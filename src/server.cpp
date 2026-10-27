@@ -20,6 +20,9 @@
 #include <deque>
 #include <string>
 #include <vector>
+#include <filesystem>
+#include <sys/stat.h>
+#include <unistd.h>
 
 namespace {
 using Clock = std::chrono::steady_clock;
@@ -32,6 +35,34 @@ uint16_t u16(const uint8_t* p) { return (uint16_t(p[0]) << 8) | p[1]; }
 uint32_t u32(const uint8_t* p) { return (uint32_t(p[0]) << 24) | (uint32_t(p[1]) << 16) | (uint32_t(p[2]) << 8) | p[3]; }
 void put(uint8_t* p, uint64_t value, unsigned count) {
   while (count) { p[--count] = uint8_t(value); value >>= 8; }
+}
+struct Config {
+  std::string bind = "127.0.0.1", viewer, token, origin, authority, cert, key;
+  unsigned port = 8080;
+  bool proxy = false, insecure_local = false;
+} config;
+bool secretEqual(const std::string& a, const std::string& b) {
+  if (a.size() != b.size()) return false;
+  unsigned difference = 0;
+  for (size_t i = 0; i < a.size(); ++i) difference |= unsigned(a[i] ^ b[i]);
+  return difference == 0;
+}
+std::string header(lws* wsi, lws_token_indexes token) {
+  char value[1024];
+  const int count = lws_hdr_copy(wsi, value, sizeof(value), token);
+  return count > 0 ? std::string(value, size_t(count)) : "";
+}
+bool authenticated(lws* wsi, bool websocket = false) {
+  if (config.token.empty()) return true;
+  if (!websocket) return secretEqual(header(wsi, WSI_TOKEN_HTTP_AUTHORIZATION), "Bearer " + config.token);
+  std::istringstream protocols(header(wsi, WSI_TOKEN_PROTOCOL));
+  std::string protocol;
+  while (std::getline(protocols, protocol, ',')) {
+    const auto first = protocol.find_first_not_of(" \t");
+    const auto last = protocol.find_last_not_of(" \t");
+    if (first != std::string::npos && secretEqual(protocol.substr(first, last-first+1), "bearer." + config.token)) return true;
+  }
+  return false;
 }
 bool loopbackOrigin(const std::string& origin) {
   const auto scheme = origin.find("://");
@@ -49,11 +80,11 @@ bool loopbackOrigin(const std::string& origin) {
 }
 bool loopbackHost(const std::string& host) { return loopbackOrigin("http://" + host); }
 bool localRequest(lws* wsi) {
-  char host[256] = {}, origin[256] = {};
-  if (lws_hdr_copy(wsi, host, sizeof(host), WSI_TOKEN_HOST) <= 0 || !loopbackHost(host)) return false;
+  const auto host = header(wsi, WSI_TOKEN_HOST);
+  if (!loopbackHost(host) && (config.token.empty() || host != config.authority)) return false;
   if (lws_hdr_total_length(wsi, WSI_TOKEN_ORIGIN) <= 0) return true;
-  const int length = lws_hdr_copy(wsi, origin, sizeof(origin), WSI_TOKEN_ORIGIN);
-  return length > 0 && loopbackOrigin(origin);
+  const auto origin = header(wsi, WSI_TOKEN_ORIGIN);
+  return config.token.empty() ? loopbackOrigin(origin) : !origin.empty() && origin == config.origin;
 }
 nsl::InputEvent inputEvent(const uint8_t* p) {
   const uint32_t raw = u32(p + 4);
@@ -310,12 +341,12 @@ int metricsResponse(lws* wsi, HttpResponse* response, Server* server) {
   if (!response) return -1;
   std::string json;
   const bool available = cgroupMetrics(json);
-  if (!available) json = "{\"error\":\"cgroup_v2_unavailable\"}";
+  if (!available) json = "{\"resources_available\":false,\"usage_usec\":null,\"memory_current\":null,\"inactive_file\":null}";
   json.pop_back(); json += server->metrics() + "}";
   if (json.size() > sizeof(response->body)) return -1;
   std::memcpy(response->body, json.data(), json.size());
   response->length = json.size();
-  return responseHeaders(wsi, available ? HTTP_STATUS_OK : HTTP_STATUS_SERVICE_UNAVAILABLE,
+  return responseHeaders(wsi, HTTP_STATUS_OK,
                          "application/json", response->length);
 }
 uint32_t nextGeneration = 0;
@@ -331,6 +362,7 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
           return errorResponse(wsi, response, HTTP_STATUS_METHOD_NOT_ALLOWED, "method_not_allowed");
         }
         if (!localRequest(wsi)) return errorResponse(wsi, response, HTTP_STATUS_FORBIDDEN, "forbidden");
+        if (!authenticated(wsi)) return errorResponse(wsi, response, HTTP_STATUS_UNAUTHORIZED, "unauthorized");
         if (path == "/metrics") return metricsResponse(wsi, response, s);
         if (path == "/snapshot.png") {
           if (s->snapshot_client || !s->snapshot.request()) {
@@ -349,11 +381,11 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
         std::memcpy(response->body, json.data(), json.size()); response->length = json.size();
         return responseHeaders(wsi, HTTP_STATUS_OK, "application/json", json.size());
       }
-      const char* file = nullptr; const char* mime = nullptr;
-      if (path == "/" || path == "/index.html") { file="/opt/native/viewer/index.html"; mime="text/html"; }
-      if (path == "/viewer.js") { file="/opt/native/viewer/viewer.js"; mime="application/javascript"; }
-      if (!file) return errorResponse(wsi, response, HTTP_STATUS_NOT_FOUND, "not_found");
-      return lws_serve_http_file(wsi, file, mime, nullptr, 0) < 0 ? -1 : 0;
+      std::string file; const char* mime = nullptr;
+      if (path == "/" || path == "/index.html") { file=config.viewer+"/index.html"; mime="text/html"; }
+      if (path == "/viewer.js") { file=config.viewer+"/viewer.js"; mime="application/javascript"; }
+      if (file.empty()) return errorResponse(wsi, response, HTTP_STATUS_NOT_FOUND, "not_found");
+      return lws_serve_http_file(wsi, file.c_str(), mime, nullptr, 0) < 0 ? -1 : 0;
     }
     case LWS_CALLBACK_HTTP_WRITEABLE: {
       auto* response = static_cast<HttpResponse*>(user);
@@ -384,12 +416,11 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
     case LWS_CALLBACK_CLOSED_HTTP: closeSnapshot(s, wsi, static_cast<HttpResponse*>(user)); return 0;
     case LWS_CALLBACK_HTTP_FILE_COMPLETION: return lws_http_transaction_completed(wsi);
     case LWS_CALLBACK_FILTER_PROTOCOL_CONNECTION: {
-      char uri[256] = {}, origin[256] = {};
+      char uri[256] = {};
       if (lws_hdr_copy(wsi, uri, sizeof(uri), WSI_TOKEN_GET_URI) <= 0 || !user) return 1;
       const bool control = !std::strcmp(uri, "/control");
-      if ((control && !localRequest(wsi)) ||
-          (!control && (std::strcmp(uri, "/stream") ||
-            lws_hdr_copy(wsi, origin, sizeof(origin), WSI_TOKEN_ORIGIN) <= 0 || !loopbackOrigin(origin))) ||
+      if (!localRequest(wsi) || !authenticated(wsi, true) ||
+          (!control && (std::strcmp(uri, "/stream") || lws_hdr_total_length(wsi, WSI_TOKEN_ORIGIN) <= 0)) ||
           s->viewer || nextGeneration == UINT32_MAX) return 1;
       static_cast<HttpResponse*>(user)->control = control;
       return 0;
@@ -463,7 +494,55 @@ void selfCheck() {
   assert(input.type == 6 && input.code == 1 && input.value == -120 && input.buttons == 16 && input.modifiers == 128);
 }
 } // namespace
-int main() {
+int main(int argc, char** argv) {
+  try {
+    config.viewer = (std::filesystem::canonical("/proc/self/exe").parent_path() / "viewer").string();
+    for (int i = 1; i < argc; ++i) {
+      const std::string option = argv[i];
+      if (option == "--help") {
+        std::cout << "Usage: native-stream-engine [--bind ADDRESS] [--port PORT] [--viewer-dir DIR]\n"
+                     "  [--token-file FILE --public-origin https://HOST[:PORT]]\n"
+                     "  [--tls-cert FILE --tls-key FILE | --behind-tls-proxy]\n"
+                     "  [--insecure-local: unauthenticated, isolated development network only]\n"
+                     "Attach to DISPLAY using the caller's XAUTHORITY. Defaults: 127.0.0.1:8080.\n";
+        return 0;
+      }
+      if (option == "--behind-tls-proxy") { config.proxy = true; continue; }
+      if (option == "--insecure-local") { config.insecure_local = true; continue; }
+      if (++i == argc) throw std::runtime_error("Missing value for " + option);
+      const std::string value = argv[i];
+      if (option == "--bind") config.bind = value;
+      else if (option == "--port") {
+        uint64_t port;
+        if (!unsignedNumber(value, port) || !port || port > 65535) throw std::runtime_error("Invalid port");
+        config.port = unsigned(port);
+      } else if (option == "--viewer-dir") config.viewer = value;
+      else if (option == "--public-origin") {
+        if (value.rfind("https://", 0) != 0 || value.size() <= 8 || value.find_first_of("/?#@\\ \t\r\n", 8) != std::string::npos)
+          throw std::runtime_error("Public origin must be an HTTPS origin without path or credentials");
+        config.origin = value; config.authority = value.substr(8);
+      } else if (option == "--token-file") {
+        struct stat st{};
+        if (stat(value.c_str(), &st) || !S_ISREG(st.st_mode) || st.st_uid != geteuid() || (st.st_mode & 0077) || st.st_size > 66)
+          throw std::runtime_error("Token file must be private, owned by this user and contain 64 hexadecimal characters");
+        std::ifstream file(value); std::getline(file, config.token);
+        if (!file || config.token.size() != 64 || config.token.find_first_not_of("0123456789abcdef") != std::string::npos)
+          throw std::runtime_error("Token must contain 64 lowercase hexadecimal characters");
+      } else if (option == "--tls-cert") config.cert = value;
+      else if (option == "--tls-key") config.key = value;
+      else throw std::runtime_error("Unknown option: " + option);
+    }
+    if (config.cert.empty() != config.key.empty() || (config.proxy && !config.cert.empty()))
+      throw std::runtime_error("Choose a TLS certificate/key pair or a TLS proxy");
+    if (!config.origin.empty() && config.token.empty()) throw std::runtime_error("Public origin requires a token");
+    if (config.insecure_local && (!config.token.empty() || !config.origin.empty() || !config.cert.empty() || config.proxy))
+      throw std::runtime_error("--insecure-local cannot be combined with remote access options");
+    if (config.bind != "127.0.0.1" && !config.insecure_local && (config.token.empty() || config.origin.empty() || (config.cert.empty() && !config.proxy)))
+      throw std::runtime_error("Non-loopback binding requires token, public origin, and TLS or --behind-tls-proxy");
+    if (config.insecure_local) std::cerr << "WARNING: unauthenticated development listener; isolate it and publish to host loopback only\n";
+    for (const char* name : {"index.html", "viewer.js"})
+      if (!std::filesystem::is_regular_file(std::filesystem::path(config.viewer)/name)) throw std::runtime_error("Viewer assets missing; use --viewer-dir");
+  } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 2; }
   selfCheck();
   if (!nsl::initializeNativeBackend()) { std::cerr << "Native backend initialization failed\n"; return 1; }
   std::signal(SIGINT, signalStop); std::signal(SIGTERM, signalStop);
@@ -478,15 +557,22 @@ int main() {
   const auto dimensions = s.input->dimensions(); s.width = dimensions.first; s.height = dimensions.second;
   lws_protocols protocols[] = {{"http", callback, sizeof(HttpResponse), 4096, 0, nullptr, 0}, {"nsl1", callback, sizeof(HttpResponse), 4096, 0, nullptr, 0}, {nullptr, nullptr, 0, 0, 0, nullptr, 0}};
   lws_context_creation_info info{};
-  info.port=8080; info.iface="0.0.0.0"; info.protocols=protocols; info.user=&s;
+  info.port=int(config.port); info.iface=config.bind.c_str(); info.protocols=protocols; info.user=&s;
+  // shortcut: native TLS supports HTTP/1.1 only, enable HTTP/2 after multiplexed-response lifecycle tests.
+  info.alpn = "http/1.1";
+  if (!config.cert.empty()) {
+    info.options |= LWS_SERVER_OPTION_DO_SSL_GLOBAL_INIT;
+    info.ssl_cert_filepath = config.cert.c_str(); info.ssl_private_key_filepath = config.key.c_str();
+  }
   info.uid=-1; info.gid=-1;
   s.context=lws_create_context(&info);
-  if (!s.context) { std::cerr << "Cannot create port 8080 server\n"; s.capture.stop(); return 1; }
+  if (!s.context) { std::cerr << "Cannot listen on " << config.bind << ':' << config.port << '\n'; s.capture.stop(); return 1; }
   s.snapshot.start(s.context);
   heartbeatContext=s.context;
   lws_sul_schedule(s.context, 0, &heartbeat, heartbeatTick, 100000);
   int result = 0;
-  std::cerr << "Native stream lab on :8080; publish Docker port to host loopback only\n";
+  std::cerr << "Native stream listening on " << config.bind << ':' << config.port << '\n';
+  std::cout << "{\"ready\":true,\"pid\":" << getpid() << ",\"port\":" << config.port << "}" << std::endl;
   while (!stopping) {
     captureError = s.capture.error();
     if (!captureError.empty()) {

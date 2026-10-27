@@ -1,10 +1,146 @@
-# Native desktop engine: modular baseline and comparison evidence
+# Native desktop streaming: how it works, what the tests show, and what remains
 
 Selected evidence: 49 runs; 3 excluded run/workload observations. Final image: native-stream-lab:baseline / sha256:75ba2cb566ef9b63dcf1dd9e270eeb86f44c81e891e6efd9cd9bb6e92368378c. Source commit: bf54721bb2d4778c77530dd25e50cdfb32aabeec.
 
 This report describes the explicit manifest selection. It does not infer a universal winner or equal motion quality.
 
 [Initial nine-session desktop benchmark](native-stream-report.md) is separate context; its measurements are not pooled here.
+
+## 1. The answer in plain English
+
+We built a small engine that sends a Linux desktop to a web browser and sends keyboard and mouse input back. It works in the tested X11/XFCE environment. It is not yet proven rock solid, ready for public deployment, or a replacement for every feature in Selkies or KasmVNC.
+
+The clearest positive result is low container memory use in real file-manager work. The clearest weakness is synthetic moving video on a restricted connection: image quality degrades and the slowest measured interactions take longer. The game test shows a different tradeoff: Selkies uses less CPU and bandwidth than our engine in that workload.
+
+Read sections 1–4 for the main result. Sections 5–8 explain the measurements, test coverage, and reliability limits. The expandable tables retain every measured value, including ranges, missing metrics, and excluded observations. This revision explains existing evidence; it does not contain a new performance run.
+
+## 2. What happens when you use the desktop
+
+The application and the streaming engine do different jobs. Chrome, Ghostty, Thunar, or a game runs inside Linux and draws into its desktop. The engine captures that desktop and transports the picture. The browser you use to view it decodes the picture. An application can exit while the desktop and stream keep running.
+
+Picture path: application → X11 desktop → pixel capture → H.264 compression → WebSocket connection → browser video decoder → visible canvas. Input travels in the opposite direction: browser keyboard or pointer event → server → X11 input backend → application.
+
+The current display is Xvfb, an X11 display kept in memory, with the XFCE desktop running on it. This allows a graphical session without a physical monitor. It does not prove behavior on a hardware display or on Wayland.
+
+| Part | Simple explanation | Current implementation |
+| --- | --- | --- |
+| Application | Produces the content you want to use. | Runs separately from the streaming engine; its own startup and resource needs still matter. |
+| Capture | Reads the desktop pixels and detects changes. | CPU capture from X11 at a fixed 1280 × 720 resolution. |
+| Encoder | Compresses many pixels into a smaller video stream. | Persistent libx264 through libavcodec; compression trades bandwidth against image detail. |
+| Flow control | Stops old frames piling up when the receiver is slow. | Up to 8 outstanding frames and 8 MiB of logical encoded payload; these are not total-memory limits. |
+| Transport and viewer | Moves the compressed picture and draws it locally. | WebSocket transport and browser H.264 VideoDecoder. Decode and drawing cost client resources too. |
+| Input and cursor | Makes clicks, typing, and pointer shapes correspond to the remote desktop. | X11 input; the later cursor update sends images and hotspots separately from video. Cursor position follows the local pointer. |
+| SDK and CLI | Lets a program request input or a screenshot. | Typed Node client and command-line tool. One browser or one agent owns input at a time; an ACK is submission, not proof an app completed the action. |
+
+## 3. The results that matter most
+
+These figures are medians across selected sessions. They describe the settings and workloads actually tested. They do not compare the engines at identical picture quality, so a lower resource number alone is not an efficiency win.
+
+Thunar is a real file manager. Freedoom is a real game. Both have three fresh sessions per engine. The constrained-video diagnostic has three native sessions but only one Selkies session, which gives much less confidence about the reference engine’s run-to-run variation.
+
+| Test and metric | Our engine | Selkies | KasmVNC | What it means |
+| --- | --- | --- | --- | --- |
+| File-manager scrolling: CPU / RAM / transmit | 13.4% / 166.0 MiB / 1.02 Mbps | 48.5% / 238.4 MiB / 1.35 Mbps | 12.1% / 179.8 MiB / 0.96 Mbps | Our engine used the least RAM here. KasmVNC used slightly less CPU and bandwidth. This does not rank scrolling smoothness. |
+| Game turning and firing: CPU / RAM / transmit | 100.9% / 200.0 MiB / 38.55 Mbps | 72.8% / 267.1 MiB / 5.85 Mbps | 103.7% / 204.6 MiB / 83.02 Mbps | Selkies used less CPU and bandwidth; our engine used less RAM. Game motion fidelity and input latency were not measured. |
+| Restricted video: frozen-picture PSNR | 14.22 dB | 34.62 dB | No selected result | Higher is closer to source pixels. Our engine was substantially worse after the picture settled. |
+| Restricted video: sparse motion PSNR | 18.64 dB | 21.58 dB | No selected result | Our engine was also worse among matched moving frames. Only 11–12 native pairs and 24 Selkies pairs matched. |
+| Restricted video: input p95 | 210.1 ms | 109.7 ms | No selected result | The slower end of our measured interactions took longer. A single Selkies session is limited evidence. |
+| Original native fixture: visible / produced updates | 50.36 / 50.78 per second | Separate historical comparison | Separate historical comparison | The viewer kept up closely with this producer. A 60 FPS setting did not produce a measured sustained 60 FPS result. |
+
+## 4. What improved, and what still hurts
+
+The first general variant allowed several frames to be in flight instead of waiting after each one, and adapted the encoder’s bitrate ceiling. The second repaired recovery relative to that ceiling. The third repaired two cases where queueing could hide congestion. The final core was then frozen for validation; it does not choose a policy by workload name.
+
+In the synthetic scrolling test with added delay, the native final candidate delivered about 28.54 visible updates/s versus 14.58 for the earlier native reference. Their producers generated about 28.61 and 26.82 updates/s, respectively. This is a useful improvement under that test, with three candidate sessions and one reference session; it is not evidence for arbitrary internet paths.
+
+For local synthetic video, transmit fell from about 45.45 to 18.60 Mbps and CPU from 70.51% to 60.46%, while frozen PSNR fell from 34.03 to 31.77 dB and sparse-motion PSNR from 33.56 to 30.42 dB. That is a bandwidth/quality tradeoff, not a free performance gain.
+
+On the restricted video test, maintaining delivered updates did not preserve picture quality or input tail latency. The current policy has no enforced visual-quality floor or quiet-period refinement. Fixing this measured weakness should precede any claim of quality-matched superiority.
+
+## 5. How to read the numbers
+
+A cell such as 43.200 [43.000–44.100], n=3 means: the middle result across three independent sessions was 43.2; the smallest was 43.0 and the largest was 44.1. The range is not a confidence interval. Different metrics can have different n because missing values are not replaced with zero.
+
+A measurement of 0 is different from ‘unmeasured.’ A failed observation is different from a slow but valid one. Failed observations stay visible in the exclusion table and raw files. No selected KasmVNC result for a profile should be read as a score of zero.
+
+| Metric | Plain-language meaning | How to use it |
+| --- | --- | --- |
+| CPU (% of one core) | 100% means roughly one fully occupied CPU core; values above 100% are possible. | Lower is better only for comparable delivered work and quality. This includes the desktop and app inside the container. |
+| RAM (MiB) | The container memory measure used by the runner. | Does not include the viewing browser or the whole Docker VM. It is not the total cost of using the desktop. |
+| Container transmit (Mbps) | Data sent from the container before the relay. | Not necessarily bytes delivered to the browser during the same interval; queues can distort short windows. |
+| Producer versus visible updates/s | How often the test content changes versus how many distinct marked updates the viewer observes. | A 30 Hz producer cannot demonstrate sustained 60 FPS. These are not physical monitor presentation measurements. |
+| Observed visual changes/s | How often sampled pixels change in a real application. | Useful to confirm activity; not decoded FPS or a smoothness score. |
+| Input median and p95 (ms) | Typical measured response and the threshold containing about 95% of that session’s trials. | Lower is better. p95 is not a maximum or a guarantee about future clicks; the synthetic cases use 20 trials per workload. |
+| PSNR (dB) | A pixel comparison; higher generally means closer to the reference. | Compare the same content and method. A difference in dB is not a percentage improvement and does not fully describe perceived quality. |
+| MAE | Mean absolute pixel error; lower means closer to the reference. | Read with PSNR and the images. Whole-frame averages can hide small text or edge defects. |
+| Frozen versus motion quality | Frozen compares a settled picture; motion compares sampled frames matched to the same source update. | They answer different questions. Neither sparse motion samples nor a sharp frozen screenshot prove full-rate motion quality. |
+| Motion coverage | How many source and decoded samples could actually be paired. | Small matched sets limit conclusions, even if many frames were collected. Inspect pair counts and coverage together. |
+
+## 6. What the experiment actually covered
+
+The report selects 49 raw runs and records 3 excluded run/workload observations. The raw run identity, runner hash, fixture hash, and image are retained below. Selection is explicit; the exporter does not search for a best-looking run.
+
+The comparison environment uses CPU capture at 1280 × 720, two allocated CPUs, a 1536 MiB container limit, 512 MiB shared memory, and Chrome 156 as viewer. These are benchmark conditions, not a promise that every application fits that resource budget.
+
+The broader synthetic tests usually produced 27–29 updates/s against a 30 Hz target. Their ‘idle’ case still changed a marker and consumed work; the separate original quiescent-idle measurement was 3.26% CPU. Those two idle results must not be compared as if they were the same task.
+
+The comparison images contain the same inactive benchmark application during real-app runs. The clean baseline starts plain XFCE; artifact-equivalence checks relate its native executable and package database to the measured image. The app comparisons are not measurements of a completely clean default desktop.
+
+Resource sampling, settled-image comparison, sparse-motion comparison, and input checks are separate passes. Short controlled samples make differences inspectable, but they do not establish days of stability, natural-video quality, or performance in every browser.
+
+| Evidence group | What was done | Boundary |
+| --- | --- | --- |
+| Original fixture | Retained the initial desktop workload and native regression contract. | Historical results stay separate from broader and real-app results. |
+| Broader synthetic workloads | Idle marker, scrolling, window movement, synthetic moving video, and mixed content. | Controlled diagnostics; not a complete sample of real applications or natural video. |
+| Local connection | Host loopback with no added shaping. | Not a remote internet connection. |
+| Added delay | Relay adds 25 ms in each direction. | Controlled delay; no physical-WAN or packet-loss claim. |
+| Restricted bandwidth | The delayed profile also caps downstream at 8 Mbps and upstream at 2 Mbps. | Container TX is measured upstream of that relay; it is not browser goodput. |
+| Thunar | The same hashed real files, with actual X11 content and decoded correspondence checks. | Three sessions per engine; real-app input latency remains unmeasured. |
+| Freedoom | A running game with held/released key-state checks and visible pixel changes. | Three sessions per engine; no equal game-fidelity or game-latency result. |
+
+## 7. Is the engine reliable enough?
+
+There is useful functional evidence, but production reliability is not established. Short passing tests show that the exercised paths worked under their conditions. They do not prove the absence of crashes, leaks, races, or application compatibility issues over long sessions.
+
+The later cursor change passed 13 cursor, 12 video/input, and 5 framework checks in each of release and sanitizer builds: 60 checks total. Graceful shutdown exited zero, with no reported sanitizer diagnostics. System libraries were not instrumented. These are later correctness checks, not a rerun of the performance tables.
+
+The engine bounds logical encoded data and has timeout and held-input cleanup behavior. Its frame-age thresholds are admission and recovery mechanisms, not hard guarantees on what the user sees: already queued or in-transit work may be older. Total memory also includes codecs, transport, applications, and the browser.
+
+The current service has no authentication or TLS. Its documented deployment binds to host loopback for isolated local use. Anyone who can reach the service can observe and control the desktop; an Origin check is not a login or authorization system.
+
+| Area | What is supported by the evidence | What is still missing |
+| --- | --- | --- |
+| Functional correctness | Recorded browser/video, input, SDK, framework, and later cursor checks. | Coverage of every application, browser, driver, and failure sequence. |
+| Memory and shutdown | Bounded encoded queues; tested graceful shutdown; no reported sanitizer diagnostics in those runs. | Long soak, memory-pressure recovery, and evidence for all linked libraries. |
+| Connection recovery | Specific reconnect, stall, and held-input paths are exercised by integration checks. | A broad packet-loss, disconnect, latency, and congestion-recovery qualification. |
+| Picture quality | Settled and sparse-motion comparisons expose measured weaknesses. | A quality floor, natural-video coverage, and quality-matched comparisons. |
+| Platform and features | Implemented X11/XFCE path, fixed 720p, one controller. | Wayland, GNOME validation, audio, clipboard, IME, resize, hardware encoding, relative pointer, and remote pointer-warp synchronization. |
+| Deployment | A local isolated prototype. | Authentication, authorization, TLS, multi-user isolation, and operational hardening before public exposure. |
+
+## 8. What today’s installation issues do and do not tell us
+
+Update dated October 27, 2026: the current interactive desktop is no longer the untouched benchmark snapshot. It has a later cursor build, Chrome and Ghostty installed, and a Chromium-compatible container seccomp profile. The benchmark numbers above were not rerun for this modified desktop.
+
+The long installation was caused by building Ghostty from source, compiler memory kills, build retries, and saving/reconfiguring the container for Chrome’s sandbox. Chrome’s package installation itself was only part of that work. This was installation work sharing the machine’s resources, not a measurement of streaming latency or engine efficiency.
+
+Ghostty was subsequently reported to exit unexpectedly. An isolated launch on a separate display reproduced an early process exit while the streaming process remained running. The current container’s memory counters showed no out-of-memory kills at the diagnostic check. The application-level cause remains unresolved; investigation was stopped at the user’s request. The earlier brief launch check does not establish application stability.
+
+An app closing, the whole desktop session ending, and the viewer freezing are distinct failures. Diagnosis must check application exit status, container health, native-server state, and browser decode/draw progress. Continued streaming does not certify the application; an application exit alone does not establish an engine fault. No engine fix or new reliability certification is claimed by this report revision.
+
+## 9. What evidence would change the conclusion
+
+The next work should turn specific unknowns into measured results. This is a proposed qualification sequence, not work already completed. Set acceptance criteria before each run, preserve failures, and compare the same source and environment.
+
+First reproduce and resolve application exits such as Ghostty’s, separating app, graphics, container, and transport causes. Then address the measured constrained-video quality and input-tail weakness. Only after those checks pass should the report’s reliability language become stronger.
+
+| Next check | Evidence to collect | What it would establish |
+| --- | --- | --- |
+| Long-running sessions | Hours of application use, process health, memory growth, frame progress, and controlled shutdown. | Stability for the stated duration and workload, not an unlimited uptime guarantee. |
+| Resource pressure and restart | CPU/RAM pressure, app crashes, decoder or connection stalls, and repeated reconnects. | Whether failure stays contained, recovers predictably, and releases held inputs. |
+| Matched-quality comparison | Tune to a comparable visual target and report latency, bandwidth, client/server resources, and fidelity together. | Whether a resource advantage survives at comparable delivered quality. |
+| Real network conditions | Loss, jitter, different propagation delays, bandwidth changes, and measured recovery times. | Behavior beyond the current controlled relay profiles. |
+| Broader applications and clients | Browser, editor, terminal, natural video, more resolutions and intended architectures. | How far the current results generalize. |
+| Deployment controls | Authentication, authorization, TLS, session isolation, and rejection-path tests. | A basis for evaluating exposure beyond this local development environment. |
 
 ## Findings
 
@@ -389,6 +525,13 @@ Lower resource usage must be read with fidelity and latency. No universal winner
 | Clean desktop build and native self-checks | Recorded; see raw artifact | tests/results/baseline-build.log |
 | Sanitizer build and native self-checks | Recorded; see raw artifact | tests/results/baseline-asan-build.log |
 | Strict TypeScript consumer compilation | Recorded; see raw artifact | tests/results/package-types.log |
+| Later cursor verification | Post-benchmark evidence; 60 total checks across both builds | tests/results/cursor-verification.json |
+| Later correctness evidence: cursor-release.json | Post-benchmark checks; performance matrix not rerun | tests/results/cursor-release.json |
+| Later correctness evidence: cursor-asan.json | Post-benchmark checks; performance matrix not rerun | tests/results/cursor-asan.json |
+| Later correctness evidence: integration-cursor-release.json | Post-benchmark checks; performance matrix not rerun | tests/results/integration-cursor-release.json |
+| Later correctness evidence: integration-cursor-asan.json | Post-benchmark checks; performance matrix not rerun | tests/results/integration-cursor-asan.json |
+| Later correctness evidence: framework-cursor-release.json | Post-benchmark checks; performance matrix not rerun | tests/results/framework-cursor-release.json |
+| Later correctness evidence: framework-cursor-asan.json | Post-benchmark checks; performance matrix not rerun | tests/results/framework-cursor-asan.json |
 
 ## Excluded observations
 
@@ -552,3 +695,10 @@ Game motion quality, real-application input latency, natural video, browser/edit
 - [Clean desktop build and native self-checks](evidence/general/tests/results/baseline-build.log)
 - [Sanitizer build and native self-checks](evidence/general/tests/results/baseline-asan-build.log)
 - [Strict TypeScript consumer compilation](evidence/general/tests/results/package-types.log)
+- [Later cursor verification](evidence/general/tests/results/cursor-verification.json)
+- [Later correctness evidence: cursor-release.json](evidence/general/tests/results/cursor-release.json)
+- [Later correctness evidence: cursor-asan.json](evidence/general/tests/results/cursor-asan.json)
+- [Later correctness evidence: integration-cursor-release.json](evidence/general/tests/results/integration-cursor-release.json)
+- [Later correctness evidence: integration-cursor-asan.json](evidence/general/tests/results/integration-cursor-asan.json)
+- [Later correctness evidence: framework-cursor-release.json](evidence/general/tests/results/framework-cursor-release.json)
+- [Later correctness evidence: framework-cursor-asan.json](evidence/general/tests/results/framework-cursor-asan.json)

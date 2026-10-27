@@ -1,10 +1,24 @@
-# Native integration check
+# Testing
+
+| Task | Guide |
+| --- | --- |
+| SDK checks, no desktop needed | `npm ci --ignore-scripts` then `npm test` from the repository root |
+| Native Linux VM without Docker | [Portable verification](#portable-linux-verification) |
+| Browser video and input | [Native integration](#native-integration-check) |
+| SDK against a real desktop | [Framework integration](#framework-integration) |
+| Cursor images and hotspots | [Remote cursor verification](#remote-cursor-verification) |
+| Latest recorded portable results | [Verification summary and receipts](../docs/portable-verification.md) |
+
+Use disposable test desktops. Historical results below are labeled by build;
+they do not replace the latest verification receipts.
+
+## Native integration check
 
 Run against an already started native container; this test never builds, starts,
 stops, or deletes a container:
 
 ```sh
-TEST_CONTAINER=<native-container-name> TEST_URL=http://127.0.0.1:18094 rtk proxy node tests/integration.mjs
+TEST_CONTAINER=<native-container-name> TEST_URL=http://127.0.0.1:18094 node tests/integration.mjs
 ```
 
 Requires installed Google Chrome, local development dependencies (`npm ci --ignore-scripts`), Docker access, and Python/Tk with X11 in the container. The fixture
@@ -65,7 +79,7 @@ server-side held-control cleanup on timeout.
 
 ## Framework integration
 
-Run `TEST_CONTAINER=<container> TEST_URL=http://127.0.0.1:18094 rtk proxy node tests/framework-integration.mjs`
+Run `TEST_CONTAINER=<container> TEST_URL=http://127.0.0.1:18094 node tests/framework-integration.mjs`
 against a dedicated container with the framework endpoints implemented. It uses
 the actual SDK and server without a mock: PNG signature and independently known
 Tk pixels before and after a desktop change without a viewer, acknowledged input
@@ -143,3 +157,11 @@ The live desktop's arrow, text and resize screenshots are in
 `results/cursor-live-*.png`; its deployed executable and viewer hashes match the
 tested release. Existing performance reports describe the earlier frozen build;
 the benchmark matrix was not rerun for this cursor change.
+## Portable Linux verification
+
+`portable-integration.mjs` runs against an explicitly selected disposable Linux VM
+over SSH. It verifies managed and existing displays, port-conflict failure,
+browser decoding, independent X11 application input, held-key release, native TLS,
+HTTP/WebSocket credentials, origin rejection and process cleanup. It uses the same
+input fixture as the container tests, and does not invoke Docker. See
+[the portable guide](../docs/portable.md#repeat-the-non-docker-verification).

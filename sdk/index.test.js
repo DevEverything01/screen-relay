@@ -2,6 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { createServer } from 'node:http';
+import { once } from 'node:events';
 import { capabilities, connect, snapshot } from './index.js';
 
 function packet(type, generation, sequence, payload) {
@@ -151,5 +153,35 @@ test('SDK and CLI snapshots do not open a control connection', async () => {
     assert.deepEqual(JSON.parse(stdout), { path: '/dev/null', bytes: 3 });
   } finally {
     globalThis.WebSocket = original; globalThis.fetch = originalFetch;
+  }
+});
+
+test('remote credentials require HTTPS and are not forwarded through redirects', async () => {
+  const token = 'ab'.repeat(32);
+  for (const options of [
+    { url: 'http://remote.invalid', token },
+    { url: 'https://remote.invalid' },
+    { url: 'https://remote.invalid', token: 'short' },
+    { url: 'https://user:password@remote.invalid', token },
+    { url: 'https://remote.invalid/path', token },
+  ]) await assert.rejects(capabilities(options), { code: 'INVALID_ARGUMENT' });
+  let redirected = 0;
+  const target = createServer((req, res) => { redirected++; res.end('{}'); });
+  target.listen(0, '127.0.0.1'); await once(target, 'listening');
+  const server = createServer((req, res) => {
+    if (req.headers.authorization !== `Bearer ${token}`) { res.writeHead(401); res.end('{}'); }
+    else if (req.url === '/snapshot.png') { res.writeHead(302, { Location: `http://127.0.0.1:${target.address().port}/` }); res.end(); }
+    else { res.setHeader('Content-Type', 'application/json'); res.end('{"version":1}'); }
+  });
+  server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  const url = `http://127.0.0.1:${server.address().port}`;
+  try {
+    await assert.rejects(capabilities({ url }), { code: 'UNAUTHORIZED' });
+    assert.deepEqual(await capabilities({ url, token }), { version: 1 });
+    await assert.rejects(snapshot({ url, token }), { code: 'NETWORK_ERROR' });
+    assert.equal(redirected, 0);
+  } finally {
+    server.closeAllConnections(); target.closeAllConnections();
+    await Promise.all([new Promise(resolve => server.close(resolve)), new Promise(resolve => target.close(resolve))]);
   }
 });

@@ -26,4 +26,4 @@ xfconf-query -c xfwm4 -p /general/use_compositing -s false || true
 if [ -f /opt/bench/fixture.py ]; then
   python3 /opt/bench/fixture.py > /tmp/fixture.log 2>&1 &
 fi
-exec /opt/native/native-stream
+exec /opt/native/native-stream --bind 0.0.0.0 --insecure-local

@@ -1,6 +1,11 @@
-# Local framework API
+# Node SDK and CLI
 
-The Node SDK targets Node 22 or newer and has no runtime npm dependencies. From a consumer project, install the repository locally with `npm install /absolute/path/to/native-stream-lab`, then import from `native-stream-lab` or run `npx native-stream --help`. Build and start the native server separately from the repository as described in the main README. The server uses a local, unauthenticated trust profile: publish the Docker port on loopback only, and use an isolated desktop. Anyone able to reach the server can control that desktop. Host and browser Origin checks reduce browser-based exposure; they do not provide authentication or secure remote access. Wayland, audio, clipboard, IME and remote deployment are not provided.
+[Setup](../README.md#agent-control) · [Connection and security](portable.md#authenticated-remote-access) ·
+[Protocol and verification](#protocol-and-verification) · [Main README](../README.md)
+
+The Node SDK targets Node 22 or newer and has no runtime npm dependencies. From a consumer project, install the repository locally with `npm install /absolute/path/to/native-stream-lab`, then import from `native-stream-lab` or run `npx native-stream --help`. Build and start the native server separately as described in the main README. Docker is optional. The default is a loopback listener; authenticated HTTPS/WSS and secure-tunnel deployment are described in [portable setup](portable.md). Wayland, audio, clipboard and IME are not provided.
+
+All SDK functions accept `{url, timeout, token}`. The URL is an origin without a path, credentials, query or fragment. Plain HTTP is permitted only for `localhost` and `127.0.0.1`; remote origins require HTTPS and a 64-character lowercase hexadecimal token. HTTP uses a Bearer header and does not follow redirects. WebSockets offer `nsl1` plus `bearer.TOKEN`, with the token omitted for the local unauthenticated profile. HTTP 401 returns `UNAUTHORIZED`; a rejected WebSocket handshake returns `NETWORK_ERROR`. Tokens never appear in request URLs.
 
 ```js
 import { connect } from "native-stream-lab";
@@ -14,11 +19,11 @@ try {
 } finally { desktop.close(); }
 ```
 
-`connect` acquires the exclusive control connection and waits for a ready message. Closing or losing the connection releases held keys and buttons. Reconnect explicitly with a new `connect`; input is never replayed. Input resolves when the server acknowledges it; this does not guarantee an application has processed it. Session `snapshot()` returns PNG bytes and optionally writes them to a path. The independent `snapshot({ url }, "screen.png")` export works without acquiring control, including while the viewer is connected. Both capture the native X11 surface rather than a browser canvas. `capabilities()` and `status()` are also exported independently, so discovery does not require control. Status is the existing cgroup metrics endpoint and can be unavailable where cgroup metrics are unsupported.
+`connect` acquires the exclusive control connection and waits for a ready message. Closing or losing the connection releases held keys and buttons. Reconnect explicitly with a new `connect`; input is never replayed. Input resolves when the server acknowledges it; this does not guarantee an application has processed it. Session `snapshot()` returns PNG bytes and optionally writes them to a path. The independent `snapshot({ url }, "screen.png")` export works without acquiring control, including while the viewer is connected. Both capture the native X11 surface rather than a browser canvas. `capabilities()` and `status()` are also exported independently, so discovery does not require control. Status returns transport metrics even where cgroup counters are unavailable; unavailable resource counters are null.
 
 Input types are `keyDown` and `keyUp` with a USB HID `key`; `pointerMove` with normalized `x`, `y`; `buttonDown` and `buttonUp` with `button` 1–3 and coordinates; `wheel` with `axis`, a signed `delta` in multiples of 120 within ±1200, and coordinates; and `releaseAll`. Coordinates must be finite numbers from 0 to 1. The X11 input implementation defines supported HID mappings; capabilities does not enumerate them. Errors expose a `code`, including `INVALID_ARGUMENT`, `UNSUPPORTED`, `NETWORK_ERROR`, `DISCONNECTED`, `PROTOCOL_ERROR`, `TIMEOUT`, `BUSY`, `HTTP_ERROR`, and `IO_ERROR`.
 
-The CLI uses `NATIVE_STREAM_URL` (default `http://127.0.0.1:8080`) and emits JSON on stdout; errors are JSON on stderr with nonzero exit status. Run it directly from the repository or install the package locally:
+The CLI uses `NATIVE_STREAM_URL` (default `http://127.0.0.1:8080`) and optionally `NATIVE_STREAM_TOKEN_FILE`. It emits JSON on stdout; errors are JSON on stderr with nonzero exit status. Run it directly from the repository or install the package locally:
 
 ```sh
 NATIVE_STREAM_URL=http://127.0.0.1:18094 node sdk/cli.js capabilities

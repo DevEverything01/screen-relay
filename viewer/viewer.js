@@ -3,6 +3,7 @@ const canvas = document.querySelector("#screen"),
   ctx = canvas.getContext("2d"),
   status = document.querySelector("#status");
 const cursor = document.querySelector("#cursor"), cursorContext = cursor.getContext("2d");
+let accessToken = '';
 let cursorAvailable = false, cursorHotX = 0, cursorHotY = 0, pointerPosition;
 function renderCursor() {
   canvas.style.cursor = cursorAvailable && ready ? "none" : "default";
@@ -217,6 +218,7 @@ function connect() {
     `${
       location.protocol === "https:" ? "wss" : "ws"
     }://${location.host}/stream`,
+    accessToken ? ['nsl1', `bearer.${accessToken}`] : 'nsl1',
   );
   const ws = socket;
   ws.binaryType = "arraybuffer";
@@ -460,7 +462,7 @@ function startHud() {
     previousCpu,
     previousCpuTime,
     metrics =
-      "Container CPU (one core): unavailable · Container RAM: unavailable";
+      "Cgroup CPU (one core): unavailable · Cgroup RAM: unavailable";
   hudTimer = setInterval(() => {
     const now = performance.now(), seconds = (now - previousTime) / 1000;
     const fps = (stats.drawn - previousDrawn) / seconds;
@@ -474,7 +476,8 @@ function startHud() {
     if (!metricsRequest) {
       const controller = metricsRequest = new AbortController();
       const timer = setTimeout(() => controller.abort(), 2000);
-      fetch("/metrics", { cache: "no-store", signal: controller.signal })
+      fetch("/metrics", { cache: "no-store", signal: controller.signal, redirect: 'error',
+        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {} })
         .then((response) => {
           if (!response.ok) throw new Error("Metrics unavailable");
           return response.json();
@@ -500,13 +503,13 @@ function startHud() {
             (Math.max(0, data.memory_current - data.inactive_file) / 1048576)
               .toFixed(1);
           metrics =
-            `Container CPU (one core): ${cpu} · Container RAM: ${ram} MiB`;
+            `Cgroup CPU (one core): ${cpu} · Cgroup RAM: ${ram} MiB`;
           previousCpu = data.usage_usec;
           previousCpuTime = time;
         })
         .catch(() => {
           metrics =
-            "Container CPU (one core): unavailable · Container RAM: unavailable";
+            "Cgroup CPU (one core): unavailable · Cgroup RAM: unavailable";
           previousCpu = undefined;
         })
         .finally(() => {
@@ -522,7 +525,7 @@ document.addEventListener("visibilitychange", () => {
     metricsRequest?.abort();
     metricsRequest = null;
     document.querySelector("#hud").textContent =
-      "Drawn FPS: 0.0 · Stream Mbps: 0.00 · Container CPU (one core): unavailable · Container RAM: unavailable";
+      "Drawn FPS: 0.0 · Stream Mbps: 0.00 · Cgroup CPU (one core): unavailable · Cgroup RAM: unavailable";
     release();
     epoch++;
     if (socket) socket.close();
@@ -536,6 +539,13 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 document.querySelector("#reconnect").addEventListener("click", () => {
+  const value = document.querySelector('#access-token').value.trim();
+  if (value && (!/^[0-9a-f]{64}$/.test(value) ||
+      (location.protocol !== 'https:' && !['localhost', '127.0.0.1'].includes(location.hostname)))) {
+    status.textContent = 'Use a 64-character token over HTTPS or a localhost tunnel';
+    return;
+  }
+  accessToken = value;
   retry = 0;
   connect();
 });

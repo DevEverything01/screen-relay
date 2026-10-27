@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 import { capabilities, connect, snapshot, status } from './index.js';
+import { readFileSync } from 'node:fs';
 
 const [command, ...args] = process.argv.slice(2);
 const options = { url: process.env.NATIVE_STREAM_URL || 'http://127.0.0.1:8080' };
-const help = 'Usage: native-stream capabilities | status | snapshot <file.png> | input <JSON array>\nSet NATIVE_STREAM_URL to a loopback HTTP origin. Input example: [{"type":"keyDown","key":4},{"type":"keyUp","key":4}]';
+const help = 'Usage: native-stream capabilities | status | snapshot <file.png> | input <JSON array>\nSet NATIVE_STREAM_URL to an HTTPS origin or loopback HTTP origin. For authenticated access set NATIVE_STREAM_TOKEN_FILE. Input example: [{"type":"keyDown","key":4},{"type":"keyUp","key":4}]';
 try {
+  if (process.env.NATIVE_STREAM_TOKEN_FILE) options.token = readFileSync(process.env.NATIVE_STREAM_TOKEN_FILE, 'utf8').trim();
   let result;
   if (command === '--help' || command === 'help') { console.log(help); }
   else if (command === 'capabilities' && !args.length) result = await capabilities(options);

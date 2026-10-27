@@ -10,6 +10,7 @@
     "test:integration": "node tests/integration.mjs",
     "test:framework": "node tests/framework-integration.mjs",
     "test:cursor": "node tests/cursor-integration.mjs",
+    "test:portable": "node tests/portable-integration.mjs",
     "qualify": "node qualification/run.mjs"
   },
   "devDependencies": {

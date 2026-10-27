@@ -125,7 +125,7 @@ The viewer requests low-latency H.264 decoding where available, but that prefere
 - H.264 uses low delay with no B frames/lookahead. YUV420 may reduce colored-text fidelity.
 - An RTT-derived bounded window permits multiple frames after the first ACK; memory and freshness remain bounded as described in [flow control](flow-control.md). A drawn ACK is not a presentation timestamp.
 - Cursor shape fidelity and unsupported keyboard/layout behavior must be recorded as limitations unless implemented and measured.
-- `/stream` requires a loopback HTTP(S) Origin. `/control` and local HTTP API routes require a loopback Host and reject a non-loopback Origin when supplied; a native agent may omit Origin. One viewer or agent owns control. These checks are not authentication; publish to host loopback only.
+- Without a token, `/stream` requires a loopback HTTP(S) Origin and all control/data routes require a loopback Host. In authenticated mode, data routes require the token, browser origins must exactly match `--public-origin`, and Host must match the configured authority or loopback. Native agents may omit Origin. WebSocket authentication uses the offered `bearer.TOKEN` subprotocol alongside `nsl1`; the selected protocol remains `nsl1`. One viewer or agent owns control. See [remote TLS and proxy requirements](portable.md).
 
 ## Current timing, color, and telemetry
 
@@ -143,7 +143,7 @@ The server closes a generation after three seconds without ACK progress or three
 {"usage_usec":1234,"memory_current":5678,"inactive_file":90}
 ```
 
-CPU is cumulative microseconds; memory fields are bytes. Missing/invalid data returns HTTP 503 and `{"error":"cgroup_v2_unavailable"}`. The HUD polls about once per second, permits one metrics request at a time, and aborts after two seconds. CPU is delta usage / elapsed browser time × 100, normalized to **one core** and potentially above 100%. RAM is max(0, memory_current − inactive_file) / 2^20 MiB: a working-set approximation, not process RSS. Both cover the whole container, including desktop/apps. Drawn FPS counts canvas draws; stream Mbps counts H.264 payload bytes, excluding protocol overhead. These are observational counters, not WAN or physical-presentation guarantees.
+CPU is cumulative microseconds; memory fields are bytes. Missing/invalid resource data returns HTTP 200 with `resources_available: false` and null `usage_usec`, `memory_current` and `inactive_file` fields; transport metrics remain available. The HUD polls about once per second, permits one metrics request at a time, and aborts after two seconds. CPU is delta usage / elapsed browser time × 100, normalized to **one core** and potentially above 100%. RAM is max(0, memory_current − inactive_file) / 2^20 MiB: a working-set approximation, not process RSS. Both cover the mounted cgroup, including desktop/apps in the reference container; they are not process-only measurements. Drawn FPS counts canvas draws; stream Mbps counts H.264 payload bytes, excluding protocol overhead. These are observational counters, not WAN or physical-presentation guarantees.
 
 ## References
 
@@ -156,7 +156,7 @@ CPU is cumulative microseconds; memory fields are bytes. Missing/invalid data re
 
 ## Verification status
 
-General3 passed all 12 browser/video and five framework checks in release and ASAN/UBSAN builds. Earlier 4b9ea36 results apply only to that earlier core. The v1 wire layout is unchanged, but the frame cap and concurrency semantics changed; compatibility with old viewers is not promised. There is no static quiet-period refinement or guaranteed quality floor. No authentication or TLS is provided.
+General3 passed all 12 browser/video and five framework checks in release and ASAN/UBSAN builds. Earlier 4b9ea36 results apply only to that earlier core. The v1 wire layout is unchanged, but the frame cap and concurrency semantics changed; compatibility with old viewers is not promised. There is no static quiet-period refinement or guaranteed quality floor. The historical General3 run predates authenticated TLS; see [portable setup](portable.md) for the current remote access contract.
 
 Backend extraction also passed an injected CPU-source test through the actual H.264 encoder, linked without X11. See [backend boundaries and status](backends.md).
 

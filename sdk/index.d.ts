@@ -1,4 +1,4 @@
-export interface Options { url?: string; timeout?: number }
+export interface Options { url?: string; timeout?: number; token?: string }
 export type Input =
   | { type: 'keyDown' | 'keyUp'; key: number }
   | { type: 'pointerMove'; x: number; y: number }

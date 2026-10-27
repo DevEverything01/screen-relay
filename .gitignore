@@ -6,5 +6,5 @@ __pycache__/
 tests/results/
 qualification/results/
 probes/results/
-native-stream
+/native-stream
 result.yaml

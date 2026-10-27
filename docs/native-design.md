@@ -8,7 +8,7 @@ A capture worker owns a `CaptureSource`, reusable YUV frame and persistent libav
 
 Capture admission requires damage, an available browser credit, and the frame deadline. Damage resets before capture on the same X connection so subsequent drawing remains pending. Capture and conversion are full-frame; regional conversion savings are not implemented. Pixel masks/stride are validated and encoder input is made writable before reuse.
 
-Pending damage stays latched while credit is unavailable: NonEmpty events are transitions. Initial/reconnected sessions force a frame, restored credit wakes the worker, and capture failure retains pending work. The session pins Xfce compositing off; child windows, popups, and scrolling require verification against root capture.
+Pending damage stays latched while credit is unavailable: NonEmpty events are transitions. Initial/reconnected sessions force a frame, restored credit wakes the worker, and capture failure retains pending work. The Docker reference session pins Xfce compositing off; child windows, popups, and scrolling require verification against root capture.
 
 Use low-delay H.264 with no B frames or lookahead. Preserve the reference chain: stop before generating extra frames rather than dropping dependent encoded packets. The browser decodes and draws, sends ACK to release credit, and closes each VideoFrame after drawing or on reset. A draw acknowledgement is not a physical presentation timestamp. The initial window is one frame; after an ACK an RTT-derived window ranges from two to eight. Encoded frame count and bytes are bounded; see [flow control](flow-control.md).
 
@@ -39,9 +39,9 @@ Persistent x264 currently uses CRF 10, ultrafast/zerolatency, two threads, no B 
 
 Capture/encode failure retains dirty work and forces IDR in the same generation. Two recovery attempts reopen the encoder and wait one second; the third consecutive failure, or failed reopen, is fatal. The server observes `CaptureEncoder::error()` and exits with failure. Reconnect increments generation. Sequence exhaustion stops admission and requires reconnect; automatic generation rotation is not implemented.
 
-The surface is fixed 1280×720, one viewer. Input supports mapped HID keys, buttons 1..3, two wheel axes, held modifiers, and release-all. Cursor images and hotspots are sent separately from video using XFixes notifications. Layout/IME completeness, clipboard, audio, resize, remote pointer-warp synchronization, hardware encoding and multiple viewers remain outside this implementation. Adaptive flow and VBV control passed release and sanitizer integration; performance and fidelity are reported separately. A loopback Origin check is not authentication; publish to host loopback only.
+The surface is fixed 1280×720, one viewer. Input supports mapped HID keys, buttons 1..3, two wheel axes, held modifiers, and release-all. Cursor images and hotspots are sent separately from video using XFixes notifications. Layout/IME completeness, clipboard, audio, resize, remote pointer-warp synchronization, hardware encoding and multiple viewers remain outside this implementation. Adaptive flow and VBV control passed release and sanitizer integration; performance and fidelity are reported separately. The local profile uses loopback Host/Origin checks. Authenticated TLS deployment is specified in [portable setup](portable.md).
 
-The HUD reports canvas draw FPS, H.264 payload rate, whole-container CPU normalized to one core, and cgroup working-set RAM. It excludes browser resource usage and does not isolate streaming CPU. The adaptive window depends on ACK turnaround; this implementation makes no WAN performance claim.
+The HUD reports canvas draw FPS, H.264 payload rate, mounted-cgroup CPU normalized to one core, and cgroup working-set RAM. It excludes browser resource usage and does not isolate streaming CPU. The adaptive window depends on ACK turnaround; this implementation makes no WAN performance claim.
 
 ## Acceptance targets
 

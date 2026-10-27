@@ -158,7 +158,7 @@ print(json.dumps(paused))`));
       samples.push({before, response, after});
     }
     const hud = await poll(() => page.locator('#hud').textContent(), text =>
-      /Container CPU \(one core\): [\d.]+%/.test(text) && /Container RAM: [\d.]+ MiB/.test(text));
+      /Cgroup CPU \(one core\): [\d.]+%/.test(text) && /Cgroup RAM: [\d.]+ MiB/.test(text));
     const drawn = await page.evaluate(() => nativeStats.drawn);
     await page.mouse.click(200,130);
     await poll(() => page.evaluate(() => nativeStats), s => s.drawn > drawn && s.decodeerrors === 0);

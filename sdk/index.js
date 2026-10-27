@@ -32,13 +32,18 @@ function encodeInput(event, generation, sequence) {
   }
   return b;
 }
-function baseUrl(url) {
+function baseUrl(url, token) {
   let parsed;
   try { parsed = new URL(url); } catch { throw fail('INVALID_ARGUMENT', 'Invalid server URL'); }
-  if (parsed.protocol !== 'http:' || !['localhost', '127.0.0.1'].includes(parsed.hostname) || parsed.username || parsed.password || parsed.pathname !== '/' || parsed.search || parsed.hash) throw fail('INVALID_ARGUMENT', 'Server URL must be a loopback HTTP origin');
+  const local = ['localhost', '127.0.0.1'].includes(parsed.hostname);
+  if (!['http:', 'https:'].includes(parsed.protocol) || (!local && parsed.protocol !== 'https:') ||
+      parsed.username || parsed.password || parsed.pathname !== '/' || parsed.search || parsed.hash)
+    throw fail('INVALID_ARGUMENT', 'Server URL must be an HTTPS origin or loopback HTTP origin');
+  if ((token !== undefined && (typeof token !== 'string' || !/^[0-9a-f]{64}$/.test(token))) || (!local && !token))
+    throw fail('INVALID_ARGUMENT', 'Remote connections require a 64-character hexadecimal token');
   return parsed;
 }
-async function request(base, path, timeout, binary = false) {
+async function request(base, path, timeout, binary = false, token) {
   const controller = new AbortController();
   let timer;
   const deadline = new Promise((_, reject) => {
@@ -46,11 +51,12 @@ async function request(base, path, timeout, binary = false) {
   });
   const operation = (async () => {
     try {
-      const response = await fetch(new URL(path, base), { signal: controller.signal });
+      const response = await fetch(new URL(path, base), { signal: controller.signal, redirect: 'error',
+        headers: token ? { Authorization: `Bearer ${token}` } : {} });
       if (!response.ok) {
         let body;
         try { body = await response.json(); } catch (error) { if (!(error instanceof SyntaxError)) throw error; }
-        throw fail(body?.error === 'busy' || response.status === 429 || response.status === 409 ? 'BUSY' : 'HTTP_ERROR', `Server returned HTTP ${response.status}`);
+        throw fail(response.status === 401 ? 'UNAUTHORIZED' : body?.error === 'busy' || response.status === 429 || response.status === 409 ? 'BUSY' : 'HTTP_ERROR', `Server returned HTTP ${response.status}`);
       }
       if (!binary) {
         try { return await response.json(); }
@@ -72,25 +78,25 @@ async function request(base, path, timeout, binary = false) {
   try { return await Promise.race([operation, deadline]); } finally { clearTimeout(timer); }
 }
 
-export async function capabilities({ url = 'http://127.0.0.1:8080', timeout = 5000 } = {}) {
-  return request(baseUrl(url), '/capabilities', integer(timeout, 1, 2147483647, 'timeout'));
+export async function capabilities({ url = 'http://127.0.0.1:8080', timeout = 5000, token } = {}) {
+  return request(baseUrl(url, token), '/capabilities', integer(timeout, 1, 2147483647, 'timeout'), false, token);
 }
-export async function status({ url = 'http://127.0.0.1:8080', timeout = 5000 } = {}) {
-  return request(baseUrl(url), '/metrics', integer(timeout, 1, 2147483647, 'timeout'));
+export async function status({ url = 'http://127.0.0.1:8080', timeout = 5000, token } = {}) {
+  return request(baseUrl(url, token), '/metrics', integer(timeout, 1, 2147483647, 'timeout'), false, token);
 }
-export async function snapshot({ url = 'http://127.0.0.1:8080', timeout = 5000 } = {}, path) {
-  const bytes = await request(baseUrl(url), '/snapshot.png', integer(timeout, 1, 2147483647, 'timeout'), true);
+export async function snapshot({ url = 'http://127.0.0.1:8080', timeout = 5000, token } = {}, path) {
+  const bytes = await request(baseUrl(url, token), '/snapshot.png', integer(timeout, 1, 2147483647, 'timeout'), true, token);
   if (path !== undefined) {
     try { await writeFile(path, bytes); } catch (error) { throw fail('IO_ERROR', `Snapshot write failed: ${error.message}`); }
   }
   return bytes;
 }
 
-export async function connect({ url = 'http://127.0.0.1:8080', timeout = 5000 } = {}) {
-  const base = baseUrl(url);
+export async function connect({ url = 'http://127.0.0.1:8080', timeout = 5000, token } = {}) {
+  const base = baseUrl(url, token);
   integer(timeout, 1, 2147483647, 'timeout');
-  const wsUrl = new URL('/control', base); wsUrl.protocol = 'ws:';
-  const socket = new WebSocket(wsUrl, 'nsl1'); socket.binaryType = 'arraybuffer';
+  const wsUrl = new URL('/control', base); wsUrl.protocol = base.protocol === 'https:' ? 'wss:' : 'ws:';
+  const socket = new WebSocket(wsUrl, token ? ['nsl1', `bearer.${token}`] : 'nsl1'); socket.binaryType = 'arraybuffer';
   let generation = 0, sequence = 0, closed = false, ready = false;
   const pending = new Map();
   let resolveReady, rejectReady;
@@ -126,11 +132,11 @@ export async function connect({ url = 'http://127.0.0.1:8080', timeout = 5000 } 
   try { surface = await initial; } finally { clearTimeout(timer); }
   return {
     surface,
-    async capabilities() { return request(base, '/capabilities', timeout); },
-    async status() { return request(base, '/metrics', timeout); },
+    async capabilities() { return request(base, '/capabilities', timeout, false, token); },
+    async status() { return request(base, '/metrics', timeout, false, token); },
     async snapshot(path) {
       if (closed) throw fail('DISCONNECTED', 'Control connection closed');
-      return snapshot({ url: base.href, timeout }, path);
+      return snapshot({ url: base.href, timeout, token }, path);
     },
     input(event) {
       if (closed) return Promise.reject(fail('DISCONNECTED', 'Control connection closed'));

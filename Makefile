@@ -4,8 +4,16 @@ CXXFLAGS ?= -O2
 CXXFLAGS += -std=c++17 -Wall -Wextra -Wpedantic -pthread
 LDLIBS += $(shell pkg-config --libs x11 xext xdamage xfixes xtst libavcodec libavutil libswscale libwebsockets) -pthread
 
-.PHONY: all test-color test-flow test-backend
+PREFIX ?= /usr/local
+.PHONY: all install test-color test-flow test-backend
 all: native-stream
+
+install: native-stream
+	install -d "$(DESTDIR)$(PREFIX)/lib/native-stream/viewer" "$(DESTDIR)$(PREFIX)/bin"
+	install -m 0755 native-stream "$(DESTDIR)$(PREFIX)/lib/native-stream/native-stream-engine"
+	install -m 0644 viewer/index.html viewer/viewer.js "$(DESTDIR)$(PREFIX)/lib/native-stream/viewer/"
+	ln -sfn ../lib/native-stream/native-stream-engine "$(DESTDIR)$(PREFIX)/bin/native-stream-engine"
+	install -m 0755 scripts/native-stream-desktop "$(DESTDIR)$(PREFIX)/bin/native-stream-desktop"
 
 native-stream: src/capture.cpp src/server.cpp src/color.cpp src/x11-capture.cpp src/x11-input.cpp src/capture.hpp src/color.hpp src/flow.hpp src/capture-source.hpp src/input.hpp src/snapshot.hpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) src/capture.cpp src/server.cpp src/color.cpp src/x11-capture.cpp src/x11-input.cpp -o $@ $(LDLIBS)

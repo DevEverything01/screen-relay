@@ -42,7 +42,11 @@ class ReportTests(unittest.TestCase):
                         'selectedRuns': [{'label': 'candidate', 'kind': 'candidate', 'raw': 'valid.json',
                                           'profile': 'original-fixture'},
                                          {'label': 'rejected', 'kind': 'reference', 'raw': 'invalid.json'}],
-                        'verification': [], 'limitations': [], 'notes': []}
+                        'verification': [], 'limitations': [], 'notes': [],
+                        'readerGuide': [{'title': 'Understanding <results>',
+                                         'paragraphs': ['An app <exit> is not a measured stream failure.'],
+                                         'table': {'headers': ['Meaning', 'Limit'],
+                                                   'rows': [['CPU | memory', '<unmeasured>']]}}]}
             path = root/'manifest.json'
             path.write_text(json.dumps(manifest))
             self.assertEqual(report.export(path, root/'out', root),
@@ -55,6 +59,13 @@ class ReportTests(unittest.TestCase):
                              'Original static-text PSNR (dB)', '38.000 [38.000–38.000], n=1']:
                 self.assertIn(expected, markdown)
             self.assertIn('| Frozen PSNR (dB) | unmeasured |', markdown)
+            self.assertIn('## Understanding <results>', markdown)
+            self.assertIn('CPU \\| memory', markdown)
+            page = (root/'out/general-engine-report.html').read_text()
+            self.assertIn('Understanding &lt;results&gt;', page)
+            self.assertIn('An app &lt;exit&gt; is not a measured stream failure.', page)
+            self.assertIn('&lt;unmeasured&gt;', page)
+            self.assertNotIn('<unmeasured>', page)
             (root/'valid.json').write_text('{malformed')
             with self.assertRaises(json.JSONDecodeError):
                 report.export(path, root/'out', root)

@@ -135,10 +135,22 @@ def export(manifest_path, output, root):
     title = manifest['title']
     summary = f'Selected evidence: {len(manifest["selectedRuns"])} runs; {len(failures)} excluded run/workload observations. Final image: {manifest["finalImage"]}. Source commit: {manifest["finalSourceCommit"]}.'
     md = ['# ' + title, summary, 'This report describes the explicit manifest selection. It does not infer a universal winner or equal motion quality.',
-          '[Initial nine-session desktop benchmark](native-stream-report.md) is separate context; its measurements are not pooled here.',
-          '## Findings', '\n\n'.join(manifest['notes']) or 'No conclusion supplied.']
-    sections.append('<section><h2>Findings</h2>' + ''.join(paragraph(n) for n in manifest['notes']) + '</section>')
+          '[Initial nine-session desktop benchmark](native-stream-report.md) is separate context; its measurements are not pooled here.']
+    navigation = []
+    for index, guide in enumerate(manifest.get('readerGuide', []), 1):
+        anchor = 'guide-' + str(index)
+        navigation.append('<a href="#' + anchor + '">' + html.escape(guide['title']) + '</a>')
+        md += ['## ' + guide['title'], *guide['paragraphs']]
+        body = ''.join(paragraph(p) for p in guide['paragraphs'])
+        if guide.get('table'):
+            headers, rows = guide['table']['headers'], guide['table']['rows']
+            md.append(md_table(headers, rows))
+            body += table(headers, rows)
+        sections.append('<section id="' + anchor + '"><h2>' + html.escape(guide['title']) + '</h2>' + body + '</section>')
+    md += ['## Findings', '\n\n'.join(manifest['notes']) or 'No conclusion supplied.']
+    sections.append('<details class="technical"><summary>Detailed findings and experiment history</summary>' + ''.join(paragraph(n) for n in manifest['notes']) + '</details>')
     profiles = sorted({g[0] for g in groups})
+    sections.append('<section id="measurements"><h2>Full measurements</h2><p>Open a workload below to see every metric. Values are median [minimum–maximum], followed by the number of independent sessions. Unmeasured means no result was collected, not zero.</p><label for="profile">Show test environment </label><select id="profile"><option value="">All environments</option>' + ''.join('<option>' + html.escape(p) + '</option>' for p in profiles) + '</select></section>')
     for profile in profiles:
         for mode in sorted({g[1] for g in groups if g[0] == profile}):
             selected = [(g, runs) for g, runs in groups.items() if g[:2] == (profile, mode)]
@@ -146,23 +158,24 @@ def export(manifest_path, output, root):
             rows = [[name] + [format_values([r.get(key) for r in runs]) for _, runs in selected] for name, key in METRICS]
             heading = profile + ' / ' + mode
             md += ['## ' + heading, md_table(headers, rows)]
-            sections.append('<section data-profile="' + html.escape(profile, quote=True) + '"><h2>' + html.escape(heading) + '</h2>' + table(headers, rows) + '</section>')
+            sections.append('<details data-profile="' + html.escape(profile, quote=True) + '"><summary>' + html.escape(heading) + '</summary>' + table(headers, rows) + '</details>')
     verification = [[v['name'], v['status'], v.get('evidence', '')] for v in manifest['verification']]
     for heading, headers, rows in [('Verification', ['Check', 'Status', 'Evidence'], verification),
                                    ('Excluded observations', ['Variant', 'Profile/workload', 'Disposition', 'Errors', 'Evidence'], failures),
                                    ('Run provenance', ['Variant', 'Kind', 'Engine', 'Profile', 'Image', 'Runner SHA256', 'Fixture SHA256'], identities)]:
         md += ['## ' + heading, md_table(headers, rows) if rows else 'None recorded.']
-        sections.append('<section><h2>' + heading + '</h2>' + (table(headers, rows) if rows else paragraph('None recorded.')) + '</section>')
+        sections.append('<section id="' + heading.lower().replace(' ', '-') + '"><h2>' + heading + '</h2>' + (table(headers, rows) if rows else paragraph('None recorded.')) + '</section>')
     for v in manifest['verification']:
         if v.get('evidence'):
             evidence.append((v['name'], link_for(v['evidence'], v.get('evidenceHref'))))
     md += ['## Scope and limits', '\n\n'.join(limits), '## Evidence',
            '\n'.join('- [' + label.replace(']', '') + '](' + href + ')' for label, href in evidence)]
-    sections.append('<section><h2>Scope and limits</h2><ul>' + ''.join('<li>' + html.escape(v) + '</li>' for v in limits) + '</ul></section>')
-    sections.append('<section><h2>Evidence</h2><ul>' + ''.join('<li><a href="' + html.escape(href, quote=True) + '">' + html.escape(label) + '</a></li>' for label, href in evidence) + '</ul></section>')
+    sections.append('<section id="scope-and-limits"><h2>Scope and limits</h2><ul>' + ''.join('<li>' + html.escape(v) + '</li>' for v in limits) + '</ul></section>')
+    sections.append('<section id="evidence"><h2>Evidence</h2><ul>' + ''.join('<li><a href="' + html.escape(href, quote=True) + '">' + html.escape(label) + '</a></li>' for label, href in evidence) + '</ul></section>')
     page = '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>' + html.escape(title) + '''</title><style>
     :root{font-family:system-ui,sans-serif;color:#182c35;background:#f4f6f7;line-height:1.55}body{margin:0}main{overflow-wrap:anywhere;max-width:1250px;margin:40px auto;padding:0 20px}h1{font-size:clamp(2rem,5vw,3rem);line-height:1.15}section{background:white;padding:22px;margin:22px 0;border:1px solid #d6dfe2;border-radius:10px}h2{font-size:1.3rem;margin:0 0 12px}.table{overflow:auto}table{border-collapse:collapse;width:100%;font-size:.85rem}th,td{padding:10px;border-bottom:1px solid #dce3e6;text-align:left;min-width:150px;vertical-align:top;overflow-wrap:anywhere}th{background:#edf2f4}a{color:#165b85}select{font:inherit;padding:8px}li{margin:8px 0}.notice{border-left:4px solid #a36920;padding:12px;background:#fff7e8}@media(max-width:600px){main{padding:0 12px;margin:24px auto}section{padding:14px}th,td{min-width:130px}}@media print{body{background:white}section{border:0;padding:0}.table{overflow:visible}select,label[for=profile]{display:none}}
-    </style><main><h1>''' + html.escape(title) + '</h1>' + paragraph(summary) + '<p class="notice">Explicit selected evidence. No universal winner or equal-quality conclusion is inferred. Invalid observations are excluded visibly.</p><p><a href="native-stream-report.md">Initial nine-session desktop benchmark</a> is separate context.</p><label for="profile">Filter profile </label><select id="profile"><option value="">All profiles</option>' + ''.join('<option>' + html.escape(p) + '</option>' for p in profiles) + '</select>' + ''.join(sections) + '''</main><script>document.getElementById('profile').addEventListener('change',e=>{document.querySelectorAll('[data-profile]').forEach(s=>s.hidden=!!e.target.value&&s.dataset.profile!==e.target.value)})</script></html>'''
+    nav{display:flex;flex-wrap:wrap;gap:10px 20px;padding:18px 0}nav a{font-size:.95rem}section p,.technical p{max-width:85ch}details{background:white;border:1px solid #d6dfe2;border-radius:10px;padding:18px 22px;margin:12px 0}summary{cursor:pointer;font-weight:650;padding:4px 0}summary:focus-visible,a:focus-visible,select:focus-visible{outline:3px solid #165b85;outline-offset:4px}details[open] summary{margin-bottom:16px}h2{scroll-margin-top:20px}section:target{border-color:#165b85}#guide-1{border-left:5px solid #a36920}#guide-2 td:first-child{font-weight:650} @media print{nav{display:none}details{break-inside:avoid}}
+    </style><main><h1>''' + html.escape(title) + '</h1><p class="notice">A working local prototype with measured strengths and known gaps. Production reliability is not established.</p><nav aria-label="Report sections">' + ''.join(navigation) + '<a href="#measurements">Full measurements</a><a href="#verification">Verification</a><a href="#excluded-observations">Excluded results</a><a href="#evidence">Evidence files</a></nav><details><summary>Benchmark snapshot and source identity</summary>' + paragraph(summary) + '<p><a href="native-stream-report.md">Initial nine-session desktop benchmark</a> is separate context; its measurements are not pooled here.</p></details>' + ''.join(sections) + '''</main><script>document.getElementById('profile').addEventListener('change',e=>{document.querySelectorAll('[data-profile]').forEach(s=>s.hidden=!!e.target.value&&s.dataset.profile!==e.target.value)});let printState;addEventListener('beforeprint',()=>{printState=[...document.querySelectorAll('details')].map(d=>[d,d.open,d.hidden]);printState.forEach(([d])=>{d.open=true;d.hidden=false})});addEventListener('afterprint',()=>{printState?.forEach(([d,open,hidden])=>{d.open=open;d.hidden=hidden})})</script></html>'''
     output.mkdir(parents=True, exist_ok=True)
     (output/'general-engine-report.md').write_text('\n\n'.join(md) + '\n')
     (output/'general-engine-report.html').write_text(page)

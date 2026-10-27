@@ -1,0 +1,22 @@
+{
+  "measurementTablesUnchanged": true,
+  "selectedRunsUnchanged": 49,
+  "readerSections": 9,
+  "linksResolved": 91,
+  "originalVerificationPreserved": 21,
+  "laterEvidenceFilesVerified": 7,
+  "reportSha256": "eb192cda279add761c31fc1e29d4e1bd10c080d156cb6311389474dcefc10c70",
+  "browserChecks": {
+    "overviewVisible": true,
+    "viewportWidth": 745,
+    "documentWidth": 745,
+    "bandwidthFilterVisibleWorkloads": [
+      "bandwidth / scroll",
+      "bandwidth / video"
+    ],
+    "expandedVideoTableContainsInputP95": true,
+    "navigationToOverview": true
+  },
+  "exporterTests": "2 passed",
+  "preview": "report-reader-overview.png"
+}
