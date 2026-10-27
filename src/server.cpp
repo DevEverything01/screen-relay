@@ -5,6 +5,7 @@
 #include "capture-source.hpp"
 #include <libwebsockets.h>
 #include <array>
+#include <algorithm>
 #include <cassert>
 #include <chrono>
 #include <charconv>
@@ -76,6 +77,8 @@ struct Server {
   std::deque<std::pair<uint32_t, nsl::InputStatus>> replies;
   std::mutex mutex;
   std::deque<nsl::EncodedFrame> pending;
+  std::optional<nsl::CursorImage> pending_cursor;
+  bool last_write_cursor = false;
   nsl::FlowControl flow;
   nsl::CaptureEncoder capture;
   uint32_t generation = 0, lastSequence = 0;
@@ -91,12 +94,18 @@ struct Server {
     pending.push_back(std::move(frame));
     lws_cancel_service(context);
     return true;
+  }, nsl::makeCaptureSource, [this](uint32_t gen, nsl::CursorImage&& cursor) {
+    std::lock_guard<std::mutex> lock(mutex);
+    if (!context || !generation || gen != generation) return;
+    pending_cursor = std::move(cursor);
+    lws_cancel_service(context);
   }) {}
   void release() { if (input) input->releaseAll(); }
   void end() {
     release();
     uint32_t old;
-    { std::lock_guard<std::mutex> lock(mutex); old = generation; generation = 0; pending.clear(); flow = {}; failed = false; }
+    { std::lock_guard<std::mutex> lock(mutex); old = generation; generation = 0; pending.clear(); pending_cursor.reset(); flow = {}; failed = false; }
+    last_write_cursor = false;
     if (old) capture.endSession(old);
     lastSequence = 0; received.clear(); replies.clear(); control_ready = controller = false; viewer = nullptr;
   }
@@ -170,10 +179,36 @@ struct Server {
   }
   int write(lws* wsi) {
     std::optional<nsl::EncodedFrame> frame;
+    std::optional<nsl::CursorImage> cursor;
     { std::lock_guard<std::mutex> lock(mutex);
       if (failed) return -1;
-      if (pending.empty()) return 0;
-      frame.emplace(std::move(pending.front())); pending.pop_front();
+      // Start with video to establish the generation; then share writes fairly.
+      if (lastSequence && pending_cursor && (!last_write_cursor || pending.empty())) {
+        cursor = std::move(pending_cursor); pending_cursor.reset();
+      } else {
+        if (pending.empty()) return 0;
+        frame.emplace(std::move(pending.front())); pending.pop_front();
+      }
+    }
+    if (cursor) {
+      const auto& c = *cursor;
+      if (c.width > nsl::CursorImage::max_extent || c.height > nsl::CursorImage::max_extent ||
+          c.rgba.size() != size_t(c.width) * c.height * 4 ||
+          (c.width && c.height ? c.xhot >= c.width || c.yhot >= c.height
+                              : c.width || c.height || c.xhot || c.yhot)) return -1;
+      std::vector<uint8_t> wire(LWS_PRE + 28 + c.rgba.size());
+      auto* p = wire.data() + LWS_PRE;
+      std::memcpy(p, "NSL1", 4); p[4] = 1; p[5] = 6;
+      put(p+8, generation, 4); put(p+16, 8 + c.rgba.size(), 4);
+      put(p+20, c.width, 2); put(p+22, c.height, 2); put(p+24, c.xhot, 2); put(p+26, c.yhot, 2);
+      std::copy(c.rgba.begin(), c.rgba.end(), p+28);
+      const size_t size = wire.size() - LWS_PRE;
+      if (lws_write(wsi, p, size, LWS_WRITE_BINARY) != int(size)) return -1;
+      last_write_cursor = true;
+      { std::lock_guard<std::mutex> lock(mutex);
+        if (!pending.empty() || pending_cursor) lws_callback_on_writable(wsi);
+      }
+      return 0;
     }
     auto& f = *frame;
     if (f.generation != generation) return 0;
@@ -189,9 +224,10 @@ struct Server {
     const size_t size = wire.size()-LWS_PRE;
     if (lws_write(wsi, p, size, LWS_WRITE_BINARY) != int(size)) return -1;
     width = f.width; height = f.height; lastSequence = f.sequence;
+    last_write_cursor = false;
     { std::lock_guard<std::mutex> lock(mutex); if (!flow.sent(f.sequence, nowUs())) return -1; }
     updateFlow();
-    { std::lock_guard<std::mutex> lock(mutex); if (!pending.empty()) lws_callback_on_writable(wsi); }
+    { std::lock_guard<std::mutex> lock(mutex); if (!pending.empty() || pending_cursor) lws_callback_on_writable(wsi); }
     return 0;
   }
 };
@@ -307,7 +343,8 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
             "\",\"width\":" + std::to_string(s->width) + ",\"height\":" + std::to_string(s->height) +
             ",\"input\":{\"keyboard\":true,\"pointer\":true,\"buttons\":true,\"wheel\":true}," +
             "\"snapshot\":\"/snapshot.png\",\"control\":\"/control\",\"wayland\":false," +
-            "\"max_input_pending\":32,\"cursor\":false,\"audio\":false,\"clipboard\":false,\"resize\":false,\"ime\":false}";
+            "\"max_input_pending\":32,\"cursor\":" + (s->capture.stats().cursor_supported ? "true" : "false") +
+            ",\"audio\":false,\"clipboard\":false,\"resize\":false,\"ime\":false}";
         if (json.size() > sizeof(response->body)) return -1;
         std::memcpy(response->body, json.data(), json.size()); response->length = json.size();
         return responseHeaders(wsi, HTTP_STATUS_OK, "application/json", json.size());
@@ -360,7 +397,8 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
     case LWS_CALLBACK_ESTABLISHED: {
       if (s->viewer || nextGeneration == UINT32_MAX) return -1;
       s->viewer = wsi; s->controller = static_cast<HttpResponse*>(user)->control;
-      { std::lock_guard<std::mutex> lock(s->mutex); s->generation = ++nextGeneration; s->pending.clear(); s->flow = {}; s->failed=false; }
+      { std::lock_guard<std::mutex> lock(s->mutex); s->generation = ++nextGeneration; s->pending.clear(); s->pending_cursor.reset(); s->flow = {}; s->failed=false; }
+      s->last_write_cursor = false;
       s->lastSequence=0; s->received.clear();
       if (s->controller) { s->control_ready = true; lws_callback_on_writable(wsi); }
       else { s->capture.beginSession(s->generation); lws_set_timer_usecs(wsi, 100000); }

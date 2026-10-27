@@ -3,10 +3,12 @@
 #include <X11/Xutil.h>
 #include <X11/extensions/Xdamage.h>
 #include <X11/extensions/XShm.h>
+#include <X11/extensions/Xfixes.h>
 #include <sys/shm.h>
 #include <atomic>
 #include <stdexcept>
 #include <mutex>
+#include <algorithm>
 namespace nsl {
 namespace {
 void require(bool ok, const char* message) { if (!ok) throw std::runtime_error(message); }
@@ -27,6 +29,8 @@ class X11CaptureSource final : public CaptureSource {
   XShmSegmentInfo shm{};
   bool attached = false;
   int damage_event = 0;
+  int cursor_event = 0;
+  bool cursor_dirty = true;
  public:
   X11CaptureSource() { shm.shmid = -1; shm.shmaddr = reinterpret_cast<char*>(-1); }
   ~X11CaptureSource() override {
@@ -42,6 +46,9 @@ class X11CaptureSource final : public CaptureSource {
     require(display, "opening X display failed");
     int ignored;
     require(XDamageQueryExtension(display, &damage_event, &ignored), "XDamage unavailable");
+    int major = 1, minor = 0;
+    require(XFixesQueryExtension(display, &cursor_event, &ignored) &&
+            XFixesQueryVersion(display, &major, &minor) && major >= 1, "XFixes cursor tracking unavailable");
     require(XShmQueryExtension(display), "MIT-SHM unavailable");
     const int screen = DefaultScreen(display);
     require(DisplayWidth(display, screen) == 1280 && DisplayHeight(display, screen) == 720,
@@ -73,6 +80,7 @@ class X11CaptureSource final : public CaptureSource {
     shm.shmid = -1;
     damage = XDamageCreate(display, RootWindow(display, screen), XDamageReportNonEmpty);
     require(damage != 0, "creating XDamage failed");
+    XFixesSelectCursorInput(display, RootWindow(display, screen), XFixesDisplayCursorNotifyMask);
     XFlush(display);
   }
   int fd() const override { return ConnectionNumber(display); }
@@ -81,8 +89,34 @@ class X11CaptureSource final : public CaptureSource {
     while (XPending(display)) {
       XEvent event; XNextEvent(display, &event);
       if (event.type == damage_event + XDamageNotify) dirty = true;
+      if (event.type == cursor_event + XFixesCursorNotify) cursor_dirty = true;
     }
     return dirty;
+  }
+  bool cursorSupported() const override { return true; }
+  std::optional<CursorImage> cursor(bool force) override {
+    if (!force && !cursor_dirty) return std::nullopt;
+    cursor_dirty = false;
+    std::unique_ptr<XFixesCursorImage, decltype(&XFree)> image(XFixesGetCursorImage(display), &XFree);
+    CursorImage result;
+    // Bound an application-provided image; never leave a previous shape stuck on failure.
+    if (!image || !image->width || !image->height ||
+        image->width > CursorImage::max_extent || image->height > CursorImage::max_extent ||
+        image->xhot >= image->width || image->yhot >= image->height) return result;
+    result.width = image->width; result.height = image->height;
+    result.xhot = image->xhot; result.yhot = image->yhot;
+    result.rgba.resize(size_t(result.width) * result.height * 4);
+    for (size_t pixel = 0; pixel < result.rgba.size() / 4; ++pixel) {
+      // Xlib uses unsigned long even on LP64; XFixes colors are premultiplied ARGB.
+      const uint32_t argb = uint32_t(image->pixels[pixel]);
+      const unsigned alpha = argb >> 24;
+      for (unsigned channel = 0; channel < 3; ++channel) {
+        const unsigned component = (argb >> (16 - channel * 8)) & 255;
+        result.rgba[pixel * 4 + channel] = alpha ? std::min(255u, (component * 255 + alpha / 2) / alpha) : 0;
+      }
+      result.rgba[pixel * 4 + 3] = alpha;
+    }
+    return result;
   }
   PixelFormat pixelFormat() const override {
     return image->byte_order == LSBFirst ? PixelFormat::BGRA : PixelFormat::ARGB;

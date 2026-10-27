@@ -47,7 +47,7 @@ All integers are unsigned big-endian unless marked signed. Do not cast incoming 
 | --- | ---: | --- |
 | 0 | 4 | ASCII magic `NSL1` |
 | 4 | 1 | Version, `1` |
-| 5 | 1 | Type: `1` frame, `2` ACK, `3` input, `4` control ready, `5` input response |
+| 5 | 1 | Type: `1` frame, `2` ACK, `3` input, `4` control ready, `5` input response, `6` cursor image |
 | 6 | 2 | Flags, zero for ACK/input; frame bit 0 is keyframe, all other bits zero |
 | 8 | 4 | Stream generation |
 | 12 | 4 | Sequence number |
@@ -71,6 +71,31 @@ Common payload length must equal `12 + access-unit length`; whole message maximu
 ### ACK, type 2
 
 Payload length is zero. The common generation and sequence identify the sent front frame. Ignore ACKs that do not exactly match it. No other message grants credit.
+
+### Cursor image, type 6
+
+Server-to-viewer on `/stream` only, after the generation's first video frame.
+Flags and sequence are zero; generation must match the current video generation.
+The payload is four big-endian `uint16` values (width, height, hotspot X, hotspot Y)
+followed by `width * height * 4` bytes of straight-alpha RGBA in row order.
+Dimensions are bounded to 256×256 and the hotspot must lie inside the image.
+An eight-byte all-zero payload restores the local arrow when a native image is
+unavailable or exceeds the bound. A fully transparent nonempty image represents
+a blank remote cursor. Incorrect lengths, dimensions, hotspots or generations
+are rejected by the viewer.
+
+Cursor updates neither consume video credit nor receive ACKs. One pending image
+is retained, with newer changes replacing it; video and cursor writes alternate
+when both are pending. A fresh connection receives the current shape even if it
+has not changed. X11 cursor events wake the capture worker independently of
+desktop damage and video admission. The browser renders an overlay at the local
+pointer position, scales its image and hotspot with the desktop, and hides it
+outside the desktop or on disconnect. Remote pointer warps are not synchronized.
+
+X11 pixels follow the [XFixes cursor image contract](https://xorg.freedesktop.org/archive/current/doc/fixesproto/fixesproto.txt):
+premultiplied ARGB in Xlib `unsigned long` elements. The backend converts to
+straight RGBA before publication. Deploy server and viewer together; older
+viewers that accept only type 1 do not support the cursor extension.
 
 ### Input, type 3
 

@@ -19,6 +19,7 @@ struct EncodedFrame {
 };
 
 struct CaptureStats {
+  bool cursor_supported = false;
   uint64_t captures = 0;
   uint64_t encoded = 0;
   uint64_t capture_ns = 0;
@@ -29,7 +30,9 @@ struct CaptureStats {
 class CaptureEncoder {
  public:
   using Publish = std::function<bool(EncodedFrame&&)>;
-  explicit CaptureEncoder(Publish publish, CaptureSourceFactory factory = makeCaptureSource);
+  using PublishCursor = std::function<void(uint32_t, CursorImage&&)>;
+  explicit CaptureEncoder(Publish publish, CaptureSourceFactory factory = makeCaptureSource,
+                          PublishCursor cursor = {});
   ~CaptureEncoder();
   CaptureEncoder(const CaptureEncoder&) = delete;
   CaptureEncoder& operator=(const CaptureEncoder&) = delete;

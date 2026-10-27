@@ -122,3 +122,24 @@ tsc --noEmit --strict --module NodeNext --target ES2022 tests/sdk-types.mts
 The compiler check validates public package/type resolution and rejects invalid
 input shapes; it does not contact a desktop. Real Thunar and Freedoom comparisons
 are described in `qualification/` and reported separately from these contract tests.
+
+## Remote cursor verification
+
+Run `TEST_CONTAINER=<dedicated-container> TEST_URL=<local-url> npm run test:cursor`
+against a clean image with the pinned XFCE/Thunar environment. This opens the real
+file manager, reads its actual cursor through an independent Xlib/XFixes observer,
+and compares browser-rendered pixels, alpha, dimensions and hotspot placement.
+It checks arrow, text and resize shapes, half-size desktop scaling, reconnect,
+leaving the desktop, video-credit exhaustion and five malformed wire cases.
+No test application supplies the expected cursor image.
+
+The old baseline failed because no remote cursor was rendered. The cursor update
+passed all 13 checks in release and ASAN/UBSAN builds, plus the existing 12 video
+and five framework checks in each build. Both instrumented and release servers
+exited zero; no sanitizer diagnostics were reported. Local receipts are
+`results/cursor-before.json`, `results/cursor-release.json`,
+`results/cursor-asan.json` and `results/cursor-verification.json`.
+The live desktop's arrow, text and resize screenshots are in
+`results/cursor-live-*.png`; its deployed executable and viewer hashes match the
+tested release. Existing performance reports describe the earlier frozen build;
+the benchmark matrix was not rerun for this cursor change.

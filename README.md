@@ -50,6 +50,7 @@ The stream uses persistent libx264 via libavcodec, scalar/ARM NEON BT.709 conver
     npm test
     TEST_CONTAINER=native-stream-lab TEST_URL=http://127.0.0.1:18094 npm run test:integration
     TEST_CONTAINER=native-stream-lab TEST_URL=http://127.0.0.1:18094 npm run test:framework
+    TEST_CONTAINER=native-stream-lab TEST_URL=http://127.0.0.1:18094 npm run test:cursor
 
 Integration needs installed Google Chrome and a dedicated container; tests temporarily cover its desktop. Playwright/PNG tooling are local development dependencies. Docker builds run color, flow-policy and injected-backend tests. See [test evidence and limits](tests/README.md).
 
@@ -59,7 +60,9 @@ The [modular baseline report](optimize/general-engine-report.md) ([HTML](optimiz
 
 The [initial nine-session comparison](optimize/native-stream-report.md) ([HTML](optimize/native-stream-report.html)) remains narrow historical evidence. [Broader qualification](qualification/README.md) records CPU, RAM, bandwidth, delivered updates, latency and fidelity together. Comparative runs require separately prepared competitor images and credentials. No universal winner follows from unequal-quality operating points.
 
-Current limits: CPU capture, fixed 720p, one controller, mapped keyboard subset. No Wayland backend, authentication, TLS, IME, audio, clipboard, resize, cursor-image capture, relative pointer, hardware encoding or simultaneous viewer/agent control. GNOME, physical presentation, packet loss and browser/VM resources are unverified. C++ was chosen for direct native-library integration; no Rust-versus-C++ benchmark was performed.
+The viewer receives actual X11 cursor images and hotspots, including text and window-resize cursors, independently of video frames. Cursor images scale with the desktop; the local pointer supplies their position. Images larger than 256×256 fall back to the local arrow. See the [cursor protocol](docs/build-contract.md#cursor-image-type-6).
+
+Current limits: CPU capture, fixed 720p, one controller, mapped keyboard subset. No Wayland backend, authentication, TLS, IME, audio, clipboard, resize, remote pointer-warp synchronization, relative pointer, hardware encoding or simultaneous viewer/agent control. GNOME, physical presentation, packet loss and browser/VM resources are unverified. C++ was chosen for direct native-library integration; no Rust-versus-C++ benchmark was performed.
 
 For a live keyboard-controlled game, see [Freedoom](doom/README.md).
 

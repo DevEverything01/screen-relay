@@ -33,4 +33,8 @@ The input command holds one connection for the whole batch and closes it even on
 
 `/control` uses WebSocket subprotocol `nsl1` and the existing big-endian NSL1 envelope. Ready is type 4 with nonzero generation and a four-byte width/height payload. Input is type 3 with a nonzero request sequence and the existing 16-byte input payload. Type 5 echoes that sequence and contains a status byte: 0 success, 1 invalid, 2 unsupported. The SDK rejects malformed messages and times out pending requests. Discovery and PNG are `GET /capabilities` and `GET /snapshot.png`; existing `GET /metrics` supplies status. The human viewer uses the same native input validation and ownership contract.
 
+The `cursor` capability describes cursor-image updates on the human `/stream`
+connection. `/control` does not receive cursor messages, and snapshots contain
+desktop pixels without the viewer's pointer overlay.
+
 Run `node --test sdk/index.test.js` for SDK protocol and lifecycle checks. Full integration additionally requires the native server and checks fresh PNG pixels without a viewer, input parity and held-control release, controller conflicts, malformed input, Host/Origin handling, and streaming flow while snapshots run. The SDK tests alone do not establish those native or browser behaviors.

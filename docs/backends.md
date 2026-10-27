@@ -13,6 +13,14 @@ The current refactor separates capture and input interfaces from the streaming p
 
 `src/capture-source.hpp` defines `CaptureSource`: `fd()`, `drainDamage()`, `pixelFormat()` and `capture()`. Its `FrameView` is a non-owning, CPU-accessible pointer, stride, dimensions and BGRA or ARGB format; pixels remain valid until the next capture or source destruction. The stream capture worker creates and owns its source, polls its fd alongside the wake fd, drains notifications, latches dirty work, captures and converts before the next capture. The worker requires a valid fd, stable supported pixel format, fixed 1280×720 dimensions, and stride 5120–10240 bytes. It copies/converts pixels into its own encoder frame; this interface does not provide GPU zero-copy. The X11 implementation owns its display, XDamage and MIT-SHM resources and subtracts damage before reading the root. `CaptureEncoder` accepts a `CaptureSourceFactory`, defaulting to `makeCaptureSource()`; injection allows a source to be selected without placing X11 calls in the encoder. `Snapshot` uses a separate source on its own worker via `makeCaptureSource()` and converts the CPU view to PNG; it does not share the stream worker source.
 
+Optional `cursorSupported()` and `cursor(force)` expose owned cursor images and
+hotspots through the same source boundary. The default implementation is
+unsupported. X11 requires XFixes 1+, subscribes to cursor notifications and
+converts native premultiplied ARGB into bounded straight-alpha RGBA. Only the
+capture worker reads that display; a separate publication callback transfers
+images into the transport's single latest-image slot. Cursor changes are serviced
+while video admission is paused and do not mark the video frame dirty.
+
 `src/input.hpp` defines `InputBackend` with `apply`, `releaseAll`, `dimensions` and `name`; the service thread owns the instance and applies input and release on connection lifecycle events. `src/x11-input.cpp` implements XTest on a separate X connection. `initializeNativeBackend()` initializes Xlib threading before backend use. The current factories construct X11 implementations; no runtime Wayland selection, permission flow or fallback backend exists.
 
 ## Future Wayland work

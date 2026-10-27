@@ -115,9 +115,11 @@ struct Resources {
 }  // namespace
 
 struct CaptureEncoder::Impl {
-  explicit Impl(Publish callback, CaptureSourceFactory factory) : source_factory(std::move(factory)), publish(std::move(callback)) {}
+  explicit Impl(Publish callback, CaptureSourceFactory factory, PublishCursor cursor)
+      : source_factory(std::move(factory)), publish(std::move(callback)), publish_cursor(std::move(cursor)) {}
   CaptureSourceFactory source_factory;
   Publish publish;
+  PublishCursor publish_cursor;
   mutable std::mutex mutex;
   std::condition_variable ready;
   std::thread worker;
@@ -145,7 +147,9 @@ struct CaptureEncoder::Impl {
       require(format == PixelFormat::BGRA || format == PixelFormat::ARGB, "unsupported capture pixel format");
       Resources r(format);
       r.init();
-      { std::lock_guard<std::mutex> lock(mutex); initialized = true; running = true; }
+      { std::lock_guard<std::mutex> lock(mutex);
+        counters.cursor_supported = source->cursorSupported(); initialized = true; running = true;
+      }
       ready.notify_all();
       bool dirty = true, force_idr = true;
       uint64_t seen_revision = 0;
@@ -156,20 +160,28 @@ struct CaptureEncoder::Impl {
         if (source->drainDamage()) dirty = true;
         uint32_t gen, seq;
         uint64_t rev, rate;
-        bool admitted;
+        bool admitted, cursor_active, refresh_cursor = false;
         {
           std::lock_guard<std::mutex> lock(mutex);
           if (stopping) break;
           if (revision != seen_revision) {
             seen_revision = revision; dirty = true; force_idr = true;
+            refresh_cursor = true;
           }
           gen = generation; rev = revision; rate = bitrate;
+          cursor_active = gen != 0 && active && bool(publish_cursor);
           admitted = gen != 0 && active && !paused &&
                      (!admit_until_us || uint64_t(std::chrono::duration_cast<std::chrono::microseconds>(
                          Clock::now().time_since_epoch()).count()) < admit_until_us) &&
                      sequence - acknowledged < window &&
                      sequence < std::numeric_limits<uint32_t>::max();
           seq = sequence + (admitted ? 1 : 0);
+        }
+        bool cursor_published = false;
+        if (cursor_active) {
+          if (auto cursor = source->cursor(refresh_cursor)) {
+            publish_cursor(gen, std::move(*cursor)); cursor_published = true;
+          }
         }
         const auto now = Clock::now();
         if (admitted && dirty && now >= deadline) {
@@ -260,6 +272,8 @@ struct CaptureEncoder::Impl {
           }
           continue;
         }
+        // A synchronous cursor read may have buffered display events in Xlib.
+        if (cursor_published) continue;
         timespec timeout{};
         const timespec* timeout_ptr = nullptr;
         if (admitted && dirty) {
@@ -293,8 +307,8 @@ struct CaptureEncoder::Impl {
   }
 };
 
-CaptureEncoder::CaptureEncoder(Publish publish, CaptureSourceFactory factory)
-    : impl_(std::make_unique<Impl>(std::move(publish), std::move(factory))) {}
+CaptureEncoder::CaptureEncoder(Publish publish, CaptureSourceFactory factory, PublishCursor cursor)
+    : impl_(std::make_unique<Impl>(std::move(publish), std::move(factory), std::move(cursor))) {}
 CaptureEncoder::~CaptureEncoder() { stop(); }
 bool CaptureEncoder::start(std::string& error) {
   auto& i = *impl_;

@@ -152,7 +152,7 @@ try {
     const before=await viewer.evaluate(()=>nativeStats.drawn);
     docker('exec',container,'kill','-USR2',String(fixturePID));
     try {
-      await viewer.locator('canvas').focus(); await viewer.keyboard.down('Shift');
+      await viewer.locator('#screen').focus(); await viewer.keyboard.down('Shift');
       await poll(state,s=>s.shift);
       const sdkPixel=await snapshotPixel([192,48,176],await snapshot({url}),viewer);
       assert(state().shift,'SDK snapshot disrupted the viewer control session');

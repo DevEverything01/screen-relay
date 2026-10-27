@@ -2,6 +2,38 @@
 const canvas = document.querySelector("#screen"),
   ctx = canvas.getContext("2d"),
   status = document.querySelector("#status");
+const cursor = document.querySelector("#cursor"), cursorContext = cursor.getContext("2d");
+let cursorAvailable = false, cursorHotX = 0, cursorHotY = 0, pointerPosition;
+function renderCursor() {
+  canvas.style.cursor = cursorAvailable && ready ? "none" : "default";
+  const r = canvas.getBoundingClientRect(), p = pointerPosition;
+  cursor.hidden = !cursorAvailable || !ready || !p || p.pointerType === "touch" ||
+    p.clientX < r.left || p.clientX >= r.right || p.clientY < r.top || p.clientY >= r.bottom;
+  if (cursor.hidden) return;
+  const sx = r.width / canvas.width, sy = r.height / canvas.height;
+  cursor.style.width = `${cursor.width * sx}px`;
+  cursor.style.height = `${cursor.height * sy}px`;
+  cursor.style.left = `${p.clientX - r.left - cursorHotX * sx}px`;
+  cursor.style.top = `${p.clientY - r.top - cursorHotY * sy}px`;
+}
+function receiveCursor(data) {
+  const v = new DataView(data);
+  if (data.byteLength < 28 || data.byteLength > 28 + 256 * 256 * 4 ||
+      v.getUint16(6) || v.getUint32(12) || !generation || v.getUint32(8) !== generation) {
+    throw new Error("Invalid cursor envelope");
+  }
+  const width = v.getUint16(20), height = v.getUint16(22),
+    hotX = v.getUint16(24), hotY = v.getUint16(26);
+  if (width > 256 || height > 256 || data.byteLength !== 28 + width * height * 4 ||
+      (width && height ? hotX >= width || hotY >= height : width || height || hotX || hotY)) {
+    throw new Error("Invalid cursor image");
+  }
+  cursorAvailable = width > 0;
+  cursorHotX = hotX; cursorHotY = hotY;
+  cursor.width = width || 1; cursor.height = height || 1;
+  if (cursorAvailable) cursorContext.putImageData(new ImageData(new Uint8ClampedArray(data, 28), width, height), 0, 0);
+  renderCursor();
+}
 const stats = window.nativeStats = {
   received: 0,
   drawn: 0,
@@ -119,6 +151,9 @@ function release() {
 function reset() {
   release();
   ready = false;
+  cursorAvailable = false;
+  cursor.width = cursor.height = 1;
+  renderCursor();
   clearTimeout(deadline);
   for (const item of pending.values()) item.frame?.close();
   pending.clear();
@@ -197,14 +232,20 @@ function connect() {
     if (current !== epoch || ws.readyState !== WebSocket.OPEN) return;
     try {
       if (
-        !(e.data instanceof ArrayBuffer) || e.data.byteLength < 33 ||
+        !(e.data instanceof ArrayBuffer) || e.data.byteLength < 20 ||
         e.data.byteLength > 8388640
       ) throw new Error("Invalid frame length");
       const v = new DataView(e.data),
         gen = v.getUint32(8),
         seq = v.getUint32(12),
         flags = v.getUint16(6),
-        len = v.getUint32(16),
+        len = v.getUint32(16);
+      if (v.getUint32(0) !== 0x4e534c31 || v.getUint8(4) !== 1 || len !== e.data.byteLength - 20) {
+        throw new Error("Invalid message envelope");
+      }
+      if (v.getUint8(5) === 6) { receiveCursor(e.data); return; }
+      if (e.data.byteLength < 33) throw new Error("Invalid frame length");
+      const
         width = v.getUint16(20),
         height = v.getUint16(22),
         pts = v.getBigUint64(24);
@@ -266,7 +307,9 @@ function connect() {
                 stats.pendingBytes -= next.bytes;
                 stats.outstanding = pending.size;
                 stats.drawn++;
+                const wasReady = ready;
                 ready = true;
+                if (!wasReady) renderCursor();
                 retry = 0;
                 status.textContent = "Live · click to control";
               }
@@ -315,6 +358,8 @@ function connect() {
   };
 }
 function position(e) {
+  pointerPosition = {clientX: e.clientX, clientY: e.clientY, pointerType: e.pointerType};
+  renderCursor();
   const r = canvas.getBoundingClientRect();
   if (r.width <= 0 || r.height <= 0) return;
   const px = Math.max(
@@ -355,6 +400,9 @@ canvas.addEventListener("pointermove", (e) => {
   position(e);
   sendInput(3);
 });
+canvas.addEventListener("pointerleave", () => { pointerPosition = null; renderCursor(); });
+new ResizeObserver(renderCursor).observe(canvas);
+window.addEventListener("scroll", renderCursor, {passive: true});
 const buttonMap = [1, 2, 3];
 canvas.addEventListener("pointerdown", (e) => {
   const button = buttonMap[e.button];
@@ -403,7 +451,7 @@ canvas.addEventListener("wheel", (e) => {
   }
 }, { passive: false });
 canvas.addEventListener("blur", release);
-window.addEventListener("blur", release);
+window.addEventListener("blur", () => { release(); pointerPosition = null; renderCursor(); });
 let hudTimer, metricsRequest;
 function startHud() {
   let previousTime = performance.now(),

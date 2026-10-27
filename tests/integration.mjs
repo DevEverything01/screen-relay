@@ -36,7 +36,7 @@ async function live(p = page) {
   assert.equal(await p.evaluate(() => nativeStats.decodeerrors), 0);
 }
 async function pixel(expected) {
-  return poll(() => page.evaluate(() => [...document.querySelector('canvas').getContext('2d').getImageData(800, 400, 1, 1).data]),
+  return poll(() => page.evaluate(() => [...document.querySelector('#screen').getContext('2d').getImageData(800, 400, 1, 1).data]),
     p => expected.every((v, i) => Math.abs(v-p[i]) < 35));
 }
 // A raw receiver exercises server framing and timeout without relying on the viewer's parser or ACK code.
@@ -56,8 +56,9 @@ async function rawProbe(mode, origin) {
       timer = setTimeout(() => {ws.close(); reject(new Error('Socket did not close within 7s'));}, 7000);
       ws.onopen = () => {opened = true;};
       ws.onmessage = e => {
-        frames++;
         const header = new DataView(e.data);
+        if (header.getUint8(5) === 6) return; // Cursor changes do not consume video credit.
+        frames++;
         received.push({generation: header.getUint32(8), sequence: header.getUint32(12), bytes: e.data.byteLength, at: performance.now()-start});
         if (frames !== 1) return;
         firstAt = performance.now();
@@ -173,7 +174,7 @@ print(json.dumps(paused))`));
     return s;
   });
   await check('held controls release on canvas blur with independent X server state', async () => {
-    await page.locator('canvas').focus(); await page.keyboard.down('Shift');
+    await page.locator('#screen').focus(); await page.keyboard.down('Shift');
     await page.mouse.move(800,400); await page.mouse.down();
     await poll(state, s => s.shift && s.button1);
     await page.locator('#reconnect').focus();
@@ -191,7 +192,7 @@ print(json.dumps(paused))`));
   await check('continuous X11 damage decodes changing pixels and settles when damage stops', async () => {
     const before = await page.evaluate(() => nativeStats.drawn);
     docker('exec', container, 'kill', '-USR2', String(fixturePID));
-    const readPatch = () => page.evaluate(() => [...document.querySelector('canvas').getContext('2d').getImageData(1000,150,1,1).data]);
+    const readPatch = () => page.evaluate(() => [...document.querySelector('#screen').getContext('2d').getImageData(1000,150,1,1).data]);
     let yellow, blue;
     try {
       yellow = await poll(readPatch, p => Math.abs(p[0]-224) < 35 && Math.abs(p[1]-160) < 35 && p[2] < 70);
@@ -210,7 +211,7 @@ print(json.dumps(paused))`));
     return {yellow, blue, settled, final};
   });
   await check('disconnect releases held controls and reconnect renders fresh desktop', async () => {
-    await page.locator('canvas').focus(); await page.keyboard.down('Shift');
+    await page.locator('#screen').focus(); await page.keyboard.down('Shift');
     await page.mouse.move(800,400); await page.mouse.down();
     await poll(state, s => s.shift && s.button1);
     await page.close();
