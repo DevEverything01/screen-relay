@@ -8,7 +8,6 @@
 | --- | --- |
 | `--json` | Success object on stdout. On failure, an error object on stderr and a non-zero exit. |
 | Error shape | `{"error":{"code","message","hint","component"?,"log"?}}` |
-| Human errors | One line on stderr with a fix hint. |
 | `NATIVE_STREAM_URL` | Default `--url` for client commands. |
 | `NATIVE_STREAM_TOKEN_FILE` | Default `--token-file` for client commands. |
 | State directory | `${XDG_STATE_HOME:-~/.local/state}/native-stream/<name>/` (mode 0700): `session.json`, `token` (0600), logs. |

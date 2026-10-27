@@ -3,7 +3,7 @@
 A library for Node 22+ with no runtime dependencies. The SDK has no CLI. Use [`native-stream`](cli.md) for command-line control.
 
 ```sh
-npm install /absolute/path/to/native-stream
+npm install /absolute/path/to/this/repo
 ```
 
 ```js
@@ -28,7 +28,7 @@ Every function takes `{ url, timeout, token }`.
 | `token` | 64 lowercase hex characters. Required for remote hosts. |
 | `timeout` | Milliseconds per request. |
 
-HTTP uses a Bearer header and does not follow redirects. WebSockets offer `nsl1` and `bearer.TOKEN`. Tokens never appear in URLs.
+Redirects are not followed. Token handling: [Remote access](remote-access.md#tokens).
 
 ## Functions
 
