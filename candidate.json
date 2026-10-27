@@ -1,5 +1,5 @@
 {
-  "engine": "selkies",
-  "image": "sha256:aa2b9fe4228860fcae86829b1c609139f956f934236bbebdd50bcf143d356712",
-  "command": "selkies"
+  "engine": "native",
+  "image": "native-stream-lab:final2",
+  "command": "native"
 }

@@ -1,36 +1,48 @@
-# Initial implementation scope
+# Native lab design and limits
 
-This is a proposed design to approve, not a validated implementation or an optimization finding.
+This describes the implemented prototype, not an optimization verdict. See the [implemented contract](build-contract.md), [verification recipes](../tests/README.md), [metrics checks](../tests/live-metrics-README.md), and [final report](../optimize/native-stream-report.md) (pending publication).
 
 ## Data ownership
 
 A capture worker owns an X connection, XDamage object, MIT-SHM image, reusable YUV frame and persistent libavcodec/libx264 encoder. The transport thread owns its WebSocket context and a separate X connection for XTest input. A bounded handoff transfers encoded packet ownership; no writer rewrites storage still held by a reader.
 
-Capture admission requires damage, an available browser credit, and the frame deadline. Transfer/reset damage before capture on the same X connection so a concurrent subsequent draw remains pending. Start with full-frame capture and conversion; do not claim regional conversion savings. Respect pixel masks, stride and SHM allocation lifetime. Make encoder input writable before reuse.
+Capture admission requires damage, an available browser credit, and the frame deadline. Damage resets before capture on the same X connection so subsequent drawing remains pending. Capture and conversion are full-frame; regional conversion savings are not implemented. Pixel masks/stride are validated and encoder input is made writable before reuse.
 
-Latch pending damage even while credit is unavailable: NonEmpty events are transitions. Force an initial/reconnect frame, wake on restored credit, and restore pending work after capture failure. Pin Xfce compositing off, as in both baseline sessions; verify child windows, popups and scrolling reach root capture.
+Pending damage stays latched while credit is unavailable: NonEmpty events are transitions. Initial/reconnected sessions force a frame, restored credit wakes the worker, and capture failure retains pending work. The session pins Xfce compositing off; child windows, popups, and scrolling require verification against root capture.
 
-Use low-delay H.264 with no B frames or lookahead. Preserve the reference chain: stop before generating extra frames rather than dropping dependent encoded packets. The browser decodes, draws and closes every VideoFrame; its acknowledgement releases credit. A draw acknowledgement is not a physical presentation timestamp. One in-flight frame deliberately bounds state; its WAN round-trip ceiling is a limitation of this local experiment.
+Use low-delay H.264 with no B frames or lookahead. Preserve the reference chain: stop before generating extra frames rather than dropping dependent encoded packets. The browser decodes and draws, sends ACK to release credit, and closes each VideoFrame in a finally block. A draw acknowledgement is not a physical presentation timestamp. One in-flight frame deliberately bounds state; its WAN round-trip ceiling is a limitation of this local experiment.
 
-Before relying on one-frame credit, test IDR followed by silence: WebCodecs low-latency preference does not guarantee immediate output. A decoder retaining the first frame would deadlock this policy. Do not paper over it with per-frame flush. Reject unsupported configurations or use a measured bounded-credit policy. Implement ACK timeout/hidden-tab recovery with a new generation and IDR. Only the transport thread may write sockets; worker completion wakes it.
+IDR followed by silence needs an actual-browser check: WebCodecs low-latency preference does not guarantee immediate output. A decoder retaining its first frame cannot make progress under one-credit admission. The page checks decoder support and uses first-frame/decode deadlines rather than per-frame flushes. ACK timeout and hidden-tab recovery reconnect with a new generation and IDR. Only the transport thread writes sockets; worker completion wakes it.
 
-On reconnect, reset the stream generation and send an IDR with parameter sets. Validate inbound message sizes, input ranges and acknowledgements. Release held keys and buttons on blur/disconnect. Include pointer scaling, modifier keys and wheel events. Cursor shape fidelity needs explicit implementation or an honest recorded limitation.
+Reconnect resets generation and sends an IDR with parameter sets. The server validates inbound sizes, input ranges, and acknowledgements, and releases held controls on blur/disconnect. Pointer scaling, modifier keys, and wheel events are implemented. Cursor-shape streaming remains unsupported.
 
-## Libraries proposed for approval
+## Libraries used
 
-The current shared image already contains libavcodec, libavutil and libswscale development packages. A live capability check confirmed `avcodec_find_encoder_by_name("libx264")` succeeds in libavcodec.so.61.
+The reference image provides libavcodec ABI 61, libavutil, and libswscale development packages. Startup requires `avcodec_find_encoder_by_name("libx264")` to succeed and returns an error otherwise.
 
-Proposed additional container packages: build-essential, pkg-config, libx11-dev, libxext-dev, libxdamage-dev, libxfixes-dev, libxtst-dev, libwebsockets-dev. None is approved or installed for this prototype yet. H.264 decoding capability must be checked in the actual browser. YUV420 discards chroma detail and may fail the colored-text quality constraint.
+The Dockerfile installs the compiler and development packages: build-essential, pkg-config, libx11-dev, libxext-dev, libxdamage-dev, libxfixes-dev, libxtst-dev, libwebsockets-dev. It builds the daemon directly against these libraries, without invoking Selkies, KasmVNC, or an FFmpeg process. H.264 decoding capability must be checked in the actual browser. YUV420 discards chroma detail and may fail the colored-text quality constraint.
 
 ## Primary references
 
 - [XDamage protocol](https://xorg.freedesktop.org/archive/current/doc/damageproto/damageproto.txt): region subtraction and damage reporting.
 - [MIT-SHM](https://xorg.freedesktop.org/archive/current/doc/xextproto/shm.html): image storage and capture semantics; SHM still entails a framebuffer copy.
-- [FFmpeg send/receive API](https://ffmpeg.org/doxygen/8.0/avcodec_8h_source.html): reference ownership and encoder draining. Installed FFmpeg version must be respected during implementation.
+- [FFmpeg send/receive API](https://ffmpeg.org/doxygen/7.0/avcodec_8h_source.html): reference ownership and encoder draining. The reference image uses libavcodec ABI 61.
 - [WebCodecs AVC registration](https://www.w3.org/TR/webcodecs-avc-codec-registration/): Annex B, keyframes and parameter sets.
 - [libwebsockets write API](https://libwebsockets.org/lws-api-doc-main/html/lws-write_8h.html): writable callbacks and required buffer padding.
 - [XTest](https://www.x.org/releases/X11R7.5/doc/Xext/xtestlib.html): synthetic input.
 
-## What would constitute success
+## Implemented conversion and failure behavior
+
+Little-endian BGRA uses limited-range BT.709 conversion in `src/color.cpp`, with AArch64 NEON eight-pixel luma and 2×2 chroma blocks plus scalar tail/fallback. It respects source and destination strides. Averaging each 2×2 block places chroma at its center, so the codec and frame signal CENTER; left-sited metadata would misdescribe these pixels. Big-endian ARGB uses libswscale with left-sited chroma metadata. These paths require their own verification evidence.
+
+Persistent x264 currently uses CRF 10, ultrafast/zerolatency, two threads, no B frames/lookahead, GOP 600, and repeated SPS/PPS in Annex B. YUV420 still loses chroma detail; low CRF cannot recover it. Static similarity alone does not establish matched motion quality.
+
+Capture/encode failure retains dirty work and forces IDR in the same generation. Two recovery attempts reopen the encoder and wait one second; the third consecutive failure, or failed reopen, is fatal. The server observes `CaptureEncoder::error()` and exits with failure. Reconnect increments generation. Sequence exhaustion stops admission and requires reconnect; automatic generation rotation is not implemented.
+
+The surface is fixed 1280×720, one viewer. Input supports mapped HID keys, buttons 1..3, two wheel axes, held modifiers, and release-all. Layout/IME completeness, clipboard, audio, resize, cursor-shape streaming, hardware encoding, multiple viewers, and adaptive network control remain outside this implementation. A loopback Origin check is not authentication; publish to host loopback only.
+
+The HUD reports canvas draw FPS, H.264 payload rate, whole-container CPU normalized to one core, and cgroup working-set RAM. It excludes browser resource usage and does not isolate streaming CPU. One-credit throughput depends on round-trip time; this local experiment makes no WAN performance claim.
+
+## Acceptance targets
 
 Predeclared lab targets: ≤5% of one CPU core at idle, ≥50 browser-visible motion updates/s with the existing approximately 55/s producer, motion input p95 ≤45 ms, no input loss, bounded memory/backlog, and static text quality no worse than the measured baseline within the agreed tolerance. Report active CPU, memory and bandwidth even when a target fails. Equal configured FPS is not equal achieved FPS; static text similarity is not matched motion quality. No universal efficiency winner may be inferred from unmatched operating points.
