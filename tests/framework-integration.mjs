@@ -4,7 +4,7 @@ import {mkdirSync, writeFileSync} from 'node:fs';
 import {request} from 'node:http';
 import {fileURLToPath} from 'node:url';
 import {chromium} from 'playwright';
-import {connect, capabilities} from '../sdk/index.js';
+import {connect, capabilities, snapshot} from '../sdk/index.js';
 
 const container = process.env.TEST_CONTAINER;
 assert(container, 'Set TEST_CONTAINER to a dedicated existing native container');
@@ -41,23 +41,26 @@ async function http(path, headers={}) {
     req.on('error',reject); req.end();
   });
 }
-async function snapshotPixel(expected) {
-  const response=await http('/snapshot.png');
-  assert.equal(response.status,200);
-  assert.match(response.headers['content-type'],/^image\/png/);
-  assert.deepEqual([...response.bytes.subarray(0,8)],[137,80,78,71,13,10,26,10]);
-  const page=await browser.newPage();
+async function snapshotPixel(expected, bytes, decodePage) {
+  if (!bytes) {
+    const response=await http('/snapshot.png');
+    assert.equal(response.status,200);
+    assert.match(response.headers['content-type'],/^image\/png/);
+    bytes=response.bytes;
+  }
+  assert.deepEqual([...bytes.subarray(0,8)],[137,80,78,71,13,10,26,10]);
+  const page=decodePage || await browser.newPage();
   try {
     const pixel=await page.evaluate(async data=>{
       const image=new Image(); image.src='data:image/png;base64,'+data; await image.decode();
       const canvas=document.createElement('canvas'); canvas.width=image.width; canvas.height=image.height;
       const ctx=canvas.getContext('2d'); ctx.drawImage(image,0,0);
       return {width:image.width,height:image.height,rgba:[...ctx.getImageData(800,400,1,1).data]};
-    },response.bytes.toString('base64'));
+    },bytes.toString('base64'));
     assert.equal(pixel.width,1280); assert.equal(pixel.height,720);
     assert(expected.every((value,i)=>Math.abs(value-pixel.rgba[i])<3),JSON.stringify(pixel));
     return pixel;
-  } finally {await page.close();}
+  } finally {if (!decodePage) await page.close();}
 }
 async function rawMalformed() {
   return new Promise((resolve,reject)=>{
@@ -149,11 +152,16 @@ try {
     const before=await viewer.evaluate(()=>nativeStats.drawn);
     docker('exec',container,'kill','-USR2',String(fixturePID));
     try {
+      await viewer.locator('canvas').focus(); await viewer.keyboard.down('Shift');
+      await poll(state,s=>s.shift);
+      const sdkPixel=await snapshotPixel([192,48,176],await snapshot({url}),viewer);
+      assert(state().shift,'SDK snapshot disrupted the viewer control session');
+      await viewer.keyboard.up('Shift'); await poll(state,s=>!s.shift);
       const responses=await Promise.all(Array.from({length:12},()=>http('/snapshot.png')));
       assert(responses.some(r=>r.status===200));
       for(const response of responses) assert([200,409,429,503].includes(response.status),String(response.status));
       await viewer.waitForFunction(previous=>nativeStats.drawn>previous+2&&nativeStats.decodeerrors===0,before);
-      return {statuses:responses.map(r=>r.status),stats:await viewer.evaluate(()=>nativeStats)};
+      return {sdkPixel,statuses:responses.map(r=>r.status),stats:await viewer.evaluate(()=>nativeStats)};
     } finally {
       docker('exec',container,'kill','-USR2',String(fixturePID));
       await viewer.close();

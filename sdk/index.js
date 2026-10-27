@@ -78,6 +78,13 @@ export async function capabilities({ url = 'http://127.0.0.1:8080', timeout = 50
 export async function status({ url = 'http://127.0.0.1:8080', timeout = 5000 } = {}) {
   return request(baseUrl(url), '/metrics', integer(timeout, 1, 2147483647, 'timeout'));
 }
+export async function snapshot({ url = 'http://127.0.0.1:8080', timeout = 5000 } = {}, path) {
+  const bytes = await request(baseUrl(url), '/snapshot.png', integer(timeout, 1, 2147483647, 'timeout'), true);
+  if (path !== undefined) {
+    try { await writeFile(path, bytes); } catch (error) { throw fail('IO_ERROR', `Snapshot write failed: ${error.message}`); }
+  }
+  return bytes;
+}
 
 export async function connect({ url = 'http://127.0.0.1:8080', timeout = 5000 } = {}) {
   const base = baseUrl(url);
@@ -123,11 +130,7 @@ export async function connect({ url = 'http://127.0.0.1:8080', timeout = 5000 } 
     async status() { return request(base, '/metrics', timeout); },
     async snapshot(path) {
       if (closed) throw fail('DISCONNECTED', 'Control connection closed');
-      const bytes = await request(base, '/snapshot.png', timeout, true);
-      if (path !== undefined) {
-        try { await writeFile(path, bytes); } catch (error) { throw fail('IO_ERROR', `Snapshot write failed: ${error.message}`); }
-      }
-      return bytes;
+      return snapshot({ url: base.href, timeout }, path);
     },
     input(event) {
       if (closed) return Promise.reject(fail('DISCONNECTED', 'Control connection closed'));

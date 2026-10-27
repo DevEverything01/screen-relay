@@ -27,14 +27,16 @@ class ReportTests(unittest.TestCase):
     def test_exclusion_and_provenance(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            valid = {'valid': True, 'engine': 'native', 'profile': 'local',
+            valid = {'valid': True, 'engine': 'native',
                      'imageId': 'image-proof', 'runnerSha256': 'runner-proof',
                      'fixtureSha256': 'fixture-proof',
+                     'text': {'psnrDb': 38, 'textInkMeanAbsoluteError': 4.1},
                      'runs': {'video': {'valid': True, 'cpuPercent': 12}}}
             (root/'valid.json').write_text(json.dumps(valid))
             (root/'invalid.json').write_text(json.dumps({'valid': False, 'errors': ['timeout-proof']}))
             manifest = {'title': 'Fixture', 'finalImage': 'final-image', 'finalSourceCommit': 'commit',
-                        'selectedRuns': [{'label': 'candidate', 'kind': 'candidate', 'raw': 'valid.json'},
+                        'selectedRuns': [{'label': 'candidate', 'kind': 'candidate', 'raw': 'valid.json',
+                                          'profile': 'original-fixture'},
                                          {'label': 'rejected', 'kind': 'reference', 'raw': 'invalid.json'}],
                         'verification': [], 'limitations': [], 'notes': []}
             path = root/'manifest.json'
@@ -44,8 +46,11 @@ class ReportTests(unittest.TestCase):
             markdown = (root/'out/general-engine-report.md').read_text()
             for expected in ['timeout-proof', 'image-proof', 'runner-proof', 'fixture-proof',
                              '12.000 [12.000–12.000], n=1', 'entire run excluded',
-                             'evidence/general/valid.json']:
+                             'evidence/general/valid.json', '## original-fixture / video',
+                             'Original static-text ink MAE', '4.100 [4.100–4.100], n=1',
+                             'Original static-text PSNR (dB)', '38.000 [38.000–38.000], n=1']:
                 self.assertIn(expected, markdown)
+            self.assertIn('| Frozen PSNR (dB) | unmeasured |', markdown)
             (root/'valid.json').write_text('{malformed')
             with self.assertRaises(json.JSONDecodeError):
                 report.export(path, root/'out', root)

@@ -23,7 +23,6 @@ COPY tests/color-test.cpp ./tests/color-test.cpp
 COPY tests/flow-test.cpp ./tests/flow-test.cpp
 COPY tests/backend-source-test.cpp ./tests/backend-source-test.cpp
 COPY Makefile ./Makefile
-COPY bench/fixture.py /opt/bench/fixture.py
 RUN make CXXFLAGS="${BUILD_FLAGS}" test-color \
     && make CXXFLAGS="${BUILD_FLAGS}" test-flow \
     && make CXXFLAGS="${BUILD_FLAGS}" test-backend \

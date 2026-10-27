@@ -2,6 +2,9 @@
   "name": "native-stream-lab",
   "private": true,
   "type": "module",
+  "exports": { ".": { "types": "./sdk/index.d.ts", "import": "./sdk/index.js" } },
+  "bin": { "native-stream": "./sdk/cli.js" },
+  "engines": { "node": ">=22" },
   "scripts": {
     "test": "node --test sdk/index.test.js",
     "test:integration": "node tests/integration.mjs",

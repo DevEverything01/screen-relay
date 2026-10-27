@@ -1,6 +1,6 @@
 # Native desktop streaming lab
 
-An experimental Linux desktop streaming framework with a browser viewer, typed Node SDK and CLI, and replaceable capture/input backends. The implemented backend streams Xfce/X11 at 1280×720. Wayland is future work.
+An experimental Linux desktop streaming framework with a browser viewer, typed Node SDK and CLI, and replaceable capture/input backends. The implemented backend streams Xfce/X11 as H.264 at 1280×720, targeting up to 60 FPS. Actual delivery depends on the application, encoder and connection; a configured rate is not a measured rate. Wayland is future work.
 
 ## Run
 
@@ -11,13 +11,15 @@ From this directory:
 
 Open [the viewer](http://127.0.0.1:18094) in Chrome with H.264 WebCodecs support. The image builds the native server/tests and starts Xvfb/Xfce. It needs no runtime browser, Node server, Selkies, KasmVNC or separate FFmpeg process. The Debian base digest is pinned; apt repositories are not a full reproducible-build snapshot.
 
+Normal startup opens the XFCE desktop without a benchmark application. Benchmark runners explicitly copy their fixture into the dedicated test container before starting it.
+
 This is an unauthenticated local development profile. Publish to host loopback and use an isolated desktop. Anyone able to reach the service can observe/control it. Host/Origin checks do not replace authentication or TLS.
 
 ## Agent control
 
-Close the viewer before acquiring control: one browser **or** one agent owns input at a time. Native PNG observation is independent.
+Close the viewer before acquiring control: one browser **or** one agent owns input at a time. The optional `snapshot({ url }, path)` export and CLI snapshot command take a single native PNG without acquiring control, including while the viewer is connected. Continuous desktop streaming uses H.264.
 
-    import { connect } from './sdk/index.js';
+    import { connect } from 'native-stream-lab';
     const desktop = await connect({ url: 'http://127.0.0.1:18094' });
     try {
       console.log(await desktop.capabilities());
@@ -51,7 +53,7 @@ The stream uses persistent libx264 via libavcodec, scalar/ARM NEON BT.709 conver
 
 Integration needs installed Google Chrome and a dedicated container; tests temporarily cover its desktop. Playwright/PNG tooling are local development dependencies. Docker builds run color, flow-policy and injected-backend tests. See [test evidence and limits](tests/README.md).
 
-The general3 candidate passed 12 browser/video and five framework checks in release and ASAN/UBSAN builds. Graceful sanitizer termination exited zero with no reported leak/runtime error; system libraries were not instrumented. Nine SDK tests cover validation, ACKs, disconnect, pending limits, malformed replies and body/file errors.
+The general3 candidate passed 12 browser/video and five framework checks in release and ASAN/UBSAN builds. Graceful sanitizer termination exited zero with no reported leak/runtime error; system libraries were not instrumented. Ten SDK tests cover validation, ACKs, disconnect, pending limits, malformed replies, body/file errors and snapshot commands that do not acquire control.
 
 The [initial nine-session comparison](optimize/native-stream-report.md) ([HTML](optimize/native-stream-report.html)) remains narrow historical evidence. [Broader qualification](qualification/README.md) records CPU, RAM, bandwidth, delivered updates, latency and fidelity together. Comparative runs require separately prepared competitor images and credentials. No universal winner follows from unequal-quality operating points.
 
@@ -60,3 +62,19 @@ Current limits: CPU capture, fixed 720p, one controller, mapped keyboard subset.
 For a live keyboard-controlled game, see [Freedoom](doom/README.md).
 
 External automation stays independent: agent-desktop can use the graphical session's AT-SPI interfaces, and agent-browser can connect to a browser's CDP endpoint. Neither tool is a dependency of this framework, and this lab has not run those integrations.
+
+## Repository map
+
+| Directory | Responsibility |
+| --- | --- |
+| `src/` | Native capture/input interfaces, X11 implementations, encoder, flow control and HTTP/WebSocket service |
+| `viewer/` | Browser H.264 decoding, rendering and human input |
+| `sdk/` | Typed Node client, CLI and protocol/error tests |
+| `tests/` | Native unit checks and real browser/X11 integration |
+| `qualification/` | Broad diagnostics, real-application comparisons and explicit evidence reporting |
+| `bench/` | Original benchmark, retained separately for regressions |
+| `probes/` | Isolated codec/runtime investigations |
+| `docs/` | Backend, protocol, flow and development contracts |
+| `optimize/` | Published reports and portable evidence |
+
+See [engineering and extension rules](docs/engineering.md) before changing a backend or claiming a performance improvement.

@@ -10,10 +10,12 @@ from statistics import median
 
 METRICS = [
     ('CPU (% one core)', 'cpuPercent'), ('RAM (MiB)', 'memoryMiB'),
-    ('Transmit (Mbps)', 'mbps'), ('Visible updates/s', 'visibleUpdatesPerSecond'),
+    ('Container transmit (Mbps)', 'mbps'), ('Visible updates/s', 'visibleUpdatesPerSecond'),
     ('Producer updates/s', 'producerUpdatesPerSecond'),
-    ('Game visual changes/s', 'usefulVisualChangesPerSecond'),
+    ('Observed visual changes/s', 'usefulVisualChangesPerSecond'),
     ('Frozen PSNR (dB)', 'frozenPsnr'), ('Frozen MAE', 'frozenMae'),
+    ('Original static-text PSNR (dB)', 'originalTextPsnr'),
+    ('Original static-text ink MAE', 'originalTextInkMae'),
     ('Motion median PSNR (dB)', 'motionPsnr'), ('Motion worst-decile PSNR (dB)', 'motionWorstPsnr'),
     ('Motion median MAE', 'motionMae'), ('Motion pairs', 'motionPairs'),
     ('Motion source samples', 'motionSourceSamples'), ('Motion decoded samples', 'motionDecodedSamples'),
@@ -83,7 +85,7 @@ def export(manifest_path, output, root):
         href = link_for(selection['raw'], selection.get('evidenceHref'))
         label, kind = selection['label'], selection['kind']
         evidence.append((label, href))
-        profile = raw.get('profile', 'game' if 'phases' in raw else 'unspecified')
+        profile = selection.get('profile', raw.get('profile', 'game' if 'phases' in raw else 'unspecified'))
         errors = raw.get('errors') or []
         identities.append([label, kind, raw.get('engine', 'unspecified'), profile,
                            raw.get('imageId', raw.get('image', 'unrecorded')),
@@ -95,8 +97,11 @@ def export(manifest_path, output, root):
             if work.get('valid') is False or work.get('errors'):
                 failures.append([label, profile + '/' + mode, 'workload excluded', json.dumps(work.get('errors', [])), href])
                 continue
-            groups[(profile, mode, label, kind, raw.get('engine', 'unspecified'))].append(
-                extract(work, (raw.get('latency') or {}).get(mode, [])))
+            values = extract(work, (raw.get('latency') or {}).get(mode, []))
+            text = raw.get('text') or {}
+            values.update(originalTextPsnr=text.get('psnrDb'),
+                          originalTextInkMae=text.get('textInkMeanAbsoluteError'))
+            groups[(profile, mode, label, kind, raw.get('engine', 'unspecified'))].append(values)
 
     limits = [
         'Only X11/Xfce is validated here. GNOME on X11 is unverified; a Wayland backend is not implemented. Typed SDK, CLI, developer experience and agent experience status come from manifest verification evidence. Rust versus C++ is an implementation choice, not a benchmark result.',
@@ -127,8 +132,8 @@ def export(manifest_path, output, root):
     summary = f'Selected evidence: {len(manifest["selectedRuns"])} runs; {len(failures)} excluded run/workload observations. Final image: {manifest["finalImage"]}. Source commit: {manifest["finalSourceCommit"]}.'
     md = ['# ' + title, summary, 'This report describes the explicit manifest selection. It does not infer a universal winner or equal motion quality.',
           '[Initial nine-session desktop benchmark](native-stream-report.md) is separate context; its measurements are not pooled here.',
-          '## Findings supplied in manifest', '\n\n'.join(manifest['notes']) or 'No conclusion supplied.']
-    sections.append('<section><h2>Findings supplied in manifest</h2>' + ''.join(paragraph(n) for n in manifest['notes']) + '</section>')
+          '## Findings', '\n\n'.join(manifest['notes']) or 'No conclusion supplied.']
+    sections.append('<section><h2>Findings</h2>' + ''.join(paragraph(n) for n in manifest['notes']) + '</section>')
     profiles = sorted({g[0] for g in groups})
     for profile in profiles:
         for mode in sorted({g[1] for g in groups if g[0] == profile}):
@@ -152,7 +157,7 @@ def export(manifest_path, output, root):
     sections.append('<section><h2>Scope and limits</h2><ul>' + ''.join('<li>' + html.escape(v) + '</li>' for v in limits) + '</ul></section>')
     sections.append('<section><h2>Evidence</h2><ul>' + ''.join('<li><a href="' + html.escape(href, quote=True) + '">' + html.escape(label) + '</a></li>' for label, href in evidence) + '</ul></section>')
     page = '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>' + html.escape(title) + '''</title><style>
-    :root{font-family:system-ui,sans-serif;color:#182c35;background:#f4f6f7;line-height:1.55}body{margin:0}main{max-width:1250px;margin:40px auto;padding:0 20px}h1{font-size:clamp(2rem,5vw,3rem);line-height:1.15}section{background:white;padding:22px;margin:22px 0;border:1px solid #d6dfe2;border-radius:10px}h2{font-size:1.3rem;margin:0 0 12px}.table{overflow:auto}table{border-collapse:collapse;width:100%;font-size:.85rem}th,td{padding:10px;border-bottom:1px solid #dce3e6;text-align:left;min-width:150px;vertical-align:top;overflow-wrap:anywhere}th{background:#edf2f4}a{color:#165b85}select{font:inherit;padding:8px}li{margin:8px 0}.notice{border-left:4px solid #a36920;padding:12px;background:#fff7e8}@media(max-width:600px){main{padding:0 12px;margin:24px auto}section{padding:14px}th,td{min-width:130px}}@media print{body{background:white}section{border:0;padding:0}.table{overflow:visible}select,label[for=profile]{display:none}}
+    :root{font-family:system-ui,sans-serif;color:#182c35;background:#f4f6f7;line-height:1.55}body{margin:0}main{overflow-wrap:anywhere;max-width:1250px;margin:40px auto;padding:0 20px}h1{font-size:clamp(2rem,5vw,3rem);line-height:1.15}section{background:white;padding:22px;margin:22px 0;border:1px solid #d6dfe2;border-radius:10px}h2{font-size:1.3rem;margin:0 0 12px}.table{overflow:auto}table{border-collapse:collapse;width:100%;font-size:.85rem}th,td{padding:10px;border-bottom:1px solid #dce3e6;text-align:left;min-width:150px;vertical-align:top;overflow-wrap:anywhere}th{background:#edf2f4}a{color:#165b85}select{font:inherit;padding:8px}li{margin:8px 0}.notice{border-left:4px solid #a36920;padding:12px;background:#fff7e8}@media(max-width:600px){main{padding:0 12px;margin:24px auto}section{padding:14px}th,td{min-width:130px}}@media print{body{background:white}section{border:0;padding:0}.table{overflow:visible}select,label[for=profile]{display:none}}
     </style><main><h1>''' + html.escape(title) + '</h1>' + paragraph(summary) + '<p class="notice">Explicit selected evidence. No universal winner or equal-quality conclusion is inferred. Invalid observations are excluded visibly.</p><p><a href="native-stream-report.md">Initial nine-session desktop benchmark</a> is separate context.</p><label for="profile">Filter profile </label><select id="profile"><option value="">All profiles</option>' + ''.join('<option>' + html.escape(p) + '</option>' for p in profiles) + '</select>' + ''.join(sections) + '''</main><script>document.getElementById('profile').addEventListener('change',e=>{document.querySelectorAll('[data-profile]').forEach(s=>s.hidden=!!e.target.value&&s.dataset.profile!==e.target.value)})</script></html>'''
     output.mkdir(parents=True, exist_ok=True)
     (output/'general-engine-report.md').write_text('\n\n'.join(md) + '\n')

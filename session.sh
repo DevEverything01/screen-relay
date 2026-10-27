@@ -22,5 +22,8 @@ pulseaudio --start --exit-idle-time=-1
 xfce4-session > /tmp/desktop.log 2>&1 &
 sleep 2
 xfconf-query -c xfwm4 -p /general/use_compositing -s false || true
-python3 /opt/bench/fixture.py > /tmp/fixture.log 2>&1 &
+# Benchmark runners copy their fixture before startup; normal images contain none.
+if [ -f /opt/bench/fixture.py ]; then
+  python3 /opt/bench/fixture.py > /tmp/fixture.log 2>&1 &
+fi
 exec /opt/native/native-stream

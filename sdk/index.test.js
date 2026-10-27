@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { capabilities, connect } from './index.js';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { capabilities, connect, snapshot } from './index.js';
 
 function packet(type, generation, sequence, payload) {
   const b = Buffer.alloc(20 + payload.length);
@@ -133,4 +135,21 @@ test('snapshot body failures and file failures have stable codes', async () => {
     await assert.rejects(session.snapshot('/nonexistent-directory/screen.png'), { code: 'IO_ERROR' });
     session.close();
   } finally { globalThis.WebSocket = originalSocket; globalThis.fetch = originalFetch; }
+});
+
+test('SDK and CLI snapshots do not open a control connection', async () => {
+  const original = globalThis.WebSocket, originalFetch = globalThis.fetch;
+  globalThis.WebSocket = class { constructor() { throw new Error('Unexpected control connection'); } };
+  globalThis.fetch = async url => { assert.equal(url.pathname, '/snapshot.png'); return new Response(new Uint8Array([1, 2, 3])); };
+  try {
+    assert.deepEqual(await snapshot(), Buffer.from([1, 2, 3]));
+    const setup = `globalThis.WebSocket = class { constructor() { throw Error('Unexpected control connection'); } }; globalThis.fetch = async url => { if (url.pathname !== '/snapshot.png') throw Error('Unexpected URL'); return new Response(new Uint8Array([1,2,3])); };`;
+    const preload = `data:text/javascript,${encodeURIComponent(setup)}`;
+    const { stdout } = await promisify(execFile)(process.execPath, ['--import', preload, new URL('./cli.js', import.meta.url).pathname, 'snapshot', '/dev/null'], {
+      timeout: 5000,
+    });
+    assert.deepEqual(JSON.parse(stdout), { path: '/dev/null', bytes: 3 });
+  } finally {
+    globalThis.WebSocket = original; globalThis.fetch = originalFetch;
+  }
 });

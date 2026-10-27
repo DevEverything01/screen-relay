@@ -90,4 +90,35 @@ All 12 video/input checks and five framework checks passed in release and ASAN/U
 
 ## Frozen general3 verification
 
-The final congestion-policy correction passed all 12 video/input and five framework checks in both release and ASAN/UBSAN builds. Graceful instrumented termination exited zero without an OOM kill or sanitizer/leak diagnostic. See `results/integration-general3.json`, `results/framework-general3.json`, `results/integration-general3-asan.json`, `results/framework-general3-asan.json`, `results/general3-asan.log` and `results/general3-asan-build.log`. The public CLI returned capabilities and a 1280×720 native PNG with no browser connection (`results/general3-cli.png`). Nine SDK tests pass (`results/sdk-tests.log`).
+The final congestion-policy correction passed all 12 video/input and five framework checks in both release and ASAN/UBSAN builds. Graceful instrumented termination exited zero without an OOM kill or sanitizer/leak diagnostic. See `results/integration-general3.json`, `results/framework-general3.json`, `results/integration-general3-asan.json`, `results/framework-general3-asan.json`, `results/general3-asan.log` and `results/general3-asan-build.log`. The public CLI returned capabilities and a 1280×720 native PNG with no browser connection (`results/general3-cli.png`). Ten SDK tests pass on Node 22.22.2 and Node 26.12.0 (`results/sdk-node22.log` and `results/sdk-tests.log`).
+
+## Clean desktop release verification
+
+The runnable `native-stream-lab:baseline` image starts plain XFCE; it contains no
+benchmark fixture. Both this release and `baseline-asan` passed all 12 video/input
+checks and five framework checks using Node 22.22.2. The updated framework check
+takes a public SDK snapshot while the viewer holds Shift, checks independent X11
+key state and PNG pixels, then verifies continued streaming. Both servers exited
+zero on graceful termination, with no reported sanitizer diagnostics.
+
+Evidence: `results/baseline-verification.json`, `results/integration-baseline-release.json`,
+`results/integration-baseline-asan.json`, `results/framework-final-sdk.json`,
+`results/framework-final-sdk-asan.json`, and `results/baseline-asan.log`.
+`results/binary-equivalence.json` proves the native executable and installed
+package database are identical to the general3 comparison image. An additional
+real runner invocation explicitly copied its fixture before boot and passed
+(`results/baseline-fixture-smoke.json`). These packaging checks are not extra
+independent performance repetitions.
+
+The local package was installed into a separate consumer without network access;
+bare imports and the installed CLI were exercised on Node 22 and Node 26.
+`results/package-smoke.json` records that check and the TypeScript consumer check.
+With an installed TypeScript compiler, run:
+
+```sh
+tsc --noEmit --strict --module NodeNext --target ES2022 tests/sdk-types.mts
+```
+
+The compiler check validates public package/type resolution and rejects invalid
+input shapes; it does not contact a desktop. Real Thunar and Freedoom comparisons
+are described in `qualification/` and reported separately from these contract tests.

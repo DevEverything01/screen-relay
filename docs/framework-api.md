@@ -1,9 +1,9 @@
 # Local framework API
 
-The Node SDK targets Node 22 or newer and has no runtime npm dependencies. The server uses a local, unauthenticated trust profile: publish the Docker port on loopback only, and use an isolated desktop. Anyone able to reach the server can control that desktop. Host and browser Origin checks reduce browser-based exposure; they do not provide authentication or secure remote access. Wayland, audio, clipboard, IME and remote deployment are not provided.
+The Node SDK targets Node 22 or newer and has no runtime npm dependencies. From a consumer project, install the repository locally with `npm install /absolute/path/to/native-stream-lab`, then import from `native-stream-lab` or run `npx native-stream --help`. Build and start the native server separately from the repository as described in the main README. The server uses a local, unauthenticated trust profile: publish the Docker port on loopback only, and use an isolated desktop. Anyone able to reach the server can control that desktop. Host and browser Origin checks reduce browser-based exposure; they do not provide authentication or secure remote access. Wayland, audio, clipboard, IME and remote deployment are not provided.
 
 ```js
-import { connect } from "./sdk/index.js";
+import { connect } from "native-stream-lab";
 const desktop = await connect({ url: "http://127.0.0.1:18094" });
 try {
   console.log(await desktop.capabilities(), desktop.surface);
@@ -14,17 +14,17 @@ try {
 } finally { desktop.close(); }
 ```
 
-`connect` acquires the exclusive control connection and waits for a ready message. Closing or losing the connection releases held keys and buttons. Reconnect explicitly with a new `connect`; input is never replayed. Input resolves when the server acknowledges it; this does not guarantee an application has processed it. `snapshot()` returns PNG bytes and optionally writes them to a path. It captures the native X11 surface rather than a browser canvas. `capabilities()` and `status()` are also exported independently, so discovery does not require control. Status is the existing cgroup metrics endpoint and can be unavailable where cgroup metrics are unsupported.
+`connect` acquires the exclusive control connection and waits for a ready message. Closing or losing the connection releases held keys and buttons. Reconnect explicitly with a new `connect`; input is never replayed. Input resolves when the server acknowledges it; this does not guarantee an application has processed it. Session `snapshot()` returns PNG bytes and optionally writes them to a path. The independent `snapshot({ url }, "screen.png")` export works without acquiring control, including while the viewer is connected. Both capture the native X11 surface rather than a browser canvas. `capabilities()` and `status()` are also exported independently, so discovery does not require control. Status is the existing cgroup metrics endpoint and can be unavailable where cgroup metrics are unsupported.
 
 Input types are `keyDown` and `keyUp` with a USB HID `key`; `pointerMove` with normalized `x`, `y`; `buttonDown` and `buttonUp` with `button` 1–3 and coordinates; `wheel` with `axis`, a signed `delta` in multiples of 120 within ±1200, and coordinates; and `releaseAll`. Coordinates must be finite numbers from 0 to 1. The X11 input implementation defines supported HID mappings; capabilities does not enumerate them. Errors expose a `code`, including `INVALID_ARGUMENT`, `UNSUPPORTED`, `NETWORK_ERROR`, `DISCONNECTED`, `PROTOCOL_ERROR`, `TIMEOUT`, `BUSY`, `HTTP_ERROR`, and `IO_ERROR`.
 
 The CLI uses `NATIVE_STREAM_URL` (default `http://127.0.0.1:8080`) and emits JSON on stdout; errors are JSON on stderr with nonzero exit status. Run it directly from the repository or install the package locally:
 
 ```sh
-node sdk/cli.js capabilities
-node sdk/cli.js status
-node sdk/cli.js snapshot screen.png
-node sdk/cli.js input '[{"type":"keyDown","key":4},{"type":"keyUp","key":4}]'
+NATIVE_STREAM_URL=http://127.0.0.1:18094 node sdk/cli.js capabilities
+NATIVE_STREAM_URL=http://127.0.0.1:18094 node sdk/cli.js status
+NATIVE_STREAM_URL=http://127.0.0.1:18094 node sdk/cli.js snapshot screen.png
+NATIVE_STREAM_URL=http://127.0.0.1:18094 node sdk/cli.js input '[{"type":"keyDown","key":4},{"type":"keyUp","key":4}]'
 ```
 
 The input command holds one connection for the whole batch and closes it even on failure. One owner controls the desktop at a time: a viewer or an SDK control connection. A viewer cannot connect concurrently with an agent controller. Snapshots are available independently of the viewer; one snapshot can be outstanding globally, and a busy or unavailable snapshot returns HTTP 503 without blocking the streaming event loop. `close()` starts closing the socket; the server releases controls when it observes the closure.

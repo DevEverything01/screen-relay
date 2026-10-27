@@ -16,10 +16,11 @@ export interface Session {
   surface: { width: number; height: number };
   capabilities(): Promise<Capabilities>;
   status(): Promise<Record<string, unknown>>;
-  snapshot(path?: string): Promise<Buffer>;
+  snapshot(path?: string): Promise<Uint8Array>;
   input(event: Input): Promise<void>;
   close(): void;
 }
 export function connect(options?: Options): Promise<Session>;
 export function capabilities(options?: Options): Promise<Capabilities>;
 export function status(options?: Options): Promise<Record<string, unknown>>;
+export function snapshot(options?: Options, path?: string): Promise<Uint8Array>;
