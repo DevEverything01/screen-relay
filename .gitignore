@@ -6,4 +6,3 @@ __pycache__/
 /native-stream
 tests/results/
 experiments/engine-evaluation/*/results/
-experiments/exp-001/result.yaml
