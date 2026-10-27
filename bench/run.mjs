@@ -1,5 +1,5 @@
-import {chromium} from "../../desktop-stream-bench/node_modules/playwright/index.mjs";
-import {PNG} from "../../desktop-stream-bench/node_modules/pngjs/lib/png.js";
+import {chromium} from "playwright";
+import {PNG} from "pngjs";
 import {execFile} from "node:child_process";
 import {promisify} from "node:util";
 import {readFile, writeFile, mkdir} from "node:fs/promises";

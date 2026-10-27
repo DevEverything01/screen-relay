@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {mkdirSync, writeFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
-import {chromium} from '../../desktop-stream-bench/node_modules/playwright/index.mjs';
+import {chromium} from 'playwright';
 
 const container = process.env.TEST_CONTAINER;
 assert(container, 'Set TEST_CONTAINER to the existing native container running bench/fixture.py');

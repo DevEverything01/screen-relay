@@ -1,6 +1,9 @@
 .git
 .context
-bench/results
-tests/results
 node_modules
+**/results
+optimize
+build
 native-stream
+.env
+**/*.log

@@ -24,10 +24,10 @@ root_window = x.XDefaultRootWindow(d)
 shift_code = x.XKeysymToKeycode(d, 0xffe1)
 root = tk.Tk()
 root.overrideredirect(True)
-root.geometry('1280x720+0+0')
-root.configure(bg='#20b060')
+root.geometry(f'{root.winfo_screenwidth()}x{root.winfo_screenheight()}+0+0')
+root.configure(bg='#20b060', cursor='none', borderwidth=0, highlightthickness=0)
 root.attributes('-topmost', True)
-entry = tk.Entry(root, font=('monospace', 24))
+entry = tk.Entry(root, font=('monospace', 24), insertontime=0)
 entry.place(x=100, y=100, width=600, height=60)
 def focus_entry(_event=None):
     entry.focus_force()
@@ -39,13 +39,29 @@ for name in ('KeyPress', 'KeyRelease', 'ButtonPress', 'ButtonRelease', 'Motion')
     root.bind_all('<' + name + '>', lambda e, n=name: events.append({
         'type': n, 'key': e.keysym, 'button': str(e.num), 'x': e.x_root, 'y': e.y_root}))
 changed = False
+color_applied = False
+animating = False
+animation_tick = 0
+patch = tk.Frame(root, bg='#102030')
+patch.place(x=950, y=100, width=200, height=180)
 def change(_signum, _frame):
     global changed
     changed = True
 signal.signal(signal.SIGUSR1, change)
+def animate(_signum, _frame):
+    global animating
+    animating = not animating
+    if not animating:
+        root.focus_force()
+signal.signal(signal.SIGUSR2, animate)
 def publish():
-    if changed:
+    global animation_tick, color_applied
+    if changed and not color_applied:
         root.configure(bg='#c030b0')
+        color_applied = True
+    if animating:
+        animation_tick += 1
+        patch.configure(bg='#e0a020' if animation_tick % 2 else '#2040e0')
     keymap = C.create_string_buffer(32)
     x.XQueryKeymap(d, keymap)
     rr, child = C.c_ulong(), C.c_ulong()
@@ -58,7 +74,7 @@ def publish():
     state = {'pid': os.getpid(), 'entry': entry.get(), 'events': events[-300:],
              'shift': bool(keymap.raw[shift_code // 8] & (1 << (shift_code % 8))),
              'button1': bool(mask.value & 256), 'pointer': [rx.value, ry.value],
-             'changed': changed, 'xFocus': focus.value,
+             'changed': changed, 'animationTick': animation_tick, 'animating': animating, 'xFocus': focus.value,
              'entryWindow': entry.winfo_id(), 'rootWindow': root.winfo_id(), 'tkFocus': str(root.focus_get())}
     with open(path + '.next', 'w') as f:
         json.dump(state, f)

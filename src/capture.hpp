@@ -1,5 +1,6 @@
 #pragma once
 
+#include "capture-source.hpp"
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -28,7 +29,7 @@ struct CaptureStats {
 class CaptureEncoder {
  public:
   using Publish = std::function<bool(EncodedFrame&&)>;
-  explicit CaptureEncoder(Publish publish);
+  explicit CaptureEncoder(Publish publish, CaptureSourceFactory factory = makeCaptureSource);
   ~CaptureEncoder();
   CaptureEncoder(const CaptureEncoder&) = delete;
   CaptureEncoder& operator=(const CaptureEncoder&) = delete;
@@ -36,6 +37,7 @@ class CaptureEncoder {
   void beginSession(uint32_t generation);
   void endSession(uint32_t generation);
   void acknowledge(uint32_t generation, uint32_t sequence);
+  void setFlowControl(uint32_t generation, unsigned window, uint64_t bitrate, bool paused, uint64_t admit_until_us);
   CaptureStats stats() const;
   std::string error() const;
   void stop();

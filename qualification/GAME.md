@@ -19,3 +19,12 @@ After settling, measurements cover 20 seconds stationary and 20 seconds holding 
 Useful visual changes per second count changes in sampled pixels, not decoded frames or producer FPS. Compression noise may increase this count; identical or short-lived frames may be missed. Actual producer rate is unknown: the configured cap is not a measurement. CPU includes the live game, desktop and streaming stack. Memory is cgroup working set at phase end, and bandwidth is container eth0 transmit bytes. There is no gaming latency or physical display claim. The initial map and settings match, but live AI, timing and random events mean successive sessions are not frame-identical. Independent repeats are required before a broad performance conclusion.
 
 The offline self-check protects resource arithmetic and rejects reversed counters. The live checks require a game process, a nonblack surface, advancing pixels under input, changed before/after game hashes and independent XQueryKeymap proof that right/control reached X11 and remain held across the live phase. Browser errors are recorded separately for triage; native/video decoder failures are rejected. This goes beyond the native-only diagnostic by applying one observable metric to all three engines. No engine-specific statistics are compared. No live measurements are implied by passing the offline check.
+
+To qualify a standalone native framework image without replacing the pinned comparison image, build a separate game image and run only native:
+
+```sh
+rtk docker build -f native-stream-lab/qualification/Dockerfile.games --build-arg BASE_IMAGE=native-stream-lab:framework-final -t native-stream-lab:framework-games native-stream-lab
+rtk proxy env GAME_IMAGE=native-stream-lab:framework-games node native-stream-lab/qualification/game.mjs native
+```
+
+The image names above are explicit tags for the coordinating operator to build and schedule. `BASE_IMAGE` defaults to the pinned `native-stream-lab:final2`; `GAME_IMAGE` defaults to `native-stream-lab:games`. Standalone native images need no competitor session script. Results record the selected image tag, immutable image ID, selected-engine artifacts, and optional native telemetry. Optional telemetry is diagnostic only; useful visual changes remain the same generic metric for every engine.

@@ -1,5 +1,5 @@
-import {chromium} from "../../desktop-stream-bench/node_modules/playwright/index.mjs";
-import {PNG} from "../../desktop-stream-bench/node_modules/pngjs/lib/png.js";
+import {chromium} from "playwright";
+import {PNG} from "pngjs";
 import {execFile} from "node:child_process";
 import {promisify} from "node:util";
 import {readFile, writeFile, mkdir} from "node:fs/promises";
@@ -56,7 +56,7 @@ if (process.argv.includes("--self-check")) {
 const config = JSON.parse(await readFile(path.join(here, "../candidate.json"), "utf8"));
 const engine = process.env.ENGINE || config.engine;
 if (!["selkies", "kasm", "native"].includes(engine)) throw Error("Set ENGINE=selkies|kasm|native");
-const image = engine === "native" ? "native-stream-lab:final2" : "sha256:aa2b9fe4228860fcae86829b1c609139f956f934236bbebdd50bcf143d356712";
+const image = engine === "native" ? (process.env.NATIVE_IMAGE || "native-stream-lab:final2") : "sha256:aa2b9fe4228860fcae86829b1c609139f956f934236bbebdd50bcf143d356712";
 const command = engine;
 const cases = (process.env.CASES || "idle,scroll,window,video,mixed").split(",");
 if (!cases.length || new Set(cases).size !== cases.length || cases.some(c => !["idle","scroll","window","video","mixed"].includes(c))) throw Error("Invalid CASES");
@@ -67,7 +67,7 @@ const id = `${new Date().toISOString().replace(/[:.]/g,"-")}-${engine}-${randomU
 const directory = path.join(here,"results",id);
 await mkdir(directory,{recursive:true});
 const fixture = path.join(here,"fixture.py");
-const result = {id,engine,image,command,started:new Date().toISOString(),fixtureSha256:createHash("sha256").update(await readFile(fixture)).digest("hex"),runnerSha256:createHash("sha256").update(await readFile(fileURLToPath(import.meta.url))).digest("hex"),profile,cases,motionQuality,inputLatencyStartEvent:"pointerdown",runs:{},latency:{},errors:[],limits:"Browser animation-frame sampling; frozen-frame quality only, not motion fidelity. Idle includes marker overhead. Synthetic video is not recorded natural video."};
+const result = {id,engine,image,command,started:new Date().toISOString(),fixtureSha256:createHash("sha256").update(await readFile(fixture)).digest("hex"),runnerSha256:createHash("sha256").update(await readFile(fileURLToPath(import.meta.url))).digest("hex"),profile,cases,motionQuality,inputLatencyStartEvent:"pointerdown",runs:{},latency:{},errors:[],limits:`Browser animation-frame sampling; ${motionQuality ? "optional sparse marker-matched synthetic motion quality is a separate instrumented pass, not full-rate perceptual fidelity" : "frozen-frame quality only, not motion fidelity"}. Idle includes marker overhead. Synthetic video is not recorded natural video.`};
 if(motionQuality) result.motionQualitySha256=createHash("sha256").update(await readFile(path.join(here,"motion-quality.mjs"))).digest("hex");
 const progress = phase => console.error(`${engine}: ${phase}`);
 const save = () => writeFile(path.join(directory,"raw.json"),JSON.stringify(result,null,2));
@@ -126,6 +126,19 @@ try {
   },result.geometry);
   const flashPixel = await page.evaluate(()=>pixel());
   if(Math.abs(flashPixel[0]-flashPixel[1]) <= 100) throw Error("Flash pixel is not visible or lacks red/green contrast");
+  const nativeTelemetry=async(run,phase)=>{
+    if(engine !== "native") return;
+    run.nativeTelemetry ||= {};
+    try {
+      const response=await docker("exec",name,"python3","-c","import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8080/metrics', timeout=5).read().decode())");
+      const metrics=JSON.parse(response.stdout);
+      if(!metrics || typeof metrics!=="object" || Array.isArray(metrics)) throw Error("Metrics response is not a JSON object");
+      run.nativeTelemetry[phase]={recordedAt:new Date().toISOString(),metrics};
+    } catch(e) {
+      run.nativeTelemetry[phase]={error:e.stack || String(e)};
+      run.errors.push(`native telemetry ${phase}: ${e.message}`);
+    }
+  };
   const captureWindow=async(label)=>{
     const file=`window-${label}.png`;
     await docker("exec","-u","bench",name,"scrot","-o","/tmp/window-evidence.png");
@@ -149,12 +162,14 @@ try {
       run.inputToggleDelta=after.toggles-before.toggles;
       if(run.inputToggleDelta!==20) run.errors.push(`native toggle count ${run.inputToggleDelta}/20`);
       progress(`${workload} 20-second resource and frame observation`);
+      await nativeTelemetry(run,"start");
       if(workload === "window") run.windowEvidence={before:await captureWindow("before")};
       await page.evaluate(()=>{window.obs={start:performance.now(),end:null,frames:[],invalid:0,raf:0};window.measuring=true;function sample(){const t=performance.now(),id=readFrame();obs.raf++;if(id===null)obs.invalid++;else if(obs.frames.at(-1)?.id!==id)obs.frames.push({t,id});if(measuring)requestAnimationFrame(sample);else obs.end=t;}requestAnimationFrame(sample);});
       run.samples=(await docker("exec",name,"python3","-u","-c",sampler)).stdout.trim().split("\n").map(JSON.parse);
       await page.evaluate(()=>{window.measuring=false;});
       await page.waitForFunction(()=>obs.end!==null);
       run.observed=await page.evaluate(()=>obs);
+      await nativeTelemetry(run,"end");
       if(workload === "window") {
         run.windowEvidence.after=await captureWindow("after");
         run.windowEvidence.valid=movedWindow(run.windowEvidence.before,run.windowEvidence.after);

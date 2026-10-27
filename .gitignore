@@ -2,7 +2,9 @@
 bench/results/
 build/
 node_modules/
+__pycache__/
 tests/results/
 qualification/results/
+probes/results/
 native-stream
 result.yaml

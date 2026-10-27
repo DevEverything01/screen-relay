@@ -22,3 +22,7 @@ Initial breadth runs locate limitations. Repeat final comparisons on independent
 The first four-variant optimization run remains closed to further optimization pending concrete findings and renewed bounded scope; this additional qualification changes no engine code. Original benchmark files and raw evidence remain intact.
 
 Test authoring contract: these new cases protect delivery outside the small original animation region and under constrained transport. Credible failures include full-frame bitrate growth, producer/receiver divergence and round-trip-limited delivery. The original local small-region benchmark cannot expose those failures. Tests exercise native applications, browser pixels and independent resource counters without adding production seams.
+
+## Authorized general-engine pass
+
+The user subsequently approved up to two hours and six measured variants, ending 2026-10-27 08:07 UTC. General1 introduced bounded pipelining and VBV feedback; general2 added the modular framework and fixed recovery underutilization; general3 corrected queue-delay/byte feedback masks. The final source is frozen before repeated qualification. Backend/API correctness, sanitizers and source injection are separate gates from resource, latency and quality observations. No workload-specific encoder branch, Wayland implementation or external automation-tool dependency is added. Failed/intermediate observations remain evidence; none establishes a universal performance claim.

@@ -5,7 +5,7 @@ import {mkdir,writeFile,readFile} from "node:fs/promises";
 import {fileURLToPath} from "node:url";
 import path from "node:path";
 import {createHash} from "node:crypto";
-import {chromium} from "../../desktop-stream-bench/node_modules/playwright/index.mjs";
+import {chromium} from "playwright";
 const exec=promisify(execFile), sleep=ms=>new Promise(r=>setTimeout(r,ms));
 function calculate(a,b) {
  const seconds=b.t-a.t;if(seconds<=0||b.cpu<a.cpu||b.tx<a.tx)throw Error("Invalid resource counters");
@@ -21,7 +21,8 @@ assert(["native","selkies","kasm"].includes(engine),"Usage: node qualification/g
 const here=path.dirname(fileURLToPath(import.meta.url)),dir=path.join(here,"results",`game-${engine}-${Date.now()}`);
 await mkdir(dir,{recursive:true});
 const container=`qualification-game-${engine}-${process.pid}`,port=18099,url=`http://127.0.0.1:${port}`;
-const data={engine,container,url,started:new Date().toISOString(),producerRate:"unknown (configured cap 60 is not measured production)",inputLatency:"unmeasured",notes:"Useful visual changes are downscaled canvas hashes sampled at browser rAF; not decoded FPS, physical presentation, or gaming latency. Resources include desktop and game.",errors:[],browserErrors:[],phases:{}};
+const image=process.env.GAME_IMAGE||"native-stream-lab:games";
+const data={engine,image,container,url,started:new Date().toISOString(),producerRate:"unknown (configured cap 60 is not measured production)",inputLatency:"unmeasured",notes:"Useful visual changes are downscaled canvas hashes sampled at browser rAF; not decoded FPS, physical presentation, or gaming latency. Resources include desktop and game.",errors:[],browserErrors:[],phases:{}};
 const save=()=>writeFile(path.join(dir,"result.json"),JSON.stringify(data,null,2));
 const sampler=`import json,os,pathlib,time
 p=pathlib.Path("/sys/fs/cgroup")
@@ -70,10 +71,10 @@ try {
  const envFile=path.resolve(here,"../../desktop-stream-bench/.env");
  const envText=await readFile(envFile,"utf8"),password=envText.match(/^BENCH_PASSWORD=(.*)$/m)?.[1]?.replace(/^['"]|['"]$/g,"");
  assert(password,"BENCH_PASSWORD missing from desktop-stream-bench/.env");
- await docker("create","--name",container,"--cpus","2","--memory","1536m","--memory-swap","1536m","--shm-size","512m","--env-file",envFile,"--env","SELKIES_ALLOWED_ORIGINS=http://127.0.0.1:18099","-p",`127.0.0.1:${port}:8080`,"native-stream-lab:games",engine);created=true;
+ await docker("create","--name",container,"--cpus","2","--memory","1536m","--memory-swap","1536m","--shm-size","512m","--env-file",envFile,"--env","SELKIES_ALLOWED_ORIGINS=http://127.0.0.1:18099","-p",`127.0.0.1:${port}:8080`,image,engine);created=true;
  await docker("start",container);
  data.imageId=(await docker("inspect","--format","{{.Image}}",container)).trim();
- data.containerArtifactSha256=(await docker("exec",container,"sha256sum","/usr/games/crispy-doom","/usr/share/games/doom/freedoom1.wad","/opt/native/native-stream","/opt/native/session.sh","/opt/bench/session.sh","/opt/native/game-launch.sh")).trim().split("\n");
+ data.containerArtifactSha256=(await docker("exec",container,"sha256sum","/usr/games/crispy-doom","/usr/share/games/doom/freedoom1.wad",...(engine==="native"?["/opt/native/native-stream","/opt/native/session.sh"]:["/opt/bench/session.sh"]),"/opt/native/game-launch.sh")).trim().split("\n");
  for(let i=0;i<40;i++){const s=await snapshot();if(Object.values(s.processes).some(p=>p.name.includes("crispy-doom")))break;if(i===39)throw Error("Game failed to start");await sleep(500);}
  browser=await chromium.launch({executablePath:process.env.CHROME_PATH||"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",headless:true});
  page=await browser.newPage({viewport:{width:1280,height:720},deviceScaleFactor:1,httpCredentials:{username:"bench",password}});
@@ -115,6 +116,7 @@ try {
  await phase("stationary",false);await phase("liveInput",true);
  await page.keyboard.up("Control");await page.keyboard.up("ArrowRight");data.inputReleased=await keyState();assert(!data.inputReleased.held.right&&!data.inputReleased.held.control,"X11 keys remain held after release");data.after=await screenshot("after");
  assert.notEqual(data.before.hash,data.after.hash,"Game pixels did not change after turn/fire");
+ data.nativeTelemetry=await page.evaluate(()=>window.nativeStats?{...window.nativeStats}:null);
  data.decoderErrors=await page.evaluate(()=>({native:window.nativeStats?.decodeerrors??null,video:[...document.querySelectorAll("video")].map(v=>v.error?{code:v.error.code,message:v.error.message}:null)}));
  assert(!data.decoderErrors.native,"Native decoder errors");assert(data.decoderErrors.video.every(e=>e===null),"Video decoder errors");data.valid=true;data.completed=new Date().toISOString();
 } catch(e){data.valid=false;data.errors.push(e.stack||String(e));process.exitCode=1;}

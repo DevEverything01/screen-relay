@@ -1,4 +1,5 @@
-FROM native-stream-lab:final2
+ARG BASE_IMAGE=native-stream-lab:final2
+FROM ${BASE_IMAGE}
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends crispy-doom freedoom
 COPY qualification/game-launch.sh /opt/native/game-launch.sh

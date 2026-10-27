@@ -1,18 +1,18 @@
 # Native lab design and limits
 
-This describes the implemented prototype, not an optimization verdict. See the [implemented contract](build-contract.md), [verification recipes](../tests/README.md), [metrics checks](../tests/live-metrics-README.md), and [final report](../optimize/native-stream-report.md) (pending publication).
+This describes the implemented prototype, not an optimization verdict. See the [implemented contract](build-contract.md), [verification recipes](../tests/README.md), [metrics checks](../tests/live-metrics-README.md), and [initial narrow report](../optimize/native-stream-report.md).
 
 ## Data ownership
 
-A capture worker owns an X connection, XDamage object, MIT-SHM image, reusable YUV frame and persistent libavcodec/libx264 encoder. The transport thread owns its WebSocket context and a separate X connection for XTest input. A bounded handoff transfers encoded packet ownership; no writer rewrites storage still held by a reader.
+A capture worker owns a `CaptureSource`, reusable YUV frame and persistent libavcodec/libx264 encoder. The X11 capture source owns its X connection, XDamage object and MIT-SHM image. The transport thread owns its WebSocket context and an `InputBackend`, currently XTest on a separate X connection. A separate snapshot worker owns another capture source. See [backend boundaries](backends.md). A bounded handoff transfers encoded packet ownership; no writer rewrites storage still held by a reader.
 
 Capture admission requires damage, an available browser credit, and the frame deadline. Damage resets before capture on the same X connection so subsequent drawing remains pending. Capture and conversion are full-frame; regional conversion savings are not implemented. Pixel masks/stride are validated and encoder input is made writable before reuse.
 
 Pending damage stays latched while credit is unavailable: NonEmpty events are transitions. Initial/reconnected sessions force a frame, restored credit wakes the worker, and capture failure retains pending work. The session pins Xfce compositing off; child windows, popups, and scrolling require verification against root capture.
 
-Use low-delay H.264 with no B frames or lookahead. Preserve the reference chain: stop before generating extra frames rather than dropping dependent encoded packets. The browser decodes and draws, sends ACK to release credit, and closes each VideoFrame in a finally block. A draw acknowledgement is not a physical presentation timestamp. One in-flight frame deliberately bounds state; its WAN round-trip ceiling is a limitation of this local experiment.
+Use low-delay H.264 with no B frames or lookahead. Preserve the reference chain: stop before generating extra frames rather than dropping dependent encoded packets. The browser decodes and draws, sends ACK to release credit, and closes each VideoFrame after drawing or on reset. A draw acknowledgement is not a physical presentation timestamp. The initial window is one frame; after an ACK an RTT-derived window ranges from two to eight. Encoded frame count and bytes are bounded; see [flow control](flow-control.md).
 
-IDR followed by silence needs an actual-browser check: WebCodecs low-latency preference does not guarantee immediate output. A decoder retaining its first frame cannot make progress under one-credit admission. The page checks decoder support and uses first-frame/decode deadlines rather than per-frame flushes. ACK timeout and hidden-tab recovery reconnect with a new generation and IDR. Only the transport thread writes sockets; worker completion wakes it.
+IDR followed by silence needs an actual-browser check: WebCodecs low-latency preference does not guarantee immediate output. A decoder retaining its first frame cannot make progress under one-credit admission. The page configures the decoder and uses first-frame/decode deadlines rather than per-frame flushes. ACK timeout and hidden-tab recovery reconnect with a new generation and IDR. Only the transport thread writes sockets; worker completion wakes it.
 
 Reconnect resets generation and sends an IDR with parameter sets. The server validates inbound sizes, input ranges, and acknowledgements, and releases held controls on blur/disconnect. Pointer scaling, modifier keys, and wheel events are implemented. Cursor-shape streaming remains unsupported.
 
@@ -39,10 +39,16 @@ Persistent x264 currently uses CRF 10, ultrafast/zerolatency, two threads, no B 
 
 Capture/encode failure retains dirty work and forces IDR in the same generation. Two recovery attempts reopen the encoder and wait one second; the third consecutive failure, or failed reopen, is fatal. The server observes `CaptureEncoder::error()` and exits with failure. Reconnect increments generation. Sequence exhaustion stops admission and requires reconnect; automatic generation rotation is not implemented.
 
-The surface is fixed 1280×720, one viewer. Input supports mapped HID keys, buttons 1..3, two wheel axes, held modifiers, and release-all. Layout/IME completeness, clipboard, audio, resize, cursor-shape streaming, hardware encoding, multiple viewers, and adaptive network control remain outside this implementation. A loopback Origin check is not authentication; publish to host loopback only.
+The surface is fixed 1280×720, one viewer. Input supports mapped HID keys, buttons 1..3, two wheel axes, held modifiers, and release-all. Layout/IME completeness, clipboard, audio, resize, cursor-shape streaming, hardware encoding, multiple viewers, remain outside this implementation. Adaptive flow and VBV control passed release and sanitizer integration; performance and fidelity are reported separately. A loopback Origin check is not authentication; publish to host loopback only.
 
-The HUD reports canvas draw FPS, H.264 payload rate, whole-container CPU normalized to one core, and cgroup working-set RAM. It excludes browser resource usage and does not isolate streaming CPU. One-credit throughput depends on round-trip time; this local experiment makes no WAN performance claim.
+The HUD reports canvas draw FPS, H.264 payload rate, whole-container CPU normalized to one core, and cgroup working-set RAM. It excludes browser resource usage and does not isolate streaming CPU. The adaptive window depends on ACK turnaround; this implementation makes no WAN performance claim.
 
 ## Acceptance targets
 
 Predeclared lab targets: ≤5% of one CPU core at idle, ≥50 browser-visible motion updates/s with the existing approximately 55/s producer, motion input p95 ≤45 ms, no input loss, bounded memory/backlog, and static text quality no worse than the measured baseline within the agreed tolerance. Report active CPU, memory and bandwidth even when a target fails. Equal configured FPS is not equal achieved FPS; static text similarity is not matched motion quality. No universal efficiency winner may be inferred from unmatched operating points.
+
+## Verification status
+
+The current multi-frame implementation has not yet completed runtime verification. Earlier 4b9ea36 benchmark and integration results do not validate it. Wire v1 layout remains unchanged, but old-viewer compatibility is not promised. Quiet-period refinement and an enforced fidelity floor are not implemented.
+
+General3 passed 12 browser/video and five framework checks in release and ASAN/UBSAN builds; only Xfce on X11 has been tested.

@@ -1,44 +1,62 @@
 # Native desktop streaming lab
 
-A small Linux desktop-to-browser streaming server, built around the platform capture APIs and codec/transport libraries. It runs Xfce at 1280×720, captures X11 damage, encodes H.264 in-process, and serves one local browser viewer with keyboard and pointer input.
+An experimental Linux desktop streaming framework with a browser viewer, typed Node SDK and CLI, and replaceable capture/input backends. The implemented backend streams Xfce/X11 at 1280×720. Wayland is future work.
 
-## Build and run
+## Run
 
-Build the standalone Debian image from this directory:
+From this directory:
 
-```sh
-docker build -t native-stream-lab:standalone .
-```
+    docker build -t native-stream-lab:standalone .
+    docker run --name native-stream-lab --cpus=2 --memory=1536m --memory-swap=1536m --shm-size=512m -p 127.0.0.1:18094:8080 native-stream-lab:standalone
 
-Run it with the same resource bounds used by the lab and publish the port on host loopback only:
+Open [the viewer](http://127.0.0.1:18094) in Chrome with H.264 WebCodecs support. The image builds the native server/tests and starts Xvfb/Xfce. It needs no runtime browser, Node server, Selkies, KasmVNC or separate FFmpeg process. The Debian base digest is pinned; apt repositories are not a full reproducible-build snapshot.
 
-```sh
-docker run --name native-stream-lab \
-  --cpus=2 --memory=1536m --memory-swap=1536m --shm-size=512m \
-  -p 127.0.0.1:18094:8080 \
-  native-stream-lab:standalone
-```
+This is an unauthenticated local development profile. Publish to host loopback and use an isolated desktop. Anyone able to reach the service can observe/control it. Host/Origin checks do not replace authentication or TLS.
 
-Open [http://127.0.0.1:18094](http://127.0.0.1:18094) in current Google Chrome with H.264 WebCodecs decoding support. The viewer uses the browser's WebCodecs decoder; it does not bundle or install a browser in the container. The server permits one viewer at a time and checks that the WebSocket Origin is loopback. Keep the port mapping on `127.0.0.1`.
+## Agent control
 
-The Dockerfile builds the native executable and viewer in the default Debian Trixie image. It installs the required X11, FFmpeg, and libwebsockets development packages, and invokes the native server directly. It does not install or start Selkies, KasmVNC, or a separate FFmpeg process. Xvfb and Xfce provide the desktop platform.
+Close the viewer before acquiring control: one browser **or** one agent owns input at a time. Native PNG observation is independent.
 
-## Architecture
+    import { connect } from './sdk/index.js';
+    const desktop = await connect({ url: 'http://127.0.0.1:18094' });
+    try {
+      console.log(await desktop.capabilities());
+      await desktop.input({ type: 'pointerMove', x: 0.5, y: 0.5 });
+      await desktop.snapshot('screen.png');
+    } finally {
+      desktop.close();
+    }
 
-- An XDamage event latches frame work. The capture worker uses MIT-SHM to read the 1280×720 X11 root surface, then converts BGRA to limited-range BT.709 YUV420 with the project's scalar/ARM NEON converter.
-- A persistent libx264 encoder is accessed through the installed FFmpeg `libavcodec`/`libavutil` APIs. The encoder runs low-delay with no B frames/lookahead; packet bytes move into a bounded queue without dropping reference packets.
-- A single libwebsockets service thread owns WebSocket writes and a separate XTest connection for synthetic keyboard, pointer, button, and wheel input. The browser decodes and draws each frame, then returns an ACK that releases the one-frame credit.
-- A three-second ACK timeout ends the viewer generation and releases held controls. A reconnect starts a new generation and receives an IDR with parameter sets.
+Node 22+ is required; the SDK has no runtime npm dependencies. Coordinates use [0,1], keys use USB HID usages. ACK means submitted input, not application completion. Connection loss releases held controls when observed by the server; reconnect never replays input.
 
-See [the protocol and ownership contract](docs/build-contract.md) for byte layouts, limits, and thread boundaries. See [integration checks](tests/README.md) for the real browser/X11 test coverage and its limits.
+    NATIVE_STREAM_URL=http://127.0.0.1:18094 node sdk/cli.js capabilities
+    NATIVE_STREAM_URL=http://127.0.0.1:18094 node sdk/cli.js snapshot screen.png
 
-## Validation status
+CLI results are JSON on stdout, errors are JSON on stderr, and failures exit nonzero. See [the framework API](docs/framework-api.md) for types, batches, errors and lifecycle.
 
-- The live integration suite passed all ten checks: decoded desktop pixels, independently checked live resource counters, keyboard/pointer/wheel, held-control cleanup, reconnect, single-viewer behavior, malformed/untrusted client handling, and ACK-timeout recovery. The timeout probe independently observed held Shift/button state and subsequent release. Details and limits are in [tests/README.md](tests/README.md).
-- The ARM64 Docker color-conversion unit suite passed its BT.709 reference, chroma, stride, tail, and guard checks, including the NEON path.
-- The color suite and ten browser/X11 checks also passed with address and undefined-behavior sanitizers. Graceful shutdown produced no sanitizer or leak diagnostic. System libraries were not instrumented.
-- The [initial desktop comparison](optimize/native-stream-report.md) ([HTML](optimize/native-stream-report.html)) records nine fresh CRF 10 sessions, 720 input trials and all 14 initial gates passed. This is narrow interim evidence; broad workload qualification and a general-engine verdict remain pending.
+## Backend boundaries
 
-The standalone server is a local lab prototype, not WAN proof or a generally superior replacement for existing streaming systems. It has one local viewer and no authentication, TLS, IME/full keyboard-layout support, audio, clipboard, resizing, or relative-pointer mode. The desktop surface is fixed at 720p; CPU-only local validation does not establish WAN latency, hardware-encoder behavior, physical presentation latency, or performance on other workloads.
+CaptureSource supplies CPU pixels and damage notifications. InputBackend applies events and releases held controls. X11 code lives in src/x11-capture.cpp and src/x11-input.cpp; the encoder and server consume the interfaces. A separate PNG worker uses the capture factory without a video session.
 
-Live, keyboard-controlled Freedoom is available as a separate image; see [`doom/README.md`](doom/README.md).
+These are C++ source interfaces, not a stable cross-language plugin ABI. An injected source with no X11 linkage drives the actual H.264 encoder and checks independently decoded pixels, fresh IDRs, idle behavior and invalid-frame recovery. See [backend contracts and Wayland requirements](docs/backends.md).
+
+The stream uses persistent libx264 via libavcodec, scalar/ARM NEON BT.709 conversion, and libwebsockets. An RTT-derived window admits up to eight frames with at most 8 MiB logical encoded payload. Additional codec, transport and browser allocations are separate. Feedback adjusts the VBV ceiling without workload-name branches. See [flow control](docs/flow-control.md) and [the wire/build contract](docs/build-contract.md).
+
+## Verification
+
+    npm ci --ignore-scripts
+    npm test
+    TEST_CONTAINER=native-stream-lab TEST_URL=http://127.0.0.1:18094 npm run test:integration
+    TEST_CONTAINER=native-stream-lab TEST_URL=http://127.0.0.1:18094 npm run test:framework
+
+Integration needs installed Google Chrome and a dedicated container; tests temporarily cover its desktop. Playwright/PNG tooling are local development dependencies. Docker builds run color, flow-policy and injected-backend tests. See [test evidence and limits](tests/README.md).
+
+The general3 candidate passed 12 browser/video and five framework checks in release and ASAN/UBSAN builds. Graceful sanitizer termination exited zero with no reported leak/runtime error; system libraries were not instrumented. Nine SDK tests cover validation, ACKs, disconnect, pending limits, malformed replies and body/file errors.
+
+The [initial nine-session comparison](optimize/native-stream-report.md) ([HTML](optimize/native-stream-report.html)) remains narrow historical evidence. [Broader qualification](qualification/README.md) records CPU, RAM, bandwidth, delivered updates, latency and fidelity together. Comparative runs require separately prepared competitor images and credentials. No universal winner follows from unequal-quality operating points.
+
+Current limits: CPU capture, fixed 720p, one controller, mapped keyboard subset. No Wayland backend, authentication, TLS, IME, audio, clipboard, resize, cursor-image capture, relative pointer, hardware encoding or simultaneous viewer/agent control. GNOME, physical presentation, packet loss and browser/VM resources are unverified. C++ was chosen for direct native-library integration; no Rust-versus-C++ benchmark was performed.
+
+For a live keyboard-controlled game, see [Freedoom](doom/README.md).
+
+External automation stays independent: agent-desktop can use the graphical session's AT-SPI interfaces, and agent-browser can connect to a browser's CDP endpoint. Neither tool is a dependency of this framework, and this lab has not run those integrations.

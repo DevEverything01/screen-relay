@@ -18,7 +18,7 @@ const container=process.env.CONTAINER, cdp=process.env.CDP_URL, viewer=process.e
 if(!container || !cdp || !viewer) throw Error("Set CONTAINER, CDP_URL and VIEWER_URL for the existing visible viewer");
 const duration=Number(process.env.SECONDS || 60);
 if(!Number.isInteger(duration)||duration<1||duration>3600) throw Error("SECONDS must be an integer from 1 to 3600");
-const {chromium}=await import("../../desktop-stream-bench/node_modules/playwright/index.mjs");
+const {chromium}=await import("playwright");
 const browser=await chromium.connectOverCDP(cdp);
 const pages=browser.contexts().flatMap(c=>c.pages()).filter(p=>p.url()===viewer);
 if(pages.length!==1) throw Error(`Expected exactly one existing viewer at ${viewer}; found ${pages.length}`);

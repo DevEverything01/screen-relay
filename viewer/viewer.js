@@ -8,11 +8,14 @@ const stats = window.nativeStats = {
   bytes: 0,
   decodeerrors: 0,
   outstanding: 0,
+  pendingBytes: 0,
+  pendingHighWater: 0,
 };
 let socket,
   decoder,
   generation = 0,
   sequence = 0,
+  lastTimestamp = -1,
   ready = false,
   retry = 0,
   retryTimer,
@@ -117,10 +120,13 @@ function reset() {
   release();
   ready = false;
   clearTimeout(deadline);
+  for (const item of pending.values()) item.frame?.close();
   pending.clear();
   stats.outstanding = 0;
+  stats.pendingBytes = 0;
   generation = 0;
   sequence = 0;
+  lastTimestamp = -1;
   if (decoder && decoder.state !== "closed") decoder.close();
   decoder = null;
 }
@@ -130,6 +136,15 @@ function fail(message) {
   const old = socket;
   reset();
   if (old && old.readyState < WebSocket.CLOSING) old.close();
+}
+function watchPending(current) {
+  clearTimeout(deadline);
+  const oldest = pending.values().next().value;
+  if (oldest) {
+    deadline = setTimeout(() => {
+      if (current === epoch) fail("Decoder timed out; reconnecting");
+    }, Math.max(0, oldest.arrived + 5000 - performance.now()));
+  }
 }
 function codecFromSps(bytes) {
   for (let i = 0; i + 7 < bytes.length; i++) {
@@ -178,12 +193,12 @@ function connect() {
       }, 5000);
     }
   };
-  ws.onmessage = async (e) => {
-    if (current !== epoch) return;
+  ws.onmessage = (e) => {
+    if (current !== epoch || ws.readyState !== WebSocket.OPEN) return;
     try {
       if (
         !(e.data instanceof ArrayBuffer) || e.data.byteLength < 33 ||
-        e.data.byteLength > 16777248
+        e.data.byteLength > 8388640
       ) throw new Error("Invalid frame length");
       const v = new DataView(e.data),
         gen = v.getUint32(8),
@@ -207,19 +222,20 @@ function connect() {
           throw new Error("Generation must start with a keyframe");
         }
       }
-      if (seq !== sequence + 1 || pending.size) {
-        throw new Error("Unexpected frame sequence");
-      }
-      sequence = seq;
-      clearTimeout(deadline);
-      stats.received++;
       const data = new Uint8Array(e.data, 32), timestamp = Number(pts);
+      if (
+        seq !== sequence + 1 || timestamp <= lastTimestamp ||
+        pending.size >= 8 || stats.pendingBytes + data.byteLength > 8388608
+      ) throw new Error("Unexpected frame sequence or queue limit");
+      sequence = seq;
+      lastTimestamp = timestamp;
+      stats.received++;
       stats.bytes += data.byteLength;
-      pending.set(timestamp, { gen, seq });
+      pending.set(timestamp, { gen, seq, bytes: data.byteLength, arrived: performance.now() });
       stats.outstanding = pending.size;
-      deadline = setTimeout(() => {
-        if (current === epoch) fail("Decoder timed out; reconnecting");
-      }, 5000);
+      stats.pendingBytes += data.byteLength;
+      stats.pendingHighWater = Math.max(stats.pendingHighWater, pending.size);
+      watchPending(current);
       if (!decoder) {
         const config = {
           codec: codecFromSps(data),
@@ -227,37 +243,45 @@ function connect() {
           codedHeight: height,
           optimizeForLatency: true,
         };
-        const support = await VideoDecoder.isConfigSupported(config);
-        if (current !== epoch || ws !== socket || generation !== gen) return;
-        if (!support.supported) {
-          throw new Error(`Unsupported decoder: ${config.codec}`);
-        }
-        decoder = new VideoDecoder({
+        const instance = new VideoDecoder({
           output(frame) {
+            let retained = false;
             try {
+              if (current !== epoch || decoder !== instance) return;
               const item = pending.get(frame.timestamp);
-              if (current !== epoch || !item || item.gen !== generation) return;
-              ctx.drawImage(frame, 0, 0, 1280, 720);
-              pending.delete(frame.timestamp);
-              stats.outstanding = pending.size;
-              stats.drawn++;
-              clearTimeout(deadline);
-              ready = true;
-              retry = 0;
-              status.textContent = "Live · click to control";
-              if (ws.readyState === WebSocket.OPEN) {
-                ws.send(header(2, item.gen, item.seq, 0));
+              if (!item || item.gen !== generation || item.frame) {
+                throw new Error("Unexpected decoded frame");
               }
+              item.frame = frame;
+              retained = true;
+              while (pending.size) {
+                const [timestamp, next] = pending.entries().next().value;
+                if (!next.frame) break;
+                ctx.drawImage(next.frame, 0, 0, 1280, 720);
+                if (ws.readyState !== WebSocket.OPEN) throw new Error("Connection closed before ACK");
+                ws.send(header(2, next.gen, next.seq, 0));
+                next.frame.close();
+                next.frame = null;
+                pending.delete(timestamp);
+                stats.pendingBytes -= next.bytes;
+                stats.outstanding = pending.size;
+                stats.drawn++;
+                ready = true;
+                retry = 0;
+                status.textContent = "Live · click to control";
+              }
+              watchPending(current);
             } catch (error) {
               fail(`Draw failed: ${error.message}`);
             } finally {
-              frame.close();
+              if (!retained) frame.close();
             }
           },
           error(error) {
-            if (current === epoch) fail(`Decode failed: ${error.message}`);
+            if (current === epoch && decoder === instance) fail(`Decode failed: ${error.message}`);
           },
         });
+        decoder = instance;
         decoder.configure(config);
       }
       decoder.decode(

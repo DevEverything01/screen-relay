@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {mkdirSync, writeFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
-import {chromium} from '../../desktop-stream-bench/node_modules/playwright/index.mjs';
+import {chromium} from 'playwright';
 
 const container = process.env.TEST_CONTAINER;
 assert(container, 'Set TEST_CONTAINER to the existing native container');
@@ -16,7 +16,7 @@ const fixturePath = `/tmp/${tag}.py`;
 const docker = (...args) => execFileSync('docker', args, {encoding: 'utf8', timeout: 15000});
 const state = () => JSON.parse(docker('exec', container, 'cat', statePath));
 const report = {url, container, started: new Date().toISOString(), checks: []};
-let browser, page, fixturePID;
+let browser, page, fixturePID, pausedFixtures = [];
 async function poll(read, predicate, timeout = 8000) {
   const end = Date.now() + timeout;
   let value, error;
@@ -49,20 +49,40 @@ async function rawProbe(mode, origin) {
   await p.goto(origin || url);
   try {
     const result = await p.evaluate(({wsURL, mode}) => new Promise((resolve, reject) => {
-      let opened = false, frames = 0, firstAt, first, timer;
+      let opened = false, frames = 0, firstAt, first, timer, invalidTimer;
+      const received = [];
       const start = performance.now(), ws = new WebSocket(wsURL);
       ws.binaryType = 'arraybuffer';
       timer = setTimeout(() => {ws.close(); reject(new Error('Socket did not close within 7s'));}, 7000);
       ws.onopen = () => {opened = true;};
       ws.onmessage = e => {
         frames++;
+        const header = new DataView(e.data);
+        received.push({generation: header.getUint32(8), sequence: header.getUint32(12), bytes: e.data.byteLength, at: performance.now()-start});
         if (frames !== 1) return;
         firstAt = performance.now();
         const v = new DataView(e.data);
         first = {magic: v.getUint32(0), type: v.getUint8(5), flags: v.getUint16(6), generation: v.getUint32(8), sequence: v.getUint32(12)};
         if (mode === 'malformed') ws.send(new Uint8Array(36));
         if (mode === 'oversized') ws.send(new Uint8Array(65537));
-        if (mode === 'stall') {
+        if (mode === 'pipeline') {
+          const ack = (generation, sequence) => {
+            const b = new ArrayBuffer(20), v = new DataView(b);
+            v.setUint32(0,0x4e534c31); v.setUint8(4,1); v.setUint8(5,2);
+            v.setUint32(8,generation); v.setUint32(12,sequence); ws.send(b);
+          };
+          setTimeout(() => {
+            if (ws.readyState !== WebSocket.OPEN) return;
+            ack(first.generation, first.sequence);
+            invalidTimer = setInterval(() => {
+              if (ws.readyState !== WebSocket.OPEN) return;
+              ack(first.generation, first.sequence); // Duplicate retired frame.
+              ack(first.generation, received.at(-1).sequence + 1000); // Never sent.
+              ack(first.generation + 1, received.at(-1).sequence); // Wrong generation.
+            }, 70);
+          }, 120);
+        }
+        if (mode === 'stall' || mode === 'pipeline') {
           for (const [event, code] of [[1,225],[4,1]]) {
             const b = new ArrayBuffer(36), input = new DataView(b);
             input.setUint32(0,0x4e534c31); input.setUint8(4,1); input.setUint8(5,3);
@@ -74,13 +94,27 @@ async function rawProbe(mode, origin) {
         }
       };
       ws.onerror = () => {};
-      ws.onclose = e => {clearTimeout(timer); resolve({opened, frames, first, code: e.code, elapsed: performance.now()-start, afterFrame: firstAt && performance.now()-firstAt});};
+      ws.onclose = e => {clearTimeout(timer); clearInterval(invalidTimer); resolve({opened, frames, first, received, code: e.code, elapsed: performance.now()-start, afterFrame: firstAt && performance.now()-firstAt});};
     }), {wsURL, mode});
     assert(!diagnostics.some(s => s.includes('LOCAL_NETWORK_ACCESS')), diagnostics.join('\n'));
     return {...result, diagnostics};
   } finally {await context.close();}
 }
 try {
+  // The dedicated container's benchmark producer must not create hidden-window damage during idle proof.
+  pausedFixtures = JSON.parse(docker('exec', container, 'python3', '-c', `
+import os, signal, json
+paused = []
+for name in os.listdir('/proc'):
+    if not name.isdigit(): continue
+    try:
+        args = open('/proc/' + name + '/cmdline', 'rb').read().split(b'\\0')
+        status = open('/proc/' + name + '/status').read()
+        if b'/opt/bench/fixture.py' in args and '\\nState:\\tT' not in status:
+            os.kill(int(name), signal.SIGSTOP)
+            paused.append(int(name))
+    except (FileNotFoundError, ProcessLookupError): pass
+print(json.dumps(paused))`));
   docker('cp', fileURLToPath(new URL('./input_fixture.py', import.meta.url)), `${container}:${fixturePath}`);
   docker('exec', '-d', '-e', 'DISPLAY=:1', container, 'python3', fixturePath, statePath);
   fixturePID = (await poll(state, s => s.pid)).pid;
@@ -154,6 +188,27 @@ try {
     const rgba = await pixel([192,48,176]); await live();
     return {rejection, rgba};
   });
+  await check('continuous X11 damage decodes changing pixels and settles when damage stops', async () => {
+    const before = await page.evaluate(() => nativeStats.drawn);
+    docker('exec', container, 'kill', '-USR2', String(fixturePID));
+    const readPatch = () => page.evaluate(() => [...document.querySelector('canvas').getContext('2d').getImageData(1000,150,1,1).data]);
+    let yellow, blue;
+    try {
+      yellow = await poll(readPatch, p => Math.abs(p[0]-224) < 35 && Math.abs(p[1]-160) < 35 && p[2] < 70);
+      blue = await poll(readPatch, p => p[0] < 70 && Math.abs(p[1]-64) < 35 && Math.abs(p[2]-224) < 35);
+      await poll(() => page.evaluate(() => nativeStats), s => s.drawn >= before + 5 && s.decodeerrors === 0);
+    } finally {
+      docker('exec', container, 'kill', '-USR2', String(fixturePID));
+      await poll(state, s => !s.animating);
+    }
+    await page.waitForTimeout(500);
+    const settled = await page.evaluate(() => nativeStats.drawn);
+    await page.waitForTimeout(1000);
+    const final = await page.evaluate(() => nativeStats);
+    assert(final.drawn - settled <= 2, `Idle desktop keeps producing frames: ${JSON.stringify({settled, final})}`);
+    assert.equal(final.decodeerrors, 0);
+    return {yellow, blue, settled, final};
+  });
   await check('disconnect releases held controls and reconnect renders fresh desktop', async () => {
     await page.locator('canvas').focus(); await page.keyboard.down('Shift');
     await page.mouse.move(800,400); await page.mouse.down();
@@ -182,6 +237,34 @@ try {
       return r;
     });
   }
+  await check('pipeline admits multiple frames and invalid ACKs cannot replenish credits or extend ownership', async () => {
+    docker('exec', container, 'kill', '-USR2', String(fixturePID));
+    await poll(state, s => s.animating && s.animationTick > 3);
+    let r;
+    try {
+      const probe = poll(() => rawProbe('pipeline'), value => value.opened);
+      await poll(state, s => s.shift && s.button1, 2500);
+      r = await probe;
+    } finally {
+      docker('exec', container, 'kill', '-USR2', String(fixturePID));
+      await poll(state, s => !s.animating);
+    }
+    assert(r.frames >= 3, `One ACK must admit multiple actual damage frames: ${JSON.stringify(r)}`);
+    assert.equal(r.first.flags & 1, 1, 'A new session must start with an IDR frame');
+    assert(r.frames <= 9, `Invalid ACKs replenished the eight-frame window: ${JSON.stringify(r)}`);
+    assert(r.afterFrame >= 2900 && r.afterFrame < 6000, `Invalid ACKs changed no-progress timeout: ${JSON.stringify(r)}`);
+    for (let i = 0; i < r.received.length; i++) {
+      const f = r.received[i];
+      assert.equal(f.generation, r.first.generation);
+      assert.equal(f.sequence, i + 1);
+      assert(f.bytes > 32 && f.bytes <= 8*1024*1024 + 32);
+    }
+    assert(r.received.slice(1).reduce((n, f) => n + f.bytes - 32, 0) <= 8*1024*1024);
+    await poll(state, s => !s.shift && !s.button1);
+    page = await browser.newPage(); await page.goto(url); await live(); await pixel([192,48,176]);
+    await page.close();
+    return r;
+  });
   await check('non-loopback origin rejected at handshake', async () => {
     const r = await rawProbe('reject', 'https://untrusted.invalid'); assert.equal(r.opened,false); return r;
   });
@@ -193,6 +276,10 @@ try {
   await browser?.close();
   if (fixturePID) {
     try {report.finalFixture = state(); docker('exec', container, 'kill', String(fixturePID));}
+    catch (e) {report.cleanupError = e.message; process.exitCode = 1;}
+  }
+  for (const pid of pausedFixtures) {
+    try { docker('exec', container, 'kill', '-CONT', String(pid)); }
     catch (e) {report.cleanupError = e.message; process.exitCode = 1;}
   }
   report.finished = new Date().toISOString();

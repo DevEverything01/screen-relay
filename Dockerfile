@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=debian:trixie-slim
+ARG BASE_IMAGE=debian:trixie-slim@sha256:62bd423aeee912639ca8ee681c2b762cb3e25137e0a92b20be455898a9f034ad
 FROM ${BASE_IMAGE}
 
 USER root
@@ -20,9 +20,13 @@ ARG BUILD_FLAGS="-O2 -std=c++17 -Wall -Wextra -Wpedantic -pthread"
 COPY src/ ./src/
 COPY viewer/ ./viewer/
 COPY tests/color-test.cpp ./tests/color-test.cpp
+COPY tests/flow-test.cpp ./tests/flow-test.cpp
+COPY tests/backend-source-test.cpp ./tests/backend-source-test.cpp
 COPY Makefile ./Makefile
 COPY bench/fixture.py /opt/bench/fixture.py
 RUN make CXXFLAGS="${BUILD_FLAGS}" test-color \
+    && make CXXFLAGS="${BUILD_FLAGS}" test-flow \
+    && make CXXFLAGS="${BUILD_FLAGS}" test-backend \
     && make CXXFLAGS="${BUILD_FLAGS}" \
     && mkdir -p /opt/native/viewer \
     && install -m 0755 native-stream /opt/native/native-stream \

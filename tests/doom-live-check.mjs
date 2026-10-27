@@ -4,8 +4,8 @@ import {promisify} from "node:util";
 import {mkdir,writeFile} from "node:fs/promises";
 import {fileURLToPath} from "node:url";
 import path from "node:path";
-import {chromium} from "../../desktop-stream-bench/node_modules/playwright/index.mjs";
-import {PNG} from "../../desktop-stream-bench/node_modules/pngjs/lib/png.js";
+import {chromium} from "playwright";
+import {PNG} from "pngjs";
 const exec=promisify(execFile), sleep=ms=>new Promise(r=>setTimeout(r,ms));
 function calculate(a,b) {
  const seconds=b.t-a.t;if(seconds<=0||b.cpu<a.cpu||b.tx<a.tx)throw Error("Invalid resource counters");

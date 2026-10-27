@@ -1,4 +1,4 @@
-import {PNG} from "../../desktop-stream-bench/node_modules/pngjs/lib/png.js";
+import {PNG} from "pngjs";
 import {readFile, writeFile} from "node:fs/promises";
 import path from "node:path";
 import assert from "node:assert/strict";
