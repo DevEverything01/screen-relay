@@ -44,23 +44,16 @@ async function check(name, fn) {
   catch(error) { report.checks.push({name,passed:false,ms:Date.now()-start,error:error.stack}); throw error; }
 }
 function launch(port, extra = []) {
-  const result=json(`import json,os,pathlib,subprocess,sys,tempfile,time
-directory=pathlib.Path(tempfile.mkdtemp(prefix='nsl-portable-test-'))
-log=directory/'launcher.log'
-with log.open('wb') as stream:
- p=subprocess.Popen([str(pathlib.Path.home()/'.local/bin/native-stream-desktop'),'--port',sys.argv[1],*json.loads(sys.argv[2])],stdin=subprocess.DEVNULL,stdout=stream,stderr=stream,start_new_session=True)
-deadline=time.monotonic()+30
-while time.monotonic()<deadline:
- for line in log.read_text().splitlines():
-  if line.startswith('{'):
-   data=json.loads(line)
-   if data.get('ready'):
-    data['launcherLog']=str(log); print(json.dumps(data)); sys.exit(0)
- if p.poll() is not None: raise RuntimeError(log.read_text())
- time.sleep(.1)
-p.terminate(); raise RuntimeError('Launcher timeout: '+log.read_text())`, String(port), JSON.stringify(extra));
+  const result=json(`import json,pathlib,subprocess,sys
+p=subprocess.run([str(pathlib.Path.home()/'.local/bin/native-stream'),'up','-d','--json','--name','p'+sys.argv[1],'--port',sys.argv[1],*json.loads(sys.argv[2])],stdin=subprocess.DEVNULL,capture_output=True,text=True,timeout=38)
+if p.returncode: raise RuntimeError(p.stderr)
+print(p.stdout.strip().splitlines()[-1])`, String(port), JSON.stringify(extra));
   sessions.push(result);
   return result;
+}
+function down(session) {
+  remote(`import pathlib,subprocess,sys
+subprocess.run([str(pathlib.Path.home()/'.local/bin/native-stream'),'down','--name',sys.argv[1]],check=True,stdout=subprocess.DEVNULL)`, session.name);
 }
 function terminate(pid) {
   remote(`import os,signal,sys
@@ -101,10 +94,10 @@ try {
   report.environment=json(`import hashlib,json,os,pathlib,platform,shutil,subprocess,sys
 root=pathlib.Path(sys.argv[1]); binary=pathlib.Path.home()/'.local/bin/native-stream-engine'
 container=subprocess.run(['systemd-detect-virt','--container'],capture_output=True,text=True)
-print(json.dumps({'kernel':platform.release(),'machine':platform.machine(),'osRelease':pathlib.Path('/etc/os-release').read_text(),'pid1':pathlib.Path('/proc/1/comm').read_text().strip(),'containerDetection':container.stdout.strip(),'containerDetectionExit':container.returncode,'dockerMarker':pathlib.Path('/.dockerenv').exists(),'dockerCli':shutil.which('docker'),'engineSha256':hashlib.sha256(binary.read_bytes()).hexdigest(),'sourceSha256':{str(p.relative_to(root)):hashlib.sha256(p.read_bytes()).hexdigest() for p in [root/'src/server/server.cpp',root/'scripts/native-stream-desktop',root/'tests/integration/input_fixture.py']}}))`,remoteRoot);
+print(json.dumps({'kernel':platform.release(),'machine':platform.machine(),'osRelease':pathlib.Path('/etc/os-release').read_text(),'pid1':pathlib.Path('/proc/1/comm').read_text().strip(),'containerDetection':container.stdout.strip(),'containerDetectionExit':container.returncode,'dockerMarker':pathlib.Path('/.dockerenv').exists(),'dockerCli':shutil.which('docker'),'engineSha256':hashlib.sha256(binary.read_bytes()).hexdigest(),'sourceSha256':{str(p.relative_to(root)):hashlib.sha256(p.read_bytes()).hexdigest() for p in [root/'src/server/server.cpp',root/'scripts/native-stream',root/'tests/integration/input_fixture.py']}}))`,remoteRoot);
   assert.equal(report.environment.dockerMarker,false);
   assert.notEqual(report.environment.containerDetectionExit,0,'Verification target is a container');
-  for(const name of ['src/server/server.cpp','scripts/native-stream-desktop','tests/integration/input_fixture.py'])
+  for(const name of ['src/server/server.cpp','scripts/native-stream','tests/integration/input_fixture.py'])
     assert.equal(report.environment.sourceSha256[name],createHash('sha256').update(readFileSync(new URL('../../'+name,import.meta.url))).digest('hex'),'Stale remote source: '+name);
   const forwards=Array.from({length:4},(_,i)=>['-L',`127.0.0.1:${localPort+i}:127.0.0.1:${remotePort+i}`]).flat();
   tunnel=spawn('ssh',[...ssh,'-S','none','-o','ControlMaster=no','-o','ExitOnForwardFailure=yes','-N',...forwards,target],{stdio:['ignore','ignore','pipe']});
@@ -115,7 +108,7 @@ print(json.dumps({'kernel':platform.release(),'machine':platform.machine(),'osRe
   let first, second;
   await check('portable launcher creates an XFCE display and a separate bare display',async()=>{
     first=launch(remotePort);
-    second=launch(remotePort+1,['--no-desktop']);
+    second=launch(remotePort+1,['--desktop','none']);
     assert.notEqual(first.display,second.display);
     assert.notEqual(first.xauthority,second.xauthority);
     const discovery=await poll(()=>capabilities({url:url(0)}));
@@ -133,11 +126,12 @@ for p in pathlib.Path('/proc').glob('[0-9]*'):
   });
   await check('port conflict fails without claiming another engine or stopping its display',async()=>{
     const result=json(`import json,pathlib,subprocess,sys
-p=subprocess.run([str(pathlib.Path.home()/'.local/bin/native-stream-desktop'),'--port',sys.argv[1],'--no-desktop'],capture_output=True,text=True,timeout=30)
+p=subprocess.run([str(pathlib.Path.home()/'.local/bin/native-stream'),'up','--json','--name','conflict','--port',sys.argv[1],'--desktop','none'],capture_output=True,text=True,timeout=38)
 print(json.dumps({'code':p.returncode,'stdout':p.stdout,'stderr':p.stderr}))`,String(remotePort));
     assert.notEqual(result.code,0);
     assert(!result.stdout.includes('"ready": true'));
-    const error=JSON.parse(result.stderr.trim().split('\n').at(-1));
+    const {error}=JSON.parse(result.stderr.trim().split('\n').at(-1));
+    assert.equal(error.component,'engine');
     await poll(()=>activePids({xauthority:error.logs+'/Xauthority'}),p=>p.length===0);
     await snapshot({url:url(0)});
     return {exitCode:result.code,cleanupVerified:true};
@@ -201,7 +195,7 @@ print(json.dumps({'pid':p.pid}))`,JSON.stringify(first),remoteRoot,fixtureState)
     const result=json(`import json,pathlib,subprocess
 p=subprocess.run([str(pathlib.Path.home()/'.local/bin/native-stream-engine'),'--bind','0.0.0.0'],capture_output=True,text=True)
 print(json.dumps({'code':p.returncode,'stderr':p.stderr}))`);
-    assert.equal(result.code,2); assert.match(result.stderr,/requires token/);
+    assert.equal(result.code,2); assert.match(result.stderr,/requires a token/);
     return {exitCode:result.code};
   });
   await check('TLS SDK authentication, WSS input and denied credentials work against the native server',async()=>{
@@ -293,7 +287,7 @@ session.close(); console.log(JSON.stringify({authenticated:true,wss:true,missing
     }
   });
   await check('stopping one managed display leaves the other session running',async()=>{
-    terminate(second.pid);
+    down(second);
     await poll(()=>activePids(second),p=>p.length===0);
     pixel(await snapshot({url:url(0)}),[192,48,176]);
     return {stoppedDisplay:second.display,survivingDisplay:first.display};
@@ -306,7 +300,7 @@ finally {
   for(const process of processes.toReversed()) try {terminate(process.pid);} catch(error) {cleanupErrors.push(error.message);}
   for(const session of sessions.toReversed()) {
     try {
-      terminate(session.pid);
+      down(session);
       await poll(()=>activePids(session),p=>p.length===0);
       const logs=read(session.logs+'/engine.log');
       writeFileSync(output+`/engine-${session.pid}.log`,logs);
