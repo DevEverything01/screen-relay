@@ -1,6 +1,0 @@
-.git
-.context
-bench/results
-tests/results
-node_modules
-native-stream
