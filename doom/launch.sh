@@ -2,6 +2,8 @@
 set -euo pipefail
 
 export DISPLAY=:1
+# SDL's window-surface fallback otherwise creates a costly llvmpipe presenter on Xvfb.
+export SDL_FRAMEBUFFER_ACCELERATION=0
 dbus-run-session -- /opt/native/session.sh native &
 session_pid=$!
 cleanup() {

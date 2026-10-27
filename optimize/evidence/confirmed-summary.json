@@ -1,0 +1,422 @@
+{
+  "aggregate": {
+    "native": {
+      "errors": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      },
+      "idle_cpuPercent": {
+        "median": 4.06117777598958,
+        "min": 3.79731162895314,
+        "max": 4.279907158506539
+      },
+      "idle_memoryMiB": {
+        "median": 154.94165826612902,
+        "min": 152.71685987903226,
+        "max": 155.38167842741936
+      },
+      "idle_mbps": {
+        "median": 0.003661060268399986,
+        "min": 0.002499539367549932,
+        "max": 0.0036830540318913163
+      },
+      "idle_throttledMs": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      },
+      "scroll_cpuPercent": {
+        "median": 43.012796293323966,
+        "min": 40.475957257966876,
+        "max": 44.903620980085606
+      },
+      "scroll_memoryMiB": {
+        "median": 155.24647177419354,
+        "min": 152.99911794354838,
+        "max": 159.64805947580646
+      },
+      "scroll_mbps": {
+        "median": 1.9541927475508893,
+        "min": 1.9068451152778594,
+        "max": 2.056557794187885
+      },
+      "scroll_throttledMs": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      },
+      "scroll_visibleUpdatesPerSecond": {
+        "median": 53.838656420014345,
+        "min": 51.967359454670195,
+        "max": 54.996299283073625
+      },
+      "scroll_producerUpdatesPerSecond": {
+        "median": 54.58596587822328,
+        "min": 52.610003262857184,
+        "max": 55.44911532376197
+      },
+      "motion_cpuPercent": {
+        "median": 41.30872703834629,
+        "min": 39.12412834867737,
+        "max": 43.55154909300044
+      },
+      "motion_memoryMiB": {
+        "median": 155.44329637096774,
+        "min": 153.22631048387098,
+        "max": 162.8773941532258
+      },
+      "motion_mbps": {
+        "median": 1.2866858869269702,
+        "min": 1.2345177587940095,
+        "max": 1.29791299838078
+      },
+      "motion_throttledMs": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      },
+      "motion_visibleUpdatesPerSecond": {
+        "median": 52.907067441239924,
+        "min": 50.54355031154713,
+        "max": 53.510153336096145
+      },
+      "motion_producerUpdatesPerSecond": {
+        "median": 53.147507932004835,
+        "min": 50.890518850207705,
+        "max": 53.821268437264884
+      },
+      "idle_latencyMedianMs": {
+        "median": 24.700000286102295,
+        "min": 23.800000190734863,
+        "max": 26.40000009536743
+      },
+      "idle_latencyP95Ms": {
+        "median": 29.40000009536743,
+        "min": 26.40000009536743,
+        "max": 39.69999980926514
+      },
+      "motion_latencyMedianMs": {
+        "median": 27,
+        "min": 26.09999990463257,
+        "max": 27.09999990463257
+      },
+      "motion_latencyP95Ms": {
+        "median": 43.19999980926514,
+        "min": 41.80000019073486,
+        "max": 43.90000009536743
+      },
+      "psnrDb": {
+        "median": 38.44981249076661,
+        "min": 38.44981249076661,
+        "max": 38.45007216309848
+      },
+      "textInkMeanAbsoluteError": {
+        "median": 4.097022641429807,
+        "min": 4.097022641429807,
+        "max": 4.0974868645945435
+      }
+    },
+    "selkies": {
+      "errors": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      },
+      "idle_cpuPercent": {
+        "median": 45.84014506753564,
+        "min": 45.79964508568751,
+        "max": 45.933274789930785
+      },
+      "idle_memoryMiB": {
+        "median": 219.20022681451613,
+        "min": 216.98387096774192,
+        "max": 230.94002016129033
+      },
+      "idle_mbps": {
+        "median": 0.25630111599895267,
+        "min": 0.2179745583130129,
+        "max": 0.29468114153274827
+      },
+      "idle_throttledMs": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      },
+      "scroll_cpuPercent": {
+        "median": 47.767729934802276,
+        "min": 46.550127422897546,
+        "max": 48.44308137017712
+      },
+      "scroll_memoryMiB": {
+        "median": 219.77822580645162,
+        "min": 219.4594254032258,
+        "max": 231.3595010080645
+      },
+      "scroll_mbps": {
+        "median": 2.7576584467395313,
+        "min": 2.7358177716793923,
+        "max": 2.7851245337414174
+      },
+      "scroll_throttledMs": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      },
+      "scroll_visibleUpdatesPerSecond": {
+        "median": 55.85906532224596,
+        "min": 55.59204197964069,
+        "max": 55.98357638244869
+      },
+      "scroll_producerUpdatesPerSecond": {
+        "median": 56.25807208022126,
+        "min": 55.95363446097251,
+        "max": 56.742211826234815
+      },
+      "motion_cpuPercent": {
+        "median": 47.758154788651474,
+        "min": 47.00335168977097,
+        "max": 49.46607619111638
+      },
+      "motion_memoryMiB": {
+        "median": 219.98160282258064,
+        "min": 219.6803175403226,
+        "max": 224.8562247983871
+      },
+      "motion_mbps": {
+        "median": 2.027150432930387,
+        "min": 2.0142589320339113,
+        "max": 2.0911921930320094
+      },
+      "motion_throttledMs": {
+        "median": 0,
+        "min": 0,
+        "max": 1.374
+      },
+      "motion_visibleUpdatesPerSecond": {
+        "median": 54.538823685432,
+        "min": 54.216088417161146,
+        "max": 54.62922116079366
+      },
+      "motion_producerUpdatesPerSecond": {
+        "median": 54.81088422665988,
+        "min": 54.65108294450265,
+        "max": 54.97296747752937
+      },
+      "idle_latencyMedianMs": {
+        "median": 25.699999809265137,
+        "min": 25.300000190734863,
+        "max": 26.09999990463257
+      },
+      "idle_latencyP95Ms": {
+        "median": 28.300000190734863,
+        "min": 28.199999809265137,
+        "max": 40.69999980926514
+      },
+      "motion_latencyMedianMs": {
+        "median": 25.800000190734863,
+        "min": 25.300000190734863,
+        "max": 25.899999618530273
+      },
+      "motion_latencyP95Ms": {
+        "median": 40.40000009536743,
+        "min": 38.60000038146973,
+        "max": 41.59999990463257
+      },
+      "psnrDb": {
+        "median": 38.47718076418979,
+        "min": 38.474983618893745,
+        "max": 38.47929187635627
+      },
+      "textInkMeanAbsoluteError": {
+        "median": 3.9989238462999306,
+        "min": 3.998290814711654,
+        "max": 3.999219261041126
+      }
+    },
+    "kasm": {
+      "errors": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      },
+      "idle_cpuPercent": {
+        "median": 3.9263088322983406,
+        "min": 3.849881653887763,
+        "max": 4.129455007696289
+      },
+      "idle_memoryMiB": {
+        "median": 146.01751512096774,
+        "min": 144.5631300403226,
+        "max": 154.60761088709677
+      },
+      "idle_mbps": {
+        "median": 0.00014515491560182985,
+        "min": 3.4829514041597586e-05,
+        "max": 0.0005414689041123791
+      },
+      "idle_throttledMs": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      },
+      "scroll_cpuPercent": {
+        "median": 49.863890137552815,
+        "min": 49.761867030154086,
+        "max": 50.06233687028544
+      },
+      "scroll_memoryMiB": {
+        "median": 146.63533266129033,
+        "min": 145.03679435483872,
+        "max": 163.99634576612902
+      },
+      "scroll_mbps": {
+        "median": 6.242895050813486,
+        "min": 5.811303493383812,
+        "max": 6.2729822508099655
+      },
+      "scroll_throttledMs": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      },
+      "scroll_visibleUpdatesPerSecond": {
+        "median": 51.11262654064922,
+        "min": 47.59540595108066,
+        "max": 51.394715390092706
+      },
+      "scroll_producerUpdatesPerSecond": {
+        "median": 55.168227383421396,
+        "min": 51.96318290534731,
+        "max": 55.35538833539956
+      },
+      "motion_cpuPercent": {
+        "median": 46.490507323607524,
+        "min": 46.46467732382726,
+        "max": 48.402915681799634
+      },
+      "motion_memoryMiB": {
+        "median": 146.64490927419354,
+        "min": 144.85420866935485,
+        "max": 165.23576108870967
+      },
+      "motion_mbps": {
+        "median": 3.981598207028083,
+        "min": 3.8899625288954685,
+        "max": 4.083704747858908
+      },
+      "motion_throttledMs": {
+        "median": 0,
+        "min": 0,
+        "max": 3.439
+      },
+      "motion_visibleUpdatesPerSecond": {
+        "median": 46.85492523020591,
+        "min": 45.581235228015615,
+        "max": 49.28426781194754
+      },
+      "motion_producerUpdatesPerSecond": {
+        "median": 51.0256756726734,
+        "min": 49.90142311197849,
+        "max": 52.7805663103669
+      },
+      "idle_latencyMedianMs": {
+        "median": 53.69999980926514,
+        "min": 43.299999713897705,
+        "max": 55
+      },
+      "idle_latencyP95Ms": {
+        "median": 60.40000009536743,
+        "min": 59.80000019073486,
+        "max": 69.60000038146973
+      },
+      "motion_latencyMedianMs": {
+        "median": 44.80000019073486,
+        "min": 44.799999713897705,
+        "max": 59.59999990463257
+      },
+      "motion_latencyP95Ms": {
+        "median": 77,
+        "min": 76.7999997138977,
+        "max": 77.30000019073486
+      },
+      "psnrDb": {
+        "median": 38.77586185140704,
+        "min": 38.77567942666222,
+        "max": 38.77587229580374
+      },
+      "textInkMeanAbsoluteError": {
+        "median": 3.7917537085100546,
+        "min": 3.7917115064041695,
+        "max": 3.792196830621848
+      }
+    }
+  },
+  "checks": {
+    "idle_cpuPercent": {
+      "value": 4.06117777598958,
+      "limit": 5,
+      "passed": true
+    },
+    "motion_visibleUpdatesPerSecond": {
+      "value": 52.907067441239924,
+      "limit": 50,
+      "passed": true
+    },
+    "motion_latencyP95Ms": {
+      "value": 43.19999980926514,
+      "limit": 45,
+      "passed": true
+    },
+    "motion_cpuPercent": {
+      "value": 41.30872703834629,
+      "limit": 50,
+      "passed": true
+    },
+    "motion_memoryMiB": {
+      "value": 155.44329637096774,
+      "limit": 225,
+      "passed": true
+    },
+    "motion_mbps": {
+      "value": 1.2866858869269702,
+      "limit": 2.5,
+      "passed": true
+    },
+    "scroll_visibleUpdatesPerSecond": {
+      "value": 53.838656420014345,
+      "limit": 45,
+      "passed": true
+    },
+    "textInkMeanAbsoluteError": {
+      "value": 4.097022641429807,
+      "limit": 4.5,
+      "passed": true
+    },
+    "psnrDb": {
+      "value": 38.44981249076661,
+      "limit": 37.5,
+      "passed": true
+    },
+    "fps_regression": {
+      "passed": true
+    },
+    "p95_regression": {
+      "passed": true
+    },
+    "motion_cpuPercent_regression": {
+      "passed": true
+    },
+    "motion_memoryMiB_regression": {
+      "passed": true
+    },
+    "motion_mbps_regression": {
+      "passed": true
+    }
+  },
+  "all_passed": true,
+  "runner_sha256": "9a5a41259bb710cd25f1d12a1c7e5a9eded0d0c87a6fd00a89240c3569dd1a21",
+  "fixture_sha256": "7d90298f678542d879826deb2b25dfd820ea526841c4817991a66c5996def3cc",
+  "final_inputs": 720,
+  "engine_commit": "4b9ea36"
+}

@@ -51,3 +51,9 @@ viewer also permits its unload/blur cleanup, so the disconnect case checks the
 end-to-end guarantee rather than proving which cleanup layer released controls.
 The raw stalled receiver has no browser input cleanup and separately proves
 server-side held-control cleanup on timeout.
+
+## Live game diagnostic
+
+`TEST_CONTAINER=native-doom-final TEST_URL=http://127.0.0.1:18096 TEST_LABEL=final-engine node tests/doom-live-check.mjs` samples ten seconds without a viewer, ten stationary seconds, and fifteen seconds holding turn/fire through the real browser input path. It requires an already-running live game. `node tests/doom-live-check.mjs --self-check` validates resource arithmetic.
+
+It preserves counters, process attribution, drawn-frame counts and screenshots. A changed screenshot and zero decoder errors establish a live visible stream; they do not independently prove every game action or measure input latency. This is one diagnostic per configuration, not a repeated three-engine gaming comparison. Completed release/sanitizer and game evidence is exported in [optimize/evidence](../optimize/evidence/).

@@ -3,5 +3,6 @@ bench/results/
 build/
 node_modules/
 tests/results/
+qualification/results/
 native-stream
 result.yaml

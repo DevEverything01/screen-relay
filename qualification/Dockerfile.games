@@ -1,0 +1,7 @@
+FROM native-stream-lab:final2
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends crispy-doom freedoom
+COPY qualification/game-launch.sh /opt/native/game-launch.sh
+RUN chmod 0755 /opt/native/game-launch.sh
+USER bench
+ENTRYPOINT ["/opt/native/game-launch.sh"]

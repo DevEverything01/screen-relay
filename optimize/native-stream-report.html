@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Initial desktop comparison</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #172327;
+      --muted: #58676b;
+      --line: #d9e1df;
+      --paper: #f4f7f5;
+      --card: #fff;
+      --accent: #176b57;
+      --accent-soft: #dcefe8;
+      --blue: #496b9a;
+      --gold: #b57922;
+      --red: #a4483d;
+      --shadow: 0 12px 30px #14231c0b;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-synthesis: none;
+      text-rendering: optimizeLegibility;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--paper); color: var(--ink); line-height: 1.55; }
+    main { width: min(1120px, calc(100% - 36px)); margin: 48px auto 80px; }
+    header { padding: 36px 0 27px; border-bottom: 1px solid var(--line); }
+    .eyebrow { margin: 0 0 10px; color: var(--accent); font-size: .75rem; font-weight: 750; letter-spacing: .12em; text-transform: uppercase; }
+    h1 { max-width: 800px; margin: 0; font-size: clamp(2rem, 5vw, 3.6rem); letter-spacing: -.045em; line-height: 1.05; }
+    .dek { max-width: 760px; margin: 17px 0 0; color: var(--muted); font-size: 1.08rem; }
+    .metadata { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+    .pill { padding: 5px 10px; border: 1px solid var(--line); border-radius: 999px; background: #fff; color: #405055; font-size: .82rem; }
+    section { margin-top: 30px; }
+    h2 { margin: 0 0 6px; font-size: 1.42rem; letter-spacing: -.02em; }
+    h3 { margin: 0; font-size: 1rem; }
+    .section-intro, .caption { margin: 0 0 16px; color: var(--muted); font-size: .93rem; }
+    .card { padding: 22px; border: 1px solid var(--line); border-radius: 16px; background: var(--card); box-shadow: var(--shadow); }
+    .callout { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: start; border-left: 4px solid var(--accent); }
+    .status { width: 12px; height: 12px; margin-top: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 5px var(--accent-soft); }
+    .callout p { margin: 5px 0 0; color: var(--muted); }
+    .chart-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    .chart { padding: 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); }
+    .chart h3 { display: flex; justify-content: space-between; gap: 12px; }
+    .direction { color: var(--muted); font-size: .78rem; font-weight: 500; }
+    .bar-row { display: grid; grid-template-columns: minmax(85px, 1fr) minmax(80px, 2fr) minmax(105px, auto); gap: 10px; align-items: center; margin-top: 13px; font-size: .84rem; }
+    .bar-label { overflow-wrap: anywhere; font-weight: 650; }
+    .track { height: 10px; overflow: hidden; border-radius: 99px; background: #e8eeeb; }
+    .fill { display: block; height: 100%; min-width: 2px; border-radius: inherit; background: var(--accent); }
+    .bar-value { color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 16px; color: var(--muted); font-size: .8rem; }
+    .legend span { display: inline-flex; gap: 7px; align-items: center; }
+    .swatch { width: 10px; height: 10px; border-radius: 3px; background: var(--accent); }
+    .swatch.blue { background: var(--blue); }
+    .swatch.gold { background: var(--gold); }
+    .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; background: #fff; }
+    table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+    th, td { padding: 12px 14px; border-bottom: 1px solid var(--line); text-align: right; vertical-align: top; font-variant-numeric: tabular-nums; }
+    th { background: #f8faf9; color: #46565a; font-size: .77rem; font-weight: 720; letter-spacing: .025em; }
+    th:first-child, td:first-child { text-align: left; }
+    tbody tr:last-child td { border-bottom: 0; }
+    td:first-child { min-width: 150px; font-weight: 680; }
+    .range { display: block; color: var(--muted); font-size: .78rem; white-space: nowrap; }
+    .notes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    .notes ul { margin: 10px 0 0; padding-left: 20px; color: var(--muted); }
+    .notes li + li { margin-top: 7px; }
+    .architecture { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 15px; }
+    .step { padding: 15px; border-radius: 12px; background: #f5f8f6; }
+    .step b { display: block; margin-bottom: 5px; font-size: .88rem; }
+    .step span { color: var(--muted); font-size: .83rem; }
+    .evidence { display: flex; flex-wrap: wrap; gap: 9px 15px; }
+    a { color: var(--accent); text-underline-offset: 3px; }
+    footer { margin-top: 34px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: .82rem; }
+    [hidden] { display: none !important; }
+    @media (max-width: 760px) {
+      main { width: min(100% - 24px, 600px); margin-top: 22px; }
+      .chart-grid, .notes { grid-template-columns: 1fr; }
+      .architecture { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .card { padding: 17px; }
+      .bar-row { grid-template-columns: minmax(75px, 1fr) minmax(60px, 1.2fr) minmax(90px, auto); gap: 7px; font-size: .78rem; }
+    }
+    @media print {
+      :root { --paper: #fff; --shadow: none; }
+      body { background: #fff; font-size: 10pt; }
+      main { width: 100%; margin: 0; }
+      header { padding-top: 0; }
+      section, .card, .chart, .table-wrap { break-inside: avoid; }
+      .card, .chart { box-shadow: none; }
+      .chart-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      a { color: inherit; }
+    }
+  </style>
+</head>
+<body>
+  <main id="report" hidden>
+    <header>
+      <p class="eyebrow" id="kicker"></p>
+      <h1 id="title"></h1>
+      <p class="dek" id="subtitle"></p>
+      <div class="metadata" id="metadata"></div>
+    </header>
+
+    <section aria-labelledby="finding-title">
+      <div class="card callout">
+        <span class="status" aria-hidden="true"></span>
+        <div><h2 id="finding-title">What the measurements show</h2><p id="finding"></p></div>
+      </div>
+    </section>
+
+    <section aria-labelledby="comparison-title">
+      <h2 id="comparison-title">Three-run comparison</h2>
+      <p class="section-intro" id="comparison-intro"></p>
+      <div class="chart-grid" id="charts"></div>
+      <div class="legend" id="legend" aria-label="Engine color key"></div>
+    </section>
+
+    <section aria-labelledby="table-title">
+      <h2 id="table-title">Medians and observed ranges</h2>
+      <p class="section-intro">Each cell shows the median across three valid runs, with the minimum and maximum underneath.</p>
+      <div class="table-wrap"><table><thead id="table-head"></thead><tbody id="table-body"></tbody></table></div>
+      <p class="caption" id="table-caption"></p>
+    </section>
+
+<section><h2>All measured metrics and deltas</h2><p class="caption">Medians [observed min–max]. Delta is native minus Selkies; positive cost or latency is worse. Aggregate checks do not guarantee every run meets regression limits.</p><div class="table-wrap"><table><tr><th>Metric</th><th>Selkies</th><th>Native</th><th>Delta / delta %</th><th>KasmVNC</th><th>Native target</th></tr><tr><td>errors (count)</td><td>0.0000 [0.0000–0.0000]</td><td>0.0000 [0.0000–0.0000]</td><td>+0.0000 / n/a (zero baseline)</td><td>0.0000 [0.0000–0.0000]</td><td>diagnostic</td></tr><tr><td>idle_cpuPercent (% core)</td><td>45.8401 [45.7996–45.9333]</td><td>4.0612 [3.7973–4.2799]</td><td>-41.7790 / -91.14%</td><td>3.9263 [3.8499–4.1295]</td><td>5</td></tr><tr><td>idle_memoryMiB (MiB)</td><td>219.2002 [216.9839–230.9400]</td><td>154.9417 [152.7169–155.3817]</td><td>-64.2586 / -29.32%</td><td>146.0175 [144.5631–154.6076]</td><td>diagnostic</td></tr><tr><td>idle_mbps (Mbps)</td><td>0.2563 [0.2180–0.2947]</td><td>0.0037 [0.0025–0.0037]</td><td>-0.2526 / -98.57%</td><td>0.0001 [0.0000–0.0005]</td><td>diagnostic</td></tr><tr><td>idle_throttledMs (ms)</td><td>0.0000 [0.0000–0.0000]</td><td>0.0000 [0.0000–0.0000]</td><td>+0.0000 / n/a (zero baseline)</td><td>0.0000 [0.0000–0.0000]</td><td>diagnostic</td></tr><tr><td>scroll_cpuPercent (% core)</td><td>47.7677 [46.5501–48.4431]</td><td>43.0128 [40.4760–44.9036]</td><td>-4.7549 / -9.95%</td><td>49.8639 [49.7619–50.0623]</td><td>diagnostic</td></tr><tr><td>scroll_memoryMiB (MiB)</td><td>219.7782 [219.4594–231.3595]</td><td>155.2465 [152.9991–159.6481]</td><td>-64.5318 / -29.36%</td><td>146.6353 [145.0368–163.9963]</td><td>diagnostic</td></tr><tr><td>scroll_mbps (Mbps)</td><td>2.7577 [2.7358–2.7851]</td><td>1.9542 [1.9068–2.0566]</td><td>-0.8035 / -29.14%</td><td>6.2429 [5.8113–6.2730]</td><td>diagnostic</td></tr><tr><td>scroll_throttledMs (ms)</td><td>0.0000 [0.0000–0.0000]</td><td>0.0000 [0.0000–0.0000]</td><td>+0.0000 / n/a (zero baseline)</td><td>0.0000 [0.0000–0.0000]</td><td>diagnostic</td></tr><tr><td>scroll_visibleUpdatesPerSecond (updates/s)</td><td>55.8591 [55.5920–55.9836]</td><td>53.8387 [51.9674–54.9963]</td><td>-2.0204 / -3.62%</td><td>51.1126 [47.5954–51.3947]</td><td>45</td></tr><tr><td>scroll_producerUpdatesPerSecond (updates/s)</td><td>56.2581 [55.9536–56.7422]</td><td>54.5860 [52.6100–55.4491]</td><td>-1.6721 / -2.97%</td><td>55.1682 [51.9632–55.3554]</td><td>diagnostic</td></tr><tr><td>motion_cpuPercent (% core)</td><td>47.7582 [47.0034–49.4661]</td><td>41.3087 [39.1241–43.5515]</td><td>-6.4494 / -13.50%</td><td>46.4905 [46.4647–48.4029]</td><td>50</td></tr><tr><td>motion_memoryMiB (MiB)</td><td>219.9816 [219.6803–224.8562]</td><td>155.4433 [153.2263–162.8774]</td><td>-64.5383 / -29.34%</td><td>146.6449 [144.8542–165.2358]</td><td>225</td></tr><tr><td>motion_mbps (Mbps)</td><td>2.0272 [2.0143–2.0912]</td><td>1.2867 [1.2345–1.2979]</td><td>-0.7405 / -36.53%</td><td>3.9816 [3.8900–4.0837]</td><td>2.5</td></tr><tr><td>motion_throttledMs (ms)</td><td>0.0000 [0.0000–1.3740]</td><td>0.0000 [0.0000–0.0000]</td><td>+0.0000 / n/a (zero baseline)</td><td>0.0000 [0.0000–3.4390]</td><td>diagnostic</td></tr><tr><td>motion_visibleUpdatesPerSecond (updates/s)</td><td>54.5388 [54.2161–54.6292]</td><td>52.9071 [50.5436–53.5102]</td><td>-1.6318 / -2.99%</td><td>46.8549 [45.5812–49.2843]</td><td>50</td></tr><tr><td>motion_producerUpdatesPerSecond (updates/s)</td><td>54.8109 [54.6511–54.9730]</td><td>53.1475 [50.8905–53.8213]</td><td>-1.6634 / -3.03%</td><td>51.0257 [49.9014–52.7806]</td><td>diagnostic</td></tr><tr><td>idle_latencyMedianMs (ms)</td><td>25.7000 [25.3000–26.1000]</td><td>24.7000 [23.8000–26.4000]</td><td>-1.0000 / -3.89%</td><td>53.7000 [43.3000–55.0000]</td><td>diagnostic</td></tr><tr><td>idle_latencyP95Ms (ms)</td><td>28.3000 [28.2000–40.7000]</td><td>29.4000 [26.4000–39.7000]</td><td>+1.1000 / +3.89%</td><td>60.4000 [59.8000–69.6000]</td><td>diagnostic</td></tr><tr><td>motion_latencyMedianMs (ms)</td><td>25.8000 [25.3000–25.9000]</td><td>27.0000 [26.1000–27.1000]</td><td>+1.2000 / +4.65%</td><td>44.8000 [44.8000–59.6000]</td><td>diagnostic</td></tr><tr><td>motion_latencyP95Ms (ms)</td><td>40.4000 [38.6000–41.6000]</td><td>43.2000 [41.8000–43.9000]</td><td>+2.8000 / +6.93%</td><td>77.0000 [76.8000–77.3000]</td><td>45</td></tr><tr><td>psnrDb (dB)</td><td>38.4772 [38.4750–38.4793]</td><td>38.4498 [38.4498–38.4501]</td><td>-0.0274 / -0.07%</td><td>38.7759 [38.7757–38.7759]</td><td>37.5</td></tr><tr><td>textInkMeanAbsoluteError (MAE)</td><td>3.9989 [3.9983–3.9992]</td><td>4.0970 [4.0970–4.0975]</td><td>+0.0981 / +2.45%</td><td>3.7918 [3.7917–3.7922]</td><td>4.5</td></tr></table></div></section>
+<section><h2>All 14 aggregate gates</h2><p class="caption">Medians [observed min–max]. Delta is native minus Selkies; positive cost or latency is worse. Aggregate checks do not guarantee every run meets regression limits.</p><div class="table-wrap"><table><tr><th>Gate</th><th>Limit</th><th>Observed</th><th>Result</th></tr><tr><td>idle_cpuPercent</td><td>5</td><td>4.06117777598958</td><td>PASS</td></tr><tr><td>motion_visibleUpdatesPerSecond</td><td>50</td><td>52.907067441239924</td><td>PASS</td></tr><tr><td>motion_latencyP95Ms</td><td>45</td><td>43.19999980926514</td><td>PASS</td></tr><tr><td>motion_cpuPercent</td><td>50</td><td>41.30872703834629</td><td>PASS</td></tr><tr><td>motion_memoryMiB</td><td>225</td><td>155.44329637096774</td><td>PASS</td></tr><tr><td>motion_mbps</td><td>2.5</td><td>1.2866858869269702</td><td>PASS</td></tr><tr><td>scroll_visibleUpdatesPerSecond</td><td>45</td><td>53.838656420014345</td><td>PASS</td></tr><tr><td>textInkMeanAbsoluteError</td><td>4.5</td><td>4.097022641429807</td><td>PASS</td></tr><tr><td>psnrDb</td><td>37.5</td><td>38.44981249076661</td><td>PASS</td></tr><tr><td>fps_regression</td><td>motion delivery ≥95% of Selkies</td><td>see comparison table</td><td>PASS</td></tr><tr><td>p95_regression</td><td>p95 ≤ Selkies +5 ms</td><td>see comparison table</td><td>PASS</td></tr><tr><td>motion_cpuPercent_regression</td><td>CPU ≤105% of Selkies</td><td>see comparison table</td><td>PASS</td></tr><tr><td>motion_memoryMiB_regression</td><td>RAM ≤105% of Selkies</td><td>see comparison table</td><td>PASS</td></tr><tr><td>motion_mbps_regression</td><td>bandwidth ≤105% of Selkies</td><td>see comparison table</td><td>PASS</td></tr></table></div></section>
+    <section aria-labelledby="quality-title">
+      <h2 id="quality-title">Static text quality</h2>
+      <p class="section-intro" id="quality-intro"></p>
+      <div class="table-wrap"><table><thead id="quality-head"></thead><tbody id="quality-body"></tbody></table></div>
+    </section>
+
+    <section aria-labelledby="correctness-title">
+      <h2 id="correctness-title">Correctness and reliability</h2>
+      <div class="card notes">
+        <div><h3 id="correctness-heading"></h3><ul id="correctness-list"></ul></div>
+        <div><h3>Sanitizer and instrumentation</h3><ul id="sanitizer-list"></ul></div>
+      </div>
+    </section>
+
+    <section aria-labelledby="method-title">
+      <h2 id="method-title">Method and scope</h2>
+      <p class="section-intro" id="method-intro"></p>
+      <div class="architecture" id="architecture"></div>
+      <div class="card notes" style="margin-top:14px">
+        <div><h3>Interpretation</h3><ul id="interpretation-list"></ul></div>
+        <div><h3>Limits</h3><ul id="limits-list"></ul></div>
+      </div>
+    </section>
+
+    <section aria-labelledby="doom-title">
+      <h2 id="doom-title">Doom workload diagnostic</h2>
+      <div class="card notes">
+        <div><h3 id="doom-observation-title"></h3><p id="doom-observation"></p></div>
+        <div><h3>What it can establish</h3><p id="doom-scope"></p></div>
+      </div>
+      <p class="caption" id="doom-evidence"></p>
+    </section>
+
+    <section aria-labelledby="evidence-title">
+      <h2 id="evidence-title">Evidence</h2>
+      <div class="evidence" id="evidence-links"></div>
+    </section>
+
+    <footer id="footer"></footer>
+  </main>
+
+  <script>
+    /* Data contract: {meta:{title,subtitle,generatedAt,environment,commit}, finding, engines:[{id,label,n,runs:[{valid,metrics:{motion_fps,motion_cpu_pct,motion_ram_mib,motion_mbps,motion_p95_ms,static_psnr_db,static_text_mae}}]}], correctness:{passed,total,checks:[{label,result}],sanitizer:{status,scope,system_library_limit}}, method:{paragraph,architecture:[{title,text}],interpretation:[],limits:[]}, doom:{observationTitle,observation,scope,evidenceHref,framebufferHintHref}, evidence:[{label,href}], footer}. Require exactly three engines, exactly three valid runs per engine, and metrics sourced from final evidence. */
+    const reportData = {"meta": {"title": "Initial desktop comparison", "kicker": "Interim evidence \u00b7 broad qualification pending", "subtitle": "Completed initial desktop benchmark; general-engine qualification remains open.", "generatedAt": "2026-10-27 UTC", "environment": "ARM64 \u00b7 720p Xfce \u00b7 2 CPUs \u00b7 1536 MiB \u00b7 local Chrome", "commit": "Core 4b9ea36"}, "finding": "All 14 initial gates pass across nine fresh sessions and 720 inputs. Native saves resources versus Selkies with delivery and latency tradeoffs. Broad superiority over both engines is not established.", "engines": [{"id": "selkies", "label": "Selkies", "n": 3, "runs": [{"id": "2026-10-27T05-13-55-371Z-selkies-da43c484", "valid": true, "metrics": {"idle_cpu_pct": 45.84014506753564, "motion_fps": 54.538823685432, "motion_cpu_pct": 47.00335168977097, "motion_ram_mib": 224.8562247983871, "motion_mbps": 2.0142589320339113, "motion_p95_ms": 41.59999990463257, "static_psnr_db": 38.47718076418979, "static_text_mae": 3.999219261041126}}, {"id": "2026-10-27T05-23-14-378Z-selkies-230b6b49", "valid": true, "metrics": {"idle_cpu_pct": 45.79964508568751, "motion_fps": 54.62922116079366, "motion_cpu_pct": 47.758154788651474, "motion_ram_mib": 219.6803175403226, "motion_mbps": 2.027150432930387, "motion_p95_ms": 38.60000038146973, "static_psnr_db": 38.474983618893745, "static_text_mae": 3.998290814711654}}, {"id": "2026-10-27T05-32-33-433Z-selkies-bcf7d04d", "valid": true, "metrics": {"idle_cpu_pct": 45.933274789930785, "motion_fps": 54.216088417161146, "motion_cpu_pct": 49.46607619111638, "motion_ram_mib": 219.98160282258064, "motion_mbps": 2.0911921930320094, "motion_p95_ms": 40.40000009536743, "static_psnr_db": 38.47929187635627, "static_text_mae": 3.9989238462999306}}]}, {"id": "native", "label": "Native", "n": 3, "runs": [{"id": "2026-10-27T05-16-15-867Z-native-3d4a76e4", "valid": true, "metrics": {"idle_cpu_pct": 4.279907158506539, "motion_fps": 52.907067441239924, "motion_cpu_pct": 41.30872703834629, "motion_ram_mib": 153.22631048387098, "motion_mbps": 1.2866858869269702, "motion_p95_ms": 43.90000009536743, "static_psnr_db": 38.44981249076661, "static_text_mae": 4.097022641429807}}, {"id": "2026-10-27T05-25-34-294Z-native-c33f4803", "valid": true, "metrics": {"idle_cpu_pct": 3.79731162895314, "motion_fps": 50.54355031154713, "motion_cpu_pct": 39.12412834867737, "motion_ram_mib": 162.8773941532258, "motion_mbps": 1.2345177587940095, "motion_p95_ms": 43.19999980926514, "static_psnr_db": 38.45007216309848, "static_text_mae": 4.0974868645945435}}, {"id": "2026-10-27T05-27-53-133Z-native-c1047892", "valid": true, "metrics": {"idle_cpu_pct": 4.06117777598958, "motion_fps": 53.510153336096145, "motion_cpu_pct": 43.55154909300044, "motion_ram_mib": 155.44329637096774, "motion_mbps": 1.29791299838078, "motion_p95_ms": 41.80000019073486, "static_psnr_db": 38.44981249076661, "static_text_mae": 4.097022641429807}}]}, {"id": "kasm", "label": "KasmVNC", "n": 3, "runs": [{"id": "2026-10-27T05-18-35-073Z-kasm-b90b156a", "valid": true, "metrics": {"idle_cpu_pct": 3.849881653887763, "motion_fps": 45.581235228015615, "motion_cpu_pct": 46.46467732382726, "motion_ram_mib": 165.23576108870967, "motion_mbps": 3.8899625288954685, "motion_p95_ms": 77, "static_psnr_db": 38.77567942666222, "static_text_mae": 3.792196830621848}}, {"id": "2026-10-27T05-20-55-269Z-kasm-a1d326e6", "valid": true, "metrics": {"idle_cpu_pct": 4.129455007696289, "motion_fps": 49.28426781194754, "motion_cpu_pct": 48.402915681799634, "motion_ram_mib": 146.64490927419354, "motion_mbps": 4.083704747858908, "motion_p95_ms": 76.7999997138977, "static_psnr_db": 38.77587229580374, "static_text_mae": 3.7917115064041695}}, {"id": "2026-10-27T05-30-12-303Z-kasm-e05bfef3", "valid": true, "metrics": {"idle_cpu_pct": 3.9263088322983406, "motion_fps": 46.85492523020591, "motion_cpu_pct": 46.490507323607524, "motion_ram_mib": 144.85420866935485, "motion_mbps": 3.981598207028083, "motion_p95_ms": 77.30000019073486, "static_psnr_db": 38.77586185140704, "static_text_mae": 3.7917537085100546}}]}], "correctness": {"passed": 10, "total": 10, "checks": [{"label": "decoded canvas contains independent X11 fixture pixels", "result": "PASS"}, {"label": "metrics match independent cgroup CPU counters and preserve live video", "result": "PASS"}, {"label": "viewer pointer, keyboard, modifiers and wheel reach X11 application", "result": "PASS"}, {"label": "held controls release on canvas blur with independent X server state", "result": "PASS"}, {"label": "second viewer rejected while first remains live", "result": "PASS"}, {"label": "disconnect releases held controls and reconnect renders fresh desktop", "result": "PASS"}, {"label": "malformed receiver closes and subsequent session recovers", "result": "PASS"}, {"label": "oversized receiver closes and subsequent session recovers", "result": "PASS"}, {"label": "stall receiver closes and subsequent session recovers", "result": "PASS"}, {"label": "non-loopback origin rejected at handshake", "result": "PASS"}], "sanitizer": {"status": "ARM64 color and 10/10 browser/X11 tests passed ASAN+UBSAN. Release also passed 10/10.", "scope": "Graceful shutdown had no reported sanitizer/leak diagnostic.", "system_library_limit": "System libraries uninstrumented; no TSan, fuzzing or long soak."}}, "method": {"paragraph": "Own native capture, scheduling, input and transport. No Selkies, KasmVNC or FFmpeg subprocess. Three fresh sessions per engine, same corrected runner and fixture, serial local measurement, median aggregation.", "architecture": [{"title": "Capture", "text": "Own C++ XDamage admission and MIT-SHM root capture."}, {"title": "Encode", "text": "ARM NEON BT.709 SIMD; persistent in-process libx264 via libavcodec."}, {"title": "Transport and input", "text": "libwebsockets bounded queue and ACK credit; XTest input."}, {"title": "Viewer", "text": "WebCodecs and canvas draw; reconnect IDR and timeout cleanup."}], "interpretation": ["Native saves idle and motion resources versus Selkies, which delivers more motion updates and lower input p95. KasmVNC idle CPU is similar (3.93% versus 4.06%; about 3.4%, within the 5% threshold), while its RAM use is lower and static fidelity is closer; native delivers more motion updates with less latency and bandwidth.", "Original baseline v1 mousedown clock is superseded: native pointerdown cancellation suppressed mousedown. All nine confirmation runs use the same corrected pointerdown runner.", "All 14 absolute and regression gates pass aggregate medians. Observed ranges are not confidence intervals or guarantees for every run.", "Four-variant cap reached: one error, one degenerate, one not selected and one kept. Core loop 04:17\u201305:35 UTC (~77 minutes); broader qualification remains pending.", "SIMD forecast 75\u201395% conversion reduction was hypothetical. Exploratory active CPU fell ~94%\u219242.5%, but ink MAE 4.863 failed. CRF10 reduced MAE to 4.097 and raised bandwidth ~0.862\u21921.308 Mbps.", "Precise ppoll pacing forecast timer-bound delivery nearer 60 Hz. Integrated confirmation does not isolate a pacing gain; no causal speedup is claimed."], "limits": ["Initial desktop comparison only; broad qualification remains pending. No universal winner or final general-engine verdict.", "Small foreground fixture with a 1072\u00d7140 active region on a 1280\u00d7720 desktop; no held-out workload. Selection and reporting reuse this fixture.", "CPU is percent of one core; RAM is container working-set MiB; bandwidth is container transmit Mbps. Browser and Docker VM resources are excluded.", "Canvas updates are useful visible delivery, not physical presentation FPS. Input latency starts at browser pointerdown with browser rAF sampling quantization.", "Static text floors do not establish equal motion quality, maximum FPS, WAN performance or hardware encoder performance.", "No paid infrastructure was used. Actual package-download and model-usage costs are unavailable, not assumed free.", "The native engine produces the H.264 stream. Playwright only drives and observes browser tests; it is not the streaming engine.", "The original run began at 04:08 UTC including baseline work; the approximately 77-minute core phase began at 04:17 UTC."], "qualityNote": "Native static PSNR 38.45 dB / ink MAE 4.097 passes floors, but Selkies is slightly closer (38.48 / 3.999) and KasmVNC closer again (38.78 / 3.792). Equal motion quality was not measured.", "operatingPoint": "Ranges are observed minima/maxima. Benchmark image 780234be88b0d17e26ba828b9ba81cf99bb640e5851cd062892c54ab30eba15f; standalone release 6d84d748. Markdown includes all metrics, deltas and 14 gates."}, "doom": {"observationTitle": "Full-frame changes expose a bandwidth limit", "observation": "Live keyboard-controlled Freedoom, n=1 per configuration: final live-input phase delivered 56.81 drawn fps, 108.41% CPU, 197.09 MiB and 69.95 Mbps over 15.14 seconds. Input latency unmeasured. Default framebuffer: 45.29 fps / 199.49% CPU; software framebuffer: 54.31 fps / 102.81% CPU. Configuration and input differ; these are diagnostics, not controlled engine comparisons.", "scope": "Container includes game and desktop. Full-frame CRF10 traffic approaches 70 Mbps. Stable 60 fps and cross-engine game superiority are not established. Framebuffer setup materially changes game CPU.", "evidenceHref": "evidence/doom-final-engine/result.json", "framebufferHintHref": "evidence/doom-software-framebuffer/result.json"}, "evidence": [{"label": "confirmed-summary.json", "href": "evidence/confirmed-summary.json"}, {"label": "final-matrix.json", "href": "evidence/final-matrix.json"}, {"label": "experiment-log.yaml", "href": "evidence/experiment-log.yaml"}, {"label": "spec.yaml", "href": "evidence/spec.yaml"}, {"label": "integration-release.json", "href": "evidence/integration-release.json"}, {"label": "integration-sanitize2.json", "href": "evidence/integration-sanitize2.json"}, {"label": "sanitize2.log", "href": "evidence/sanitize2.log"}, {"label": "2026-10-27T05-13-55-371Z-selkies-da43c484", "href": "evidence/2026-10-27T05-13-55-371Z-selkies-da43c484/raw.json"}, {"label": "2026-10-27T05-16-15-867Z-native-3d4a76e4", "href": "evidence/2026-10-27T05-16-15-867Z-native-3d4a76e4/raw.json"}, {"label": "2026-10-27T05-18-35-073Z-kasm-b90b156a", "href": "evidence/2026-10-27T05-18-35-073Z-kasm-b90b156a/raw.json"}, {"label": "2026-10-27T05-20-55-269Z-kasm-a1d326e6", "href": "evidence/2026-10-27T05-20-55-269Z-kasm-a1d326e6/raw.json"}, {"label": "2026-10-27T05-23-14-378Z-selkies-230b6b49", "href": "evidence/2026-10-27T05-23-14-378Z-selkies-230b6b49/raw.json"}, {"label": "2026-10-27T05-25-34-294Z-native-c33f4803", "href": "evidence/2026-10-27T05-25-34-294Z-native-c33f4803/raw.json"}, {"label": "2026-10-27T05-27-53-133Z-native-c1047892", "href": "evidence/2026-10-27T05-27-53-133Z-native-c1047892/raw.json"}, {"label": "2026-10-27T05-30-12-303Z-kasm-e05bfef3", "href": "evidence/2026-10-27T05-30-12-303Z-kasm-e05bfef3/raw.json"}, {"label": "2026-10-27T05-32-33-433Z-selkies-bcf7d04d", "href": "evidence/2026-10-27T05-32-33-433Z-selkies-bcf7d04d/raw.json"}], "footer": "Interim report; broad qualification pending. Portable raw JSON and paired source/decoded PNGs accompany the report."};
+    if (reportData && Array.isArray(reportData.engines) && reportData.engines.length === 3 &&
+        reportData.engines.every(e => e.n === 3 && Array.isArray(e.runs) && e.runs.length === 3 && e.runs.every(r => r.valid))) {
+      const d = reportData;
+      const main = document.getElementById("report");
+      const $ = id => document.getElementById(id);
+      const esc = value => String(value ?? "");
+      const addText = (el, value) => { el.textContent = esc(value); };
+      const addList = (el, values) => values.forEach(value => { const li = document.createElement("li"); li.textContent = esc(value); el.append(li); });
+      const metrics = [
+        { key: "idle_cpu_pct", label: "Idle CPU", unit: "% of core", direction: "lower is better", decimals: 1 },
+        { key: "motion_fps", label: "Motion updates", unit: "fps", direction: "higher is better", decimals: 1 },
+        { key: "motion_cpu_pct", label: "Motion CPU", unit: "% of core", direction: "lower is better", decimals: 1 },
+        { key: "motion_ram_mib", label: "Motion RAM", unit: "MiB", direction: "lower is better", decimals: 1 },
+        { key: "motion_mbps", label: "Motion bandwidth", unit: "Mbps", direction: "lower is better", decimals: 2 },
+        { key: "motion_p95_ms", label: "Motion input p95", unit: "ms", direction: "lower is better", decimals: 1 }
+      ];
+      const colors = ["", "blue", "gold"];
+      const median = vals => { const s = [...vals].sort((a,b) => a-b); return s[1]; };
+      const range = vals => [Math.min(...vals), Math.max(...vals)];
+      const valuesFor = (engine, key) => engine.runs.map(r => Number(r.metrics[key]));
+      const fmt = (n, decimals) => Number(n).toFixed(decimals);
+      const safeHref = href => { try { const u = new URL(href, location.href); return ["http:","https:","file:"].includes(u.protocol) ? u.href : ""; } catch { return ""; } };
+      addText($("kicker"), d.meta.kicker || "Native desktop streaming lab · final report");
+      addText($("title"), d.meta.title);
+      addText($("subtitle"), d.meta.subtitle);
+      addText($("finding"), d.finding);
+      addText($("comparison-intro"), `Medians across n=3 valid runs per engine. Bars scale within each metric; the label states whether higher or lower is favorable.`);
+      for (const value of [d.meta.generatedAt, d.meta.environment, d.meta.commit]) {
+        if (!value) continue; const pill = document.createElement("span"); pill.className = "pill"; pill.textContent = esc(value); $("metadata").append(pill);
+      }
+      d.engines.forEach((engine, i) => {
+        const sw = document.createElement("span"); const box = document.createElement("i"); box.className = `swatch ${colors[i]}`; sw.append(box, document.createTextNode(esc(engine.label))); $("legend").append(sw);
+      });
+      metrics.forEach(metric => {
+        const card = document.createElement("article"); card.className = "chart";
+        const title = document.createElement("h3"); title.textContent = metric.label;
+        const direction = document.createElement("span"); direction.className = "direction"; direction.textContent = metric.direction; title.append(direction); card.append(title);
+        const medians = d.engines.map(e => median(valuesFor(e, metric.key)));
+        const max = Math.max(...medians) || 1;
+        d.engines.forEach((engine, i) => {
+          const val = medians[i], [lo, hi] = range(valuesFor(engine, metric.key));
+          const row = document.createElement("div"); row.className = "bar-row";
+          const name = document.createElement("span"); name.className = "bar-label"; name.textContent = esc(engine.label);
+          const track = document.createElement("span"); track.className = "track"; track.setAttribute("aria-label", `${metric.label}: ${fmt(val, metric.decimals)} ${metric.unit}`);
+          const fill = document.createElement("span"); fill.className = `fill ${colors[i]}`; fill.style.width = `${Math.max(1, val / max * 100)}%`; if (colors[i]) fill.style.background = `var(--${colors[i]})`; track.append(fill);
+          const amount = document.createElement("span"); amount.className = "bar-value"; amount.textContent = `${fmt(val, metric.decimals)} ${metric.unit}`;
+          row.append(name, track, amount); card.append(row);
+        });
+        $("charts").append(card);
+      });
+      const head = document.createElement("tr"); ["Metric", ...d.engines.map(e => e.label)].forEach(label => { const th=document.createElement("th"); th.textContent=esc(label); head.append(th); }); $("table-head").append(head);
+      metrics.forEach(metric => {
+        const tr=document.createElement("tr"); const label=document.createElement("td"); label.textContent=`${metric.label} (${metric.unit})`; tr.append(label);
+        d.engines.forEach(engine => { const vals=valuesFor(engine,metric.key), med=median(vals), [lo,hi]=range(vals); const td=document.createElement("td"); td.append(document.createTextNode(fmt(med,metric.decimals))); const small=document.createElement("small"); small.className="range"; small.textContent=`range ${fmt(lo,metric.decimals)}–${fmt(hi,metric.decimals)}`; td.append(small); tr.append(td); }); $("table-body").append(tr);
+      });
+      addText($("table-caption"), d.method.operatingPoint || "Bars compare medians; ranges show the three observed run values, not confidence intervals.");
+      addText($("quality-intro"), d.method.qualityNote || "Static text metrics are a narrow still-image check. They do not establish equivalent motion quality.");
+      const qhead=document.createElement("tr"); ["Metric", ...d.engines.map(e=>e.label)].forEach(label=>{const th=document.createElement("th");th.textContent=esc(label);qhead.append(th)});$("quality-head").append(qhead);
+      [["Static PSNR (dB)","static_psnr_db",2],["Text ink MAE (lower is closer)","static_text_mae",2]].forEach(([name,key,dec])=>{const tr=document.createElement("tr"),td=document.createElement("td");td.textContent=name;tr.append(td);d.engines.forEach(e=>{const vals=valuesFor(e,key),cell=document.createElement("td");cell.textContent=`${fmt(median(vals),dec)} (${fmt(Math.min(...vals),dec)}–${fmt(Math.max(...vals),dec)})`;tr.append(cell)});$("quality-body").append(tr)});
+      addText($("correctness-heading"), `${d.correctness.passed}/${d.correctness.total} correctness checks passed`); addList($("correctness-list"), d.correctness.checks.map(c=>`${c.result}: ${c.label}`));
+      addList($("sanitizer-list"), [d.correctness.sanitizer.status, d.correctness.sanitizer.scope, d.correctness.sanitizer.system_library_limit]);
+      addText($("method-intro"), d.method.paragraph);
+      d.method.architecture.forEach(step=>{const item=document.createElement("div");item.className="step";const b=document.createElement("b");b.textContent=esc(step.title);const span=document.createElement("span");span.textContent=esc(step.text);item.append(b,span);$("architecture").append(item)});
+      addList($("interpretation-list"),d.method.interpretation); addList($("limits-list"),d.method.limits);
+      addText($("doom-observation-title"),d.doom.observationTitle); addText($("doom-observation"),d.doom.observation); addText($("doom-scope"),d.doom.scope);
+      if(d.doom.evidenceHref){const a=document.createElement("a");a.href=safeHref(d.doom.evidenceHref);a.textContent="Doom diagnostic evidence";if(a.href)$("doom-evidence").append(a)}
+      if(d.doom.framebufferHintHref){const a=document.createElement("a");a.href=safeHref(d.doom.framebufferHintHref);a.textContent="Framebuffer capture hint";if(a.href){if($("doom-evidence").childNodes.length)$("doom-evidence").append(" · ");$("doom-evidence").append(a)}}
+      d.evidence.forEach(item=>{const href=safeHref(item.href);if(!href)return;const a=document.createElement("a");a.href=href;a.textContent=esc(item.label);$("evidence-links").append(a)});
+      addText($("footer"),d.footer); main.hidden=false;
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,116 @@
+{
+  "measuredAt": "2026-10-27T04:24:20.576Z",
+  "browserVersion": "156.0.8078.48",
+  "status": "pass",
+  "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36",
+  "secureContext": true,
+  "deadlineMs": 2000,
+  "decoderFlushCalled": false,
+  "decoderInputs": 1,
+  "provenance": "One synthetic browser-encoded H264 frame; no native server or network stream.",
+  "encoderSupport": {
+    "config": {
+      "alpha": "discard",
+      "avc": {
+        "format": "annexb"
+      },
+      "bitrate": 1000000,
+      "bitrateMode": "variable",
+      "codec": "avc1.42001e",
+      "contentHint": "",
+      "framerate": 30,
+      "hardwareAcceleration": "no-preference",
+      "height": 128,
+      "latencyMode": "realtime",
+      "width": 128
+    },
+    "supported": true
+  },
+  "decoderSupport": [
+    {
+      "config": {
+        "codec": "avc1.42001e",
+        "codedHeight": 128,
+        "codedWidth": 128,
+        "flip": false,
+        "hardwareAcceleration": "no-preference",
+        "optimizeForLatency": true,
+        "rotation": 0
+      },
+      "supported": true
+    },
+    {
+      "config": {
+        "codec": "avc1.42001e",
+        "codedHeight": 128,
+        "codedWidth": 128,
+        "flip": false,
+        "hardwareAcceleration": "prefer-hardware",
+        "optimizeForLatency": true,
+        "rotation": 0
+      },
+      "supported": true
+    },
+    {
+      "config": {
+        "codec": "avc1.42001e",
+        "codedHeight": 128,
+        "codedWidth": 128,
+        "flip": false,
+        "hardwareAcceleration": "prefer-software",
+        "optimizeForLatency": true,
+        "rotation": 0
+      },
+      "supported": true
+    }
+  ],
+  "encoderMetadata": {
+    "codec": "avc1.42001e",
+    "codedHeight": 128,
+    "codedWidth": 128,
+    "colorSpace": {
+      "fullRange": false,
+      "matrix": "bt709",
+      "primaries": "bt709",
+      "transfer": "iec61966-2-1"
+    },
+    "flip": false,
+    "hardwareAcceleration": "no-preference",
+    "rotation": 0
+  },
+  "encodeWithFlushMs": 14659.10000038147,
+  "encoderOutputCount": 1,
+  "chunk": {
+    "type": "key",
+    "timestamp": 0,
+    "duration": 33333,
+    "byteLength": 149,
+    "annexBNalTypes": [
+      7,
+      8,
+      5
+    ]
+  },
+  "actualDecoderConfig": {
+    "codec": "avc1.42001e",
+    "codedWidth": 128,
+    "codedHeight": 128,
+    "optimizeForLatency": true,
+    "hardwareAcceleration": "no-preference"
+  },
+  "outputMs": 8.599999904632568,
+  "pixel": [
+    33,
+    192,
+    65,
+    255
+  ],
+  "expectedPixel": [
+    32,
+    192,
+    64
+  ],
+  "pixelTolerance": 20,
+  "timestamp": 0,
+  "pixelPass": true
+}

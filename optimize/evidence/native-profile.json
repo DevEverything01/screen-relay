@@ -1,0 +1,108 @@
+{
+  "seconds": 10.071361670999977,
+  "processes": [
+    {
+      "pid": "8",
+      "comm": "native-stream",
+      "cpuPercent": 80.12819183365437
+    },
+    {
+      "pid": "13",
+      "comm": "Xvfb",
+      "cpuPercent": 6.056777821379079
+    },
+    {
+      "pid": "115",
+      "comm": "python3",
+      "cpuPercent": 2.482285992368475
+    },
+    {
+      "pid": "1",
+      "comm": "dbus-run-sessio",
+      "cpuPercent": 0
+    },
+    {
+      "pid": "7",
+      "comm": "dbus-daemon",
+      "cpuPercent": 0
+    },
+    {
+      "pid": "25",
+      "comm": "pulseaudio",
+      "cpuPercent": 0
+    },
+    {
+      "pid": "27",
+      "comm": "xfce4-session",
+      "cpuPercent": 0
+    },
+    {
+      "pid": "30",
+      "comm": "at-spi-bus-laun",
+      "cpuPercent": 0
+    },
+    {
+      "pid": "36",
+      "comm": "dbus-daemon",
+      "cpuPercent": 0
+    },
+    {
+      "pid": "41",
+      "comm": "xfconfd",
+      "cpuPercent": 0
+    },
+    {
+      "pid": "48",
+      "comm": "at-spi2-registr",
+      "cpuPercent": 0
+    },
+    {
+      "pid": "54",
+      "comm": "xfwm4",
+      "cpuPercent": 0
+    },
+    {
+      "pid": "59",
+      "comm": "xfsettingsd",
+      "cpuPercent": 0
+    },
+    {
+      "pid": "65",
+      "comm": "dconf-service",
+      "cpuPercent": 0
+    },
+    {
+      "pid": "69",
+      "comm": "xfce4-panel",
+      "cpuPercent": 0
+    },
+    {
+      "pid": "74",
+      "comm": "Thunar",
+      "cpuPercent": 0
+    },
+    {
+      "pid": "80",
+      "comm": "xfdesktop",
+      "cpuPercent": 0
+    },
+    {
+      "pid": "92",
+      "comm": "wrapper-2.0",
+      "cpuPercent": 0
+    },
+    {
+      "pid": "98",
+      "comm": "wrapper-2.0",
+      "cpuPercent": 0
+    }
+  ],
+  "browser": {
+    "received": 698,
+    "drawn": 698,
+    "decodeerrors": 0,
+    "outstanding": 0
+  },
+  "serverLog": "SpiRegistry daemon is running with well-known name - org.a11y.atspi.Registry\nSpiRegistry daemon is running with well-known name - org.a11y.atspi.Registry\n",
+  "stage_timing_line": "capture_stats captures=699 encoded=699 capture_ns=611275786 convert_ns=8234456350 encode_ns=1367064464"
+}
