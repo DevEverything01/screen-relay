@@ -1,7 +1,7 @@
 import { chromium } from '../../desktop-stream-bench/node_modules/playwright/index.mjs';
 
 // Local synthetic capability probe; does not measure the native encoder or transport.
-const browser = await chromium.launch({ channel: 'chrome', headless: false });
+const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: true });
 try {
   const page = await browser.newPage();
   await page.route('http://localhost/webcodecs-probe', route => route.fulfill({
