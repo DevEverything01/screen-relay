@@ -81,19 +81,20 @@ bool loopbackOrigin(const std::string& origin) {
 bool loopbackHost(const std::string& host) { return loopbackOrigin("http://" + host); }
 bool localRequest(lws* wsi) {
   const auto host = header(wsi, WSI_TOKEN_HOST);
-  if (!loopbackHost(host) && (config.token.empty() || host != config.authority)) return false;
+  if (!loopbackHost(host) && (config.origin.empty() || host != config.authority)) return false;
   if (lws_hdr_total_length(wsi, WSI_TOKEN_ORIGIN) <= 0) return true;
   const auto origin = header(wsi, WSI_TOKEN_ORIGIN);
-  return config.token.empty() ? loopbackOrigin(origin) : !origin.empty() && origin == config.origin;
+  return (loopbackHost(host) && loopbackOrigin(origin)) || (!config.token.empty() && !origin.empty() && origin == config.origin);
 }
 nsl::InputEvent inputEvent(const uint8_t* p) {
   const uint32_t raw = u32(p + 4);
   const int64_t value = raw <= INT32_MAX ? int64_t(raw) : int64_t(raw) - (int64_t(1) << 32);
   return {p[0], p[1], u16(p+2), int32_t(value), u16(p+8), u16(p+10), u16(p+12), u16(p+14)};
 }
+constexpr size_t max_input_batch = 256;
 struct HttpResponse {
-  unsigned char body[2048];
-  size_t length;
+  unsigned char body[2048], input[max_input_batch * 16];
+  size_t length, input_length, input_expected;
   std::vector<uint8_t>* image;
   size_t offset;
   bool image_headers, snapshot_error, control;
@@ -279,12 +280,13 @@ int responseHeaders(lws* wsi, unsigned status, const char* mime, size_t length) 
       lws_write(wsi, start, size_t(next-start), LWS_WRITE_HTTP_HEADERS) != next-start) return -1;
   lws_callback_on_writable(wsi); return 0;
 }
-int errorResponse(lws* wsi, HttpResponse* response, unsigned status, const char* error) {
-  if (!response) return -1;
-  const std::string json = "{\"error\":\"" + std::string(error) + "\"}";
-  if (json.size() > sizeof(response->body)) return -1;
+int jsonResponse(lws* wsi, HttpResponse* response, unsigned status, const std::string& json) {
+  if (!response || json.size() > sizeof(response->body)) return -1;
   std::memcpy(response->body, json.data(), json.size()); response->length = json.size();
   return responseHeaders(wsi, status, "application/json", response->length);
+}
+int errorResponse(lws* wsi, HttpResponse* response, unsigned status, const char* error) {
+  return jsonResponse(wsi, response, status, "{\"error\":\"" + std::string(error) + "\"}");
 }
 void closeSnapshot(Server* server, lws* wsi, HttpResponse* response) {
   if (server->snapshot_client == wsi) {
@@ -299,6 +301,27 @@ bool unsignedNumber(const std::string& text, uint64_t& value) {
   if (text.empty()) return false;
   const auto parsed = std::from_chars(text.data(), text.data()+text.size(), value);
   return parsed.ec == std::errc{} && parsed.ptr == text.data()+text.size();
+}
+/** Validates an /input Content-Length header and returns 0 or the HTTP error status. */
+unsigned inputLength(const std::string& text, uint64_t& length) {
+  if (text.empty()) return HTTP_STATUS_LENGTH_REQUIRED;
+  if (!unsignedNumber(text, length) || !length || length % 16) return HTTP_STATUS_BAD_REQUEST;
+  return length > sizeof(HttpResponse::input) ? HTTP_STATUS_REQ_ENTITY_TOO_LARGE : 0;
+}
+int inputResponse(lws* wsi, HttpResponse* response, Server* s) {
+  const bool complete = response->input_length == response->input_expected;
+  response->input_expected = 0;
+  if (!complete) return -1;
+  if (s->viewer) return errorResponse(wsi, response, HTTP_STATUS_CONFLICT, "busy");
+  const size_t count = response->input_length / 16;
+  size_t index = 0;
+  auto status = nsl::InputStatus::ok;
+  for (; index < count && status == nsl::InputStatus::ok; ++index) status = s->input->apply(inputEvent(response->input + index * 16));
+  s->release();
+  if (status == nsl::InputStatus::ok) return jsonResponse(wsi, response, HTTP_STATUS_OK, "{\"applied\":" + std::to_string(count) + "}");
+  const bool invalid = status == nsl::InputStatus::invalid;
+  return jsonResponse(wsi, response, invalid ? HTTP_STATUS_BAD_REQUEST : 422, std::string("{\"error\":\"") +
+                      (invalid ? "invalid_input" : "unsupported_input") + "\",\"index\":" + std::to_string(index - 1) + "}");
 }
 bool readSmallFile(const char* path, std::string& text) {
   std::ifstream file(path, std::ios::binary);
@@ -357,6 +380,21 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
     case LWS_CALLBACK_HTTP: {
       const std::string path(static_cast<const char*>(in), len);
       auto* response = static_cast<HttpResponse*>(user);
+      if (path == "/input") {
+        if (!response) return -1;
+        if (lws_hdr_total_length(wsi, WSI_TOKEN_POST_URI) <= 0) {
+          return errorResponse(wsi, response, HTTP_STATUS_METHOD_NOT_ALLOWED, "method_not_allowed");
+        }
+        if (!localRequest(wsi)) return errorResponse(wsi, response, HTTP_STATUS_FORBIDDEN, "forbidden");
+        if (!authenticated(wsi)) return errorResponse(wsi, response, HTTP_STATUS_UNAUTHORIZED, "unauthorized");
+        uint64_t length = 0;
+        if (const auto status = inputLength(header(wsi, WSI_TOKEN_HTTP_CONTENT_LENGTH), length)) {
+          return errorResponse(wsi, response, status, status == HTTP_STATUS_LENGTH_REQUIRED ? "length_required" :
+                               status == HTTP_STATUS_REQ_ENTITY_TOO_LARGE ? "too_large" : "invalid_input");
+        }
+        if (s->viewer) return errorResponse(wsi, response, HTTP_STATUS_CONFLICT, "busy");
+        response->input_length = 0; response->input_expected = length; return 0;
+      }
       if (path == "/metrics" || path == "/capabilities" || path == "/snapshot.png") {
         if (lws_hdr_total_length(wsi, WSI_TOKEN_GET_URI) <= 0) {
           return errorResponse(wsi, response, HTTP_STATUS_METHOD_NOT_ALLOWED, "method_not_allowed");
@@ -376,10 +414,9 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
             ",\"input\":{\"keyboard\":true,\"pointer\":true,\"buttons\":true,\"wheel\":true}," +
             "\"snapshot\":\"/snapshot.png\",\"control\":\"/control\",\"wayland\":false," +
             "\"max_input_pending\":32,\"cursor\":" + (s->capture.stats().cursor_supported ? "true" : "false") +
+            ",\"input_endpoint\":\"/input\",\"max_input_batch\":" + std::to_string(max_input_batch) +
             ",\"audio\":false,\"clipboard\":false,\"resize\":false,\"ime\":false}";
-        if (json.size() > sizeof(response->body)) return -1;
-        std::memcpy(response->body, json.data(), json.size()); response->length = json.size();
-        return responseHeaders(wsi, HTTP_STATUS_OK, "application/json", json.size());
+        return jsonResponse(wsi, response, HTTP_STATUS_OK, json);
       }
       std::string file; const char* mime = nullptr;
       if (path == "/" || path == "/index.html") { file=config.viewer+"/index.html"; mime="text/html"; }
@@ -412,6 +449,17 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
       response->length = 0;
       if (lws_write(wsi, buffer+LWS_PRE, count, LWS_WRITE_HTTP_FINAL) != int(count)) return -1;
       return lws_http_transaction_completed(wsi);
+    }
+    case LWS_CALLBACK_HTTP_BODY: {
+      auto* response = static_cast<HttpResponse*>(user);
+      if (!response || !response->input_expected) return 0;
+      if (len > response->input_expected - response->input_length) return -1;
+      std::memcpy(response->input + response->input_length, in, len); response->input_length += len;
+      return 0;
+    }
+    case LWS_CALLBACK_HTTP_BODY_COMPLETION: {
+      auto* response = static_cast<HttpResponse*>(user);
+      return response && response->input_expected ? inputResponse(wsi, response, s) : 0;
     }
     case LWS_CALLBACK_CLOSED_HTTP: closeSnapshot(s, wsi, static_cast<HttpResponse*>(user)); return 0;
     case LWS_CALLBACK_HTTP_FILE_COMPLETION: return lws_http_transaction_completed(wsi);
@@ -492,6 +540,10 @@ void selfCheck() {
   event[13] = 16; event[15] = 128;
   const auto input = inputEvent(event);
   assert(input.type == 6 && input.code == 1 && input.value == -120 && input.buttons == 16 && input.modifiers == 128);
+  uint64_t length = 0;
+  assert(inputLength("", length) == HTTP_STATUS_LENGTH_REQUIRED && inputLength("0", length) == HTTP_STATUS_BAD_REQUEST);
+  assert(inputLength("17", length) == HTTP_STATUS_BAD_REQUEST && inputLength("-16", length) == HTTP_STATUS_BAD_REQUEST);
+  assert(!inputLength("4096", length) && length == 4096 && inputLength("4112", length) == HTTP_STATUS_REQ_ENTITY_TOO_LARGE);
 }
 } // namespace
 int main(int argc, char** argv) {
@@ -501,9 +553,10 @@ int main(int argc, char** argv) {
       const std::string option = argv[i];
       if (option == "--help") {
         std::cout << "Usage: native-stream-engine [--bind ADDRESS] [--port PORT] [--viewer-dir DIR]\n"
-                     "  [--token-file FILE --public-origin https://HOST[:PORT]]\n"
+                     "  [--token-file FILE [--public-origin https://HOST[:PORT]]]\n"
                      "  [--tls-cert FILE --tls-key FILE | --behind-tls-proxy]\n"
                      "  [--insecure-local: unauthenticated, isolated development network only]\n"
+                     "Non-loopback --bind needs --token-file; --public-origin also needs TLS or --behind-tls-proxy.\n"
                      "Attach to DISPLAY using the caller's XAUTHORITY. Defaults: 127.0.0.1:8080.\n";
         return 0;
       }
@@ -537,8 +590,8 @@ int main(int argc, char** argv) {
     if (!config.origin.empty() && config.token.empty()) throw std::runtime_error("Public origin requires a token");
     if (config.insecure_local && (!config.token.empty() || !config.origin.empty() || !config.cert.empty() || config.proxy))
       throw std::runtime_error("--insecure-local cannot be combined with remote access options");
-    if (config.bind != "127.0.0.1" && !config.insecure_local && (config.token.empty() || config.origin.empty() || (config.cert.empty() && !config.proxy)))
-      throw std::runtime_error("Non-loopback binding requires token, public origin, and TLS or --behind-tls-proxy");
+    if (config.bind != "127.0.0.1" && !config.insecure_local && (config.token.empty() || (!config.origin.empty() && config.cert.empty() && !config.proxy)))
+      throw std::runtime_error("Non-loopback binding requires a token; a public origin also requires TLS or --behind-tls-proxy");
     if (config.insecure_local) std::cerr << "WARNING: unauthenticated development listener; isolate it and publish to host loopback only\n";
     for (const char* name : {"index.html", "viewer.js"})
       if (!std::filesystem::is_regular_file(std::filesystem::path(config.viewer)/name)) throw std::runtime_error("Viewer assets missing; use --viewer-dir");
