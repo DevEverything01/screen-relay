@@ -3,10 +3,9 @@
   "private": true,
   "type": "module",
   "exports": { ".": { "types": "./sdk/index.d.ts", "import": "./sdk/index.js" } },
-  "bin": { "native-stream": "./sdk/cli.js" },
   "engines": { "node": ">=22" },
   "scripts": {
-    "test": "node --test sdk/index.test.js",
+    "test": "node --test sdk/index.test.js tests/unit/cli-input.test.mjs",
     "test:integration": "node tests/integration/integration.mjs",
     "test:framework": "node tests/integration/framework-integration.mjs",
     "test:cursor": "node tests/integration/cursor-integration.mjs",

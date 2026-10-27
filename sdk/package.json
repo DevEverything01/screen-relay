@@ -1,1 +1,1 @@
-{"name":"native-stream","version":"0.1.0","type":"module","engines":{"node":">=22"},"exports":{"types":"./index.d.ts","default":"./index.js"},"bin":{"native-stream":"./cli.js"},"scripts":{"test":"node --test"}}
+{"name":"native-stream","version":"0.1.0","type":"module","engines":{"node":">=22"},"exports":{"types":"./index.d.ts","default":"./index.js"},"scripts":{"test":"node --test"}}

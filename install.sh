@@ -1,42 +1,61 @@
 #!/bin/sh
 set -eu
-desktop=0
+desktop=1
 deps=1
+client=0
 prefix=${PREFIX:-"$HOME/.local"}
+usage='Usage: ./install.sh [--prefix DIR] [--no-desktop] [--no-deps] [--client-only]'
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --desktop) desktop=1 ;;
+    --no-desktop) desktop=0 ;;
     --no-deps) deps=0 ;;
+    --client-only) client=1 ;;
     --prefix) shift; prefix=${1:?--prefix requires a directory} ;;
-    --help) echo 'Usage: ./install.sh [--desktop] [--no-deps] [--prefix DIR]'; exit 0 ;;
-    *) echo "Unknown option: $1" >&2; exit 2 ;;
+    --help) echo "$usage"; exit 0 ;;
+    *) echo "Unknown option: $1" >&2; echo "$usage" >&2; exit 2 ;;
   esac
   shift
 done
-[ "$(uname -s)" = Linux ] || { echo 'Run this installer inside the target Linux VM or sandbox.' >&2; exit 1; }
 case "$prefix" in /*) ;; *) echo '--prefix must be absolute' >&2; exit 2 ;; esac
 cd "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
-if [ "$deps" = 1 ]; then
+
+elevate=''
+apt_install() {
+  $elevate env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "$@"
+}
+if [ "$deps" = 1 ] && [ "$(uname -s)" = Linux ]; then
   if ! command -v apt-get >/dev/null 2>&1; then
-    echo 'Automatic dependencies support Debian/Ubuntu. Install the dependencies in docs/portable.md, then use --no-deps.' >&2
+    echo 'Automatic dependencies support Debian/Ubuntu (apt). Install them yourself, then rerun with --no-deps.' >&2
     exit 1
   fi
-  elevate=''
   if [ "$(id -u)" != 0 ]; then
-    sudo -n true || { echo 'Dependency installation needs root or noninteractive sudo; alternatively provision dependencies and use --no-deps.' >&2; exit 1; }
+    sudo -n true || { echo 'Installing dependencies needs root or passwordless sudo; or install them yourself and use --no-deps.' >&2; exit 1; }
     elevate='sudo -n'
   fi
   $elevate apt-get update
-  $elevate env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    build-essential pkg-config libx11-dev libxext-dev libxdamage-dev libxfixes-dev \
-    libxtst-dev libavcodec-dev libavutil-dev libswscale-dev libwebsockets-dev
-  if [ "$desktop" = 1 ]; then
-    $elevate env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      python3 xvfb xauth x11-utils dbus-x11 at-spi2-core xfce4-session xfwm4 xfce4-panel \
-      xfdesktop4 xfce4-settings thunar fonts-dejavu-core
+  if [ "$client" = 1 ]; then
+    apt_install python3
+  else
+    apt_install python3 build-essential pkg-config libx11-dev libxext-dev libxdamage-dev libxfixes-dev \
+      libxtst-dev libavcodec-dev libavutil-dev libswscale-dev libwebsockets-dev xvfb xauth x11-utils
+    if [ "$desktop" = 1 ]; then
+      apt_install dbus dbus-x11 at-spi2-core xfce4-session xfwm4 xfce4-panel xfdesktop4 xfce4-settings \
+        thunar fonts-dejavu-core
+      if apt-cache show glycin-loaders >/dev/null 2>&1; then apt_install glycin-loaders; fi
+    fi
   fi
 fi
+
+if [ "$client" = 1 ]; then
+  install -d "$prefix/bin"
+  install -m 0755 scripts/native-stream "$prefix/bin/native-stream"
+  printf '\nInstalled client: %s/bin/native-stream\n' "$prefix"
+  exit 0
+fi
+[ "$(uname -s)" = Linux ] || { echo 'The engine builds on Linux only; use --client-only on this machine.' >&2; exit 1; }
 make -j2
 make install PREFIX="$prefix"
-printf '\nInstalled engine: %s/bin/native-stream-engine\n' "$prefix"
-if [ "$desktop" = 1 ]; then printf 'Start a desktop: %s/bin/native-stream-desktop\n' "$prefix"; fi
+printf '\nInstalled: %s/bin/native-stream (engine: %s/bin/native-stream-engine)\n' "$prefix" "$prefix"
+case ":$PATH:" in *":$prefix/bin:"*) ;; *) printf 'Add %s/bin to PATH to run native-stream directly.\n' "$prefix" ;; esac
+printf '\n'
+"$prefix/bin/native-stream" doctor

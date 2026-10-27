@@ -24,7 +24,7 @@ install: native-stream
 	install -m 0755 native-stream "$(DESTDIR)$(PREFIX)/lib/native-stream/native-stream-engine"
 	install -m 0644 viewer/index.html viewer/viewer.js "$(DESTDIR)$(PREFIX)/lib/native-stream/viewer/"
 	ln -sfn ../lib/native-stream/native-stream-engine "$(DESTDIR)$(PREFIX)/bin/native-stream-engine"
-	install -m 0755 scripts/native-stream-desktop "$(DESTDIR)$(PREFIX)/bin/native-stream-desktop"
+	install -m 0755 scripts/native-stream "$(DESTDIR)$(PREFIX)/bin/native-stream"
 
 native-stream: $(ENGINE_SRCS) $(HEADERS)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(ENGINE_SRCS) -o $@ $(LDLIBS)
