@@ -50,8 +50,12 @@ def extract(work, latency):
         for output, names in [('motionSourceSamples', ['sourceSamples', 'source']),
                               ('motionDecodedSamples', ['decodedSamples', 'decoded'])]:
             for name in names:
-                if isinstance(motion.get(name), list):
-                    values[output] = len(motion[name])
+                sample = motion.get(name)
+                if isinstance(sample, dict) and finite(sample.get('samples')):
+                    values[output] = sample['samples']
+                    break
+                if isinstance(sample, list):
+                    values[output] = len(sample)
                     break
     trials = [v for v in latency if finite(v)]
     if trials:

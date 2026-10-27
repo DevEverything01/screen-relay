@@ -1,0 +1,31 @@
+{
+  "native-stream-baseline-live": {
+    "running": true,
+    "paused": false,
+    "image": "sha256:75ba2cb566ef9b63dcf1dd9e270eeb86f44c81e891e6efd9cd9bb6e92368378c",
+    "ports": {
+      "8080/tcp": [
+        {
+          "HostIp": "127.0.0.1",
+          "HostPort": "18094"
+        }
+      ]
+    },
+    "benchmarkFixtureAbsent": true,
+    "browserPointerInputOpenedThunar": true,
+    "screenshot": "live-desktop.png"
+  },
+  "native-doom-final": {
+    "running": true,
+    "paused": false,
+    "image": "sha256:9a3f947589349de5d482440fc4ca3e2071daaad20a682304a0b30f745a124ba0",
+    "ports": {
+      "8080/tcp": [
+        {
+          "HostIp": "127.0.0.1",
+          "HostPort": "18096"
+        }
+      ]
+    }
+  }
+}

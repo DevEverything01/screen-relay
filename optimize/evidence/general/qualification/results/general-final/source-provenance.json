@@ -1,0 +1,16 @@
+{
+  "qualification/run.mjs": "fb2550505ba8adb05a61e724b395f1bf6af4d180c979c73fda73024bbbf01507",
+  "qualification/fixture.py": "163ab51dfd3f78989c6af892696ba37e33d26a1e624eb3df742657f37812215c",
+  "qualification/network.mjs": "3a8de4f91390283f145f04e7ae4d46efcef129bc6fafbfb0d3820dbaff040226",
+  "qualification/game.mjs": "61d72e22cd1c8f51563efc22fd32a7b4f43fa492fbb7327a8daa18f96f2f8094",
+  "qualification/game-launch.sh": "62353830d7105370802da7d02c2f83e4376506105627eb9590e83accb39f2ea8",
+  "qualification/applications.mjs": "0aed3d9e740a1489721d793e660771b3d8cf1c7eb54cc1e4d8f8f5cfcd9bce61",
+  "sdk/index.js": "0d2fad771b5e78c926016a978c820feee312a3f14fdc09048b73f036b7a933e3",
+  "sdk/index.d.ts": "46d2968a18e4304dc5bd9fb9ed8ba2dacc62b1b65b72e0869f8df0c895528bd7",
+  "sdk/cli.js": "6384e31989aefb5fb002651c57b379e857c81aed78fd668ad72835a81deff123",
+  "tests/framework-integration.mjs": "e5dbe8f3f21329d65123abe7620d816f3e3253ba814839d73e431026f52e51ab",
+  "Dockerfile": "22ebb23527c40073589e0b45ad735025cbd30f9090891c494dd6059950383bc5",
+  "session.sh": "ef8a91fb77913ec86f95438865f7c67b81cb8e7c3ba759d752e6431298e44380",
+  "package.json": "612f9322b2a6a6c9bcdca15bfea9e9a88c8db6e980852227da50d8e67a2ef681",
+  "package-lock.json": "3f5e00d5a0312b3f834c118f5d1645780447ee427272e7c05d21a60a813831ec"
+}

@@ -1,0 +1,476 @@
+{
+  "started": "2026-10-27T07:57:44.919837+00:00",
+  "jobs": [
+    {
+      "name": "app-native-1",
+      "command": [
+        "node",
+        "qualification/applications.mjs",
+        "native"
+      ],
+      "env": {
+        "APP_DOCUMENTS": "/Users/lahfir/Documents/Projects/sandbox-ui/native-stream-lab/qualification/results/real-documents"
+      },
+      "exit": 0,
+      "seconds": 62.8846877082251,
+      "receipt": {
+        "valid": true,
+        "result": "/Users/lahfir/Documents/Projects/sandbox-ui/native-stream-lab/qualification/results/applications-native-1793087865308/result.json",
+        "errors": []
+      }
+    },
+    {
+      "name": "app-selkies-1",
+      "command": [
+        "node",
+        "qualification/applications.mjs",
+        "selkies"
+      ],
+      "env": {
+        "APP_DOCUMENTS": "/Users/lahfir/Documents/Projects/sandbox-ui/native-stream-lab/qualification/results/real-documents"
+      },
+      "exit": 0,
+      "seconds": 62.25803270796314,
+      "receipt": {
+        "valid": true,
+        "result": "/Users/lahfir/Documents/Projects/sandbox-ui/native-stream-lab/qualification/results/applications-selkies-1793087928083/result.json",
+        "errors": []
+      }
+    },
+    {
+      "name": "app-kasm-1",
+      "command": [
+        "node",
+        "qualification/applications.mjs",
+        "kasm"
+      ],
+      "env": {
+        "APP_DOCUMENTS": "/Users/lahfir/Documents/Projects/sandbox-ui/native-stream-lab/qualification/results/real-documents"
+      },
+      "exit": 0,
+      "seconds": 62.01542262500152,
+      "receipt": {
+        "valid": true,
+        "result": "/Users/lahfir/Documents/Projects/sandbox-ui/native-stream-lab/qualification/results/applications-kasm-1793087990346/result.json",
+        "errors": []
+      }
+    },
+    {
+      "name": "game-selkies-1",
+      "command": [
+        "node",
+        "qualification/game.mjs",
+        "selkies"
+      ],
+      "env": {
+        "GAME_IMAGE": "native-stream-lab:games"
+      },
+      "exit": 0,
+      "seconds": 55.17816620785743,
+      "receipt": {
+        "valid": true,
+        "result": "/Users/lahfir/Documents/Projects/sandbox-ui/native-stream-lab/qualification/results/game-selkies-1793088052357/result.json",
+        "errors": []
+      }
+    },
+    {
+      "name": "game-kasm-1",
+      "command": [
+        "node",
+        "qualification/game.mjs",
+        "kasm"
+      ],
+      "env": {
+        "GAME_IMAGE": "native-stream-lab:games"
+      },
+      "exit": 0,
+      "seconds": 55.126654291991144,
+      "receipt": {
+        "valid": true,
+        "result": "/Users/lahfir/Documents/Projects/sandbox-ui/native-stream-lab/qualification/results/game-kasm-1793088107541/result.json",
+        "errors": []
+      }
+    },
+    {
+      "name": "app-native-2",
+      "command": [
+        "node",
+        "qualification/applications.mjs",
+        "native"
+      ],
+      "env": {
+        "APP_DOCUMENTS": "/Users/lahfir/Documents/Projects/sandbox-ui/native-stream-lab/qualification/results/real-documents"
+      },
+      "exit": 0,
+      "seconds": 61.780306625179946,
+      "receipt": {
+        "valid": true,
+        "result": "/Users/lahfir/Documents/Projects/sandbox-ui/native-stream-lab/qualification/results/applications-native-1793088162664/result.json",
+        "errors": []
+      }
+    },
+    {
+      "name": "app-selkies-2",
+      "command": [
+        "node",
+        "qualification/applications.mjs",
+        "selkies"
+      ],
+      "env": {
+        "APP_DOCUMENTS": "/Users/lahfir/Documents/Projects/sandbox-ui/native-stream-lab/qualification/results/real-documents"
+      },
+      "exit": 0,
+      "seconds": 62.07086733309552,
+      "receipt": {
+        "valid": true,
+        "result": "/Users/lahfir/Documents/Projects/sandbox-ui/native-stream-lab/qualification/results/applications-selkies-1793088224455/result.json",
+        "errors": []
+      }
+    },
+    {
+      "name": "app-kasm-2",
+      "command": [
+        "node",
+        "qualification/applications.mjs",
+        "kasm"
+      ],
+      "env": {
+        "APP_DOCUMENTS": "/Users/lahfir/Documents/Projects/sandbox-ui/native-stream-lab/qualification/results/real-documents"
+      },
+      "exit": 0,
+      "seconds": 61.562218124978244,
+      "receipt": {
+        "valid": true,
+        "result": "/Users/lahfir/Documents/Projects/sandbox-ui/native-stream-lab/qualification/results/applications-kasm-1793088286515/result.json",
+        "errors": []
+      }
+    },
+    {
+      "name": "game-selkies-2",
+      "command": [
+        "node",
+        "qualification/game.mjs",
+        "selkies"
+      ],
+      "env": {
+        "GAME_IMAGE": "native-stream-lab:games"
+      },
+      "exit": 0,
+      "seconds": 55.52466554194689,
+      "receipt": {
+        "valid": true,
+        "result": "/Users/lahfir/Documents/Projects/sandbox-ui/native-stream-lab/qualification/results/game-selkies-1793088348083/result.json",
+        "errors": []
+      }
+    },
+    {
+      "name": "game-kasm-2",
+      "command": [
+        "node",
+        "qualification/game.mjs",
+        "kasm"
+      ],
+      "env": {
+        "GAME_IMAGE": "native-stream-lab:games"
+      },
+      "exit": 0,
+      "seconds": 54.909895583987236,
+      "receipt": {
+        "valid": true,
+        "result": "/Users/lahfir/Documents/Projects/sandbox-ui/native-stream-lab/qualification/results/game-kasm-1793088403575/result.json",
+        "errors": []
+      }
+    },
+    {
+      "name": "app-native-3",
+      "command": [
+        "node",
+        "qualification/applications.mjs",
+        "native"
+      ],
+      "env": {
+        "APP_DOCUMENTS": "/Users/lahfir/Documents/Projects/sandbox-ui/native-stream-lab/qualification/results/real-documents"
+      },
+      "exit": 0,
+      "seconds": 61.975530750118196,
+      "receipt": {
+        "valid": true,
+        "result": "/Users/lahfir/Documents/Projects/sandbox-ui/native-stream-lab/qualification/results/applications-native-1793088458537/result.json",
+        "errors": []
+      }
+    },
+    {
+      "name": "app-selkies-3",
+      "command": [
+        "node",
+        "qualification/applications.mjs",
+        "selkies"
+      ],
+      "env": {
+        "APP_DOCUMENTS": "/Users/lahfir/Documents/Projects/sandbox-ui/native-stream-lab/qualification/results/real-documents"
+      },
+      "exit": 0,
+      "seconds": 62.59647729201242,
+      "receipt": {
+        "valid": true,
+        "result": "/Users/lahfir/Documents/Projects/sandbox-ui/native-stream-lab/qualification/results/applications-selkies-1793088520562/result.json",
+        "errors": []
+      }
+    },
+    {
+      "name": "app-kasm-3",
+      "command": [
+        "node",
+        "qualification/applications.mjs",
+        "kasm"
+      ],
+      "env": {
+        "APP_DOCUMENTS": "/Users/lahfir/Documents/Projects/sandbox-ui/native-stream-lab/qualification/results/real-documents"
+      },
+      "exit": 0,
+      "seconds": 61.94162049982697,
+      "receipt": {
+        "valid": true,
+        "result": "/Users/lahfir/Documents/Projects/sandbox-ui/native-stream-lab/qualification/results/applications-kasm-1793088583086/result.json",
+        "errors": []
+      }
+    },
+    {
+      "name": "game-selkies-3",
+      "command": [
+        "node",
+        "qualification/game.mjs",
+        "selkies"
+      ],
+      "env": {
+        "GAME_IMAGE": "native-stream-lab:games"
+      },
+      "exit": 0,
+      "seconds": 55.24420116702095,
+      "receipt": {
+        "valid": true,
+        "result": "/Users/lahfir/Documents/Projects/sandbox-ui/native-stream-lab/qualification/results/game-selkies-1793088645017/result.json",
+        "errors": []
+      }
+    },
+    {
+      "name": "game-kasm-3",
+      "command": [
+        "node",
+        "qualification/game.mjs",
+        "kasm"
+      ],
+      "env": {
+        "GAME_IMAGE": "native-stream-lab:games"
+      },
+      "exit": 0,
+      "seconds": 54.973511958960444,
+      "receipt": {
+        "valid": true,
+        "result": "/Users/lahfir/Documents/Projects/sandbox-ui/native-stream-lab/qualification/results/game-kasm-1793088700256/result.json",
+        "errors": []
+      }
+    },
+    {
+      "name": "reference-native-delay",
+      "command": [
+        "node",
+        "qualification/run.mjs"
+      ],
+      "env": {
+        "ENGINE": "native",
+        "NATIVE_IMAGE": "native-stream-lab:final2",
+        "NET_PROFILE": "delay",
+        "CASES": "scroll",
+        "MOTION_QUALITY": "0"
+      },
+      "exit": 0,
+      "seconds": 49.74703791597858,
+      "receipt": {
+        "id": "2026-10-27T08-12-35-237Z-native-afe787c1",
+        "engine": "native",
+        "valid": true,
+        "errors": 0,
+        "scroll_cpuPercent": 33.54055061772286,
+        "scroll_memoryMiB": 296.8642113095238,
+        "scroll_mbps": 10.728461921629643,
+        "scroll_throttledMs": 0,
+        "scroll_visibleUpdatesPerSecond": 14.57754859182864,
+        "scroll_producerUpdatesPerSecond": 26.823112988361185,
+        "scroll_latencyMedianMs": 92.7000002861023,
+        "scroll_latencyP95Ms": 116
+      }
+    },
+    {
+      "name": "reference-native-bandwidth",
+      "command": [
+        "node",
+        "qualification/run.mjs"
+      ],
+      "env": {
+        "ENGINE": "native",
+        "NATIVE_IMAGE": "native-stream-lab:final2",
+        "NET_PROFILE": "bandwidth",
+        "CASES": "scroll,video",
+        "MOTION_QUALITY": "1"
+      },
+      "exit": 1,
+      "seconds": 105.88708537491038,
+      "receipt": {
+        "id": "2026-10-27T08-13-25-019Z-native-b47febc8",
+        "engine": "native",
+        "valid": false,
+        "errors": 1,
+        "scroll_cpuPercent": 26.119215464383537,
+        "scroll_memoryMiB": 294.8530505952381,
+        "scroll_mbps": 4.268885464171431,
+        "scroll_throttledMs": 0,
+        "scroll_visibleUpdatesPerSecond": 6.988882225075021,
+        "scroll_producerUpdatesPerSecond": 26.057701593780024,
+        "video_cpuPercent": 32.92111575449332,
+        "video_memoryMiB": 297.14378720238096,
+        "video_mbps": 5.703571751767431,
+        "video_throttledMs": 0,
+        "video_visibleUpdatesPerSecond": 3.4719122301080914,
+        "video_producerUpdatesPerSecond": 26.066789582564482,
+        "scroll_latencyMedianMs": 222.40000009536743,
+        "scroll_latencyP95Ms": 389.80000019073486,
+        "video_latencyMedianMs": 395.19999980926514,
+        "video_latencyP95Ms": 438.30000019073486
+      }
+    },
+    {
+      "name": "reference-selkies-delay",
+      "command": [
+        "node",
+        "qualification/run.mjs"
+      ],
+      "env": {
+        "ENGINE": "selkies",
+        "NATIVE_IMAGE": "native-stream-lab:final2",
+        "NET_PROFILE": "delay",
+        "CASES": "scroll",
+        "MOTION_QUALITY": "0"
+      },
+      "exit": 0,
+      "seconds": 51.05568400025368,
+      "receipt": {
+        "id": "2026-10-27T08-15-43-671Z-selkies-d12fe7bd",
+        "engine": "selkies",
+        "valid": true,
+        "errors": 0,
+        "scroll_cpuPercent": 66.48632629429935,
+        "scroll_memoryMiB": 357.79910714285717,
+        "scroll_mbps": 6.739694611097473,
+        "scroll_throttledMs": 0,
+        "scroll_visibleUpdatesPerSecond": 28.80685007041523,
+        "scroll_producerUpdatesPerSecond": 28.81003165006465,
+        "scroll_latencyMedianMs": 90,
+        "scroll_latencyP95Ms": 94.60000038146973
+      }
+    },
+    {
+      "name": "reference-selkies-bandwidth",
+      "command": [
+        "node",
+        "qualification/run.mjs"
+      ],
+      "env": {
+        "ENGINE": "selkies",
+        "NATIVE_IMAGE": "native-stream-lab:final2",
+        "NET_PROFILE": "bandwidth",
+        "CASES": "scroll,video",
+        "MOTION_QUALITY": "1"
+      },
+      "exit": 0,
+      "seconds": 98.46640133298934,
+      "receipt": {
+        "id": "2026-10-27T08-16-34-627Z-selkies-17ea19ab",
+        "engine": "selkies",
+        "valid": true,
+        "errors": 0,
+        "scroll_cpuPercent": 67.8562250511772,
+        "scroll_memoryMiB": 357.9330357142857,
+        "scroll_mbps": 6.734269090169824,
+        "scroll_throttledMs": 9.695,
+        "scroll_visibleUpdatesPerSecond": 28.181754922975454,
+        "scroll_producerUpdatesPerSecond": 28.775122443933437,
+        "video_cpuPercent": 76.2779307363695,
+        "video_memoryMiB": 364.8013392857143,
+        "video_mbps": 5.190667838153686,
+        "video_throttledMs": 0,
+        "video_visibleUpdatesPerSecond": 28.598143855717044,
+        "video_producerUpdatesPerSecond": 28.99123077587701,
+        "scroll_latencyMedianMs": 92.60000038146973,
+        "scroll_latencyP95Ms": 111,
+        "video_latencyMedianMs": 94.40000009536743,
+        "video_latencyP95Ms": 109.7000002861023
+      }
+    },
+    {
+      "name": "reference-kasm-delay",
+      "command": [
+        "node",
+        "qualification/run.mjs"
+      ],
+      "env": {
+        "ENGINE": "kasm",
+        "NATIVE_IMAGE": "native-stream-lab:final2",
+        "NET_PROFILE": "delay",
+        "CASES": "scroll",
+        "MOTION_QUALITY": "0"
+      },
+      "exit": 0,
+      "seconds": 48.98816204164177,
+      "receipt": {
+        "id": "2026-10-27T08-18-13-074Z-kasm-ea4db653",
+        "engine": "kasm",
+        "valid": true,
+        "errors": 0,
+        "scroll_cpuPercent": 46.58301111724497,
+        "scroll_memoryMiB": 293.6709449404762,
+        "scroll_mbps": 29.507024515240854,
+        "scroll_throttledMs": 0,
+        "scroll_visibleUpdatesPerSecond": 25.005705667440928,
+        "scroll_producerUpdatesPerSecond": 26.168538690660995,
+        "scroll_latencyMedianMs": 127.5,
+        "scroll_latencyP95Ms": 142.90000009536743
+      }
+    },
+    {
+      "name": "reference-kasm-bandwidth",
+      "command": [
+        "node",
+        "qualification/run.mjs"
+      ],
+      "env": {
+        "ENGINE": "kasm",
+        "NATIVE_IMAGE": "native-stream-lab:final2",
+        "NET_PROFILE": "bandwidth",
+        "CASES": "scroll,video",
+        "MOTION_QUALITY": "1"
+      },
+      "exit": 1,
+      "seconds": 200.80370712466538,
+      "receipt": {
+        "id": "2026-10-27T08-19-02-058Z-kasm-a9c0d638",
+        "engine": "kasm",
+        "valid": false,
+        "errors": 3,
+        "scroll_cpuPercent": 15.187766788878271,
+        "scroll_memoryMiB": 303.3377976190476,
+        "scroll_mbps": 7.452720140366994,
+        "scroll_throttledMs": 0,
+        "scroll_visibleUpdatesPerSecond": 6.037153234882449,
+        "scroll_producerUpdatesPerSecond": 9.990917627036914,
+        "video_cpuPercent": 14.534267738036451,
+        "video_memoryMiB": 318.95684523809524,
+        "video_mbps": 7.553649630584893,
+        "video_throttledMs": 0,
+        "video_visibleUpdatesPerSecond": 3.648627327249722,
+        "video_producerUpdatesPerSecond": 6.612057139825603
+      }
+    }
+  ],
+  "finished": "2026-10-27T08:22:22.572361+00:00"
+}

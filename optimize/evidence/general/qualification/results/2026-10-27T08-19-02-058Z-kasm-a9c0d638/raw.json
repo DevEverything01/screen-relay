@@ -1,0 +1,2177 @@
+{
+  "id": "2026-10-27T08-19-02-058Z-kasm-a9c0d638",
+  "engine": "kasm",
+  "image": "sha256:aa2b9fe4228860fcae86829b1c609139f956f934236bbebdd50bcf143d356712",
+  "command": "kasm",
+  "started": "2026-10-27T08:19:02.058Z",
+  "fixtureSha256": "163ab51dfd3f78989c6af892696ba37e33d26a1e624eb3df742657f37812215c",
+  "runnerSha256": "fb2550505ba8adb05a61e724b395f1bf6af4d180c979c73fda73024bbbf01507",
+  "profile": "bandwidth",
+  "cases": [
+    "scroll",
+    "video"
+  ],
+  "motionQuality": true,
+  "inputLatencyStartEvent": "pointerdown",
+  "runs": {
+    "scroll": {
+      "errors": [
+        "Invalid marker or input observations"
+      ],
+      "inputToggleDelta": 20,
+      "samples": [
+        {
+          "t": 20302.123739957,
+          "cpu": 13549140,
+          "throttle": 154857,
+          "memory": 318062592,
+          "tx": 53691078,
+          "fixture": {
+            "mode": "scroll",
+            "flash": false,
+            "toggles": 20,
+            "frame": 689,
+            "fps_marker": true,
+            "frozen": false,
+            "producer_hz": 30,
+            "submitted_updates": 689,
+            "time_ns": 20301801444249,
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "t": 20303.125763374,
+          "cpu": 13677942,
+          "throttle": 154857,
+          "memory": 318222336,
+          "tx": 54343747,
+          "fixture": {
+            "mode": "scroll",
+            "flash": false,
+            "toggles": 20,
+            "frame": 696,
+            "fps_marker": true,
+            "frozen": false,
+            "producer_hz": 30,
+            "submitted_updates": 696,
+            "time_ns": 20302909935374,
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "t": 20304.129421583,
+          "cpu": 13879881,
+          "throttle": 154857,
+          "memory": 318095360,
+          "tx": 55579392,
+          "fixture": {
+            "mode": "scroll",
+            "flash": false,
+            "toggles": 20,
+            "frame": 707,
+            "fps_marker": true,
+            "frozen": false,
+            "producer_hz": 30,
+            "submitted_updates": 707,
+            "time_ns": 20304003666333,
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "t": 20305.130463709,
+          "cpu": 13989651,
+          "throttle": 154857,
+          "memory": 317890560,
+          "tx": 56641315,
+          "fixture": {
+            "mode": "scroll",
+            "flash": false,
+            "toggles": 20,
+            "frame": 713,
+            "fps_marker": true,
+            "frozen": false,
+            "producer_hz": 30,
+            "submitted_updates": 713,
+            "time_ns": 20304952388625,
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "t": 20306.133957459,
+          "cpu": 14146057,
+          "throttle": 154857,
+          "memory": 318246912,
+          "tx": 57559199,
+          "fixture": {
+            "mode": "scroll",
+            "flash": false,
+            "toggles": 20,
+            "frame": 725,
+            "fps_marker": true,
+            "frozen": false,
+            "producer_hz": 30,
+            "submitted_updates": 725,
+            "time_ns": 20306116491626,
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "t": 20307.144660876,
+          "cpu": 14322811,
+          "throttle": 154857,
+          "memory": 318754816,
+          "tx": 57977589,
+          "fixture": {
+            "mode": "scroll",
+            "flash": false,
+            "toggles": 20,
+            "frame": 741,
+            "fps_marker": true,
+            "frozen": false,
+            "producer_hz": 30,
+            "submitted_updates": 741,
+            "time_ns": 20306724138959,
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "t": 20308.157211085,
+          "cpu": 14543292,
+          "throttle": 154857,
+          "memory": 318226432,
+          "tx": 59087512,
+          "fixture": {
+            "mode": "scroll",
+            "flash": false,
+            "toggles": 20,
+            "frame": 753,
+            "fps_marker": true,
+            "frozen": false,
+            "producer_hz": 30,
+            "submitted_updates": 753,
+            "time_ns": 20308032313002,
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "t": 20309.168485585,
+          "cpu": 14619824,
+          "throttle": 154857,
+          "memory": 317767680,
+          "tx": 60181819,
+          "fixture": {
+            "mode": "scroll",
+            "flash": false,
+            "toggles": 20,
+            "frame": 759,
+            "fps_marker": true,
+            "frozen": false,
+            "producer_hz": 30,
+            "submitted_updates": 759,
+            "time_ns": 20309160981335,
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "t": 20310.183672169,
+          "cpu": 14800230,
+          "throttle": 154857,
+          "memory": 317931520,
+          "tx": 61296350,
+          "fixture": {
+            "mode": "scroll",
+            "flash": false,
+            "toggles": 20,
+            "frame": 769,
+            "fps_marker": true,
+            "frozen": false,
+            "producer_hz": 30,
+            "submitted_updates": 769,
+            "time_ns": 20310071194878,
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "t": 20311.185450961,
+          "cpu": 14889353,
+          "throttle": 154857,
+          "memory": 317943808,
+          "tx": 61914843,
+          "fixture": {
+            "mode": "scroll",
+            "flash": false,
+            "toggles": 20,
+            "frame": 774,
+            "fps_marker": true,
+            "frozen": false,
+            "producer_hz": 30,
+            "submitted_updates": 774,
+            "time_ns": 20311023058336,
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "t": 20312.192246004,
+          "cpu": 15026722,
+          "throttle": 154857,
+          "memory": 317964288,
+          "tx": 63001086,
+          "fixture": {
+            "mode": "scroll",
+            "flash": false,
+            "toggles": 20,
+            "frame": 785,
+            "fps_marker": true,
+            "frozen": false,
+            "producer_hz": 30,
+            "submitted_updates": 785,
+            "time_ns": 20312160607962,
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "t": 20313.194654212,
+          "cpu": 15238550,
+          "throttle": 154857,
+          "memory": 317935616,
+          "tx": 63918970,
+          "fixture": {
+            "mode": "scroll",
+            "flash": false,
+            "toggles": 20,
+            "frame": 803,
+            "fps_marker": true,
+            "frozen": false,
+            "producer_hz": 30,
+            "submitted_updates": 803,
+            "time_ns": 20313139948171,
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "t": 20314.206566755,
+          "cpu": 15376637,
+          "throttle": 154857,
+          "memory": 318238720,
+          "tx": 64381789,
+          "fixture": {
+            "mode": "scroll",
+            "flash": false,
+            "toggles": 20,
+            "frame": 815,
+            "fps_marker": true,
+            "frozen": false,
+            "producer_hz": 30,
+            "submitted_updates": 815,
+            "time_ns": 20313691239754,
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "t": 20315.207574838,
+          "cpu": 15621273,
+          "throttle": 154857,
+          "memory": 317726720,
+          "tx": 66017000,
+          "fixture": {
+            "mode": "scroll",
+            "flash": false,
+            "toggles": 20,
+            "frame": 833,
+            "fps_marker": true,
+            "frozen": false,
+            "producer_hz": 30,
+            "submitted_updates": 833,
+            "time_ns": 20315189504422,
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "t": 20316.211364463,
+          "cpu": 15768020,
+          "throttle": 154857,
+          "memory": 318050304,
+          "tx": 66753213,
+          "fixture": {
+            "mode": "scroll",
+            "flash": false,
+            "toggles": 20,
+            "frame": 840,
+            "fps_marker": true,
+            "frozen": false,
+            "producer_hz": 30,
+            "submitted_updates": 840,
+            "time_ns": 20316050122713,
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "t": 20317.212309214,
+          "cpu": 15925659,
+          "throttle": 154857,
+          "memory": 318529536,
+          "tx": 67721670,
+          "fixture": {
+            "mode": "scroll",
+            "flash": false,
+            "toggles": 20,
+            "frame": 851,
+            "fps_marker": true,
+            "frozen": false,
+            "producer_hz": 30,
+            "submitted_updates": 851,
+            "time_ns": 20317205775964,
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "t": 20318.223418339,
+          "cpu": 16033767,
+          "throttle": 154857,
+          "memory": 318140416,
+          "tx": 68446941,
+          "fixture": {
+            "mode": "scroll",
+            "flash": false,
+            "toggles": 20,
+            "frame": 855,
+            "fps_marker": true,
+            "frozen": false,
+            "producer_hz": 30,
+            "submitted_updates": 855,
+            "time_ns": 20317752435256,
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "t": 20319.234582548,
+          "cpu": 16239237,
+          "throttle": 154857,
+          "memory": 317898752,
+          "tx": 69547891,
+          "fixture": {
+            "mode": "scroll",
+            "flash": false,
+            "toggles": 20,
+            "frame": 868,
+            "fps_marker": true,
+            "frozen": false,
+            "producer_hz": 30,
+            "submitted_updates": 868,
+            "time_ns": 20318966512923,
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "t": 20320.244478298,
+          "cpu": 16332878,
+          "throttle": 154857,
+          "memory": 318058496,
+          "tx": 70511740,
+          "fixture": {
+            "mode": "scroll",
+            "flash": false,
+            "toggles": 20,
+            "frame": 874,
+            "fps_marker": true,
+            "frozen": false,
+            "producer_hz": 30,
+            "submitted_updates": 874,
+            "time_ns": 20319876086215,
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "t": 20321.248073799,
+          "cpu": 16544041,
+          "throttle": 154857,
+          "memory": 318013440,
+          "tx": 71570260,
+          "fixture": {
+            "mode": "scroll",
+            "flash": false,
+            "toggles": 20,
+            "frame": 888,
+            "fps_marker": true,
+            "frozen": false,
+            "producer_hz": 30,
+            "submitted_updates": 888,
+            "time_ns": 20321196967424,
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "t": 20322.251952633,
+          "cpu": 16606166,
+          "throttle": 154857,
+          "memory": 317829120,
+          "tx": 72442320,
+          "fixture": {
+            "mode": "scroll",
+            "flash": false,
+            "toggles": 20,
+            "frame": 893,
+            "fps_marker": true,
+            "frozen": false,
+            "producer_hz": 30,
+            "submitted_updates": 893,
+            "time_ns": 20322219989133,
+            "x": 0,
+            "y": 0
+          }
+        }
+      ],
+      "observed": {
+        "start": 60042.40000009537,
+        "end": 80250.59999990463,
+        "frames": [
+          {
+            "t": 60042.5,
+            "id": 555
+          },
+          {
+            "t": 60201.7999997139,
+            "id": 556
+          },
+          {
+            "t": 60385.5,
+            "id": 558
+          },
+          {
+            "t": 60603.2999997139,
+            "id": 559
+          },
+          {
+            "t": 60702.09999990463,
+            "id": 560
+          },
+          {
+            "t": 60818.59999990463,
+            "id": 561
+          },
+          {
+            "t": 61036,
+            "id": 562
+          },
+          {
+            "t": 61319.699999809265,
+            "id": 564
+          },
+          {
+            "t": 61518.5,
+            "id": 565
+          },
+          {
+            "t": 61752.90000009537,
+            "id": 567
+          },
+          {
+            "t": 61820,
+            "id": 568
+          },
+          {
+            "t": 61953.2999997139,
+            "id": 570
+          },
+          {
+            "t": 62035.59999990463,
+            "id": 571
+          },
+          {
+            "t": 62339.2999997139,
+            "id": 572
+          },
+          {
+            "t": 62501.5,
+            "id": 574
+          },
+          {
+            "t": 62584.7999997139,
+            "id": 576
+          },
+          {
+            "t": 62686.90000009537,
+            "id": 577
+          },
+          {
+            "t": 62786.2999997139,
+            "id": 578
+          },
+          {
+            "t": 62868.40000009537,
+            "id": 580
+          },
+          {
+            "t": 62986.40000009537,
+            "id": 581
+          },
+          {
+            "t": 63219.7999997139,
+            "id": 582
+          },
+          {
+            "t": 63336.59999990463,
+            "id": 583
+          },
+          {
+            "t": 63403,
+            "id": 584
+          },
+          {
+            "t": 63670.199999809265,
+            "id": 585
+          },
+          {
+            "t": 64152.2999997139,
+            "id": 587
+          },
+          {
+            "t": 64185.699999809265,
+            "id": 589
+          },
+          {
+            "t": 64251.7999997139,
+            "id": 590
+          },
+          {
+            "t": 64319.699999809265,
+            "id": 591
+          },
+          {
+            "t": 64569,
+            "id": 592
+          },
+          {
+            "t": 64817.7999997139,
+            "id": 594
+          },
+          {
+            "t": 65084.90000009537,
+            "id": 595
+          },
+          {
+            "t": 65235.2999997139,
+            "id": 597
+          },
+          {
+            "t": 65501.5,
+            "id": 598
+          },
+          {
+            "t": 65618.5,
+            "id": 599
+          },
+          {
+            "t": 65667.5,
+            "id": 600
+          },
+          {
+            "t": 65719.19999980927,
+            "id": 620
+          },
+          {
+            "t": 65986.2999997139,
+            "id": 621
+          },
+          {
+            "t": 66103,
+            "id": 622
+          },
+          {
+            "t": 66184.69999980927,
+            "id": 623
+          },
+          {
+            "t": 66285.40000009537,
+            "id": 624
+          },
+          {
+            "t": 66534.7999997139,
+            "id": 625
+          },
+          {
+            "t": 66750.7999997139,
+            "id": 627
+          },
+          {
+            "t": 67017.5,
+            "id": 628
+          },
+          {
+            "t": 67084.19999980927,
+            "id": 629
+          },
+          {
+            "t": 67184.5,
+            "id": 631
+          },
+          {
+            "t": 67284.2999997139,
+            "id": 632
+          },
+          {
+            "t": 67384.19999980927,
+            "id": 633
+          },
+          {
+            "t": 67667.90000009537,
+            "id": 634
+          },
+          {
+            "t": 68200.69999980927,
+            "id": 635
+          },
+          {
+            "t": 68317.90000009537,
+            "id": 637
+          },
+          {
+            "t": 68384.40000009537,
+            "id": 639
+          },
+          {
+            "t": 68484.40000009537,
+            "id": 640
+          },
+          {
+            "t": 68734.19999980927,
+            "id": 641
+          },
+          {
+            "t": 68784.59999990463,
+            "id": 652
+          },
+          {
+            "t": 68868.09999990463,
+            "id": 653
+          },
+          {
+            "t": 69168,
+            "id": 654
+          },
+          {
+            "t": 69234.2999997139,
+            "id": 655
+          },
+          {
+            "t": 69284.19999980927,
+            "id": 658
+          },
+          {
+            "t": 69367.90000009537,
+            "id": 659
+          },
+          {
+            "t": 69484.09999990463,
+            "id": 660
+          },
+          {
+            "t": 69751,
+            "id": 661
+          },
+          {
+            "t": 70000.69999980927,
+            "id": 663
+          },
+          {
+            "t": 70234,
+            "id": 664
+          },
+          {
+            "t": 70318,
+            "id": 665
+          },
+          {
+            "t": 70450.7999997139,
+            "id": 667
+          },
+          {
+            "t": 70567.5,
+            "id": 669
+          },
+          {
+            "t": 70667.40000009537,
+            "id": 670
+          },
+          {
+            "t": 70918,
+            "id": 671
+          },
+          {
+            "t": 71017.90000009537,
+            "id": 684
+          },
+          {
+            "t": 71117.59999990463,
+            "id": 685
+          },
+          {
+            "t": 71201.40000009537,
+            "id": 686
+          },
+          {
+            "t": 71467.7999997139,
+            "id": 687
+          },
+          {
+            "t": 71967.59999990463,
+            "id": 689
+          },
+          {
+            "t": 72000.69999980927,
+            "id": 691
+          },
+          {
+            "t": 72067.2999997139,
+            "id": 692
+          },
+          {
+            "t": 72151.2999997139,
+            "id": 693
+          },
+          {
+            "t": 72367.5,
+            "id": 694
+          },
+          {
+            "t": 72451.19999980927,
+            "id": 695
+          },
+          {
+            "t": 72567.59999990463,
+            "id": 696
+          },
+          {
+            "t": 72634.19999980927,
+            "id": 698
+          },
+          {
+            "t": 72718,
+            "id": 699
+          },
+          {
+            "t": 73000.90000009537,
+            "id": 700
+          },
+          {
+            "t": 73100.7999997139,
+            "id": 701
+          },
+          {
+            "t": 73184.59999990463,
+            "id": 702
+          },
+          {
+            "t": 73451.19999980927,
+            "id": 703
+          },
+          {
+            "t": 73684.5,
+            "id": 705
+          },
+          {
+            "t": 73817.90000009537,
+            "id": 706
+          },
+          {
+            "t": 74018.09999990463,
+            "id": 707
+          },
+          {
+            "t": 74285.09999990463,
+            "id": 709
+          },
+          {
+            "t": 74584.09999990463,
+            "id": 710
+          },
+          {
+            "t": 74618.5,
+            "id": 711
+          },
+          {
+            "t": 74734.19999980927,
+            "id": 713
+          },
+          {
+            "t": 74867.5,
+            "id": 715
+          },
+          {
+            "t": 74951.19999980927,
+            "id": 716
+          },
+          {
+            "t": 75184.59999990463,
+            "id": 717
+          },
+          {
+            "t": 75384.69999980927,
+            "id": 719
+          },
+          {
+            "t": 75900.69999980927,
+            "id": 720
+          },
+          {
+            "t": 76084.40000009537,
+            "id": 722
+          },
+          {
+            "t": 76168,
+            "id": 738
+          },
+          {
+            "t": 76267.69999980927,
+            "id": 739
+          },
+          {
+            "t": 76500.7999997139,
+            "id": 740
+          },
+          {
+            "t": 76600.69999980927,
+            "id": 741
+          },
+          {
+            "t": 76701.40000009537,
+            "id": 743
+          },
+          {
+            "t": 76817.69999980927,
+            "id": 744
+          },
+          {
+            "t": 76884.09999990463,
+            "id": 745
+          },
+          {
+            "t": 77167.40000009537,
+            "id": 746
+          },
+          {
+            "t": 77250.69999980927,
+            "id": 747
+          },
+          {
+            "t": 77367.5,
+            "id": 749
+          },
+          {
+            "t": 77450.90000009537,
+            "id": 750
+          },
+          {
+            "t": 77550.7999997139,
+            "id": 751
+          },
+          {
+            "t": 77717.2999997139,
+            "id": 752
+          },
+          {
+            "t": 77934.7999997139,
+            "id": 753
+          },
+          {
+            "t": 78234.5,
+            "id": 755
+          },
+          {
+            "t": 78400.7999997139,
+            "id": 756
+          },
+          {
+            "t": 78601.19999980927,
+            "id": 758
+          },
+          {
+            "t": 78851.09999990463,
+            "id": 759
+          },
+          {
+            "t": 78950.90000009537,
+            "id": 760
+          },
+          {
+            "t": 79100.69999980927,
+            "id": 762
+          },
+          {
+            "t": 79200.69999980927,
+            "id": 764
+          },
+          {
+            "t": 79284.19999980927,
+            "id": 765
+          },
+          {
+            "t": 79784.09999990463,
+            "id": 766
+          },
+          {
+            "t": 79984.09999990463,
+            "id": 768
+          },
+          {
+            "t": 80200.69999980927,
+            "id": 769
+          }
+        ],
+        "invalid": 0,
+        "raf": 1214
+      },
+      "seconds": 20.12821267599793,
+      "cpuPercent": 15.187766788878271,
+      "memoryMiB": 303.3377976190476,
+      "mbps": 7.452720140366994,
+      "throttledMs": 0,
+      "visibleUpdatesPerSecond": 6.037153234882449,
+      "producerUpdatesPerSecond": 9.990917627036914,
+      "frozenQuality": {
+        "psnrDb": 33.19740208911553,
+        "meanAbsoluteError": 1.7656637008101852,
+        "scope": "full frozen frame; no motion-fidelity claim"
+      },
+      "valid": false
+    },
+    "video": {
+      "errors": [
+        "Invalid marker or input observations",
+        "motion quality: Insufficient matched-frame evidence: fewer than 10 unique pairs"
+      ],
+      "inputToggleDelta": 20,
+      "samples": [
+        {
+          "t": 20389.359674205,
+          "cpu": 26780113,
+          "throttle": 154857,
+          "memory": 334086144,
+          "tx": 133793379,
+          "fixture": {
+            "mode": "video",
+            "flash": false,
+            "toggles": 40,
+            "frame": 1342,
+            "fps_marker": true,
+            "frozen": false,
+            "producer_hz": 30,
+            "submitted_updates": 1342,
+            "time_ns": 20388996279289,
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "t": 20390.360427873,
+          "cpu": 26933044,
+          "throttle": 154857,
+          "memory": 334479360,
+          "tx": 134712159,
+          "fixture": {
+            "mode": "video",
+            "flash": false,
+            "toggles": 40,
+            "frame": 1351,
+            "fps_marker": true,
+            "frozen": false,
+            "producer_hz": 30,
+            "submitted_updates": 1351,
+            "time_ns": 20390321809414,
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "t": 20391.372165581,
+          "cpu": 27080613,
+          "throttle": 154857,
+          "memory": 334512128,
+          "tx": 135695592,
+          "fixture": {
+            "mode": "video",
+            "flash": false,
+            "toggles": 40,
+            "frame": 1358,
+            "fps_marker": true,
+            "frozen": false,
+            "producer_hz": 30,
+            "submitted_updates": 1358,
+            "time_ns": 20391153129956,
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "t": 20392.38061654,
+          "cpu": 27206653,
+          "throttle": 154857,
+          "memory": 334262272,
+          "tx": 136572644,
+          "fixture": {
+            "mode": "video",
+            "flash": false,
+            "toggles": 40,
+            "frame": 1363,
+            "fps_marker": true,
+            "frozen": false,
+            "producer_hz": 30,
+            "submitted_updates": 1363,
+            "time_ns": 20392338098082,
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "t": 20393.384849332,
+          "cpu": 27353812,
+          "throttle": 154857,
+          "memory": 334299136,
+          "tx": 137556077,
+          "fixture": {
+            "mode": "video",
+            "flash": false,
+            "toggles": 40,
+            "frame": 1368,
+            "fps_marker": true,
+            "frozen": false,
+            "producer_hz": 30,
+            "submitted_updates": 1368,
+            "time_ns": 20393286181291,
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "t": 20394.390188666,
+          "cpu": 27417004,
+          "throttle": 154857,
+          "memory": 334712832,
+          "tx": 138056016,
+          "fixture": {
+            "mode": "video",
+            "flash": false,
+            "toggles": 40,
+            "frame": 1371,
+            "fps_marker": true,
+            "frozen": false,
+            "producer_hz": 30,
+            "submitted_updates": 1371,
+            "time_ns": 20393880761249,
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "t": 20395.39577875,
+          "cpu": 27597255,
+          "throttle": 154857,
+          "memory": 334274560,
+          "tx": 139457460,
+          "fixture": {
+            "mode": "video",
+            "flash": false,
+            "toggles": 40,
+            "frame": 1379,
+            "fps_marker": true,
+            "frozen": false,
+            "producer_hz": 30,
+            "submitted_updates": 1379,
+            "time_ns": 20395357746375,
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "t": 20396.407582959,
+          "cpu": 27669514,
+          "throttle": 154857,
+          "memory": 334364672,
+          "tx": 140022882,
+          "fixture": {
+            "mode": "video",
+            "flash": false,
+            "toggles": 40,
+            "frame": 1382,
+            "fps_marker": true,
+            "frozen": false,
+            "producer_hz": 30,
+            "submitted_updates": 1382,
+            "time_ns": 20395803391334,
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "t": 20397.414433001,
+          "cpu": 27792436,
+          "throttle": 154857,
+          "memory": 334069760,
+          "tx": 141006315,
+          "fixture": {
+            "mode": "video",
+            "flash": false,
+            "toggles": 40,
+            "frame": 1387,
+            "fps_marker": true,
+            "frozen": false,
+            "producer_hz": 30,
+            "submitted_updates": 1387,
+            "time_ns": 20396918361917,
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "t": 20398.425164001,
+          "cpu": 27928138,
+          "throttle": 154857,
+          "memory": 334626816,
+          "tx": 141924199,
+          "fixture": {
+            "mode": "video",
+            "flash": false,
+            "toggles": 40,
+            "frame": 1392,
+            "fps_marker": true,
+            "frozen": false,
+            "producer_hz": 30,
+            "submitted_updates": 1392,
+            "time_ns": 20397848120751,
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "t": 20399.427224002,
+          "cpu": 28146571,
+          "throttle": 154857,
+          "memory": 334069760,
+          "tx": 143325643,
+          "fixture": {
+            "mode": "video",
+            "flash": false,
+            "toggles": 40,
+            "frame": 1403,
+            "fps_marker": true,
+            "frozen": false,
+            "producer_hz": 30,
+            "submitted_updates": 1403,
+            "time_ns": 20399404918044,
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "t": 20400.438678502,
+          "cpu": 28210217,
+          "throttle": 154857,
+          "memory": 334372864,
+          "tx": 143825582,
+          "fixture": {
+            "mode": "video",
+            "flash": false,
+            "toggles": 40,
+            "frame": 1405,
+            "fps_marker": true,
+            "frozen": false,
+            "producer_hz": 30,
+            "submitted_updates": 1405,
+            "time_ns": 20399972393794,
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "t": 20401.450797586,
+          "cpu": 28361622,
+          "throttle": 154857,
+          "memory": 334393344,
+          "tx": 144809015,
+          "fixture": {
+            "mode": "video",
+            "flash": false,
+            "toggles": 40,
+            "frame": 1411,
+            "fps_marker": true,
+            "frozen": false,
+            "producer_hz": 30,
+            "submitted_updates": 1411,
+            "time_ns": 20400930122503,
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "t": 20402.461197295,
+          "cpu": 28478942,
+          "throttle": 154857,
+          "memory": 334348288,
+          "tx": 145924570,
+          "fixture": {
+            "mode": "video",
+            "flash": false,
+            "toggles": 40,
+            "frame": 1416,
+            "fps_marker": true,
+            "frozen": false,
+            "producer_hz": 30,
+            "submitted_updates": 1416,
+            "time_ns": 20402170668003,
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "t": 20403.471927004,
+          "cpu": 28645778,
+          "throttle": 154857,
+          "memory": 334704640,
+          "tx": 146775947,
+          "fixture": {
+            "mode": "video",
+            "flash": false,
+            "toggles": 40,
+            "frame": 1426,
+            "fps_marker": true,
+            "frozen": false,
+            "producer_hz": 30,
+            "submitted_updates": 1426,
+            "time_ns": 20403180328962,
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "t": 20404.475334838,
+          "cpu": 28820945,
+          "throttle": 154857,
+          "memory": 334602240,
+          "tx": 147759380,
+          "fixture": {
+            "mode": "video",
+            "flash": false,
+            "toggles": 40,
+            "frame": 1435,
+            "fps_marker": true,
+            "frozen": false,
+            "producer_hz": 30,
+            "submitted_updates": 1435,
+            "time_ns": 20404406739629,
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "t": 20405.477726754,
+          "cpu": 29099174,
+          "throttle": 154857,
+          "memory": 334364672,
+          "tx": 148742813,
+          "fixture": {
+            "mode": "video",
+            "flash": false,
+            "toggles": 40,
+            "frame": 1454,
+            "fps_marker": true,
+            "frozen": false,
+            "producer_hz": 30,
+            "submitted_updates": 1454,
+            "time_ns": 20405464102296,
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "t": 20406.483885838,
+          "cpu": 29289600,
+          "throttle": 154857,
+          "memory": 334958592,
+          "tx": 149661721,
+          "fixture": {
+            "mode": "video",
+            "flash": false,
+            "toggles": 40,
+            "frame": 1463,
+            "fps_marker": true,
+            "frozen": false,
+            "producer_hz": 30,
+            "submitted_updates": 1463,
+            "time_ns": 20406158813879,
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "t": 20407.496126046,
+          "cpu": 29428547,
+          "throttle": 154857,
+          "memory": 334635008,
+          "tx": 150709745,
+          "fixture": {
+            "mode": "video",
+            "flash": false,
+            "toggles": 40,
+            "frame": 1468,
+            "fps_marker": true,
+            "frozen": false,
+            "producer_hz": 30,
+            "submitted_updates": 1468,
+            "time_ns": 20407037642338,
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "t": 20408.509425672,
+          "cpu": 29543401,
+          "throttle": 154857,
+          "memory": 334307328,
+          "tx": 151758727,
+          "fixture": {
+            "mode": "video",
+            "flash": false,
+            "toggles": 40,
+            "frame": 1472,
+            "fps_marker": true,
+            "frozen": false,
+            "producer_hz": 30,
+            "submitted_updates": 1472,
+            "time_ns": 20408214127088,
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "t": 20409.523751631,
+          "cpu": 29710814,
+          "throttle": 154857,
+          "memory": 335015936,
+          "tx": 152832426,
+          "fixture": {
+            "mode": "video",
+            "flash": false,
+            "toggles": 40,
+            "frame": 1477,
+            "fps_marker": true,
+            "frozen": false,
+            "producer_hz": 30,
+            "submitted_updates": 1477,
+            "time_ns": 20409413525714,
+            "x": 0,
+            "y": 0
+          }
+        }
+      ],
+      "observed": {
+        "start": 147265.59999990463,
+        "end": 167547.19999980927,
+        "frames": [
+          {
+            "t": 147265.7999997139,
+            "id": 1240
+          },
+          {
+            "t": 147532.2999997139,
+            "id": 1242
+          },
+          {
+            "t": 147782.19999980927,
+            "id": 1243
+          },
+          {
+            "t": 148098,
+            "id": 1244
+          },
+          {
+            "t": 148316.2999997139,
+            "id": 1249
+          },
+          {
+            "t": 148632.2999997139,
+            "id": 1251
+          },
+          {
+            "t": 148881.7999997139,
+            "id": 1255
+          },
+          {
+            "t": 149131.09999990463,
+            "id": 1257
+          },
+          {
+            "t": 149416.19999980927,
+            "id": 1276
+          },
+          {
+            "t": 149664.69999980927,
+            "id": 1277
+          },
+          {
+            "t": 149949.09999990463,
+            "id": 1278
+          },
+          {
+            "t": 150249.2999997139,
+            "id": 1279
+          },
+          {
+            "t": 150482.09999990463,
+            "id": 1280
+          },
+          {
+            "t": 150749.19999980927,
+            "id": 1282
+          },
+          {
+            "t": 151015.5,
+            "id": 1287
+          },
+          {
+            "t": 151298.19999980927,
+            "id": 1288
+          },
+          {
+            "t": 151565.2999997139,
+            "id": 1290
+          },
+          {
+            "t": 151916.19999980927,
+            "id": 1291
+          },
+          {
+            "t": 152148.5,
+            "id": 1293
+          },
+          {
+            "t": 152414.90000009537,
+            "id": 1294
+          },
+          {
+            "t": 152697.5,
+            "id": 1296
+          },
+          {
+            "t": 152964.09999990463,
+            "id": 1297
+          },
+          {
+            "t": 153282.90000009537,
+            "id": 1299
+          },
+          {
+            "t": 153499.09999990463,
+            "id": 1300
+          },
+          {
+            "t": 153815.2999997139,
+            "id": 1302
+          },
+          {
+            "t": 154031.09999990463,
+            "id": 1307
+          },
+          {
+            "t": 154316.2999997139,
+            "id": 1308
+          },
+          {
+            "t": 154581.09999990463,
+            "id": 1310
+          },
+          {
+            "t": 154866.09999990463,
+            "id": 1311
+          },
+          {
+            "t": 155132.59999990463,
+            "id": 1315
+          },
+          {
+            "t": 155397.59999990463,
+            "id": 1316
+          },
+          {
+            "t": 155681.19999980927,
+            "id": 1318
+          },
+          {
+            "t": 155948.40000009537,
+            "id": 1319
+          },
+          {
+            "t": 156215.09999990463,
+            "id": 1321
+          },
+          {
+            "t": 156480.59999990463,
+            "id": 1322
+          },
+          {
+            "t": 156747.7999997139,
+            "id": 1323
+          },
+          {
+            "t": 157015.90000009537,
+            "id": 1324
+          },
+          {
+            "t": 157314.90000009537,
+            "id": 1325
+          },
+          {
+            "t": 157582.19999980927,
+            "id": 1327
+          },
+          {
+            "t": 157847.2999997139,
+            "id": 1331
+          },
+          {
+            "t": 158114.19999980927,
+            "id": 1332
+          },
+          {
+            "t": 158482.19999980927,
+            "id": 1333
+          },
+          {
+            "t": 158730.59999990463,
+            "id": 1340
+          },
+          {
+            "t": 159014.19999980927,
+            "id": 1341
+          },
+          {
+            "t": 159249.09999990463,
+            "id": 1342
+          },
+          {
+            "t": 159564.40000009537,
+            "id": 1344
+          },
+          {
+            "t": 159765.7999997139,
+            "id": 1345
+          },
+          {
+            "t": 160097.90000009537,
+            "id": 1347
+          },
+          {
+            "t": 160332.59999990463,
+            "id": 1351
+          },
+          {
+            "t": 160599.19999980927,
+            "id": 1353
+          },
+          {
+            "t": 160897.7999997139,
+            "id": 1357
+          },
+          {
+            "t": 161148.90000009537,
+            "id": 1358
+          },
+          {
+            "t": 161413.69999980927,
+            "id": 1360
+          },
+          {
+            "t": 161682.19999980927,
+            "id": 1361
+          },
+          {
+            "t": 162014.90000009537,
+            "id": 1362
+          },
+          {
+            "t": 162247.09999990463,
+            "id": 1363
+          },
+          {
+            "t": 162531.90000009537,
+            "id": 1365
+          },
+          {
+            "t": 162765.5,
+            "id": 1366
+          },
+          {
+            "t": 163030.90000009537,
+            "id": 1367
+          },
+          {
+            "t": 163332.40000009537,
+            "id": 1368
+          },
+          {
+            "t": 163632.69999980927,
+            "id": 1370
+          },
+          {
+            "t": 163865.59999990463,
+            "id": 1371
+          },
+          {
+            "t": 164147,
+            "id": 1372
+          },
+          {
+            "t": 164432.59999990463,
+            "id": 1373
+          },
+          {
+            "t": 164765.5,
+            "id": 1376
+          },
+          {
+            "t": 165080.40000009537,
+            "id": 1377
+          },
+          {
+            "t": 165314.69999980927,
+            "id": 1379
+          },
+          {
+            "t": 165581.2999997139,
+            "id": 1381
+          },
+          {
+            "t": 165849.59999990463,
+            "id": 1382
+          },
+          {
+            "t": 166098,
+            "id": 1383
+          },
+          {
+            "t": 166381.59999990463,
+            "id": 1384
+          },
+          {
+            "t": 166663.59999990463,
+            "id": 1386
+          },
+          {
+            "t": 166948.7999997139,
+            "id": 1387
+          },
+          {
+            "t": 167214.5,
+            "id": 1388
+          },
+          {
+            "t": 167480.90000009537,
+            "id": 1389
+          }
+        ],
+        "invalid": 0,
+        "raf": 1218
+      },
+      "seconds": 20.164077426001313,
+      "cpuPercent": 14.534267738036451,
+      "memoryMiB": 318.95684523809524,
+      "mbps": 7.553649630584893,
+      "throttledMs": 0,
+      "visibleUpdatesPerSecond": 3.648627327249722,
+      "producerUpdatesPerSecond": 6.612057139825603,
+      "motionQuality": {
+        "scope": "continuous synthetic motion; exact X11/browser marker matching",
+        "seconds": 15,
+        "maxPairs": 60,
+        "samplingTargetMs": 100,
+        "cursorExcluded": {
+          "x": 0,
+          "y": 680,
+          "width": 48,
+          "height": 40
+        },
+        "before": {
+          "mode": "video",
+          "flash": false,
+          "toggles": 40,
+          "frame": 1477,
+          "fps_marker": true,
+          "frozen": false,
+          "producer_hz": 30,
+          "submitted_updates": 1477,
+          "time_ns": 20409413525714,
+          "x": 0,
+          "y": 0
+        },
+        "pairs": [],
+        "errors": [
+          "Insufficient matched-frame evidence: fewer than 10 unique pairs"
+        ],
+        "source": {
+          "samples": 17,
+          "unique": 17,
+          "duplicates": 0,
+          "invalidMarker": 0,
+          "markerDisagreement": 0,
+          "evicted": 0,
+          "stale": 0,
+          "invalidFraction": 0,
+          "unmatchedIds": [
+            1479,
+            1484,
+            1489,
+            1496,
+            1500,
+            1504,
+            1510,
+            1517,
+            1521,
+            1528,
+            1534,
+            1540,
+            1546,
+            1553,
+            1554,
+            1558,
+            1563
+          ],
+          "matchedFraction": 0,
+          "observedIds": [
+            {
+              "id": 1479,
+              "sampleMs": 1875.2640830000164
+            },
+            {
+              "id": 1484,
+              "sampleMs": 2994.3716669999994
+            },
+            {
+              "id": 1489,
+              "sampleMs": 4013.9474580000096
+            },
+            {
+              "id": 1496,
+              "sampleMs": 4513.669750000001
+            },
+            {
+              "id": 1500,
+              "sampleMs": 5916.675958000007
+            },
+            {
+              "id": 1504,
+              "sampleMs": 7185.655874999997
+            },
+            {
+              "id": 1510,
+              "sampleMs": 8039.964250000019
+            },
+            {
+              "id": 1517,
+              "sampleMs": 9548.769457999995
+            },
+            {
+              "id": 1521,
+              "sampleMs": 10055.771750000014
+            },
+            {
+              "id": 1528,
+              "sampleMs": 11063.033125000016
+            },
+            {
+              "id": 1534,
+              "sampleMs": 11266.541125000018
+            },
+            {
+              "id": 1540,
+              "sampleMs": 11473.252999999997
+            },
+            {
+              "id": 1546,
+              "sampleMs": 11686.643207999994
+            },
+            {
+              "id": 1553,
+              "sampleMs": 12188.191625000007
+            },
+            {
+              "id": 1554,
+              "sampleMs": 12886.610792000021
+            },
+            {
+              "id": 1558,
+              "sampleMs": 14168.76129200001
+            },
+            {
+              "id": 1563,
+              "sampleMs": 15022.172083000012
+            }
+          ]
+        },
+        "decoded": {
+          "samples": 149,
+          "unique": 41,
+          "duplicates": 108,
+          "invalidMarker": 0,
+          "markerDisagreement": 0,
+          "evicted": 0,
+          "stale": 0,
+          "invalidFraction": 0,
+          "unmatchedIds": [
+            1389,
+            1391,
+            1392,
+            1393,
+            1398,
+            1400,
+            1402,
+            1403,
+            1404,
+            1405,
+            1407,
+            1408,
+            1410,
+            1411,
+            1413,
+            1414,
+            1415,
+            1416,
+            1418,
+            1419,
+            1421,
+            1426,
+            1427,
+            1428,
+            1430,
+            1435,
+            1437,
+            1448,
+            1449,
+            1459,
+            1460,
+            1462,
+            1463,
+            1464,
+            1465,
+            1467,
+            1468,
+            1469,
+            1470,
+            1472,
+            1473
+          ],
+          "matchedFraction": 0,
+          "observedIds": [
+            {
+              "id": 1389,
+              "sampleMs": 100.25091699999757
+            },
+            {
+              "id": 1391,
+              "sampleMs": 289.4995829999971
+            },
+            {
+              "id": 1392,
+              "sampleMs": 594.7532920000085
+            },
+            {
+              "id": 1393,
+              "sampleMs": 1099.3963330000115
+            },
+            {
+              "id": 1398,
+              "sampleMs": 1401.972208000021
+            },
+            {
+              "id": 1400,
+              "sampleMs": 1804.9823750000214
+            },
+            {
+              "id": 1402,
+              "sampleMs": 2212.6027920000197
+            },
+            {
+              "id": 1403,
+              "sampleMs": 2512.811707999994
+            },
+            {
+              "id": 1404,
+              "sampleMs": 2916.0763330000045
+            },
+            {
+              "id": 1405,
+              "sampleMs": 3324.5893750000105
+            },
+            {
+              "id": 1407,
+              "sampleMs": 3629.4335000000137
+            },
+            {
+              "id": 1408,
+              "sampleMs": 4052.4530830000003
+            },
+            {
+              "id": 1410,
+              "sampleMs": 4338.427041999996
+            },
+            {
+              "id": 1411,
+              "sampleMs": 4741.060874999996
+            },
+            {
+              "id": 1413,
+              "sampleMs": 5151.668999999994
+            },
+            {
+              "id": 1414,
+              "sampleMs": 5546.204542000021
+            },
+            {
+              "id": 1415,
+              "sampleMs": 5955.189542000007
+            },
+            {
+              "id": 1416,
+              "sampleMs": 6249.3907500000205
+            },
+            {
+              "id": 1418,
+              "sampleMs": 6650.779250000021
+            },
+            {
+              "id": 1419,
+              "sampleMs": 6953.905916999996
+            },
+            {
+              "id": 1421,
+              "sampleMs": 7371.857917000016
+            },
+            {
+              "id": 1426,
+              "sampleMs": 7774.007958000002
+            },
+            {
+              "id": 1427,
+              "sampleMs": 8077.933917000017
+            },
+            {
+              "id": 1428,
+              "sampleMs": 8380.202417000022
+            },
+            {
+              "id": 1430,
+              "sampleMs": 8786.954667000013
+            },
+            {
+              "id": 1435,
+              "sampleMs": 9086.451250000013
+            },
+            {
+              "id": 1437,
+              "sampleMs": 9487.452707999997
+            },
+            {
+              "id": 1448,
+              "sampleMs": 9890.866792000015
+            },
+            {
+              "id": 1449,
+              "sampleMs": 10190.934417000011
+            },
+            {
+              "id": 1459,
+              "sampleMs": 10590.672374999995
+            },
+            {
+              "id": 1460,
+              "sampleMs": 10990.743542000011
+            },
+            {
+              "id": 1462,
+              "sampleMs": 11400.820583000022
+            },
+            {
+              "id": 1463,
+              "sampleMs": 11736.516583000019
+            },
+            {
+              "id": 1464,
+              "sampleMs": 12225.944500000012
+            },
+            {
+              "id": 1465,
+              "sampleMs": 12420.240458000015
+            },
+            {
+              "id": 1467,
+              "sampleMs": 12926.525500000018
+            },
+            {
+              "id": 1468,
+              "sampleMs": 13229.252792000014
+            },
+            {
+              "id": 1469,
+              "sampleMs": 13635.12741700001
+            },
+            {
+              "id": 1470,
+              "sampleMs": 13940.017749999999
+            },
+            {
+              "id": 1472,
+              "sampleMs": 14452.677083000017
+            },
+            {
+              "id": 1473,
+              "sampleMs": 14753.195458000002
+            }
+          ]
+        },
+        "after": {
+          "mode": "video",
+          "flash": false,
+          "toggles": 40,
+          "frame": 1569,
+          "fps_marker": true,
+          "frozen": false,
+          "producer_hz": 30,
+          "submitted_updates": 1569,
+          "time_ns": 20424678323555,
+          "x": 0,
+          "y": 0
+        },
+        "elapsedSeconds": 15.13572329200001,
+        "producerFrames": 92,
+        "producerUpdatesPerSecond": 6.026938643949514,
+        "valid": false,
+        "limits": "Sparse instrumented fidelity pass, not full-rate perceptual quality or proof of interior atomicity; resource metrics belong to a separate pass. Match coverage and delivery must accompany quality. No quality pass threshold."
+      },
+      "frozenQuality": {
+        "psnrDb": 28.43749241167593,
+        "meanAbsoluteError": 6.945804759837963,
+        "scope": "full frozen frame; no motion-fidelity claim"
+      },
+      "valid": false
+    }
+  },
+  "latency": {
+    "scroll": [
+      null,
+      null,
+      324,
+      null,
+      null,
+      1859.1000003814697,
+      2627.5999999046326,
+      390.2000002861023,
+      3010.699999809265,
+      null,
+      74.59999990463257,
+      1788.0999999046326,
+      2924.5,
+      358.90000009536743,
+      null,
+      null,
+      1811,
+      2907.199999809265,
+      389.2999997138977,
+      null
+    ],
+    "video": [
+      null,
+      null,
+      null,
+      2576.4000000953674,
+      2626.3999996185303,
+      null,
+      4.800000190734863,
+      null,
+      2755.2000002861023,
+      2492.9000000953674,
+      2873.0999999046326,
+      428.6000003814697,
+      null,
+      2991.9000000953674,
+      2291.800000190735,
+      2575,
+      928.5999999046326,
+      2949.300000190735,
+      null,
+      2176
+    ]
+  },
+  "errors": [
+    "scroll: Invalid marker or input observations",
+    "video: Invalid marker or input observations",
+    "video: motion quality: Insufficient matched-frame evidence: fewer than 10 unique pairs"
+  ],
+  "limits": "Browser animation-frame sampling; optional sparse marker-matched synthetic motion quality is a separate instrumented pass, not full-rate perceptual fidelity. Idle includes marker overhead. Synthetic video is not recorded natural video.",
+  "motionQualitySha256": "28b4d08529311185fca5be35b283462f2520f1cba2788f2f031e08939a1c3f3c",
+  "container": "native-stream-bench-2026-10-27t08-19-02-058z-kasm-a9c0d638",
+  "imageId": "sha256:aa2b9fe4228860fcae86829b1c609139f956f934236bbebdd50bcf143d356712",
+  "browserUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36",
+  "clientSettings": {
+    "before": {
+      "video_quality": "2",
+      "framerate_image_mode": "24",
+      "framerate_streaming_mode": "24",
+      "stream_mode": "-1027",
+      "dynamic_quality_min": "4",
+      "dynamic_quality_max": "9",
+      "treat_lossless": "7",
+      "jpeg_video_quality": "7",
+      "webp_video_quality": "7"
+    },
+    "after": {
+      "video_quality": "10",
+      "framerate_image_mode": "60",
+      "framerate_streaming_mode": "60",
+      "stream_mode": "-1027",
+      "dynamic_quality_min": "4",
+      "dynamic_quality_max": "9",
+      "treat_lossless": "7",
+      "jpeg_video_quality": "7",
+      "webp_video_quality": "7"
+    }
+  },
+  "geometry": {
+    "x": 0,
+    "y": 0
+  },
+  "valid": false,
+  "completed": "2026-10-27T08:22:18.585Z",
+  "network": {
+    "profile": "bandwidth",
+    "queueLimitBytes": 262144,
+    "maxConnections": 32,
+    "activeConnections": 1,
+    "up": {
+      "bytes": 16928,
+      "maxQueuedBytes": 804
+    },
+    "down": {
+      "bytes": 163982092,
+      "maxQueuedBytes": 262144
+    },
+    "connections": 19
+  }
+}

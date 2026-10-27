@@ -1,0 +1,409 @@
+{
+  "title": "Native desktop engine: modular baseline and comparison evidence",
+  "finalImage": "native-stream-lab:baseline / sha256:75ba2cb566ef9b63dcf1dd9e270eeb86f44c81e891e6efd9cd9bb6e92368378c",
+  "finalSourceCommit": "bf54721bb2d4778c77530dd25e50cdfb32aabeec",
+  "selectedRuns": [
+    {
+      "label": "Native final",
+      "kind": "candidate",
+      "raw": "qualification/results/2026-10-27T07-22-13-994Z-native-8d6bd366/raw.json"
+    },
+    {
+      "label": "Native baseline",
+      "kind": "reference",
+      "raw": "qualification/results/2026-10-27T07-23-50-726Z-native-197d3bd3/raw.json"
+    },
+    {
+      "label": "Native final",
+      "kind": "candidate",
+      "raw": "qualification/results/2026-10-27T07-26-57-592Z-native-4d2268bc/raw.json"
+    },
+    {
+      "label": "Selkies 2.1.0",
+      "kind": "reference",
+      "raw": "qualification/results/2026-10-27T07-30-04-192Z-selkies-5b593551/raw.json"
+    },
+    {
+      "label": "Native final",
+      "kind": "candidate",
+      "raw": "qualification/results/2026-10-27T07-33-10-848Z-native-69a68e00/raw.json"
+    },
+    {
+      "label": "Native final",
+      "kind": "candidate",
+      "raw": "qualification/results/game-native-1793086440278/result.json",
+      "profile": "real game"
+    },
+    {
+      "label": "Native final",
+      "kind": "candidate",
+      "raw": "qualification/results/2026-10-27T07-34-55-351Z-native-39f8041e/raw.json"
+    },
+    {
+      "label": "Native final",
+      "kind": "candidate",
+      "raw": "qualification/results/2026-10-27T07-38-02-791Z-native-f12eb220/raw.json"
+    },
+    {
+      "label": "Native final",
+      "kind": "candidate",
+      "raw": "qualification/results/2026-10-27T07-39-40-358Z-native-7a54e7ce/raw.json"
+    },
+    {
+      "label": "Native final",
+      "kind": "candidate",
+      "raw": "qualification/results/game-native-1793086829611/result.json",
+      "profile": "real game"
+    },
+    {
+      "label": "Native final",
+      "kind": "candidate",
+      "raw": "qualification/results/2026-10-27T07-41-24-707Z-native-30c25e86/raw.json"
+    },
+    {
+      "label": "Native final",
+      "kind": "candidate",
+      "raw": "qualification/results/2026-10-27T07-44-32-043Z-native-978bca5f/raw.json"
+    },
+    {
+      "label": "Native final",
+      "kind": "candidate",
+      "raw": "qualification/results/2026-10-27T07-46-08-707Z-native-edaa81bb/raw.json"
+    },
+    {
+      "label": "Native final",
+      "kind": "candidate",
+      "raw": "qualification/results/game-native-1793087217987/result.json",
+      "profile": "real game"
+    },
+    {
+      "label": "Native final",
+      "kind": "candidate",
+      "raw": "bench/results/2026-10-27T07-47-53-853Z-native-76a14377/raw.json",
+      "profile": "original fixture"
+    },
+    {
+      "label": "Native final",
+      "kind": "candidate",
+      "raw": "bench/results/2026-10-27T07-50-13-708Z-native-fa689dce/raw.json",
+      "profile": "original fixture"
+    },
+    {
+      "label": "Native final",
+      "kind": "candidate",
+      "raw": "bench/results/2026-10-27T07-52-32-643Z-native-1c888a0e/raw.json",
+      "profile": "original fixture"
+    },
+    {
+      "label": "Native final",
+      "kind": "candidate",
+      "raw": "qualification/results/applications-native-1793087865308/result.json",
+      "profile": "real desktop"
+    },
+    {
+      "label": "Selkies 2.1.0",
+      "kind": "reference",
+      "raw": "qualification/results/applications-selkies-1793087928083/result.json",
+      "profile": "real desktop"
+    },
+    {
+      "label": "KasmVNC 1.5.2",
+      "kind": "reference",
+      "raw": "qualification/results/applications-kasm-1793087990346/result.json",
+      "profile": "real desktop"
+    },
+    {
+      "label": "Selkies 2.1.0",
+      "kind": "reference",
+      "raw": "qualification/results/game-selkies-1793088052357/result.json",
+      "profile": "real game"
+    },
+    {
+      "label": "KasmVNC 1.5.2",
+      "kind": "reference",
+      "raw": "qualification/results/game-kasm-1793088107541/result.json",
+      "profile": "real game"
+    },
+    {
+      "label": "Native final",
+      "kind": "candidate",
+      "raw": "qualification/results/applications-native-1793088162664/result.json",
+      "profile": "real desktop"
+    },
+    {
+      "label": "Selkies 2.1.0",
+      "kind": "reference",
+      "raw": "qualification/results/applications-selkies-1793088224455/result.json",
+      "profile": "real desktop"
+    },
+    {
+      "label": "KasmVNC 1.5.2",
+      "kind": "reference",
+      "raw": "qualification/results/applications-kasm-1793088286515/result.json",
+      "profile": "real desktop"
+    },
+    {
+      "label": "Selkies 2.1.0",
+      "kind": "reference",
+      "raw": "qualification/results/game-selkies-1793088348083/result.json",
+      "profile": "real game"
+    },
+    {
+      "label": "KasmVNC 1.5.2",
+      "kind": "reference",
+      "raw": "qualification/results/game-kasm-1793088403575/result.json",
+      "profile": "real game"
+    },
+    {
+      "label": "Native final",
+      "kind": "candidate",
+      "raw": "qualification/results/applications-native-1793088458537/result.json",
+      "profile": "real desktop"
+    },
+    {
+      "label": "Selkies 2.1.0",
+      "kind": "reference",
+      "raw": "qualification/results/applications-selkies-1793088520562/result.json",
+      "profile": "real desktop"
+    },
+    {
+      "label": "KasmVNC 1.5.2",
+      "kind": "reference",
+      "raw": "qualification/results/applications-kasm-1793088583086/result.json",
+      "profile": "real desktop"
+    },
+    {
+      "label": "Selkies 2.1.0",
+      "kind": "reference",
+      "raw": "qualification/results/game-selkies-1793088645017/result.json",
+      "profile": "real game"
+    },
+    {
+      "label": "KasmVNC 1.5.2",
+      "kind": "reference",
+      "raw": "qualification/results/game-kasm-1793088700256/result.json",
+      "profile": "real game"
+    },
+    {
+      "label": "Native baseline",
+      "kind": "reference",
+      "raw": "qualification/results/2026-10-27T08-12-35-237Z-native-afe787c1/raw.json"
+    },
+    {
+      "label": "Native baseline",
+      "kind": "reference",
+      "raw": "qualification/results/2026-10-27T08-13-25-019Z-native-b47febc8/raw.json"
+    },
+    {
+      "label": "Selkies 2.1.0",
+      "kind": "reference",
+      "raw": "qualification/results/2026-10-27T08-15-43-671Z-selkies-d12fe7bd/raw.json"
+    },
+    {
+      "label": "Selkies 2.1.0",
+      "kind": "reference",
+      "raw": "qualification/results/2026-10-27T08-16-34-627Z-selkies-17ea19ab/raw.json"
+    },
+    {
+      "label": "KasmVNC 1.5.2",
+      "kind": "reference",
+      "raw": "qualification/results/2026-10-27T08-18-13-074Z-kasm-ea4db653/raw.json"
+    },
+    {
+      "label": "KasmVNC 1.5.2",
+      "kind": "reference",
+      "raw": "qualification/results/2026-10-27T08-19-02-058Z-kasm-a9c0d638/raw.json"
+    },
+    {
+      "label": "KasmVNC 1.5.2",
+      "kind": "reference",
+      "raw": "qualification/results/2026-10-27T06-03-55-016Z-kasm-72e2559a/raw.json"
+    },
+    {
+      "label": "Thunar setup attempt: unsupported CLI option",
+      "kind": "invalid setup",
+      "raw": "qualification/results/applications-native-1793087694834/result.json",
+      "profile": "real desktop"
+    },
+    {
+      "label": "Selkies 2.1.0 (earlier)",
+      "kind": "historical",
+      "raw": "optimize/evidence/2026-10-27T05-13-55-371Z-selkies-da43c484/raw.json",
+      "profile": "original fixture"
+    },
+    {
+      "label": "Native baseline",
+      "kind": "historical",
+      "raw": "optimize/evidence/2026-10-27T05-16-15-867Z-native-3d4a76e4/raw.json",
+      "profile": "original fixture"
+    },
+    {
+      "label": "KasmVNC 1.5.2 (earlier)",
+      "kind": "historical",
+      "raw": "optimize/evidence/2026-10-27T05-18-35-073Z-kasm-b90b156a/raw.json",
+      "profile": "original fixture"
+    },
+    {
+      "label": "KasmVNC 1.5.2 (earlier)",
+      "kind": "historical",
+      "raw": "optimize/evidence/2026-10-27T05-20-55-269Z-kasm-a1d326e6/raw.json",
+      "profile": "original fixture"
+    },
+    {
+      "label": "Selkies 2.1.0 (earlier)",
+      "kind": "historical",
+      "raw": "optimize/evidence/2026-10-27T05-23-14-378Z-selkies-230b6b49/raw.json",
+      "profile": "original fixture"
+    },
+    {
+      "label": "Native baseline",
+      "kind": "historical",
+      "raw": "optimize/evidence/2026-10-27T05-25-34-294Z-native-c33f4803/raw.json",
+      "profile": "original fixture"
+    },
+    {
+      "label": "Native baseline",
+      "kind": "historical",
+      "raw": "optimize/evidence/2026-10-27T05-27-53-133Z-native-c1047892/raw.json",
+      "profile": "original fixture"
+    },
+    {
+      "label": "KasmVNC 1.5.2 (earlier)",
+      "kind": "historical",
+      "raw": "optimize/evidence/2026-10-27T05-30-12-303Z-kasm-e05bfef3/raw.json",
+      "profile": "original fixture"
+    },
+    {
+      "label": "Selkies 2.1.0 (earlier)",
+      "kind": "historical",
+      "raw": "optimize/evidence/2026-10-27T05-32-33-433Z-selkies-bcf7d04d/raw.json",
+      "profile": "original fixture"
+    }
+  ],
+  "verification": [
+    {
+      "name": "Frozen native source and release/sanitizer suites",
+      "status": "17 release + 17 sanitizer checks passed; no reported sanitizer diagnostics",
+      "evidence": "tests/results/final-verification.json"
+    },
+    {
+      "name": "SDK unit/protocol tests",
+      "status": "10 passed",
+      "evidence": "tests/results/sdk-tests.log"
+    },
+    {
+      "name": "Final SDK snapshot with active viewer",
+      "status": "5 framework checks passed against release image",
+      "evidence": "tests/results/framework-final-sdk.json"
+    },
+    {
+      "name": "Final SDK snapshot with active viewer, sanitizer",
+      "status": "5 framework checks passed against ASAN/UBSAN image",
+      "evidence": "tests/results/framework-final-sdk-asan.json"
+    },
+    {
+      "name": "Original contract regression",
+      "status": "14/14 targets and previous-native regression checks passed",
+      "evidence": "qualification/results/general-final/original-regression.json"
+    },
+    {
+      "name": "General serial matrix",
+      "status": "17 valid independent sessions",
+      "evidence": "qualification/results/general-final/matrix.json"
+    },
+    {
+      "name": "Real apps and refreshed references",
+      "status": "19/21 valid; invalid observations retained",
+      "evidence": "qualification/results/real-final/matrix.json"
+    },
+    {
+      "name": "Runner, relay and client provenance",
+      "status": "SHA256 identities recorded",
+      "evidence": "qualification/results/general-final/source-provenance.json"
+    },
+    {
+      "name": "Shared real application data",
+      "status": "Identical copied file manifests checked per run; symlinks omitted uniformly",
+      "evidence": "qualification/results/real-final/documents-source.json"
+    },
+    {
+      "name": "Clean XFCE startup and graceful shutdown",
+      "status": "No benchmark fixture in default image; 17 release and 17 sanitizer checks passed on Node22",
+      "evidence": "tests/results/baseline-verification.json"
+    },
+    {
+      "name": "Measured-to-clean artifact equivalence",
+      "status": "Native binary and installed package database byte-identical",
+      "evidence": "tests/results/binary-equivalence.json"
+    },
+    {
+      "name": "Local package installation and Node support",
+      "status": "Node22 and Node26 SDK tests; local consumer import and installed CLI verified",
+      "evidence": "tests/results/package-smoke.json"
+    },
+    {
+      "name": "SDK minimum-version test log",
+      "status": "10 passed on Node22.22.2",
+      "evidence": "tests/results/sdk-node22.log"
+    },
+    {
+      "name": "Explicit benchmark fixture injection",
+      "status": "Clean-image runner smoke passed",
+      "evidence": "tests/results/baseline-fixture-smoke.json"
+    },
+    {
+      "name": "Bounded variant and validation history",
+      "status": "Three engine variants; final core frozen, real-application extension completed",
+      "evidence": "qualification/results/general-final/experiment-log.json"
+    },
+    {
+      "name": "Clean desktop release integration results",
+      "status": "Recorded; see raw artifact",
+      "evidence": "tests/results/integration-baseline-release.json"
+    },
+    {
+      "name": "Clean desktop sanitizer integration results",
+      "status": "Recorded; see raw artifact",
+      "evidence": "tests/results/integration-baseline-asan.json"
+    },
+    {
+      "name": "Clean desktop sanitizer runtime log",
+      "status": "Recorded; see raw artifact",
+      "evidence": "tests/results/baseline-asan.log"
+    },
+    {
+      "name": "Clean desktop build and native self-checks",
+      "status": "Recorded; see raw artifact",
+      "evidence": "tests/results/baseline-build.log"
+    },
+    {
+      "name": "Sanitizer build and native self-checks",
+      "status": "Recorded; see raw artifact",
+      "evidence": "tests/results/baseline-asan-build.log"
+    },
+    {
+      "name": "Strict TypeScript consumer compilation",
+      "status": "Recorded; see raw artifact",
+      "evidence": "tests/results/package-types.log"
+    }
+  ],
+  "notes": [
+    "The baseline has implemented capture and input interfaces, X11/Xfce backends, a browser H.264 viewer, bounded transport flow, a typed Node SDK and CLI. It is a local experimental framework, not feature parity with the comparison products.",
+    "The runnable baseline starts plain XFCE without the benchmark application. The comparison image bundled the fixture; both images contain an identical native executable and installed package database. Existing benchmark callers explicitly inject the same fixture, and that startup branch is verified separately. Real-application comparisons include the same inactive benchmark application in the background for all engines; do not treat them as measurements of a clean default desktop.",
+    "Real Thunar scroll medians (native / Selkies / KasmVNC): CPU 13.4% / 48.5% / 12.1%, RAM 166.0 MiB / 238.4 MiB / 179.8 MiB, container transmit 1.02 Mbps / 1.35 Mbps / 0.96 Mbps. Native has lower RAM in this workload; CPU, bandwidth and settled quality must be compared separately. Scroll pixel-change frequency is an activity diagnostic, not a smoothness ranking.",
+    "Real Freedoom turn/fire medians (native / Selkies / KasmVNC): CPU 100.9% / 72.8% / 103.7%, RAM 200.0 MiB / 267.1 MiB / 204.6 MiB, container transmit 38.55 Mbps / 5.85 Mbps / 83.02 Mbps. Selkies uses less CPU and bandwidth than native here; native transmits substantially less than KasmVNC. Motion fidelity is unmeasured in this application, so these are operating points rather than equal-quality efficiency rankings.",
+    "The limited-bandwidth synthetic video case remains a weakness: native median frozen PSNR 14.22 dB versus Selkies 34.62 dB, sparse matched-motion median PSNR 18.64 versus 21.58 dB, and input p95 210.1 versus 109.7 ms. Native has three sessions; Selkies has one. Only 11\u201312 native motion pairs and 24 Selkies pairs matched, so inspect coverage counters and raw evidence. These are not quality-matched comparisons; preserving delivered update rate has not solved fidelity or tail latency.",
+    "Real Thunar and Freedoom sessions are reported separately from custom synthetic diagnostics. Each real-application engine has three fresh sessions. The Thunar data are identical real files with checked hashes; actual X11 content and decoded correspondence validate navigation and scrolling. Game checks independently observe held/released native keys and live pixels; they do not establish equal gaming fidelity or input latency.",
+    "Three general-engine variants were measured. Variant 1 introduced bounded pipelining and adaptive VBV; variant 2 repaired cap-relative recovery; variant 3 corrected two congestion masks caused by queue-inflated RTT and an excessive queued-byte guard. The final core is frozen at 143d4ee. No workload names appear in engine policy. Additional time after the original two-hour optimization window is validation requested by the user, not unbounded variant tuning.",
+    "The final original-fixture median is 50.36 visible updates/s against 50.78 producer updates/s; input p95 43.4 ms, CPU 40.2% of one core, RAM 146.4 MiB, container TX 1.27 Mbps. Quiescent idle CPU is 3.26%. The 60 FPS configuration is not proof of sustained 60 FPS.",
+    "The broader synthetic fixture targets 30 Hz and usually produces 27\u201329 updates/s. Its idle case includes marker damage and is not quiescent idle. Local references have n=1; the final candidate has n=3. The earlier original three-engine sessions are historical and not pooled with broad or real-application workloads.",
+    "Lower resource usage must be read with fidelity and latency. No universal winner, equal-quality result, held-out workload claim, WAN claim or Rust-versus-C++ performance claim follows from these measurements."
+  ],
+  "limitations": [
+    "Transmit Mbps is container eth0 TX upstream of the relay, not browser-delivered goodput. Relay queues and socket buffers can skew finite windows. Controlled delay adds 25 ms each direction; limited profile also caps downstream at 8 Mbps and upstream at 2 Mbps.",
+    "The final native and refreshed network references use the same runner and current relay. Older network runs and invalid earlier window cases are retained in qualification/results but are not selected as final comparisons. Kasm local reference has the corrected visible-window fixture and an older runner lacking native telemetry; it remains n=1 diagnostic context.",
+    "Congestion backoff uses a 200 ms absolute age budget. Paths with high propagation delay can trigger conservative backoff; broader WAN policy remains work.",
+    "All selected raw JSON is exported below. Full image-pair sets and original logs remain in qualification/results and bench/results; representative captures are exported beside raw JSON. Missing image files in the compact export are not missing from the local measurement directories.",
+    "Game motion quality, real-application input latency, natural video, browser/editor workloads, prolonged soak, audio, clipboard, IME, resize, hardware encoding, Wayland and GNOME remain outside the verified baseline."
+  ]
+}

@@ -23,6 +23,10 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(values['motionDecodedSamples'], 1)
         self.assertEqual(values['latencyMedian'], 20)
         self.assertEqual(values['latencyP95'], 30)
+        work['motionQuality'].update(source={'samples': 77}, decoded={'samples': 140})
+        values = report.extract(work, [])
+        self.assertEqual(values['motionSourceSamples'], 77)
+        self.assertEqual(values['motionDecodedSamples'], 140)
 
     def test_exclusion_and_provenance(self):
         with tempfile.TemporaryDirectory() as directory:

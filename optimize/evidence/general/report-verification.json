@@ -1,0 +1,8 @@
+{
+  "linksChecked": 71,
+  "missingLinks": [],
+  "rawRunsByteIdentical": 49,
+  "verificationArtifactsByteIdentical": 21,
+  "portableReproductionByteIdentical": true,
+  "motionCoverageCheckedAgainstActualRuns": 10
+}

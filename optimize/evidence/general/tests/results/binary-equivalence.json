@@ -1,0 +1,18 @@
+{
+  "measuredImage": "sha256:bac60f6d460d68d742aef28140d0f9b34512d940dcea3300c2ada863d40b3662",
+  "measuredContainer": "native-stream-bench-2026-10-27t07-52-32-643z-native-1c888a0e",
+  "cleanContainer": "native-baseline-verify",
+  "files": {
+    "nativeBinary": {
+      "measuredSha256": "b84c89e3341649d9ce26d01b52ec4b6d976283dfc4fe4a6aa66aff559fefc470",
+      "cleanSha256": "b84c89e3341649d9ce26d01b52ec4b6d976283dfc4fe4a6aa66aff559fefc470",
+      "identical": true
+    },
+    "packageDatabase": {
+      "measuredSha256": "b534a84b2ec7411c0c9c4b5d6739ddd6684b901b726a9307de7ff8c1e040d85e",
+      "cleanSha256": "b534a84b2ec7411c0c9c4b5d6739ddd6684b901b726a9307de7ff8c1e040d85e",
+      "identical": true
+    }
+  },
+  "cleanImage": "sha256:75ba2cb566ef9b63dcf1dd9e270eeb86f44c81e891e6efd9cd9bb6e92368378c"
+}

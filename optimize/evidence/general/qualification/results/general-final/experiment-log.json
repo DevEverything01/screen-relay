@@ -1,0 +1,64 @@
+{
+  "run_id": "native-general-20261027",
+  "approval": "Proceed with the bounded general-engine pass",
+  "started_at": "2026-10-27T06:07:00Z",
+  "variants": [
+    {
+      "variant": 1,
+      "image": "native-stream-lab:general1",
+      "image_id": "sha256:61684e2f86c1e0e2feb8f2cd87335944de3d46b2f2f97bdfb5f2bfbe9ae4bc17",
+      "source": "/private/tmp/native-general1-build",
+      "correctness": "tests/results/integration-general1.json",
+      "prefixed_regression": "tests/results/integration-general-before-regression.json",
+      "runs": [
+        "2026-10-27T06-47-37-409Z-native-63cc0302",
+        "2026-10-27T06-49-15-585Z-native-b0d87060"
+      ],
+      "outcome": "12 checks pass; network throughput and latency improved; VBV recovery underutilization identified; lower frozen quality requires correction and honest tradeoff reporting"
+    },
+    {
+      "variant": 2,
+      "image": "native-stream-lab:general2b",
+      "correctness": [
+        "tests/results/integration-general2b.json",
+        "tests/results/framework-general2b-focus.json",
+        "tests/results/integration-general2b-asan.json",
+        "tests/results/framework-general2b-asan.json"
+      ],
+      "runs": [
+        "2026-10-27T07-04-37-400Z-native-2c9f1e23",
+        "2026-10-27T07-09-06-170Z-native-7c8b91ce"
+      ],
+      "change": "Remove cap-relative recovery requirement; add actual backend boundaries and SDK/control/snapshot surface. Fix REST error response completion before measurement.",
+      "outcome": "17 release and 17 sanitizer checks pass; local video delivery preserved with reduced bandwidth and fidelity; bandwidth video p95 310 ms exposes congestion reduction masked by queue-inflated RTT and high byte guard."
+    },
+    {
+      "variant": 3,
+      "image": "native-stream-lab:general3",
+      "sourceCommit": "143d4eeac4a757f7018e7bb3fc04c5c196c39c7c",
+      "image_id": "sha256:bac60f6d460d68d742aef28140d0f9b34512d940dcea3300c2ada863d40b3662",
+      "change": "Trigger sustained queue reduction at 200 ms within the 250 ms admission budget, with queued-byte guard capped at 64 KiB. No workload-name branches.",
+      "correctness": "tests/results/final-verification.json",
+      "outcome": "17 frozen-source sessions valid; 14 absolute/previous-native gates passed. Three real Thunar and three real Freedoom sessions per engine passed. Two fresh shaped reference runs invalid and excluded. Clean packaging release17+ASAN17 and Node22/26 SDK10 each passed.",
+      "confirmation": "qualification/results/general-final/matrix.json"
+    }
+  ],
+  "status": "complete",
+  "reference_matrix": "../../../../qualification/results/breadth-matrix/matrix.json",
+  "runtime_probe": "../../../../probes/results/rate-control.json",
+  "final_matrix": "qualification/results/general-final/matrix.json",
+  "validation_extension": {
+    "authorized_at": "2026-10-27T07:37:51Z",
+    "instruction": "User away; make decisions, use agents, continue until a solid modular baseline compared with the two engines; do not ask questions.",
+    "scope": "Freeze native variant3; extend real-application comparisons, current-runner references, API verification and final report beyond original optimization deadline.",
+    "new_core_variants": 0
+  },
+  "completed_at": "2026-10-27T08:31:15Z",
+  "real_matrix": "qualification/results/real-final/matrix.json",
+  "final_packaging": {
+    "image": "native-stream-lab:baseline",
+    "change": "Default plain XFCE; optional fixture injected by benchmark callers",
+    "binaryEquivalence": "tests/results/binary-equivalence.json",
+    "verification": "tests/results/baseline-verification.json"
+  }
+}

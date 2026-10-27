@@ -18,7 +18,7 @@ The fixture, runner, app data and competitor configuration are part of the measu
 
 ## Next steps
 
-1. Broaden deployment evidence: natural video and real browser/editor workloads, hardware presentation and input latency, long sessions, packet loss, more resolutions and architectures. Include client decoding CPU/GPU and memory in the end-to-end budget. Fix measured bottlenecks before adding features.
+1. Fix the measured limited-bandwidth video fidelity and tail-latency weaknesses in the [final comparison](../optimize/general-engine-report.md). Compare at matched quality and measure recovery after congestion. Then broaden evidence to natural video and real browser/editor workloads, hardware presentation and input latency, long sessions, packet loss, more resolutions and architectures. Include client decoding CPU/GPU and memory in the end-to-end budget.
 2. Add an actual Wayland capture/input implementation behind the current boundaries. Resolve portal permission and revocation, negotiated frame ownership/format, resize and held-input cleanup; validate on GNOME and the intended compositor. Revise the CPU-frame contract deliberately if GPU buffers are needed.
 3. Before exposure beyond loopback, implement and test authentication, authorization and TLS, then address multi-user/session isolation. Audio, clipboard, IME, resize, cursor images and hardware encoding each need an explicit contract and end-to-end evidence.
 

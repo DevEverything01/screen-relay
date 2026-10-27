@@ -1,0 +1,26 @@
+{
+  "images": {
+    "release": "sha256:75ba2cb566ef9b63dcf1dd9e270eeb86f44c81e891e6efd9cd9bb6e92368378c",
+    "asan": "sha256:9e638198b0d3f28c532362b9a4401ce3480c65d7a56cd21513c75e9caa456cf0"
+  },
+  "binaryHashes": {
+    "release": "b84c89e3341649d9ce26d01b52ec4b6d976283dfc4fe4a6aa66aff559fefc470",
+    "asan": "290b4b0c199e4ee6b6414e7f66a2521379f07351b2676a8f4d1cbacc1f111135"
+  },
+  "checks": {
+    "integration-baseline-release.json": 12,
+    "framework-final-sdk.json": 5,
+    "integration-baseline-asan.json": 12,
+    "framework-final-sdk-asan.json": 5
+  },
+  "cleanDesktop": {
+    "release": {
+      "benchmarkFixtureAbsent": true,
+      "gracefulExit": 0
+    },
+    "asan": {
+      "benchmarkFixtureAbsent": true,
+      "gracefulExit": 0
+    }
+  }
+}

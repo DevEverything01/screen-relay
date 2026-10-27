@@ -55,6 +55,8 @@ Integration needs installed Google Chrome and a dedicated container; tests tempo
 
 The general3 candidate passed 12 browser/video and five framework checks in release and ASAN/UBSAN builds. Graceful sanitizer termination exited zero with no reported leak/runtime error; system libraries were not instrumented. Ten SDK tests cover validation, ACKs, disconnect, pending limits, malformed replies, body/file errors and snapshot commands that do not acquire control.
 
+The [modular baseline report](optimize/general-engine-report.md) ([HTML](optimize/general-engine-report.html)) includes real Thunar and Freedoom comparisons, the broader network matrix, verification logs and remaining limitations. Reproduce it from the portable evidence with `python3 qualification/report.py optimize/evidence/general/qualification/results/general-final/manifest.json --root optimize/evidence/general`.
+
 The [initial nine-session comparison](optimize/native-stream-report.md) ([HTML](optimize/native-stream-report.html)) remains narrow historical evidence. [Broader qualification](qualification/README.md) records CPU, RAM, bandwidth, delivered updates, latency and fidelity together. Comparative runs require separately prepared competitor images and credentials. No universal winner follows from unequal-quality operating points.
 
 Current limits: CPU capture, fixed 720p, one controller, mapped keyboard subset. No Wayland backend, authentication, TLS, IME, audio, clipboard, resize, cursor-image capture, relative pointer, hardware encoding or simultaneous viewer/agent control. GNOME, physical presentation, packet loss and browser/VM resources are unverified. C++ was chosen for direct native-library integration; no Rust-versus-C++ benchmark was performed.
