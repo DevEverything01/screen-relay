@@ -4,6 +4,14 @@ const canvas = document.querySelector("#screen"),
   status = document.querySelector("#status");
 const cursor = document.querySelector("#cursor"), cursorContext = cursor.getContext("2d");
 let accessToken = '';
+const trustedPage = location.protocol === 'https:' || ['localhost', '127.0.0.1'].includes(location.hostname);
+{
+  const fragmentToken = new URLSearchParams(location.hash.slice(1)).get('token');
+  if (fragmentToken !== null) {
+    history.replaceState(null, '', location.pathname + location.search);
+    if (/^[0-9a-f]{64}$/.test(fragmentToken) && trustedPage) accessToken = fragmentToken;
+  }
+}
 let cursorAvailable = false, cursorHotX = 0, cursorHotY = 0, pointerPosition;
 function renderCursor() {
   canvas.style.cursor = cursorAvailable && ready ? "none" : "default";
@@ -540,8 +548,7 @@ document.addEventListener("visibilitychange", () => {
 });
 document.querySelector("#reconnect").addEventListener("click", () => {
   const value = document.querySelector('#access-token').value.trim();
-  if (value && (!/^[0-9a-f]{64}$/.test(value) ||
-      (location.protocol !== 'https:' && !['localhost', '127.0.0.1'].includes(location.hostname)))) {
+  if (value && (!/^[0-9a-f]{64}$/.test(value) || !trustedPage)) {
     status.textContent = 'Use a 64-character token over HTTPS or a localhost tunnel';
     return;
   }
