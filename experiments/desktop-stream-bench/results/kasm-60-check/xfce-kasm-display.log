@@ -1,0 +1,62 @@
+
+Xvnc KasmVNC 1.5.2.b3ab9ac88e5283e986c65236cf0ed7462ec1505e - built Oct 21 2026 09:33:57
+Copyright (C) 1999-2026 KasmVNC Team and many others (see README.me)
+See http://kasmweb.com for information on KasmVNC.
+Underlying X server release 12101007
+
+ 2026-10-27 03:51:47,268 [INFO] ICE: Using public IP 127.0.0.1 from args
+ 2026-10-27 03:51:47,268 [INFO] vncext: VNC extension running!
+ 2026-10-27 03:51:47,270 [INFO] vncext: Listening for websocket connections on 0.0.0.0 interface(s), port 8080
+ 2026-10-27 03:51:47,307 [INFO] VNCServerST: CPU capability: SSE2 no, SSE4.1 no, SSE4.2 no, AVX512f no
+ 2026-10-27 03:51:47,307 [INFO] VNCServerST: Hardware video encoding acceleration capability: none
+ 2026-10-27 03:51:47,307 [INFO] vncext: created VNC server for screen 0
+ 2026-10-27 03:51:47,380 [INFO] Input: Mouse horizontal scroll factor: 50.000000
+ 2026-10-27 03:51:47,380 [INFO] Input: Mouse vertical scroll factor: 50.000000
+[mi] mieq: warning: overriding existing handler (nil) with 0xaaaac80f9088 for event 2
+[mi] mieq: warning: overriding existing handler (nil) with 0xaaaac80f9088 for event 3
+ 2026-10-27 03:51:47,404 [INFO] websocket 0: got client connection from 172.17.0.1
+ 2026-10-27 03:51:47,407 [INFO] websocket 0: 172.17.0.1 172.17.0.1 bench "GET /index.html HTTP/1.1" 200 70877
+ 2026-10-27 03:51:47,419 [INFO] websocket 1: got client connection from 172.17.0.1
+ 2026-10-27 03:51:47,421 [INFO] websocket 2: got client connection from 172.17.0.1
+ 2026-10-27 03:51:47,421 [INFO] websocket 3: got client connection from 172.17.0.1
+ 2026-10-27 03:51:47,421 [INFO] websocket 4: got client connection from 172.17.0.1
+ 2026-10-27 03:51:47,421 [INFO] websocket 5: got client connection from 172.17.0.1
+ 2026-10-27 03:51:47,427 [INFO] websocket 6: got client connection from 172.17.0.1
+ 2026-10-27 03:51:47,428 [INFO] websocket 1: 172.17.0.1 172.17.0.1 bench "GET /assets/ui-DKMQOe2K.js HTTP/1.1" 200 551110
+ 2026-10-27 03:51:47,428 [INFO] websocket 2: 172.17.0.1 172.17.0.1 bench "GET /assets/ui-PaSsnzBa.css HTTP/1.1" 200 52950
+ 2026-10-27 03:51:47,430 [INFO] websocket 4: 172.17.0.1 172.17.0.1 bench "GET /assets/toggleextrakeys-CmGlT_ei.svg HTTP/1.1" 200 4551
+ 2026-10-27 03:51:47,430 [INFO] websocket 5: 172.17.0.1 172.17.0.1 bench "GET /assets/keyboard-XAYSNaxM.svg HTTP/1.1" 200 6514
+ 2026-10-27 03:51:47,437 [INFO] websocket 3: 172.17.0.1 172.17.0.1 bench "GET /assets/drag-BAMk-8Cy.svg HTTP/1.1" 200 4794
+ 2026-10-27 03:51:47,441 [INFO] websocket 6: 172.17.0.1 172.17.0.1 bench "GET /assets/ctrl-DWDnpgzu.svg HTTP/1.1" 200 4491
+ 2026-10-27 03:51:47,457 [INFO] websocket 7: got client connection from 172.17.0.1
+ 2026-10-27 03:51:47,457 [INFO] websocket 8: got client connection from 172.17.0.1
+ 2026-10-27 03:51:47,457 [INFO] websocket 9: got client connection from 172.17.0.1
+ 2026-10-27 03:51:47,460 [INFO] websocket 10: got client connection from 172.17.0.1
+ 2026-10-27 03:51:47,462 [INFO] websocket 8: 172.17.0.1 172.17.0.1 bench "GET /assets/disconnect-BEcDH18f.svg HTTP/1.1" 200 5172
+ 2026-10-27 03:51:47,463 [INFO] websocket 9: 172.17.0.1 172.17.0.1 bench "GET /assets/esc-DBerPpvV.svg HTTP/1.1" 200 4632
+ 2026-10-27 03:51:47,463 [INFO] websocket 7: 172.17.0.1 172.17.0.1 bench "GET /assets/bell-BmA9-LrF.oga HTTP/1.1" 200 8616
+ 2026-10-27 03:51:47,464 [INFO] websocket 10: 172.17.0.1 172.17.0.1 bench "GET /assets/splash-D03O8R4K.jpg HTTP/1.1" 200 95597
+ 2026-10-27 03:51:47,484 [INFO] websocket 11: got client connection from 172.17.0.1
+ 2026-10-27 03:51:47,487 [INFO] websocket 11: 172.17.0.1 172.17.0.1 bench "GET /assets/Orbitron700-DI3tXiXq.woff HTTP/1.1" 200 17594
+ 2026-10-27 03:51:47,530 [INFO] websocket 12: got client connection from 172.17.0.1
+ 2026-10-27 03:51:47,534 [INFO] websocket 12: 172.17.0.1 172.17.0.1 bench "GET /assets/368_kasm_logo_only_32x32-ig-uDAV_.png HTTP/1.1" 200 7729
+ 2026-10-27 03:51:47,552 [INFO] websocket 13: got client connection from 172.17.0.1
+ 2026-10-27 03:51:47,556 [INFO] websocket 13: 172.17.0.1 172.17.0.1 bench "GET /package.json HTTP/1.1" 200 2926
+ 2026-10-27 03:51:47,560 [INFO] websocket 14: got client connection from 172.17.0.1
+ 2026-10-27 03:51:47,570 [INFO] EncodeManager: WEBP benchmark result: 3 ms
+ 2026-10-27 03:51:47,570 [PRIO] Connections: accepted: bench@172.17.0.1_1793073107.563288::websocket
+ 2026-10-27 03:51:47,572 [INFO] SConnection: Client needs protocol version 3.8
+ 2026-10-27 03:51:47,574 [INFO] SConnection: Client requests security type None(1)
+ 2026-10-27 03:51:47,574 [INFO] VNCSConnST: Generated username: bench
+ 2026-10-27 03:51:47,574 [INFO] VNCSConnST: User bench connected at 1793073107
+ 2026-10-27 03:51:47,584 [INFO] VNCSConnST: Server default pixel format depth 24 (32bpp) little-endian rgb888
+ 2026-10-27 03:51:47,584 [INFO] VNCSConnST: Authentication successful for user: bench
+ 2026-10-27 03:51:47,584 [INFO] VNCServerST: User bench joined  - sent notifications to 0 clients
+ 2026-10-27 03:51:47,584 [INFO] VNCSConnST: Notifying other clients that user 'bench' joined the shared session
+ 2026-10-27 03:51:47,587 [INFO] VNCSConnST: Client pixel format depth 24 (32bpp) little-endian bgr888
+ 2026-10-27 03:51:47,588 [INFO] websocket 15: got client connection from 172.17.0.1
+ 2026-10-27 03:51:47,591 [INFO] websocket 15: 172.17.0.1 172.17.0.1 bench "GET /assets/handle_bg-YkRQCoNH.svg HTTP/1.1" 200 6496
+ 2026-10-27 03:51:47,591 [INFO] VNCSConnST: Client tried to subscribe to nonexistent unix channel printer
+ 2026-10-27 03:51:47,591 [INFO] VNCSConnST: Client tried to subscribe to nonexistent unix channel smartcard
+ 2026-10-27 03:52:24,062 [INFO] websocket 16: got client connection from 172.17.0.1
+ 2026-10-27 03:52:24,066 [INFO] websocket 16: 172.17.0.1 172.17.0.1 bench "GET /assets/368_kasm_logo_only_192x192-5ckMOqv_.png HTTP/1.1" 200 18973

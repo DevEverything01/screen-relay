@@ -34,12 +34,12 @@ The ten VM scenarios exercised:
 
 Evidence:
 
-- [Release receipt](../tests/results/portable/release/verification.json)
-- [Sanitizer receipt](../tests/results/portable/sanitizer/verification.json)
-- [Actual VM desktop PNG](../tests/results/portable/vm-desktop.png)
-- [Initial installation log](../tests/results/portable/native-stream-install.log)
-- [Final installation log](../tests/results/portable/native-stream-final-install.log)
-- [Native suites log](../tests/results/portable/native-stream-unit.log)
+- [Release receipt](../experiments/engine-evaluation/test-receipts/portable/release/verification.json)
+- [Sanitizer receipt](../experiments/engine-evaluation/test-receipts/portable/sanitizer/verification.json)
+- [Actual VM desktop PNG](../experiments/engine-evaluation/test-receipts/portable/vm-desktop.png)
+- [Initial installation log](../experiments/engine-evaluation/test-receipts/portable/native-stream-install.log)
+- [Final installation log](../experiments/engine-evaluation/test-receipts/portable/native-stream-final-install.log)
+- [Native suites log](../experiments/engine-evaluation/test-receipts/portable/native-stream-unit.log)
 
 The receipts retain the environment, native binary SHA-256, relevant source
 hashes, application observations, timings and cleanup results. Engine logs are

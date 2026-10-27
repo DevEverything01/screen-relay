@@ -1,0 +1,28 @@
+[libx264 @ 0x519000010480] using cpu capabilities: ARMv8 NEON
+[libx264 @ 0x519000010480] profile Constrained Baseline, level 3.2, 4:2:0, 8-bit
+[2026/10/27 13:21:03:7827] N: lws_create_context: LWS: 4.3.3-unknown, NET CLI SRV H1 H2 WS ConMon IPV6-on
+[2026/10/27 13:21:03:7827] N: __lws_lc_tag:  ++ [wsi|0|pipe] (1)
+[2026/10/27 13:21:03:7828] N: __lws_lc_tag:  ++ [vh|0|netlink] (1)
+[2026/10/27 13:21:03:7829] N: __lws_lc_tag:  ++ [vh|1|default|0.0.0.0|0.0.0.0|18114] (2)
+[2026/10/27 13:21:03:7831] N: [vh|1|default|0.0.0.0|0.0.0.0|18114]: lws_socket_bind: source ads 0.0.0.0
+[2026/10/27 13:21:03:7832] N: __lws_lc_tag:  ++ [wsi|1|listen|default|0.0.0.0|18114] (2)
+Native stream listening on 0.0.0.0:18114
+{"ready":true,"pid":8770,"port":18114}
+[2026/10/27 13:21:04:3793] N: __lws_lc_tag:  ++ [wsisrv|0|adopted] (1)
+[2026/10/27 13:21:04:4026] N: __lws_lc_tag:  ++ [wsisrv|1|adopted] (2)
+[2026/10/27 13:21:04:4031] W: User code denied connection
+[2026/10/27 13:21:04:4032] N: __lws_lc_untag:  -- [wsisrv|1|adopted] (1) 507μs
+[2026/10/27 13:21:04:4987] N: __lws_lc_tag:  ++ [wsisrv|2|adopted] (2)
+[2026/10/27 13:21:04:6103] N: __lws_lc_untag:  -- [wsisrv|0|adopted] (1) 230.985ms
+[2026/10/27 13:21:04:6205] N: __lws_lc_untag:  -- [wsisrv|2|adopted] (0) 121.826ms
+[libx264 @ 0x519000010480] frame I:1     Avg QP: 7.00  size:  6380
+[libx264 @ 0x519000010480] mb I  I16..4: 100.0%  0.0%  0.0%
+[libx264 @ 0x519000010480] coded y,uvDC,uvAC intra: 0.5% 0.5% 0.5%
+[libx264 @ 0x519000010480] i16 v,h,dc,p: 92%  4%  4%  0%
+[libx264 @ 0x519000010480] i8c dc,h,v,p: 96%  3%  1%  0%
+[libx264 @ 0x519000010480] kb/s:3062.40
+capture_stats captures=1 encoded=1 capture_ns=983761 convert_ns=2851366 encode_ns=3549456
+[2026/10/27 13:21:05:2055] N: __lws_lc_untag:  -- [wsi|0|pipe] (1) 1.422s
+[2026/10/27 13:21:05:2055] N: __lws_lc_untag:  -- [vh|1|default|0.0.0.0|0.0.0.0|18114] (1) 1.422s
+[2026/10/27 13:21:05:2055] N: __lws_lc_untag:  -- [wsi|1|listen|default|0.0.0.0|18114] (0) 1.422s
+[2026/10/27 13:21:05:2055] N: __lws_lc_untag:  -- [vh|0|netlink] (0) 1.422s

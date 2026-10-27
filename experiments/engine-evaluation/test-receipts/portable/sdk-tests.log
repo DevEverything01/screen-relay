@@ -1,0 +1,23 @@
+
+> test
+> node --test sdk/index.test.js
+
+✔ control input uses the protocol and awaits its matching acknowledgement (2.061ms)
+✔ input timeout closes the session and rejects other pending input (32.330041ms)
+✔ malformed response closes session and rejects pending input (0.409584ms)
+✔ control bounds outstanding input and rejects it when closed (0.519917ms)
+✔ disconnect rejects in-flight input (0.174458ms)
+✔ connection failure closes the socket before rejecting (0.180125ms)
+✔ JSON parse errors and body timeouts have stable codes (24.834667ms)
+✔ HTTP error bodies distinguish snapshot contention from service failure (0.49875ms)
+✔ snapshot body failures and file failures have stable codes (1.259417ms)
+✔ SDK and CLI snapshots do not open a control connection (82.468042ms)
+✔ remote credentials require HTTPS and are not forwarded through redirects (21.22825ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 299.569042

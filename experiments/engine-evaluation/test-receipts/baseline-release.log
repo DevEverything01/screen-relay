@@ -1,0 +1,134 @@
+server does not have extension for -dpms option
+dbus-run-session: ignoring unknown child process 26
+dbus-daemon[7]: [session uid=1000 pid=7 pidfd=5] Activating service name='org.a11y.Bus' requested by ':1.1' (uid=1000 pid=29 comm="xfce4-session")
+dbus-daemon[7]: [session uid=1000 pid=7 pidfd=5] Successfully activated service 'org.a11y.Bus'
+dbus-daemon[7]: [session uid=1000 pid=7 pidfd=5] Activating service name='org.xfce.Xfconf' requested by ':1.3' (uid=1000 pid=29 comm="xfce4-session")
+dbus-daemon[7]: [session uid=1000 pid=7 pidfd=5] Successfully activated service 'org.xfce.Xfconf'
+dbus-daemon[38]: Activating service name='org.a11y.atspi.Registry' requested by ':1.0' (uid=1000 pid=29 comm="xfce4-session")
+SpiRegistry daemon is running with well-known name - org.a11y.atspi.Registry
+dbus-daemon[38]: Successfully activated service 'org.a11y.atspi.Registry'
+dbus-daemon[7]: [session uid=1000 pid=7 pidfd=5] Activating service name='ca.desrt.dconf' requested by ':1.7' (uid=1000 pid=79 comm="xfsettingsd")
+dbus-daemon[7]: [session uid=1000 pid=7 pidfd=5] Successfully activated service 'ca.desrt.dconf'
+[libx264 @ 0xffff9400de90] using cpu capabilities: ARMv8 NEON
+[libx264 @ 0xffff9400de90] profile Constrained Baseline, level 3.2, 4:2:0, 8-bit
+[2026/10/27 08:26:05:4921] N: lws_create_context: LWS: 4.3.5-unknown, NET CLI SRV H1 H2 WS ConMon IPV6-on
+[2026/10/27 08:26:05:4954] N: __lws_lc_tag:  ++ [wsi|0|pipe] (1)
+[2026/10/27 08:26:05:4954] N: __lws_lc_tag:  ++ [vh|0|netlink] (1)
+[2026/10/27 08:26:05:4954] N: __lws_lc_tag:  ++ [vh|1|default|0.0.0.0|0.0.0.0|8080] (2)
+[2026/10/27 08:26:05:4958] N: [vh|1|default|0.0.0.0|0.0.0.0|8080]: lws_socket_bind: source ads 0.0.0.0
+[2026/10/27 08:26:05:4958] N: __lws_lc_tag:  ++ [wsi|1|listen|default|0.0.0.0|8080] (2)
+Native stream lab on :8080; publish Docker port to host loopback only
+[2026/10/27 08:26:07:4595] N: __lws_lc_tag:  ++ [wsisrv|0|adopted] (1)
+[2026/10/27 08:26:07:4908] N: __lws_lc_tag:  ++ [wsisrv|1|adopted] (2)
+[2026/10/27 08:26:11:0320] N: __lws_lc_tag:  ++ [wsisrv|2|adopted] (3)
+[2026/10/27 08:26:11:0497] N: __lws_lc_tag:  ++ [wsisrv|3|adopted] (4)
+[2026/10/27 08:26:11:0500] W: User code denied connection
+[2026/10/27 08:26:11:0512] N: __lws_lc_untag:  -- [wsisrv|3|adopted] (3) 1.458ms
+[2026/10/27 08:26:11:0858] N: __lws_lc_untag:  -- [wsisrv|2|adopted] (2) 53.706ms
+[2026/10/27 08:26:13:4153] N: __lws_lc_untag:  -- [wsisrv|1|adopted] (1) 5.924s
+[2026/10/27 08:26:13:4397] N: __lws_lc_untag:  -- [wsisrv|0|adopted] (0) 5.980s
+[2026/10/27 08:26:13:5903] N: __lws_lc_tag:  ++ [wsisrv|4|adopted] (1)
+[2026/10/27 08:26:13:6171] N: __lws_lc_tag:  ++ [wsisrv|5|adopted] (2)
+[2026/10/27 08:26:13:7083] N: __lws_lc_untag:  -- [wsisrv|5|adopted] (1) 91.279ms
+[2026/10/27 08:26:13:7348] N: __lws_lc_untag:  -- [wsisrv|4|adopted] (0) 144.529ms
+[2026/10/27 08:26:13:8571] N: __lws_lc_tag:  ++ [wsisrv|6|adopted] (1)
+[2026/10/27 08:26:13:8725] N: __lws_lc_tag:  ++ [wsisrv|7|adopted] (2)
+[2026/10/27 08:26:13:8912] N: __lws_lc_untag:  -- [wsisrv|7|adopted] (1) 18.741ms
+[2026/10/27 08:26:13:9261] N: __lws_lc_untag:  -- [wsisrv|6|adopted] (0) 69.010ms
+[2026/10/27 08:26:14:0855] N: __lws_lc_tag:  ++ [wsisrv|8|adopted] (1)
+[2026/10/27 08:26:14:1142] N: __lws_lc_tag:  ++ [wsisrv|9|adopted] (2)
+[2026/10/27 08:26:14:1623] N: __lws_lc_untag:  -- [wsisrv|9|adopted] (1) 48.116ms
+[2026/10/27 08:26:14:2024] N: __lws_lc_untag:  -- [wsisrv|8|adopted] (0) 116.941ms
+[2026/10/27 08:26:14:3351] N: __lws_lc_tag:  ++ [wsisrv|a|adopted] (1)
+[2026/10/27 08:26:14:3549] N: __lws_lc_tag:  ++ [wsisrv|b|adopted] (2)
+[2026/10/27 08:26:14:3644] N: __lws_lc_untag:  -- [wsisrv|b|adopted] (1) 9.534ms
+[2026/10/27 08:26:14:3938] N: __lws_lc_untag:  -- [wsisrv|a|adopted] (0) 58.716ms
+[2026/10/27 08:26:14:5185] N: __lws_lc_tag:  ++ [wsisrv|c|adopted] (1)
+[2026/10/27 08:26:14:5380] N: __lws_lc_tag:  ++ [wsisrv|d|adopted] (2)
+[2026/10/27 08:26:14:5760] N: __lws_lc_untag:  -- [wsisrv|d|adopted] (1) 38.022ms
+[2026/10/27 08:26:14:5983] N: __lws_lc_untag:  -- [wsisrv|c|adopted] (0) 79.735ms
+[2026/10/27 08:26:14:8034] N: __lws_lc_tag:  ++ [wsisrv|e|adopted] (1)
+[2026/10/27 08:26:14:8172] N: __lws_lc_tag:  ++ [wsisrv|f|adopted] (2)
+Viewer flow failure, 3s frame age, or no ACK progress for 3s
+[2026/10/27 08:26:17:8320] N: __lws_lc_untag:  -- [wsisrv|f|adopted] (1) 3.015s
+[2026/10/27 08:26:17:8662] N: __lws_lc_untag:  -- [wsisrv|e|adopted] (0) 3.063s
+[2026/10/27 08:26:18:0288] N: __lws_lc_tag:  ++ [wsisrv|10|adopted] (1)
+[2026/10/27 08:26:18:0483] N: __lws_lc_tag:  ++ [wsisrv|11|adopted] (2)
+[2026/10/27 08:26:18:0883] N: __lws_lc_untag:  -- [wsisrv|11|adopted] (1) 40.017ms
+[2026/10/27 08:26:18:1098] N: __lws_lc_untag:  -- [wsisrv|10|adopted] (0) 81.034ms
+[2026/10/27 08:26:18:4234] N: __lws_lc_tag:  ++ [wsisrv|12|adopted] (1)
+[2026/10/27 08:26:18:4377] N: __lws_lc_tag:  ++ [wsisrv|13|adopted] (2)
+Viewer flow failure, 3s frame age, or no ACK progress for 3s
+[2026/10/27 08:26:21:6600] N: __lws_lc_untag:  -- [wsisrv|13|adopted] (1) 3.222s
+[2026/10/27 08:26:21:7140] N: __lws_lc_untag:  -- [wsisrv|12|adopted] (0) 3.290s
+[2026/10/27 08:26:21:9860] N: __lws_lc_tag:  ++ [wsisrv|14|adopted] (1)
+[2026/10/27 08:26:21:9993] N: __lws_lc_tag:  ++ [wsisrv|15|adopted] (2)
+[2026/10/27 08:26:22:0438] N: __lws_lc_untag:  -- [wsisrv|15|adopted] (1) 44.488ms
+[2026/10/27 08:26:22:0718] N: __lws_lc_untag:  -- [wsisrv|14|adopted] (0) 85.828ms
+[2026/10/27 08:26:22:2124] N: __lws_lc_tag:  ++ [wsisrv|16|adopted] (1)
+[2026/10/27 08:26:22:2134] W: User code denied connection
+[2026/10/27 08:26:22:2150] N: __lws_lc_untag:  -- [wsisrv|16|adopted] (0) 2.658ms
+[2026/10/27 08:26:23:2745] N: __lws_lc_tag:  ++ [wsisrv|17|adopted] (1)
+[2026/10/27 08:26:23:2864] N: __lws_lc_tag:  ++ [wsisrv|18|adopted] (2)
+[2026/10/27 08:26:23:3015] N: __lws_lc_untag:  -- [wsisrv|18|adopted] (1) 15.051ms
+[2026/10/27 08:26:23:6448] N: __lws_lc_tag:  ++ [wsisrv|19|adopted] (2)
+[2026/10/27 08:26:23:6549] N: __lws_lc_untag:  -- [wsisrv|19|adopted] (1) 10.052ms
+[2026/10/27 08:26:23:9559] N: __lws_lc_tag:  ++ [wsisrv|1a|adopted] (2)
+[2026/10/27 08:26:23:9562] W: User code denied connection
+[2026/10/27 08:26:23:9575] N: __lws_lc_untag:  -- [wsisrv|1a|adopted] (1) 1.629ms
+[2026/10/27 08:26:24:0832] N: __lws_lc_tag:  ++ [wsisrv|1b|adopted] (2)
+[2026/10/27 08:26:24:1159] N: __lws_lc_tag:  ++ [wsisrv|1c|adopted] (3)
+[2026/10/27 08:26:24:1169] W: User code denied connection
+[2026/10/27 08:26:24:1179] N: __lws_lc_untag:  -- [wsisrv|1c|adopted] (2) 1.926ms
+[2026/10/27 08:26:24:6454] N: __lws_lc_untag:  -- [wsisrv|1b|adopted] (1) 562.227ms
+[2026/10/27 08:26:24:7028] N: __lws_lc_untag:  -- [wsisrv|17|adopted] (0) 1.428s
+[2026/10/27 08:26:24:7779] N: __lws_lc_tag:  ++ [wsisrv|1d|adopted] (1)
+[2026/10/27 08:26:24:7816] N: __lws_lc_untag:  -- [wsisrv|1d|adopted] (0) 3.774ms
+[2026/10/27 08:26:24:7822] N: __lws_lc_tag:  ++ [wsisrv|1e|adopted] (1)
+[2026/10/27 08:26:24:7842] N: __lws_lc_untag:  -- [wsisrv|1e|adopted] (0) 1.971ms
+[2026/10/27 08:26:24:7861] N: __lws_lc_tag:  ++ [wsisrv|1f|adopted] (1)
+[2026/10/27 08:26:24:8885] N: __lws_lc_tag:  ++ [wsisrv|20|adopted] (2)
+[2026/10/27 08:26:24:9045] N: __lws_lc_tag:  ++ [wsisrv|21|adopted] (3)
+[2026/10/27 08:26:25:0148] N: __lws_lc_tag:  ++ [wsisrv|22|adopted] (4)
+[2026/10/27 08:26:25:0156] W: User code denied connection
+[2026/10/27 08:26:25:0167] N: __lws_lc_untag:  -- [wsisrv|22|adopted] (3) 1.863ms
+[2026/10/27 08:26:25:1514] N: __lws_lc_tag:  ++ [wsisrv|23|adopted] (4)
+[2026/10/27 08:26:25:1622] N: __lws_lc_untag:  -- [wsisrv|23|adopted] (3) 10.755ms
+[2026/10/27 08:26:25:3010] N: __lws_lc_tag:  ++ [wsisrv|24|adopted] (4)
+[2026/10/27 08:26:25:3012] N: __lws_lc_tag:  ++ [wsisrv|25|adopted] (5)
+[2026/10/27 08:26:25:3012] N: __lws_lc_tag:  ++ [wsisrv|26|adopted] (6)
+[2026/10/27 08:26:25:3022] N: __lws_lc_tag:  ++ [wsisrv|27|adopted] (7)
+[2026/10/27 08:26:25:3022] N: __lws_lc_tag:  ++ [wsisrv|28|adopted] (8)
+[2026/10/27 08:26:25:3023] N: __lws_lc_tag:  ++ [wsisrv|29|adopted] (9)
+[2026/10/27 08:26:25:3023] N: __lws_lc_tag:  ++ [wsisrv|2a|adopted] (10)
+[2026/10/27 08:26:25:3023] N: __lws_lc_tag:  ++ [wsisrv|2b|adopted] (11)
+[2026/10/27 08:26:25:3023] N: __lws_lc_tag:  ++ [wsisrv|2c|adopted] (12)
+[2026/10/27 08:26:25:3023] N: __lws_lc_tag:  ++ [wsisrv|2d|adopted] (13)
+[2026/10/27 08:26:25:3023] N: __lws_lc_tag:  ++ [wsisrv|2e|adopted] (14)
+[2026/10/27 08:26:25:3120] N: __lws_lc_untag:  -- [wsisrv|1f|adopted] (13) 525.957ms
+[2026/10/27 08:26:25:3748] N: __lws_lc_untag:  -- [wsisrv|21|adopted] (12) 470.260ms
+[2026/10/27 08:26:25:3955] N: __lws_lc_untag:  -- [wsisrv|20|adopted] (11) 507.020ms
+[2026/10/27 08:26:25:9761] N: __lws_lc_untag:  -- [wsisrv|2c|adopted] (10) 673.871ms
+[2026/10/27 08:26:25:9770] N: __lws_lc_untag:  -- [wsisrv|2d|adopted] (9) 674.686ms
+[2026/10/27 08:26:25:9778] N: __lws_lc_untag:  -- [wsisrv|2a|adopted] (8) 675.579ms
+[2026/10/27 08:26:25:9787] N: __lws_lc_untag:  -- [wsisrv|24|adopted] (7) 677.614ms
+[2026/10/27 08:26:25:9795] N: __lws_lc_untag:  -- [wsisrv|28|adopted] (6) 677.286ms
+[2026/10/27 08:26:25:9804] N: __lws_lc_untag:  -- [wsisrv|25|adopted] (5) 679.192ms
+[2026/10/27 08:26:25:9813] N: __lws_lc_untag:  -- [wsisrv|26|adopted] (4) 680.031ms
+[2026/10/27 08:26:25:9821] N: __lws_lc_untag:  -- [wsisrv|2e|adopted] (3) 679.804ms
+[2026/10/27 08:26:25:9829] N: __lws_lc_untag:  -- [wsisrv|27|adopted] (2) 680.729ms
+[2026/10/27 08:26:25:9838] N: __lws_lc_untag:  -- [wsisrv|29|adopted] (1) 681.513ms
+[2026/10/27 08:26:25:9845] N: __lws_lc_untag:  -- [wsisrv|2b|adopted] (0) 682.263ms
+[libx264 @ 0xffff9400de90] frame I:11    Avg QP: 7.18  size:  6896
+[libx264 @ 0xffff9400de90] frame P:45    Avg QP: 3.40  size:   619
+[libx264 @ 0xffff9400de90] mb I  I16..4: 100.0%  0.0%  0.0%
+[libx264 @ 0xffff9400de90] mb P  I16..4:  4.5%  0.0%  0.0%  P16..4:  0.2%  0.0%  0.0%  0.0%  0.0%    skip:95.3%
+[libx264 @ 0xffff9400de90] coded y,uvDC,uvAC intra: 1.4% 0.5% 0.5% inter: 0.1% 0.0% 0.0%
+[libx264 @ 0xffff9400de90] i16 v,h,dc,p: 91%  5%  4%  0%
+[libx264 @ 0xffff9400de90] i8c dc,h,v,p: 94%  4%  2%  0%
+[libx264 @ 0xffff9400de90] kb/s:889.05
+capture_stats captures=56 encoded=56 capture_ns=57289712 convert_ns=120734579 encode_ns=149479001
+[2026/10/27 08:26:26:0895] N: __lws_lc_untag:  -- [wsi|0|pipe] (1) 20.594s
+[2026/10/27 08:26:26:0903] N: __lws_lc_untag:  -- [vh|1|default|0.0.0.0|0.0.0.0|8080] (1) 20.595s
+[2026/10/27 08:26:26:0903] N: __lws_lc_untag:  -- [wsi|1|listen|default|0.0.0.0|8080] (0) 20.594s
+[2026/10/27 08:26:26:0910] N: __lws_lc_untag:  -- [vh|0|netlink] (0) 20.596s

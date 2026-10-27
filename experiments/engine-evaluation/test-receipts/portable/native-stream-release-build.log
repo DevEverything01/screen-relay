@@ -1,0 +1,6 @@
+g++ -I/usr/include/aarch64-linux-gnu  -O2 -std=c++17 -Wall -Wextra -Wpedantic -pthread src/capture.cpp src/server.cpp src/color.cpp src/x11-capture.cpp src/x11-input.cpp -o native-stream -lX11 -lXext -lXdamage -lXfixes -lXtst -lavcodec -lavutil -lswscale -lwebsockets -lcap  -pthread
+install -d "/home/lahfir.guest/.local/lib/native-stream/viewer" "/home/lahfir.guest/.local/bin"
+install -m 0755 native-stream "/home/lahfir.guest/.local/lib/native-stream/native-stream-engine"
+install -m 0644 viewer/index.html viewer/viewer.js "/home/lahfir.guest/.local/lib/native-stream/viewer/"
+ln -sfn ../lib/native-stream/native-stream-engine "/home/lahfir.guest/.local/bin/native-stream-engine"
+install -m 0755 scripts/native-stream-desktop "/home/lahfir.guest/.local/bin/native-stream-desktop"

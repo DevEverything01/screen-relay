@@ -1,0 +1,19 @@
+[libx264 @ 0x519000010480] using cpu capabilities: ARMv8 NEON
+[libx264 @ 0x519000010480] profile Constrained Baseline, level 3.2, 4:2:0, 8-bit
+[2026/10/27 13:20:58:1282] N: lws_create_context: LWS: 4.3.3-unknown, NET CLI SRV H1 H2 WS ConMon IPV6-on
+[2026/10/27 13:20:58:1282] N: __lws_lc_tag:  ++ [wsi|0|pipe] (1)
+[2026/10/27 13:20:58:1283] N: __lws_lc_tag:  ++ [vh|0|netlink] (1)
+[2026/10/27 13:20:58:1283] N: __lws_lc_tag:  ++ [vh|1|default|127.0.0.1|127.0.0.1|18114] (2)
+[2026/10/27 13:20:58:1284] N: [vh|1|default|127.0.0.1|127.0.0.1|18114]: lws_socket_bind: source ads 127.0.0.1
+[2026/10/27 13:20:58:1284] N: __lws_lc_tag:  ++ [wsi|1|listen|default|127.0.0.1|18114] (2)
+Native stream listening on 127.0.0.1:18114
+{"ready":true,"pid":8702,"port":18114}
+[2026/10/27 13:20:58:2172] N: __lws_lc_tag:  ++ [wsisrv|0|adopted] (1)
+[2026/10/27 13:20:58:2187] N: __lws_lc_tag:  ++ [wsisrv|1|adopted] (2)
+[2026/10/27 13:20:58:2404] N: __lws_lc_untag:  -- [wsisrv|1|adopted] (1) 21.697ms
+capture_stats captures=0 encoded=0 capture_ns=0 convert_ns=0 encode_ns=0
+[2026/10/27 13:20:58:2729] N: __lws_lc_untag:  -- [wsi|0|pipe] (1) 144.680ms
+[2026/10/27 13:20:58:2730] N: __lws_lc_untag:  -- [wsisrv|0|adopted] (0) 55.801ms
+[2026/10/27 13:20:58:2730] N: __lws_lc_untag:  -- [vh|1|default|127.0.0.1|127.0.0.1|18114] (1) 144.722ms
+[2026/10/27 13:20:58:2730] N: __lws_lc_untag:  -- [wsi|1|listen|default|127.0.0.1|18114] (0) 144.596ms
+[2026/10/27 13:20:58:2730] N: __lws_lc_untag:  -- [vh|0|netlink] (0) 144.779ms

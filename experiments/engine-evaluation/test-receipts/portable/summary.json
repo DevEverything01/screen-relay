@@ -1,0 +1,33 @@
+{
+  "passed": true,
+  "nativeVm": "PRETTY_NAME=\"Ubuntu 24.04.5 LTS\"",
+  "architecture": "aarch64",
+  "dockerPresentInVm": false,
+  "releaseChecks": 10,
+  "sanitizerChecks": 10,
+  "sdkChecks": 11,
+  "nativeSuites": 3,
+  "optionalDockerRegressionChecks": 30,
+  "packageVerification": {
+    "passed": true,
+    "archiveSha256": "658340c5c328fb390f86e875dd0c8b53149b7e6dd5086c04fdb2f00b4e785e52",
+    "manifestFilesVerified": 84,
+    "customPrefixInstall": true,
+    "viewerAssetsServedFromInstall": true,
+    "freshPngSize": [
+      1280,
+      720
+    ],
+    "attachedEngineExit": 0,
+    "existingDisplayPreserved": true,
+    "binarySha256": "0f2b197e7bbddf983ff9966418decbe037298a6985d38e74620fc21ddc291da4"
+  },
+  "skillInstalled": true,
+  "limits": [
+    "Vercel Sandbox and other provider gateways not verified end to end",
+    "Other Linux distributions and CPU architectures not verified",
+    "Performance benchmarks not rerun",
+    "Native TLS supports HTTP/1.1; no HTTP/2 claim",
+    "No release published"
+  ]
+}

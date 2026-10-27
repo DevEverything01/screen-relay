@@ -1,0 +1,162 @@
+{
+  "started": "2026-10-27T20:23:09.521Z",
+  "target": "lima-nsl-portable",
+  "checks": [
+    {
+      "name": "portable launcher creates an XFCE display and a separate bare display",
+      "passed": true,
+      "ms": 681,
+      "evidence": {
+        "first": {
+          "ready": true,
+          "url": "http://127.0.0.1:18111",
+          "display": ":0",
+          "xauthority": "/tmp/native-stream-9jntdpxd/Xauthority",
+          "pid": 8900,
+          "enginePid": 8907,
+          "logs": "/tmp/native-stream-9jntdpxd",
+          "launcherLog": "/tmp/nsl-portable-test-5h9p47me/launcher.log"
+        },
+        "second": {
+          "ready": true,
+          "url": "http://127.0.0.1:18112",
+          "display": ":1",
+          "xauthority": "/tmp/native-stream-ousan5kz/Xauthority",
+          "pid": 8959,
+          "enginePid": 8965,
+          "logs": "/tmp/native-stream-ousan5kz",
+          "launcherLog": "/tmp/nsl-portable-test-vb7uuvla/launcher.log"
+        },
+        "windowManager": "xfwm4",
+        "resourceCountersAvailable": false
+      }
+    },
+    {
+      "name": "port conflict fails without claiming another engine or stopping its display",
+      "passed": true,
+      "ms": 295,
+      "evidence": {
+        "exitCode": 1,
+        "cleanupVerified": true
+      }
+    },
+    {
+      "name": "direct engine attaches to an existing display and leaves it alive on exit",
+      "passed": true,
+      "ms": 249,
+      "evidence": {
+        "attachedPid": 9028,
+        "existingDisplayStillCapturable": true
+      }
+    },
+    {
+      "name": "SDK snapshot and input reach a real X11 application outside Docker",
+      "passed": true,
+      "ms": 563,
+      "evidence": {
+        "before": [
+          32,
+          176,
+          96,
+          255
+        ],
+        "after": [
+          192,
+          48,
+          176,
+          255
+        ],
+        "entry": "a",
+        "heldKeyReleased": true
+      }
+    },
+    {
+      "name": "browser decodes moving native frames and keyboard input reaches the application",
+      "passed": true,
+      "ms": 899,
+      "evidence": {
+        "drawn": 10,
+        "decodeerrors": 0,
+        "entry": "ab"
+      }
+    },
+    {
+      "name": "public listener rejects missing security configuration before starting",
+      "passed": true,
+      "ms": 37,
+      "evidence": {
+        "exitCode": 2
+      }
+    },
+    {
+      "name": "TLS SDK authentication, WSS input and denied credentials work against the native server",
+      "passed": true,
+      "ms": 571,
+      "evidence": {
+        "authenticated": true,
+        "wss": true,
+        "missingAndWrongTokenRejected": true,
+        "foreignOriginRejected": true,
+        "snapshotBytes": 7801,
+        "entry": "abc"
+      }
+    },
+    {
+      "name": "authenticated HTTPS viewer decodes frames; an incorrect token cannot stream",
+      "passed": true,
+      "ms": 1930,
+      "evidence": {
+        "drawn": 1,
+        "decodeerrors": 0,
+        "pixel": [
+          191,
+          47,
+          176,
+          255
+        ]
+      }
+    },
+    {
+      "name": "the same engine streams through an external TLS terminator",
+      "passed": true,
+      "ms": 1365,
+      "evidence": {
+        "status": 200,
+        "type": "image/png",
+        "bytes": 7801,
+        "drawn": 2
+      }
+    },
+    {
+      "name": "stopping one managed display leaves the other session running",
+      "passed": true,
+      "ms": 67,
+      "evidence": {
+        "stoppedDisplay": ":1",
+        "survivingDisplay": ":0"
+      }
+    }
+  ],
+  "environment": {
+    "kernel": "6.8.0-142-generic",
+    "machine": "aarch64",
+    "osRelease": "PRETTY_NAME=\"Ubuntu 24.04.5 LTS\"\nNAME=\"Ubuntu\"\nVERSION_ID=\"24.04\"\nVERSION=\"24.04.5 LTS (Noble Numbat)\"\nVERSION_CODENAME=noble\nID=ubuntu\nID_LIKE=debian\nHOME_URL=\"https://www.ubuntu.com/\"\nSUPPORT_URL=\"https://help.ubuntu.com/\"\nBUG_REPORT_URL=\"https://bugs.launchpad.net/ubuntu/\"\nPRIVACY_POLICY_URL=\"https://www.ubuntu.com/legal/terms-and-policies/privacy-policy\"\nUBUNTU_CODENAME=noble\nLOGO=ubuntu-logo\n",
+    "pid1": "systemd",
+    "containerDetection": "none",
+    "containerDetectionExit": 1,
+    "dockerMarker": false,
+    "dockerCli": null,
+    "engineSha256": "0f2b197e7bbddf983ff9966418decbe037298a6985d38e74620fc21ddc291da4",
+    "sourceSha256": {
+      "src/server.cpp": "623406f23a1abd000625d8b718fe7ae70e47013f6cf07bce4199d0ddebc41bc0",
+      "scripts/native-stream-desktop": "4dc4e8a0486bf1dbe26bab9b2de4c30b3898552949221dd4175cd961b3300f45",
+      "tests/input_fixture.py": "2b0b4c59197b90abc2dfb88a1cb59ce2a7b036d8530c85ecbe7b422835a3862a"
+    }
+  },
+  "passed": true,
+  "cleanup": {
+    "passed": true,
+    "errors": []
+  },
+  "finished": "2026-10-27T20:23:18.663Z"
+}

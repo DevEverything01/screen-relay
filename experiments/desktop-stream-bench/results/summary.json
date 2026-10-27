@@ -1,0 +1,112 @@
+{
+  "title": "Corrected comparison \u00b7 both clients target 60 FPS",
+  "state": "Benchmarks complete. Kasm's default 24-FPS cap was identified and retested at 60 FPS. Both live GNOME desktops are restored.",
+  "table": [
+    [
+      "Metric \u00b7 60-FPS target",
+      "Selkies \u00b7 Xfce",
+      "Selkies \u00b7 GNOME",
+      "KasmVNC \u00b7 Xfce",
+      "KasmVNC \u00b7 GNOME"
+    ],
+    [
+      "Idle input latency \u00b7 median",
+      "25.2 ms",
+      "25.5 ms",
+      "54.9 ms",
+      "57.7 ms"
+    ],
+    [
+      "Idle input latency \u00b7 p95",
+      "29.3 ms",
+      "27.5 ms",
+      "76.8 ms",
+      "60.7 ms"
+    ],
+    [
+      "Idle \u00b7 CPU",
+      "45.9%",
+      "45.7%",
+      "4.0%",
+      "4.3%"
+    ],
+    [
+      "Idle \u00b7 memory",
+      "218.2 MiB",
+      "470.2 MiB",
+      "160.1 MiB",
+      "420.9 MiB"
+    ],
+    [
+      "Idle \u00b7 bandwidth",
+      "0.207 Mbps",
+      "0.231 Mbps",
+      "0.000 Mbps",
+      "0.000 Mbps"
+    ],
+    [
+      "Motion input latency \u00b7 median",
+      "24.6 ms",
+      "26.7 ms",
+      "44.1 ms",
+      "76.7 ms"
+    ],
+    [
+      "Motion input latency \u00b7 p95",
+      "39.8 ms",
+      "44.0 ms",
+      "77.4 ms",
+      "79.2 ms"
+    ],
+    [
+      "Motion \u00b7 CPU",
+      "46.0%",
+      "74.2%",
+      "45.5%",
+      "69.0%"
+    ],
+    [
+      "Motion \u00b7 memory",
+      "220.3 MiB",
+      "466.6 MiB",
+      "160.5 MiB",
+      "418.0 MiB"
+    ],
+    [
+      "Motion \u00b7 bandwidth",
+      "1.866 Mbps",
+      "1.455 Mbps",
+      "4.001 Mbps",
+      "3.852 Mbps"
+    ],
+    [
+      "Motion \u00b7 visible updates/s",
+      "54.5",
+      "54.7",
+      "47.0",
+      "49.8"
+    ],
+    [
+      "Motion \u00b7 app-produced updates/s",
+      "54.7",
+      "55.6",
+      "51.5",
+      "52.8"
+    ],
+    [
+      "Text PSNR \u00b7 higher is closer",
+      "38.5 dB",
+      "37.8 dB",
+      "38.8 dB",
+      "38.1 dB"
+    ],
+    [
+      "Text ink error \u00b7 lower is closer",
+      "3.99",
+      "4.33",
+      "3.79",
+      "4.13"
+    ]
+  ],
+  "note": "CPU: 100% = one core; memory includes the desktop and app. Selkies resource values average three 12-second runs; Kasm 60-FPS values are one 12-second sensitivity check per workload. Each latency condition has 30 trials. Visible updates/s is measured from native frame IDs; the app produced about 48\u201357 updates/s, so this is not a maximum-FPS test. Both use software H.264, with different quality/rate-control settings. Original default-setting results are retained separately. The live viewers retain their existing client preferences."
+}

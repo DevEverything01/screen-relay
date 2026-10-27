@@ -1,0 +1,40 @@
+{
+  "checks": {
+    "cursor-release.json": 13,
+    "integration-cursor-release.json": 12,
+    "framework-cursor-release.json": 5,
+    "cursor-asan.json": 13,
+    "integration-cursor-asan.json": 12,
+    "framework-cursor-asan.json": 5
+  },
+  "totalChecks": 60,
+  "gracefulExit": {
+    "release": 0,
+    "asan": 0
+  },
+  "sanitizerDiagnostics": false,
+  "liveRuntimeMatchesTestedBuild": true,
+  "liveScreenshotEvidence": [
+    "cursor-live-arrow.png",
+    "cursor-live-text.png",
+    "cursor-live-resize.png"
+  ],
+  "preFixRegression": "cursor-before.json",
+  "sourceHashes": {
+    "src/capture.cpp": "fb0f6d87e99d595f4d57b80ce7aa12183276aea4bcb340f26f2371d8dccb0f75",
+    "src/snapshot.hpp": "2b0bc6ac30bac892fc87154591baa3d599e0f782d41f8a0171fdf1c55fd929e5",
+    "src/capture-source.hpp": "a7c8fbb96a8352baa72b212d64080f33a4fc8c88d0ceca57729fbdc606db17d5",
+    "src/x11-capture.cpp": "17561e2d055980636bda79dad53d5b036f45f20e1bb48269ef8c5c6197f47e42",
+    "src/color.cpp": "e57942e3bd9e6f5e59dfefa8987b800d86f173b64efd1250e0a906478bed8567",
+    "src/color.hpp": "ec6d473c47d70b0a6967bab4e8f3a2cfb5f23f1edbb40302f6290b7ba3413631",
+    "src/capture.hpp": "ae88a35f5df8a4e8d9f9c566cb762e4d8affaa1c5860953612ac03ef7cdbce3c",
+    "src/input.hpp": "b3371587cca6353fc2bc28490082a9d592f96cf88e812e496e9bd6e176a4b027",
+    "src/x11-input.cpp": "6cb6880e346a50e34597228643fc57498d57f356c68d9ad435ed4a219ed1f0f0",
+    "src/flow.hpp": "bfaf797b588814b0c666da76886decfb7c763d9d50a49c8dc08d6e63d73d6ebb",
+    "src/server.cpp": "c88c7d597a0d7313a79653c1372d1d4dc7933c3cf192485ab215ee396aed2393",
+    "viewer/index.html": "99355c6f68d517d8695e9eaedc2925468092b63cafd8b8b0c5cbdf52a86985af",
+    "viewer/viewer.js": "2aa47c1be5123b211cfbb8f0be23f5175077e18e215f4418d39727f2ddf0521b",
+    "tests/cursor-integration.mjs": "8b8f7747d7a1631a5340804669834613f35959fd3c5fe2de9de36e15529c2e39",
+    "tests/cursor-observe.py": "806ceaf1e2afffce3eeefbbd68ed42fa12f84acf5cbc58b6ef3ae9eb8ea0d184"
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "integrationChecks": {
+    "integration-baseline-release.json": 12,
+    "framework-final-sdk.json": 5,
+    "integration-baseline-asan.json": 12,
+    "framework-final-sdk-asan.json": 5
+  },
+  "sdkPass": 10,
+  "sanitizerDiagnostics": false,
+  "images": {
+    "release": "sha256:75ba2cb566ef9b63dcf1dd9e270eeb86f44c81e891e6efd9cd9bb6e92368378c",
+    "asan": "sha256:9e638198b0d3f28c532362b9a4401ce3480c65d7a56cd21513c75e9caa456cf0"
+  },
+  "scope": "X11/Xfce 1280x720 CPU, ARM64; system libraries not instrumented; external AT-SPI/CDP tools independent and untested",
+  "measuredSourceCommit": "143d4eeac4a757f7018e7bb3fc04c5c196c39c7c",
+  "measuredImage": "sha256:bac60f6d460d68d742aef28140d0f9b34512d940dcea3300c2ada863d40b3662",
+  "frozenCoreHashes": {
+    "Makefile": "715b59977e9a8896325e9d8e0e3707cf0df37584c21727e976fa2a3d4a0db007",
+    "viewer/index.html": "774ad10e4653b546d65501f60ae9d1d561050c62d6c78042b92c5658b14fbe7e",
+    "viewer/viewer.js": "83cb0a5bfc562fbad9696400b9eba2c425073e214a8f8f029dd23d1bce15aa1a",
+    "src/capture.cpp": "295054963ca4d86544ebef404a6fb0e3df0888991aaef1ea61ff9d67f561989b",
+    "src/snapshot.hpp": "2b0bc6ac30bac892fc87154591baa3d599e0f782d41f8a0171fdf1c55fd929e5",
+    "src/capture-source.hpp": "02b1d7757ccca0e232f470b3b6ac3fe67bff1ee9a9eb0a91fc957d86df2c2576",
+    "src/x11-capture.cpp": "07bb2454d49771607202e590483cd363d687b55f7986283bb93136ef64054d83",
+    "src/color.cpp": "e57942e3bd9e6f5e59dfefa8987b800d86f173b64efd1250e0a906478bed8567",
+    "src/color.hpp": "ec6d473c47d70b0a6967bab4e8f3a2cfb5f23f1edbb40302f6290b7ba3413631",
+    "src/capture.hpp": "658e047ab161f48e9ad3a3968c8c10a69fc6c26ae1c938dd340e5e906636d437",
+    "src/input.hpp": "b3371587cca6353fc2bc28490082a9d592f96cf88e812e496e9bd6e176a4b027",
+    "src/x11-input.cpp": "6cb6880e346a50e34597228643fc57498d57f356c68d9ad435ed4a219ed1f0f0",
+    "src/flow.hpp": "bfaf797b588814b0c666da76886decfb7c763d9d50a49c8dc08d6e63d73d6ebb",
+    "src/server.cpp": "d4d5c0e54bd903ea26a6c15bedcff087d50a4f9a9934257e50a680e8db00c57c"
+  },
+  "currentPackagingHashes": {
+    "Dockerfile": "22ebb23527c40073589e0b45ad735025cbd30f9090891c494dd6059950383bc5",
+    "session.sh": "ef8a91fb77913ec86f95438865f7c67b81cb8e7c3ba759d752e6431298e44380",
+    "package.json": "612f9322b2a6a6c9bcdca15bfea9e9a88c8db6e980852227da50d8e67a2ef681",
+    "sdk/index.js": "0d2fad771b5e78c926016a978c820feee312a3f14fdc09048b73f036b7a933e3",
+    "sdk/index.d.ts": "46d2968a18e4304dc5bd9fb9ed8ba2dacc62b1b65b72e0869f8df0c895528bd7",
+    "sdk/cli.js": "6384e31989aefb5fb002651c57b379e857c81aed78fd668ad72835a81deff123"
+  },
+  "sdkNodeVersions": [
+    "22.22.2",
+    "26.12.0"
+  ],
+  "cleanDesktopVerification": "baseline-verification.json",
+  "binaryEquivalence": "binary-equivalence.json",
+  "packagingChange": "Normal image contains no benchmark fixture; callers explicitly copy it before startup. Native binary and installed package database match measured general3.",
+  "sourceCommit": "bf54721bb2d4778c77530dd25e50cdfb32aabeec"
+}

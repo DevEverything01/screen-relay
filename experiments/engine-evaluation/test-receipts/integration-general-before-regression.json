@@ -1,0 +1,896 @@
+{
+  "url": "http://127.0.0.1:18100",
+  "container": "native-general-before",
+  "started": "2026-10-27T06:45:31.831Z",
+  "checks": [
+    {
+      "name": "decoded canvas contains independent X11 fixture pixels",
+      "passed": true,
+      "ms": 225,
+      "evidence": {
+        "rgba": [
+          32,
+          176,
+          95,
+          255
+        ],
+        "stats": {
+          "received": 1,
+          "drawn": 1,
+          "bytes": 3861,
+          "decodeerrors": 0,
+          "outstanding": 0
+        }
+      }
+    },
+    {
+      "name": "metrics match independent cgroup CPU counters and preserve live video",
+      "passed": true,
+      "ms": 2909,
+      "evidence": {
+        "samples": [
+          {
+            "before": 51857776,
+            "response": {
+              "status": 200,
+              "contentType": "application/json",
+              "cacheControl": "no-store",
+              "body": {
+                "usage_usec": 51858383,
+                "memory_current": 172486656,
+                "inactive_file": 139264
+              }
+            },
+            "after": 51866944
+          },
+          {
+            "before": 51874959,
+            "response": {
+              "status": 200,
+              "contentType": "application/json",
+              "cacheControl": "no-store",
+              "body": {
+                "usage_usec": 51875279,
+                "memory_current": 172478464,
+                "inactive_file": 139264
+              }
+            },
+            "after": 51883709
+          }
+        ],
+        "hud": "Drawn FPS: 3.0 · Stream Mbps: 0.00 · Container CPU (one core): 7.8% · Container RAM: 164.3 MiB",
+        "statsAfterMetrics": {
+          "received": 13,
+          "drawn": 13,
+          "bytes": 4149,
+          "decodeerrors": 0,
+          "outstanding": 0
+        }
+      }
+    },
+    {
+      "name": "viewer pointer, keyboard, modifiers and wheel reach X11 application",
+      "passed": true,
+      "ms": 123,
+      "evidence": {
+        "pid": 421,
+        "entry": "native42A",
+        "events": [
+          {
+            "type": "Motion",
+            "key": "??",
+            "button": "??",
+            "x": 200,
+            "y": 130
+          },
+          {
+            "type": "Motion",
+            "key": "??",
+            "button": "??",
+            "x": 200,
+            "y": 130
+          },
+          {
+            "type": "ButtonPress",
+            "key": "??",
+            "button": "1",
+            "x": 200,
+            "y": 130
+          },
+          {
+            "type": "Motion",
+            "key": "??",
+            "button": "??",
+            "x": 200,
+            "y": 130
+          },
+          {
+            "type": "ButtonRelease",
+            "key": "??",
+            "button": "1",
+            "x": 200,
+            "y": 130
+          },
+          {
+            "type": "Motion",
+            "key": "??",
+            "button": "??",
+            "x": 200,
+            "y": 130
+          },
+          {
+            "type": "ButtonPress",
+            "key": "??",
+            "button": "1",
+            "x": 200,
+            "y": 130
+          },
+          {
+            "type": "Motion",
+            "key": "??",
+            "button": "??",
+            "x": 200,
+            "y": 130
+          },
+          {
+            "type": "ButtonRelease",
+            "key": "??",
+            "button": "1",
+            "x": 200,
+            "y": 130
+          },
+          {
+            "type": "KeyPress",
+            "key": "n",
+            "button": "??",
+            "x": 200,
+            "y": 130
+          },
+          {
+            "type": "KeyRelease",
+            "key": "n",
+            "button": "??",
+            "x": 200,
+            "y": 130
+          },
+          {
+            "type": "KeyPress",
+            "key": "a",
+            "button": "??",
+            "x": 200,
+            "y": 130
+          },
+          {
+            "type": "KeyRelease",
+            "key": "a",
+            "button": "??",
+            "x": 200,
+            "y": 130
+          },
+          {
+            "type": "KeyPress",
+            "key": "t",
+            "button": "??",
+            "x": 200,
+            "y": 130
+          },
+          {
+            "type": "KeyRelease",
+            "key": "t",
+            "button": "??",
+            "x": 200,
+            "y": 130
+          },
+          {
+            "type": "KeyPress",
+            "key": "i",
+            "button": "??",
+            "x": 200,
+            "y": 130
+          },
+          {
+            "type": "KeyRelease",
+            "key": "i",
+            "button": "??",
+            "x": 200,
+            "y": 130
+          },
+          {
+            "type": "KeyPress",
+            "key": "v",
+            "button": "??",
+            "x": 200,
+            "y": 130
+          },
+          {
+            "type": "KeyRelease",
+            "key": "v",
+            "button": "??",
+            "x": 200,
+            "y": 130
+          },
+          {
+            "type": "KeyPress",
+            "key": "e",
+            "button": "??",
+            "x": 200,
+            "y": 130
+          },
+          {
+            "type": "KeyRelease",
+            "key": "e",
+            "button": "??",
+            "x": 200,
+            "y": 130
+          },
+          {
+            "type": "KeyPress",
+            "key": "4",
+            "button": "??",
+            "x": 200,
+            "y": 130
+          },
+          {
+            "type": "KeyRelease",
+            "key": "4",
+            "button": "??",
+            "x": 200,
+            "y": 130
+          },
+          {
+            "type": "KeyPress",
+            "key": "2",
+            "button": "??",
+            "x": 200,
+            "y": 130
+          },
+          {
+            "type": "KeyRelease",
+            "key": "2",
+            "button": "??",
+            "x": 200,
+            "y": 130
+          },
+          {
+            "type": "KeyPress",
+            "key": "Shift_L",
+            "button": "??",
+            "x": 200,
+            "y": 130
+          },
+          {
+            "type": "KeyPress",
+            "key": "A",
+            "button": "??",
+            "x": 200,
+            "y": 130
+          },
+          {
+            "type": "KeyRelease",
+            "key": "A",
+            "button": "??",
+            "x": 200,
+            "y": 130
+          },
+          {
+            "type": "KeyRelease",
+            "key": "Shift_L",
+            "button": "??",
+            "x": 200,
+            "y": 130
+          },
+          {
+            "type": "Motion",
+            "key": "??",
+            "button": "??",
+            "x": 800,
+            "y": 400
+          },
+          {
+            "type": "Motion",
+            "key": "??",
+            "button": "??",
+            "x": 800,
+            "y": 400
+          },
+          {
+            "type": "ButtonPress",
+            "key": "??",
+            "button": "5",
+            "x": 800,
+            "y": 400
+          },
+          {
+            "type": "ButtonRelease",
+            "key": "??",
+            "button": "5",
+            "x": 800,
+            "y": 400
+          }
+        ],
+        "shift": false,
+        "button1": false,
+        "pointer": [
+          800,
+          400
+        ],
+        "changed": false,
+        "animationTick": 0,
+        "animating": false,
+        "xFocus": 31457305,
+        "entryWindow": 31457305,
+        "rootWindow": 31457303,
+        "tkFocus": ".!entry"
+      }
+    },
+    {
+      "name": "held controls release on canvas blur with independent X server state",
+      "passed": true,
+      "ms": 161,
+      "evidence": {
+        "shift": false,
+        "button1": false
+      }
+    },
+    {
+      "name": "second viewer rejected while first remains live",
+      "passed": true,
+      "ms": 333,
+      "evidence": {
+        "rejection": {
+          "opened": false,
+          "frames": 0,
+          "received": [],
+          "code": 1006,
+          "elapsed": 5.400000095367432,
+          "diagnostics": [
+            "WebSocket connection to 'ws://127.0.0.1:18100/stream' failed: Connection closed before receiving a handshake response"
+          ]
+        },
+        "rgba": [
+          191,
+          47,
+          176,
+          255
+        ]
+      }
+    },
+    {
+      "name": "continuous X11 damage decodes changing pixels and settles when damage stops",
+      "passed": true,
+      "ms": 1866,
+      "evidence": {
+        "yellow": [
+          223,
+          160,
+          31,
+          255
+        ],
+        "blue": [
+          33,
+          64,
+          223,
+          255
+        ],
+        "settled": 25,
+        "final": {
+          "received": 25,
+          "drawn": 25,
+          "bytes": 17755,
+          "decodeerrors": 0,
+          "outstanding": 0
+        }
+      }
+    },
+    {
+      "name": "disconnect releases held controls and reconnect renders fresh desktop",
+      "passed": true,
+      "ms": 364,
+      "evidence": {
+        "rgba": [
+          191,
+          47,
+          176,
+          255
+        ]
+      }
+    },
+    {
+      "name": "malformed receiver closes and subsequent session recovers",
+      "passed": true,
+      "ms": 331,
+      "evidence": {
+        "opened": true,
+        "frames": 1,
+        "first": {
+          "magic": 1314081841,
+          "type": 1,
+          "flags": 1,
+          "generation": 6,
+          "sequence": 1
+        },
+        "received": [
+          {
+            "generation": 6,
+            "sequence": 1,
+            "bytes": 7245,
+            "at": 10.100000381469727
+          }
+        ],
+        "code": 1006,
+        "elapsed": 10.900000095367432,
+        "afterFrame": 0.7999997138977051,
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "oversized receiver closes and subsequent session recovers",
+      "passed": true,
+      "ms": 369,
+      "evidence": {
+        "opened": true,
+        "frames": 1,
+        "first": {
+          "magic": 1314081841,
+          "type": 1,
+          "flags": 1,
+          "generation": 8,
+          "sequence": 1
+        },
+        "received": [
+          {
+            "generation": 8,
+            "sequence": 1,
+            "bytes": 7415,
+            "at": 10.5
+          }
+        ],
+        "code": 1006,
+        "elapsed": 12.5,
+        "afterFrame": 2,
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "stall receiver closes and subsequent session recovers",
+      "passed": true,
+      "ms": 3560,
+      "evidence": {
+        "opened": true,
+        "frames": 1,
+        "first": {
+          "magic": 1314081841,
+          "type": 1,
+          "flags": 1,
+          "generation": 10,
+          "sequence": 1
+        },
+        "received": [
+          {
+            "generation": 10,
+            "sequence": 1,
+            "bytes": 7415,
+            "at": 8.099999904632568
+          }
+        ],
+        "code": 1006,
+        "elapsed": 3091.5,
+        "afterFrame": 3083.4000000953674,
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "pipeline admits multiple frames and invalid ACKs cannot replenish credits or extend ownership",
+      "passed": false,
+      "error": "AssertionError [ERR_ASSERTION]: One ACK must admit multiple actual damage frames: {\"opened\":true,\"frames\":2,\"first\":{\"magic\":1314081841,\"type\":1,\"flags\":1,\"generation\":12,\"sequence\":1},\"received\":[{\"generation\":12,\"sequence\":1,\"bytes\":7313,\"at\":8.700000286102295},{\"generation\":12,\"sequence\":2,\"bytes\":909,\"at\":136.5}],\"code\":1006,\"elapsed\":3177.6000003814697,\"afterFrame\":3169,\"diagnostics\":[]}\n    at file:///Users/lahfir/Documents/Projects/sandbox-ui/native-stream-lab/tests/integration.mjs:252:5\n    at async check (file:///Users/lahfir/Documents/Projects/sandbox-ui/native-stream-lab/tests/integration.mjs:31:26)\n    at async file:///Users/lahfir/Documents/Projects/sandbox-ui/native-stream-lab/tests/integration.mjs:240:3"
+    }
+  ],
+  "browserErrors": [],
+  "passed": false,
+  "error": "AssertionError [ERR_ASSERTION]: One ACK must admit multiple actual damage frames: {\"opened\":true,\"frames\":2,\"first\":{\"magic\":1314081841,\"type\":1,\"flags\":1,\"generation\":12,\"sequence\":1},\"received\":[{\"generation\":12,\"sequence\":1,\"bytes\":7313,\"at\":8.700000286102295},{\"generation\":12,\"sequence\":2,\"bytes\":909,\"at\":136.5}],\"code\":1006,\"elapsed\":3177.6000003814697,\"afterFrame\":3169,\"diagnostics\":[]}\n    at file:///Users/lahfir/Documents/Projects/sandbox-ui/native-stream-lab/tests/integration.mjs:252:5\n    at async check (file:///Users/lahfir/Documents/Projects/sandbox-ui/native-stream-lab/tests/integration.mjs:31:26)\n    at async file:///Users/lahfir/Documents/Projects/sandbox-ui/native-stream-lab/tests/integration.mjs:240:3",
+  "finalFixture": {
+    "pid": 421,
+    "entry": "native42A",
+    "events": [
+      {
+        "type": "Motion",
+        "key": "??",
+        "button": "??",
+        "x": 200,
+        "y": 130
+      },
+      {
+        "type": "Motion",
+        "key": "??",
+        "button": "??",
+        "x": 200,
+        "y": 130
+      },
+      {
+        "type": "ButtonPress",
+        "key": "??",
+        "button": "1",
+        "x": 200,
+        "y": 130
+      },
+      {
+        "type": "Motion",
+        "key": "??",
+        "button": "??",
+        "x": 200,
+        "y": 130
+      },
+      {
+        "type": "ButtonRelease",
+        "key": "??",
+        "button": "1",
+        "x": 200,
+        "y": 130
+      },
+      {
+        "type": "Motion",
+        "key": "??",
+        "button": "??",
+        "x": 200,
+        "y": 130
+      },
+      {
+        "type": "ButtonPress",
+        "key": "??",
+        "button": "1",
+        "x": 200,
+        "y": 130
+      },
+      {
+        "type": "Motion",
+        "key": "??",
+        "button": "??",
+        "x": 200,
+        "y": 130
+      },
+      {
+        "type": "ButtonRelease",
+        "key": "??",
+        "button": "1",
+        "x": 200,
+        "y": 130
+      },
+      {
+        "type": "KeyPress",
+        "key": "n",
+        "button": "??",
+        "x": 200,
+        "y": 130
+      },
+      {
+        "type": "KeyRelease",
+        "key": "n",
+        "button": "??",
+        "x": 200,
+        "y": 130
+      },
+      {
+        "type": "KeyPress",
+        "key": "a",
+        "button": "??",
+        "x": 200,
+        "y": 130
+      },
+      {
+        "type": "KeyRelease",
+        "key": "a",
+        "button": "??",
+        "x": 200,
+        "y": 130
+      },
+      {
+        "type": "KeyPress",
+        "key": "t",
+        "button": "??",
+        "x": 200,
+        "y": 130
+      },
+      {
+        "type": "KeyRelease",
+        "key": "t",
+        "button": "??",
+        "x": 200,
+        "y": 130
+      },
+      {
+        "type": "KeyPress",
+        "key": "i",
+        "button": "??",
+        "x": 200,
+        "y": 130
+      },
+      {
+        "type": "KeyRelease",
+        "key": "i",
+        "button": "??",
+        "x": 200,
+        "y": 130
+      },
+      {
+        "type": "KeyPress",
+        "key": "v",
+        "button": "??",
+        "x": 200,
+        "y": 130
+      },
+      {
+        "type": "KeyRelease",
+        "key": "v",
+        "button": "??",
+        "x": 200,
+        "y": 130
+      },
+      {
+        "type": "KeyPress",
+        "key": "e",
+        "button": "??",
+        "x": 200,
+        "y": 130
+      },
+      {
+        "type": "KeyRelease",
+        "key": "e",
+        "button": "??",
+        "x": 200,
+        "y": 130
+      },
+      {
+        "type": "KeyPress",
+        "key": "4",
+        "button": "??",
+        "x": 200,
+        "y": 130
+      },
+      {
+        "type": "KeyRelease",
+        "key": "4",
+        "button": "??",
+        "x": 200,
+        "y": 130
+      },
+      {
+        "type": "KeyPress",
+        "key": "2",
+        "button": "??",
+        "x": 200,
+        "y": 130
+      },
+      {
+        "type": "KeyRelease",
+        "key": "2",
+        "button": "??",
+        "x": 200,
+        "y": 130
+      },
+      {
+        "type": "KeyPress",
+        "key": "Shift_L",
+        "button": "??",
+        "x": 200,
+        "y": 130
+      },
+      {
+        "type": "KeyPress",
+        "key": "A",
+        "button": "??",
+        "x": 200,
+        "y": 130
+      },
+      {
+        "type": "KeyRelease",
+        "key": "A",
+        "button": "??",
+        "x": 200,
+        "y": 130
+      },
+      {
+        "type": "KeyRelease",
+        "key": "Shift_L",
+        "button": "??",
+        "x": 200,
+        "y": 130
+      },
+      {
+        "type": "Motion",
+        "key": "??",
+        "button": "??",
+        "x": 800,
+        "y": 400
+      },
+      {
+        "type": "Motion",
+        "key": "??",
+        "button": "??",
+        "x": 800,
+        "y": 400
+      },
+      {
+        "type": "ButtonPress",
+        "key": "??",
+        "button": "5",
+        "x": 800,
+        "y": 400
+      },
+      {
+        "type": "ButtonRelease",
+        "key": "??",
+        "button": "5",
+        "x": 800,
+        "y": 400
+      },
+      {
+        "type": "KeyPress",
+        "key": "Shift_L",
+        "button": "??",
+        "x": 800,
+        "y": 400
+      },
+      {
+        "type": "Motion",
+        "key": "??",
+        "button": "??",
+        "x": 800,
+        "y": 400
+      },
+      {
+        "type": "Motion",
+        "key": "??",
+        "button": "??",
+        "x": 800,
+        "y": 400
+      },
+      {
+        "type": "ButtonPress",
+        "key": "??",
+        "button": "1",
+        "x": 800,
+        "y": 400
+      },
+      {
+        "type": "KeyRelease",
+        "key": "Shift_L",
+        "button": "??",
+        "x": 800,
+        "y": 400
+      },
+      {
+        "type": "ButtonRelease",
+        "key": "??",
+        "button": "1",
+        "x": 800,
+        "y": 400
+      },
+      {
+        "type": "Motion",
+        "key": "??",
+        "button": "??",
+        "x": 800,
+        "y": 400
+      },
+      {
+        "type": "KeyPress",
+        "key": "Shift_L",
+        "button": "??",
+        "x": 800,
+        "y": 400
+      },
+      {
+        "type": "Motion",
+        "key": "??",
+        "button": "??",
+        "x": 800,
+        "y": 400
+      },
+      {
+        "type": "ButtonPress",
+        "key": "??",
+        "button": "1",
+        "x": 800,
+        "y": 400
+      },
+      {
+        "type": "KeyRelease",
+        "key": "Shift_L",
+        "button": "??",
+        "x": 800,
+        "y": 400
+      },
+      {
+        "type": "ButtonRelease",
+        "key": "??",
+        "button": "1",
+        "x": 800,
+        "y": 400
+      },
+      {
+        "type": "KeyPress",
+        "key": "Shift_L",
+        "button": "??",
+        "x": 800,
+        "y": 400
+      },
+      {
+        "type": "Motion",
+        "key": "??",
+        "button": "??",
+        "x": 781,
+        "y": 439
+      },
+      {
+        "type": "ButtonPress",
+        "key": "??",
+        "button": "1",
+        "x": 781,
+        "y": 439
+      },
+      {
+        "type": "KeyRelease",
+        "key": "Shift_L",
+        "button": "??",
+        "x": 781,
+        "y": 439
+      },
+      {
+        "type": "ButtonRelease",
+        "key": "??",
+        "button": "1",
+        "x": 781,
+        "y": 439
+      },
+      {
+        "type": "KeyPress",
+        "key": "Shift_L",
+        "button": "??",
+        "x": 781,
+        "y": 439
+      },
+      {
+        "type": "Motion",
+        "key": "??",
+        "button": "??",
+        "x": 781,
+        "y": 439
+      },
+      {
+        "type": "ButtonPress",
+        "key": "??",
+        "button": "1",
+        "x": 781,
+        "y": 439
+      },
+      {
+        "type": "KeyRelease",
+        "key": "Shift_L",
+        "button": "??",
+        "x": 781,
+        "y": 439
+      },
+      {
+        "type": "ButtonRelease",
+        "key": "??",
+        "button": "1",
+        "x": 781,
+        "y": 439
+      }
+    ],
+    "shift": false,
+    "button1": false,
+    "pointer": [
+      781,
+      439
+    ],
+    "changed": true,
+    "animationTick": 84,
+    "animating": false,
+    "xFocus": 31457305,
+    "entryWindow": 31457305,
+    "rootWindow": 31457303,
+    "tkFocus": "."
+  },
+  "finished": "2026-10-27T06:45:48.239Z"
+}

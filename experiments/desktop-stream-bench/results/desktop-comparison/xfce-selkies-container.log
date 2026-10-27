@@ -1,0 +1,6 @@
+SpiRegistry daemon is running with well-known name - org.a11y.atspi.Registry
+[X11] Configuring Output: 1280x720 @ 60.00 FPS (Encode Node: -2)
+[X11] Zero-copy capture (NvFBC) unavailable: software encoding was requested.
+[X11] Zero-copy capture (DRI3) unavailable: software encoding was requested; capturing through XShm.
+[X11] Encoder: software H264 (x264) 4:2:0 8-bit, 1 thread.
+[X11] Stream settings active -> Res: 1280x720 | FPS: 60.0 | Encoder: CPU (x264) | Mode: H264 | CBR 8000 | PaintOver CRF: 18 (Burst: 5f) | Colorspace: I420 (Limited Range) | Damage Thresh: 10f | Damage Dur: 20f

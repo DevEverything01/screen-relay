@@ -1,0 +1,60 @@
+[libx264 @ 0xecf0c400e210] using cpu capabilities: ARMv8 NEON
+[libx264 @ 0xecf0c400e210] profile Constrained Baseline, level 3.2, 4:2:0, 8-bit
+[2026/10/27 13:23:14:6840] N: lws_create_context: LWS: 4.3.3-unknown, NET CLI SRV H1 H2 WS ConMon IPV6-on
+[2026/10/27 13:23:14:6840] N: __lws_lc_tag:  ++ [wsi|0|pipe] (1)
+[2026/10/27 13:23:14:6840] N: __lws_lc_tag:  ++ [vh|0|netlink] (1)
+[2026/10/27 13:23:14:6846] N: __lws_lc_tag:  ++ [vh|1|default|0.0.0.0|0.0.0.0|18113] (2)
+[2026/10/27 13:23:14:6846] N:  Vhost 'default' using TLS mode
+[2026/10/27 13:23:14:7008] N: [vh|1|default|0.0.0.0|0.0.0.0|18113]: lws_socket_bind: source ads 0.0.0.0
+[2026/10/27 13:23:14:7008] N: __lws_lc_tag:  ++ [wsi|1|listen|default|0.0.0.0|18113] (2)
+Native stream listening on 0.0.0.0:18113
+{"ready":true,"pid":9083,"port":18113}
+[2026/10/27 13:23:14:9764] N: __lws_lc_tag:  ++ [wsisrv|0|adopted] (1)
+[2026/10/27 13:23:14:9764] N: lws_gate_accepts: on = 0
+[2026/10/27 13:23:14:9820] N: lws_gate_accepts: on = 0
+[2026/10/27 13:23:14:9877] N: __lws_lc_tag:  ++ [wsisrv|1|adopted] (2)
+[2026/10/27 13:23:14:9877] N: lws_gate_accepts: on = 0
+[2026/10/27 13:23:14:9897] N: lws_gate_accepts: on = 0
+[2026/10/27 13:23:14:9914] W: User code denied connection
+[2026/10/27 13:23:14:9933] N: lws_gate_accepts: on = 0
+[2026/10/27 13:23:14:9933] N: __lws_lc_untag:  -- [wsisrv|0|adopted] (1) 16.976ms
+[2026/10/27 13:23:14:9956] N: __lws_lc_tag:  ++ [wsisrv|2|adopted] (2)
+[2026/10/27 13:23:14:9956] N: lws_gate_accepts: on = 0
+[2026/10/27 13:23:14:9974] N: lws_gate_accepts: on = 0
+[2026/10/27 13:23:15:0169] N: lws_gate_accepts: on = 0
+[2026/10/27 13:23:15:0170] N: __lws_lc_untag:  -- [wsisrv|2|adopted] (1) 21.397ms
+[2026/10/27 13:23:15:0177] N: lws_gate_accepts: on = 0
+[2026/10/27 13:23:15:0177] N: __lws_lc_untag:  -- [wsisrv|1|adopted] (0) 29.988ms
+[2026/10/27 13:23:15:5189] N: __lws_lc_tag:  ++ [wsisrv|3|adopted] (1)
+[2026/10/27 13:23:15:5190] N: lws_gate_accepts: on = 0
+[2026/10/27 13:23:15:5214] N: lws_gate_accepts: on = 0
+[2026/10/27 13:23:15:5494] N: __lws_lc_tag:  ++ [wsisrv|4|adopted] (2)
+[2026/10/27 13:23:15:5494] N: lws_gate_accepts: on = 0
+[2026/10/27 13:23:15:5523] N: lws_gate_accepts: on = 0
+[2026/10/27 13:23:15:5528] W: User code denied connection
+[2026/10/27 13:23:15:5539] N: lws_gate_accepts: on = 0
+[2026/10/27 13:23:15:5539] N: __lws_lc_untag:  -- [wsisrv|4|adopted] (1) 4.527ms
+[2026/10/27 13:23:15:6691] N: __lws_lc_tag:  ++ [wsisrv|5|adopted] (2)
+[2026/10/27 13:23:15:6691] N: lws_gate_accepts: on = 0
+[2026/10/27 13:23:15:6700] N: lws_gate_accepts: on = 0
+[2026/10/27 13:23:15:6702] W: User code denied connection
+[2026/10/27 13:23:15:6706] N: lws_gate_accepts: on = 0
+[2026/10/27 13:23:15:6706] N: __lws_lc_untag:  -- [wsisrv|5|adopted] (1) 1.540ms
+[2026/10/27 13:23:16:3162] N: __lws_lc_tag:  ++ [wsisrv|6|adopted] (2)
+[2026/10/27 13:23:16:3162] N: lws_gate_accepts: on = 0
+[2026/10/27 13:23:16:3177] N: lws_gate_accepts: on = 0
+[2026/10/27 13:23:16:4537] N: lws_gate_accepts: on = 0
+[2026/10/27 13:23:16:4537] N: __lws_lc_untag:  -- [wsisrv|6|adopted] (1) 137.495ms
+[2026/10/27 13:23:16:4811] N: lws_gate_accepts: on = 0
+[2026/10/27 13:23:16:4811] N: __lws_lc_untag:  -- [wsisrv|3|adopted] (0) 962.185ms
+[libx264 @ 0xecf0c400e210] frame I:1     Avg QP: 7.00  size:  6380
+[libx264 @ 0xecf0c400e210] mb I  I16..4: 100.0%  0.0%  0.0%
+[libx264 @ 0xecf0c400e210] coded y,uvDC,uvAC intra: 0.5% 0.5% 0.5%
+[libx264 @ 0xecf0c400e210] i16 v,h,dc,p: 92%  4%  4%  0%
+[libx264 @ 0xecf0c400e210] i8c dc,h,v,p: 96%  3%  1%  0%
+[libx264 @ 0xecf0c400e210] kb/s:3062.40
+capture_stats captures=1 encoded=1 capture_ns=3099951 convert_ns=1570142 encode_ns=4392548
+[2026/10/27 13:23:18:4701] N: __lws_lc_untag:  -- [wsi|0|pipe] (1) 3.786s
+[2026/10/27 13:23:18:4705] N: __lws_lc_untag:  -- [vh|1|default|0.0.0.0|0.0.0.0|18113] (1) 3.785s
+[2026/10/27 13:23:18:4705] N: __lws_lc_untag:  -- [wsi|1|listen|default|0.0.0.0|18113] (0) 3.769s
+[2026/10/27 13:23:18:4705] N: __lws_lc_untag:  -- [vh|0|netlink] (0) 3.786s

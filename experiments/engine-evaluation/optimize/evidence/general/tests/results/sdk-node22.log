@@ -1,0 +1,70 @@
+TAP version 13
+# Subtest: control input uses the protocol and awaits its matching acknowledgement
+ok 1 - control input uses the protocol and awaits its matching acknowledgement
+  ---
+  duration_ms: 18.620709
+  type: 'test'
+  ...
+# Subtest: input timeout closes the session and rejects other pending input
+ok 2 - input timeout closes the session and rejects other pending input
+  ---
+  duration_ms: 31.77075
+  type: 'test'
+  ...
+# Subtest: malformed response closes session and rejects pending input
+ok 3 - malformed response closes session and rejects pending input
+  ---
+  duration_ms: 0.952334
+  type: 'test'
+  ...
+# Subtest: control bounds outstanding input and rejects it when closed
+ok 4 - control bounds outstanding input and rejects it when closed
+  ---
+  duration_ms: 0.774917
+  type: 'test'
+  ...
+# Subtest: disconnect rejects in-flight input
+ok 5 - disconnect rejects in-flight input
+  ---
+  duration_ms: 0.292834
+  type: 'test'
+  ...
+# Subtest: connection failure closes the socket before rejecting
+ok 6 - connection failure closes the socket before rejecting
+  ---
+  duration_ms: 0.195666
+  type: 'test'
+  ...
+# Subtest: JSON parse errors and body timeouts have stable codes
+ok 7 - JSON parse errors and body timeouts have stable codes
+  ---
+  duration_ms: 24.331875
+  type: 'test'
+  ...
+# Subtest: HTTP error bodies distinguish snapshot contention from service failure
+ok 8 - HTTP error bodies distinguish snapshot contention from service failure
+  ---
+  duration_ms: 0.647458
+  type: 'test'
+  ...
+# Subtest: snapshot body failures and file failures have stable codes
+ok 9 - snapshot body failures and file failures have stable codes
+  ---
+  duration_ms: 2.273333
+  type: 'test'
+  ...
+# Subtest: SDK and CLI snapshots do not open a control connection
+ok 10 - SDK and CLI snapshots do not open a control connection
+  ---
+  duration_ms: 53.103
+  type: 'test'
+  ...
+1..10
+# tests 10
+# suites 0
+# pass 10
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 211.981708

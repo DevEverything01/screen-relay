@@ -1,0 +1,128 @@
+{
+  "url": "http://127.0.0.1:18099",
+  "container": "native-cursor-asan",
+  "checks": [
+    {
+      "name": "discovery and fresh PNG work with no viewer or controller",
+      "passed": true,
+      "evidence": {
+        "discovery": {
+          "version": 1,
+          "backend": "x11",
+          "width": 1280,
+          "height": 720,
+          "input": {
+            "keyboard": true,
+            "pointer": true,
+            "buttons": true,
+            "wheel": true
+          },
+          "snapshot": "/snapshot.png",
+          "control": "/control",
+          "wayland": false,
+          "max_input_pending": 32,
+          "cursor": true,
+          "audio": false,
+          "clipboard": false,
+          "resize": false,
+          "ime": false
+        },
+        "before": {
+          "width": 1280,
+          "height": 720,
+          "rgba": [
+            32,
+            176,
+            96,
+            255
+          ]
+        },
+        "after": {
+          "width": 1280,
+          "height": 720,
+          "rgba": [
+            192,
+            48,
+            176,
+            255
+          ]
+        }
+      },
+      "ms": 824
+    },
+    {
+      "name": "SDK acknowledged input reaches native application and disconnect releases controls",
+      "passed": true,
+      "evidence": {
+        "entry": "a",
+        "shift": false,
+        "button1": false
+      },
+      "ms": 945
+    },
+    {
+      "name": "control ready envelope is real and malformed input releases ownership",
+      "passed": true,
+      "evidence": {
+        "ready": true,
+        "statuses": [
+          1,
+          2
+        ],
+        "code": 1006
+      },
+      "ms": 6
+    },
+    {
+      "name": "Host and Origin validation reject HTTP access",
+      "passed": true,
+      "evidence": {
+        "host": 403,
+        "origin": 403,
+        "longOrigin": 403
+      },
+      "ms": 4
+    },
+    {
+      "name": "concurrent snapshots stay bounded and live viewer continues decoding",
+      "passed": true,
+      "evidence": {
+        "sdkPixel": {
+          "width": 1280,
+          "height": 720,
+          "rgba": [
+            192,
+            48,
+            176,
+            255
+          ]
+        },
+        "statuses": [
+          200,
+          503,
+          503,
+          503,
+          503,
+          503,
+          503,
+          503,
+          503,
+          503,
+          503,
+          503
+        ],
+        "stats": {
+          "received": 8,
+          "drawn": 8,
+          "bytes": 8200,
+          "decodeerrors": 0,
+          "outstanding": 0,
+          "pendingBytes": 0,
+          "pendingHighWater": 1
+        }
+      },
+      "ms": 659
+    }
+  ],
+  "passed": true
+}

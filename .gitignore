@@ -1,10 +1,9 @@
 .context/
-bench/results/
 build/
 node_modules/
 __pycache__/
-tests/results/
-qualification/results/
-probes/results/
+.env
 /native-stream
-result.yaml
+tests/results/
+experiments/engine-evaluation/*/results/
+experiments/exp-001/result.yaml

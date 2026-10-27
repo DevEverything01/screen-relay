@@ -1,0 +1,44 @@
+mkdir -p build
+g++ -O2 -std=c++17 -Wall -Wextra -Wpedantic -pthread tests/color-test.cpp src/color.cpp -o build/color-test
+./build/color-test
+BT.709 colors, box chroma, random pixels, tails, strides and guards passed
+mkdir -p build
+g++ -O2 -std=c++17 -Wall -Wextra -Wpedantic -pthread tests/flow-test.cpp -o build/flow-test
+./build/flow-test
+flow policy checks passed
+mkdir -p build
+g++ -O2 -std=c++17 -Wall -Wextra -Wpedantic -pthread tests/backend-source-test.cpp src/capture.cpp src/color.cpp -o build/backend-source-test -I/usr/include/aarch64-linux-gnu -lavcodec -lavutil -lswscale 
+./build/backend-source-test
+[libx264 @ 0xf246e0000bb0] using cpu capabilities: ARMv8 NEON
+[libx264 @ 0xf246e0000bb0] profile Constrained Baseline, level 3.2, 4:2:0, 8-bit
+[swscaler @ 0xb3ad8514ca10] No accelerated colorspace conversion found from yuv420p to rgb24.
+[swscaler @ 0xb3ad85490d30] No accelerated colorspace conversion found from yuv420p to rgb24.
+[libx264 @ 0xf246e0000bb0] frame I:2     Avg QP: 6.00  size:  3170
+[libx264 @ 0xf246e0000bb0] frame P:1     Avg QP: 5.00  size:  4135
+[libx264 @ 0xf246e0000bb0] mb I  I16..4: 100.0%  0.0%  0.0%
+[libx264 @ 0xf246e0000bb0] mb P  I16..4: 100.0%  0.0%  0.0%  P16..4:  0.0%  0.0%  0.0%  0.0%  0.0%    skip: 0.0%
+[libx264 @ 0xf246e0000bb0] coded y,uvDC,uvAC intra: 0.0% 0.1% 0.0%
+[libx264 @ 0xf246e0000bb0] i16 v,h,dc,p: 96%  0%  4%  0%
+[libx264 @ 0xf246e0000bb0] i8c dc,h,v,p: 100%  0%  0%  0%
+[libx264 @ 0xf246e0000bb0] kb/s:1676.00
+[libx264 @ 0xf246e0000920] using cpu capabilities: ARMv8 NEON
+[libx264 @ 0xf246e0000920] profile Constrained Baseline, level 3.2, 4:2:0, 8-bit
+capture: invalid capture frame; retrying with IDR
+[libx264 @ 0xf246e0000920] using cpu capabilities: ARMv8 NEON
+[libx264 @ 0xf246e0000920] profile Constrained Baseline, level 3.2, 4:2:0, 8-bit
+capture: invalid capture frame; retrying with IDR
+[libx264 @ 0xf246e0000920] using cpu capabilities: ARMv8 NEON
+[libx264 @ 0xf246e0000920] profile Constrained Baseline, level 3.2, 4:2:0, 8-bit
+capture: invalid capture frame; retrying with IDR
+capture worker stopped: capture failed three consecutive times: invalid capture frame
+[libx264 @ 0xf246e00008e0] using cpu capabilities: ARMv8 NEON
+[libx264 @ 0xf246e00008e0] profile Constrained Baseline, level 3.2, 4:2:0, 8-bit
+capture: invalid capture frame; retrying with IDR
+[libx264 @ 0xf246e00008e0] using cpu capabilities: ARMv8 NEON
+[libx264 @ 0xf246e00008e0] profile Constrained Baseline, level 3.2, 4:2:0, 8-bit
+capture: invalid capture frame; retrying with IDR
+[libx264 @ 0xf246e00008e0] using cpu capabilities: ARMv8 NEON
+[libx264 @ 0xf246e00008e0] profile Constrained Baseline, level 3.2, 4:2:0, 8-bit
+capture: invalid capture frame; retrying with IDR
+capture worker stopped: capture failed three consecutive times: invalid capture frame
+backend source: decoded fresh IDRs, damage, idle, shutdown and invalid frames passed

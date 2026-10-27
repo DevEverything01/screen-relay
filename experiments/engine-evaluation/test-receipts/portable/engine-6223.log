@@ -1,0 +1,39 @@
+[libx264 @ 0xe16bdc00e280] using cpu capabilities: ARMv8 NEON
+[libx264 @ 0xe16bdc00e280] profile Constrained Baseline, level 3.2, 4:2:0, 8-bit
+[2026/10/27 13:07:02:6241] N: lws_create_context: LWS: 4.3.3-unknown, NET CLI SRV H1 H2 WS ConMon IPV6-on
+[2026/10/27 13:07:02:6242] N: __lws_lc_tag:  ++ [wsi|0|pipe] (1)
+[2026/10/27 13:07:02:6242] N: __lws_lc_tag:  ++ [vh|0|netlink] (1)
+[2026/10/27 13:07:02:6243] N: __lws_lc_tag:  ++ [vh|1|default|127.0.0.1|127.0.0.1|18111] (2)
+[2026/10/27 13:07:02:6244] N: [vh|1|default|127.0.0.1|127.0.0.1|18111]: lws_socket_bind: source ads 127.0.0.1
+[2026/10/27 13:07:02:6244] N: __lws_lc_tag:  ++ [wsi|1|listen|default|127.0.0.1|18111] (2)
+Native stream listening on 127.0.0.1:18111
+{"ready":true,"pid":6230,"port":18111}
+[2026/10/27 13:07:02:7191] N: __lws_lc_tag:  ++ [wsisrv|0|adopted] (1)
+[2026/10/27 13:07:02:7297] N: __lws_lc_untag:  -- [wsisrv|0|adopted] (0) 10.623ms
+[2026/10/27 13:07:02:9909] N: __lws_lc_tag:  ++ [wsisrv|1|adopted] (1)
+[2026/10/27 13:07:03:3656] N: __lws_lc_tag:  ++ [wsisrv|2|adopted] (2)
+[2026/10/27 13:07:03:3863] N: __lws_lc_untag:  -- [wsisrv|2|adopted] (1) 20.652ms
+[2026/10/27 13:07:03:6140] N: __lws_lc_untag:  -- [wsisrv|1|adopted] (0) 623.067ms
+[2026/10/27 13:07:03:9046] N: __lws_lc_tag:  ++ [wsisrv|3|adopted] (1)
+[2026/10/27 13:07:03:9139] N: __lws_lc_untag:  -- [wsisrv|3|adopted] (0) 9.291ms
+[2026/10/27 13:07:03:9318] N: __lws_lc_tag:  ++ [wsisrv|4|adopted] (1)
+[2026/10/27 13:07:04:1129] N: __lws_lc_untag:  -- [wsisrv|4|adopted] (0) 181.048ms
+[2026/10/27 13:07:04:4275] N: __lws_lc_tag:  ++ [wsisrv|5|adopted] (1)
+[2026/10/27 13:07:04:4359] N: __lws_lc_untag:  -- [wsisrv|5|adopted] (0) 8.460ms
+[2026/10/27 13:07:06:2478] N: __lws_lc_tag:  ++ [wsisrv|6|adopted] (1)
+[2026/10/27 13:07:06:3029] N: __lws_lc_tag:  ++ [wsisrv|7|adopted] (2)
+[2026/10/27 13:07:06:8891] N: __lws_lc_untag:  -- [wsisrv|7|adopted] (1) 586.259ms
+[2026/10/27 13:07:06:9226] N: __lws_lc_untag:  -- [wsisrv|6|adopted] (0) 674.810ms
+[libx264 @ 0xe16bdc00e280] frame I:1     Avg QP: 7.00  size:  5104
+[libx264 @ 0xe16bdc00e280] frame P:13    Avg QP: 3.31  size:   542
+[libx264 @ 0xe16bdc00e280] mb I  I16..4: 100.0%  0.0%  0.0%
+[libx264 @ 0xe16bdc00e280] mb P  I16..4:  3.0%  0.0%  0.0%  P16..4:  0.0%  0.0%  0.0%  0.0%  0.0%    skip:97.0%
+[libx264 @ 0xe16bdc00e280] coded y,uvDC,uvAC intra: 1.0% 1.0% 1.0% inter: 0.0% 0.0% 0.0%
+[libx264 @ 0xe16bdc00e280] i16 v,h,dc,p: 90%  7%  3%  0%
+[libx264 @ 0xe16bdc00e280] i8c dc,h,v,p: 90%  6%  4%  0%
+[libx264 @ 0xe16bdc00e280] kb/s:416.67
+capture_stats captures=14 encoded=14 capture_ns=12243023 convert_ns=8302085 encode_ns=28027978
+[2026/10/27 13:07:08:3030] N: __lws_lc_untag:  -- [wsi|0|pipe] (1) 5.678s
+[2026/10/27 13:07:08:3030] N: __lws_lc_untag:  -- [vh|1|default|127.0.0.1|127.0.0.1|18111] (1) 5.678s
+[2026/10/27 13:07:08:3030] N: __lws_lc_untag:  -- [wsi|1|listen|default|127.0.0.1|18111] (0) 5.678s
+[2026/10/27 13:07:08:3031] N: __lws_lc_untag:  -- [vh|0|netlink] (0) 5.678s

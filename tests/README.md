@@ -10,7 +10,14 @@
 | Latest recorded portable results | [Verification summary and receipts](../docs/portable-verification.md) |
 
 Use disposable test desktops. Historical results below are labeled by build;
-they do not replace the latest verification receipts.
+they do not replace the latest verification receipts. New runs write to
+`tests/results/` (untracked); the historical `results/...` receipts cited below are
+kept in [experiments/engine-evaluation/test-receipts](../experiments/engine-evaluation/test-receipts/).
+
+| Folder | Contents |
+| --- | --- |
+| `unit/` | Native C++ checks run by `make test`, plus the SDK type-consumer check |
+| `integration/` | Browser, framework, cursor and portable checks against a real desktop |
 
 ## Native integration check
 
@@ -18,7 +25,7 @@ Run against an already started native container; this test never builds, starts,
 stops, or deletes a container:
 
 ```sh
-TEST_CONTAINER=<native-container-name> TEST_URL=http://127.0.0.1:18094 node tests/integration.mjs
+TEST_CONTAINER=<native-container-name> TEST_URL=http://127.0.0.1:18094 node tests/integration/integration.mjs
 ```
 
 Requires installed Google Chrome, local development dependencies (`npm ci --ignore-scripts`), Docker access, and Python/Tk with X11 in the container. The fixture
@@ -79,7 +86,7 @@ server-side held-control cleanup on timeout.
 
 ## Framework integration
 
-Run `TEST_CONTAINER=<container> TEST_URL=http://127.0.0.1:18094 node tests/framework-integration.mjs`
+Run `TEST_CONTAINER=<container> TEST_URL=http://127.0.0.1:18094 node tests/integration/framework-integration.mjs`
 against a dedicated container with the framework endpoints implemented. It uses
 the actual SDK and server without a mock: PNG signature and independently known
 Tk pixels before and after a desktop change without a viewer, acknowledged input
@@ -89,12 +96,6 @@ bounded concurrent snapshot burst while real video continues decoding.
 Results are saved to `results/framework-integration.json`. Syntax checks alone
 do not establish these native behaviors. The burst checks completion and live
 video, not a precise native memory bound or sustained snapshot throughput.
-
-## Live game diagnostic
-
-`TEST_CONTAINER=native-doom-final TEST_URL=http://127.0.0.1:18096 TEST_LABEL=final-engine node tests/doom-live-check.mjs` samples ten seconds without a viewer, ten stationary seconds, and fifteen seconds holding turn/fire through the real browser input path. It requires an already-running live game. `node tests/doom-live-check.mjs --self-check` validates resource arithmetic.
-
-It preserves counters, process attribution, drawn-frame counts and screenshots. A changed screenshot and zero decoder errors establish a live visible stream; they do not independently prove every game action or measure input latency. This is one diagnostic per configuration, not a repeated three-engine gaming comparison. Completed release/sanitizer and game evidence is exported in [optimize/evidence](../optimize/evidence/).
 
 ## General2b validation
 
@@ -130,12 +131,12 @@ bare imports and the installed CLI were exercised on Node 22 and Node 26.
 With an installed TypeScript compiler, run:
 
 ```sh
-tsc --noEmit --strict --module NodeNext --target ES2022 tests/sdk-types.mts
+tsc --noEmit --strict --module NodeNext --target ES2022 tests/unit/sdk-types.mts
 ```
 
 The compiler check validates public package/type resolution and rejects invalid
 input shapes; it does not contact a desktop. Real Thunar and Freedoom comparisons
-are described in `qualification/` and reported separately from these contract tests.
+are described in [qualification](../experiments/engine-evaluation/qualification/README.md) and reported separately from these contract tests.
 
 ## Remote cursor verification
 

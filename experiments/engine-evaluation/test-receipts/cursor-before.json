@@ -1,0 +1,11 @@
+{
+  "url": "http://127.0.0.1:18098",
+  "container": "native-cursor-before",
+  "checks": [
+    {
+      "name": "actual desktop arrow pixels and hotspot",
+      "passed": false,
+      "error": "Error: Timed out: null\n    at poll (file:///Users/lahfir/Documents/Projects/sandbox-ui/native-stream-lab/tests/cursor-integration.mjs:27:9)\n    at async compareCursor (file:///Users/lahfir/Documents/Projects/sandbox-ui/native-stream-lab/tests/cursor-integration.mjs:38:20)\n    at async check (file:///Users/lahfir/Documents/Projects/sandbox-ui/native-stream-lab/tests/cursor-integration.mjs:30:58)\n    at async file:///Users/lahfir/Documents/Projects/sandbox-ui/native-stream-lab/tests/cursor-integration.mjs:74:17"
+    }
+  ]
+}

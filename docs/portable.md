@@ -201,7 +201,7 @@ The runner uses standard SSH and a localhost tunnel, not the Docker CLI:
 ```sh
 TEST_SSH_CONFIG=/path/to/ssh.config TEST_SSH_TARGET=my-test-vm \
   TEST_REMOTE_ROOT=/home/test/native-stream-src \
-  node tests/portable-integration.mjs
+  node tests/integration/portable-integration.mjs
 ```
 
 See the runner's environment defaults for ports and output paths. Only point it

@@ -1,6 +1,6 @@
 # Implemented native stream contract
 
-This describes the current implementation, not a performance verdict. Authoritative source: [capture.hpp](../src/capture.hpp), [capture.cpp](../src/capture.cpp), [server.cpp](../src/server.cpp), and [viewer.js](../viewer/viewer.js). See [verification recipes](../tests/README.md), [metrics checks](../tests/live-metrics-README.md), and the [initial narrow report](../optimize/native-stream-report.md).
+This describes the current implementation, not a performance verdict. Authoritative source: [capture.hpp](../src/core/capture.hpp), [capture.cpp](../src/core/capture.cpp), [server.cpp](../src/server/server.cpp), and [viewer.js](../viewer/viewer.js). See [verification recipes](../tests/README.md), [metrics checks](../experiments/engine-evaluation/diagnostics/live-metrics-README.md), and the [initial narrow report](../experiments/engine-evaluation/optimize/native-stream-report.md).
 
 ## Build boundary
 

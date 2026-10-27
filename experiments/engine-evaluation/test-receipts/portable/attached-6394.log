@@ -1,0 +1,23 @@
+[libx264 @ 0xef160400e210] using cpu capabilities: ARMv8 NEON
+[libx264 @ 0xef160400e210] profile Constrained Baseline, level 3.2, 4:2:0, 8-bit
+[2026/10/27 13:07:07:8459] N: lws_create_context: LWS: 4.3.3-unknown, NET CLI SRV H1 H2 WS ConMon IPV6-on
+[2026/10/27 13:07:07:8460] N: __lws_lc_tag:  ++ [wsi|0|pipe] (1)
+[2026/10/27 13:07:07:8460] N: __lws_lc_tag:  ++ [vh|0|netlink] (1)
+[2026/10/27 13:07:07:8465] N: __lws_lc_tag:  ++ [vh|1|default|0.0.0.0|0.0.0.0|18113] (2)
+[2026/10/27 13:07:07:8465] N:  Vhost 'default' using TLS mode
+[2026/10/27 13:07:07:8610] N: [vh|1|default|0.0.0.0|0.0.0.0|18113]: lws_socket_bind: source ads 0.0.0.0
+[2026/10/27 13:07:07:8611] N: __lws_lc_tag:  ++ [wsi|1|listen|default|0.0.0.0|18113] (2)
+Native stream listening on 0.0.0.0:18113
+{"ready":true,"pid":6394,"port":18113}
+[2026/10/27 13:07:08:1431] N: __lws_lc_tag:  ++ [wsisrv|0|adopted] (1)
+[2026/10/27 13:07:08:1431] N: lws_gate_accepts: on = 0
+[2026/10/27 13:07:08:1521] N: lws_gate_accepts: on = 0
+[2026/10/27 13:07:08:1522] N: __lws_lc_tag:  ++ [mux|0|h2_sid1_(wsisrv|0|adopted])] (1)
+[2026/10/27 13:07:08:1523] N: __lws_lc_untag:  -- [mux|0|h2_sid1_(wsisrv|0|adopted])] (0) 77μs
+[2026/10/27 13:07:08:1581] N: lws_gate_accepts: on = 0
+[2026/10/27 13:07:08:1582] N: __lws_lc_untag:  -- [wsisrv|0|adopted] (0) 15.058ms
+capture_stats captures=0 encoded=0 capture_ns=0 convert_ns=0 encode_ns=0
+[2026/10/27 13:07:08:1738] N: __lws_lc_untag:  -- [wsi|0|pipe] (1) 327.856ms
+[2026/10/27 13:07:08:1741] N: __lws_lc_untag:  -- [vh|1|default|0.0.0.0|0.0.0.0|18113] (1) 327.607ms
+[2026/10/27 13:07:08:1741] N: __lws_lc_untag:  -- [wsi|1|listen|default|0.0.0.0|18113] (0) 313.049ms
+[2026/10/27 13:07:08:1741] N: __lws_lc_untag:  -- [vh|0|netlink] (0) 328.141ms

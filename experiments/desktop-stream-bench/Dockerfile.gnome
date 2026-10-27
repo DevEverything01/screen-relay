@@ -1,0 +1,7 @@
+FROM desktop-stream-bench:local
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends gnome-session gnome-session-xsession gnome-shell gnome-settings-daemon gnome-terminal nautilus gnome-control-center mesa-utils libgl1-mesa-dri
+COPY fixture.py session.sh gnome-entry.sh /opt/bench/
+RUN chmod +x /opt/bench/session.sh /opt/bench/gnome-entry.sh
+ENV DESKTOP=gnome LANG=C.UTF-8
+ENTRYPOINT ["/opt/bench/gnome-entry.sh"]

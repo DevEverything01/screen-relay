@@ -1,0 +1,14 @@
+{
+  "passed": true,
+  "archiveSha256": "658340c5c328fb390f86e875dd0c8b53149b7e6dd5086c04fdb2f00b4e785e52",
+  "manifestFilesVerified": 84,
+  "customPrefixInstall": true,
+  "viewerAssetsServedFromInstall": true,
+  "freshPngSize": [
+    1280,
+    720
+  ],
+  "attachedEngineExit": 0,
+  "existingDisplayPreserved": true,
+  "binarySha256": "0f2b197e7bbddf983ff9966418decbe037298a6985d38e74620fc21ddc291da4"
+}

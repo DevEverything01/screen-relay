@@ -1,0 +1,702 @@
+[
+  {
+    "tag": "INPUT",
+    "id": "noVNC_view_drag_button",
+    "title": "Move/Drag Viewport",
+    "type": "image",
+    "value": "",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_toggle_extra_keys_button",
+    "title": "Show Extra Keys",
+    "type": "image",
+    "value": "",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_keyboard_button",
+    "title": "Show Keyboard",
+    "type": "image",
+    "value": "",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_toggle_ctrl_button",
+    "title": "Toggle Ctrl",
+    "type": "image",
+    "value": "",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_toggle_alt_button",
+    "title": "Toggle Alt",
+    "type": "image",
+    "value": "",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_toggle_windows_button",
+    "title": "Toggle Windows",
+    "type": "image",
+    "value": "",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_send_tab_button",
+    "title": "Send Tab",
+    "type": "image",
+    "value": "",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_send_esc_button",
+    "title": "Send Escape",
+    "type": "image",
+    "value": "",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_send_ctrl_alt_del_button",
+    "title": "Send Ctrl-Alt-Del",
+    "type": "image",
+    "value": "",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_power_button",
+    "title": "Shutdown/Reboot...",
+    "type": "image",
+    "value": "",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_shutdown_button",
+    "title": "",
+    "type": "button",
+    "value": "Shutdown",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_reboot_button",
+    "title": "",
+    "type": "button",
+    "value": "Reboot",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_reset_button",
+    "title": "",
+    "type": "button",
+    "value": "Reset",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_clipboard_button",
+    "title": "Clipboard",
+    "type": "image",
+    "value": "",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_clipboard_clear_button",
+    "title": "",
+    "type": "button",
+    "value": "Clear",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_fullscreen_button",
+    "title": "Fullscreen",
+    "type": "image",
+    "value": "",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_displays_button",
+    "title": "Show Displays",
+    "type": "image",
+    "value": "",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_game_mode_button",
+    "title": "Game Pointer Mode",
+    "type": "image",
+    "value": "",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_settings_button",
+    "title": "Settings",
+    "type": "image",
+    "value": "",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_setting_shared",
+    "title": "",
+    "type": "checkbox",
+    "value": "on",
+    "checked": true,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_setting_view_only",
+    "title": "",
+    "type": "checkbox",
+    "value": "on",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_setting_clipboard_up",
+    "title": "",
+    "type": "checkbox",
+    "value": "on",
+    "checked": true,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_setting_clipboard_down",
+    "title": "",
+    "type": "checkbox",
+    "value": "on",
+    "checked": true,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_setting_clipboard_seamless",
+    "title": "",
+    "type": "checkbox",
+    "value": "on",
+    "checked": true,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_setting_prefer_local_cursor",
+    "title": "",
+    "type": "checkbox",
+    "value": "on",
+    "checked": true,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_setting_translate_shortcuts",
+    "title": "",
+    "type": "checkbox",
+    "value": "on",
+    "checked": true,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_setting_enable_webrtc",
+    "title": "",
+    "type": "checkbox",
+    "value": "on",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_setting_enable_webp",
+    "title": "",
+    "type": "checkbox",
+    "value": "on",
+    "checked": true,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_setting_enable_perf_stats",
+    "title": "",
+    "type": "checkbox",
+    "value": "on",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_setting_enable_threading",
+    "title": "",
+    "type": "checkbox",
+    "value": "on",
+    "checked": true,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_setting_pointer_lock",
+    "title": "",
+    "type": "checkbox",
+    "value": "on",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_setting_enable_ime",
+    "title": "",
+    "type": "checkbox",
+    "value": "on",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_setting_virtual_keyboard_visible",
+    "title": "",
+    "type": "checkbox",
+    "value": "on",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_setting_toggle_control_panel",
+    "title": "",
+    "type": "checkbox",
+    "value": "on",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "SELECT",
+    "id": "noVNC_setting_idle_disconnect",
+    "title": "",
+    "type": "select-one",
+    "value": "20",
+    "text": "10203060"
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_setting_view_clip",
+    "title": "",
+    "type": "checkbox",
+    "value": "on",
+    "checked": true,
+    "text": ""
+  },
+  {
+    "tag": "SELECT",
+    "id": "noVNC_setting_resize",
+    "title": "",
+    "type": "select-one",
+    "value": "remote",
+    "text": "NoneLocal ScalingRemote Resizing"
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_setting_toggle_control_panel",
+    "title": "",
+    "type": "checkbox",
+    "value": "on",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "SELECT",
+    "id": "noVNC_setting_stream_mode",
+    "title": "",
+    "type": "select-one",
+    "value": "-1027",
+    "text": "JPEG/WEBP (Images)SW H.264/AVC"
+  },
+  {
+    "tag": "SELECT",
+    "id": "noVNC_setting_video_quality",
+    "title": "",
+    "type": "select-one",
+    "value": "2",
+    "text": ""
+  },
+  {
+    "tag": "SELECT",
+    "id": "noVNC_setting_anti_aliasing",
+    "title": "",
+    "type": "select-one",
+    "value": "0",
+    "text": "Auto DynamicOnOff"
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_setting_quality",
+    "title": "",
+    "type": "range",
+    "value": "6",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_setting_dynamic_quality_min",
+    "title": "",
+    "type": "range",
+    "value": "4",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_setting_dynamic_quality_max",
+    "title": "",
+    "type": "range",
+    "value": "9",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_setting_treat_lossless",
+    "title": "",
+    "type": "range",
+    "value": "7",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_setting_framerate_image_mode",
+    "title": "",
+    "type": "number",
+    "value": "24",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_setting_jpeg_video_quality",
+    "title": "",
+    "type": "range",
+    "value": "7",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_setting_webp_video_quality",
+    "title": "",
+    "type": "range",
+    "value": "7",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_setting_video_area",
+    "title": "",
+    "type": "range",
+    "value": "65",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_setting_video_time",
+    "title": "",
+    "type": "range",
+    "value": "5",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_setting_video_out_time",
+    "title": "",
+    "type": "range",
+    "value": "3",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "SELECT",
+    "id": "noVNC_setting_video_scaling",
+    "title": "",
+    "type": "select-one",
+    "value": "0",
+    "text": "NearestBilinearProgressive Bilinear"
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_setting_max_video_resolution_x",
+    "title": "",
+    "type": "number",
+    "value": "960",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_setting_max_video_resolution_y",
+    "title": "",
+    "type": "number",
+    "value": "540",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_setting_forced_resolution_x",
+    "title": "",
+    "type": "number",
+    "value": "960",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_setting_forced_resolution_y",
+    "title": "",
+    "type": "number",
+    "value": "540",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "SELECT",
+    "id": "noVNC_setting_video_rendering_mode",
+    "title": "",
+    "type": "select-one",
+    "value": "canvas2d",
+    "text": "Canvas2DWebGL"
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_setting_gop",
+    "title": "",
+    "type": "range",
+    "value": "24",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_setting_video_stream_quality",
+    "title": "",
+    "type": "range",
+    "value": "43",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_setting_framerate_streaming_mode",
+    "title": "",
+    "type": "number",
+    "value": "24",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_setting_compression",
+    "title": "",
+    "type": "range",
+    "value": "2",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_setting_repeaterID",
+    "title": "",
+    "type": "text",
+    "value": "",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_setting_encrypt",
+    "title": "",
+    "type": "checkbox",
+    "value": "on",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_setting_host",
+    "title": "",
+    "type": "text",
+    "value": "localhost",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_setting_port",
+    "title": "",
+    "type": "number",
+    "value": "8032",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_setting_path",
+    "title": "",
+    "type": "text",
+    "value": "websockify",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_setting_reconnect",
+    "title": "",
+    "type": "checkbox",
+    "value": "on",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_setting_reconnect_delay",
+    "title": "",
+    "type": "number",
+    "value": "5000",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_setting_reconnect_retries",
+    "title": "",
+    "type": "number",
+    "value": "5",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_setting_show_dot",
+    "title": "",
+    "type": "checkbox",
+    "value": "on",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "SELECT",
+    "id": "noVNC_setting_logging",
+    "title": "",
+    "type": "select-one",
+    "value": "warn",
+    "text": "errorwarninfodebug"
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_disconnect_button",
+    "title": "Disconnect",
+    "type": "image",
+    "value": "",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "",
+    "title": "Connect",
+    "type": "image",
+    "value": "",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "BUTTON",
+    "id": "noVNC_addMonitor",
+    "title": "",
+    "type": "submit",
+    "value": "",
+    "text": "Add Monitor"
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_auto_placement",
+    "title": "",
+    "type": "checkbox",
+    "value": "on",
+    "checked": true,
+    "text": ""
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_setting_enable_hidpi",
+    "title": "",
+    "type": "checkbox",
+    "value": "on",
+    "checked": false,
+    "text": ""
+  },
+  {
+    "tag": "BUTTON",
+    "id": "noVNC_identify_monitors_button",
+    "title": "",
+    "type": "submit",
+    "value": "",
+    "text": "Identify"
+  },
+  {
+    "tag": "BUTTON",
+    "id": "noVNC_close_displays",
+    "title": "",
+    "type": "submit",
+    "value": "",
+    "text": "Done"
+  },
+  {
+    "tag": "INPUT",
+    "id": "noVNC_cancel_reconnect_button",
+    "title": "",
+    "type": "button",
+    "value": "Cancel",
+    "checked": false,
+    "text": ""
+  }
+]

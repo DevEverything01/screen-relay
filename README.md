@@ -114,10 +114,10 @@ npm test
 | --- | --- |
 | Native Linux VM, without Docker | [Verification summary](docs/portable-verification.md) · [Rerun instructions](docs/portable.md#repeat-the-non-docker-verification) |
 | Browser, input, framework and cursor tests | [Test guide](tests/README.md) |
-| Native color, flow and backend suites | [Makefile](Makefile) |
-| Performance results and explanations | [HTML report](optimize/general-engine-report.html) · [Markdown report](optimize/general-engine-report.md) |
-| Benchmark workloads and reproduction | [Qualification guide](qualification/README.md) |
-| Keyboard-controlled game demo | [Freedoom](doom/README.md) |
+| Native color, flow and backend suites | `make test` ([Makefile](Makefile)) |
+| Performance results and explanations | [HTML report](experiments/engine-evaluation/optimize/general-engine-report.html) · [Markdown report](experiments/engine-evaluation/optimize/general-engine-report.md) |
+| Benchmark workloads and reproduction | [Qualification guide](experiments/engine-evaluation/qualification/README.md) |
+| Keyboard-controlled game demo | [Freedoom](experiments/engine-evaluation/doom/README.md) |
 
 The recorded portable verification passed **10/10 scenarios in each of release
 and ASAN/UBSAN builds on Ubuntu 24.04 ARM64**, plus **11 SDK tests**. The optional
@@ -144,18 +144,31 @@ AT-SPI/CDP automation tools are optional and their integration has not been veri
 
 ## File map
 
-| Path | Contents |
+```text
+src/
+  core/            Backend-agnostic pipeline: capture/input interfaces, encoder, color, flow control
+  server/          HTTP/WebSocket transport, snapshots, engine entry point
+  backends/x11/    X11 capture (XDamage, MIT-SHM, XFixes) and XTest input
+viewer/            Browser decoding, rendering, cursor and human input
+sdk/               Node client, TypeScript types, CLI
+scripts/           Desktop launcher and the Docker image entrypoint
+tests/unit/        Native C++ checks (`make test`) and the SDK type check
+tests/integration/ Browser, framework, cursor and portable checks against a real desktop
+docs/              Design, contracts and setup guides
+skills/            Coding-agent setup instructions
+experiments/       Benchmarks, comparisons, reports and retired prototypes (not part of the engine)
+```
+
+| Path | Start with |
 | --- | --- |
-| [src/](src/) | Capture/input interfaces, X11 backend, encoder, flow control, server |
-| [viewer/](viewer/) | Browser decoding, rendering, cursor and human input |
-| [sdk/](sdk/) | Node client, TypeScript types, CLI |
-| [install.sh](install.sh) · [scripts/](scripts/) | Portable install and optional desktop launcher |
-| [skills/native-stream/](skills/native-stream/SKILL.md) | Coding-agent setup instructions |
-| [tests/](tests/README.md) | Native and browser integration checks, saved receipts |
-| [qualification/](qualification/README.md) | Workloads, comparative runs and raw results |
-| [optimize/](optimize/general-engine-report.html) | Reports with portable evidence |
-| [bench/](bench/) · [probes/](probes/) | Original benchmark and isolated investigations |
+| [src/](src/) | [Backend interfaces](docs/backends.md) |
+| [tests/](tests/README.md) | Test guide |
 | [docs/](docs/engineering.md) | Engineering and extension rules |
+| [experiments/](experiments/README.md) | Index of qualification runs, reports, the Selkies/Kasm harness and exp-001 |
+
+The build selects one backend at compile time: `make BACKEND=x11` (the default
+and only backend today). A new backend adds `src/backends/<name>/` and its
+pkg-config modules in the [Makefile](Makefile); see [backend interfaces](docs/backends.md#future-wayland-work).
 
 For engine work: [backend interfaces](docs/backends.md) ·
 [flow control](docs/flow-control.md) · [wire/build contract](docs/build-contract.md) ·

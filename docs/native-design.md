@@ -1,6 +1,6 @@
 # Native lab design and limits
 
-This describes the implemented prototype, not an optimization verdict. See the [implemented contract](build-contract.md), [verification recipes](../tests/README.md), [metrics checks](../tests/live-metrics-README.md), and [initial narrow report](../optimize/native-stream-report.md).
+This describes the implemented prototype, not an optimization verdict. See the [implemented contract](build-contract.md), [verification recipes](../tests/README.md), [metrics checks](../experiments/engine-evaluation/diagnostics/live-metrics-README.md), and [initial narrow report](../experiments/engine-evaluation/optimize/native-stream-report.md).
 
 ## Data ownership
 
@@ -33,7 +33,7 @@ The Dockerfile installs the compiler and development packages: build-essential, 
 
 ## Implemented conversion and failure behavior
 
-Little-endian BGRA uses limited-range BT.709 conversion in `src/color.cpp`, with AArch64 NEON eight-pixel luma and 2×2 chroma blocks plus scalar tail/fallback. It respects source and destination strides. Averaging each 2×2 block places chroma at its center, so the codec and frame signal CENTER; left-sited metadata would misdescribe these pixels. Big-endian ARGB uses libswscale with left-sited chroma metadata. These paths require their own verification evidence.
+Little-endian BGRA uses limited-range BT.709 conversion in `src/core/color.cpp`, with AArch64 NEON eight-pixel luma and 2×2 chroma blocks plus scalar tail/fallback. It respects source and destination strides. Averaging each 2×2 block places chroma at its center, so the codec and frame signal CENTER; left-sited metadata would misdescribe these pixels. Big-endian ARGB uses libswscale with left-sited chroma metadata. These paths require their own verification evidence.
 
 Persistent x264 currently uses CRF 10, ultrafast/zerolatency, two threads, no B frames/lookahead, GOP 600, and repeated SPS/PPS in Annex B. YUV420 still loses chroma detail; low CRF cannot recover it. Static similarity alone does not establish matched motion quality.
 

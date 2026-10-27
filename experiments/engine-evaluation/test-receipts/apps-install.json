@@ -1,0 +1,40 @@
+{
+  "container": "native-stream-baseline-live",
+  "backupContainer": "native-stream-before-browser-apps",
+  "homeBackup": "/private/tmp/native-installed-home-besl2lzb",
+  "image": "sha256:15110f9a35a46d1eaa8c91afc14477c1fb6b7368fba72f91c8dca5e0f622aa1d",
+  "url": "http://127.0.0.1:18094/",
+  "ghostty": "Ghostty 1.4.0\n\nVersion\n  - version: 1.4.0\n  - channel: stable\nBuild Config\n  - Zig version   : 0.17.0\n  - build mode    : .small\n  - app runtime   : .gtk\n  - font engine   : .fontconfig_freetype\n  - renderer      : renderer.generic.Renderer(renderer.OpenGL)\n  - libxev        : epoll\n  - kernel version: 6.12.76-linuxkit\n  - desktop env   : other\n  - GTK version   :\n    build         : 4.18.6\n    runtime       : 4.18.6\n  - libadwaita    : enabled\n    build         : 1.7.6\n    runtime       : 1.7.6\n  - libX11        : enabled\n  - libwayland    : enabled",
+  "chrome": "Google Chrome 156.0.8078.47",
+  "securityProfile": "tests/results/chrome-seccomp.json",
+  "capabilities": {
+    "version": 1,
+    "backend": "x11",
+    "width": 1280,
+    "height": 720,
+    "input": {
+      "keyboard": true,
+      "pointer": true,
+      "buttons": true,
+      "wheel": true
+    },
+    "snapshot": "/snapshot.png",
+    "control": "/control",
+    "wayland": false,
+    "max_input_pending": 32,
+    "cursor": true,
+    "audio": false,
+    "clipboard": false,
+    "resize": false,
+    "ime": false
+  },
+  "verification": {
+    "chromeGui": "Opened successfully in the live viewer; user is actively using it",
+    "chromeSandbox": "chrome-sandbox.json: non-root renderers, nested PID namespaces, NoNewPrivs=1, Seccomp=2",
+    "ghosttyGui": "Rendered in live viewer; pwd typed through viewer returned /home/bench",
+    "ghosttyExits": "User confirmed manually closing the windows",
+    "source": "Signed Ghostty 1.4.0 source release; Zig 0.17.0 checksum verified",
+    "build": "zig build -Doptimize=ReleaseSmall -Dversion-string=1.4.0 -p /home/bench/.local -j1",
+    "scope": "Installed in current desktop container; original Dockerfile unchanged"
+  }
+}

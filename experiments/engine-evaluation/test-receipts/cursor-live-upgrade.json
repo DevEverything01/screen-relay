@@ -1,0 +1,34 @@
+{
+  "container": "native-stream-baseline-live",
+  "url": "http://127.0.0.1:18094",
+  "builtImage": "sha256:59b28319386426a2374468f063b86582f39b2fe8779c41b86cbad9c2dbfbf545",
+  "originalImage": "sha256:75ba2cb566ef9b63dcf1dd9e270eeb86f44c81e891e6efd9cd9bb6e92368378c",
+  "backup": "/private/tmp/native-cursor-upgrade-v_ffinuc/previous",
+  "deployment": "Native executable and viewer upgraded in the existing container; home directory retained",
+  "sha256": {
+    "native-stream": "c88a53f54781405fce47fab3a8c296fc5a021e8ef59127bcf512cbb83b741974",
+    "viewer/index.html": "99355c6f68d517d8695e9eaedc2925468092b63cafd8b8b0c5cbdf52a86985af",
+    "viewer/viewer.js": "2aa47c1be5123b211cfbb8f0be23f5175077e18e215f4418d39727f2ddf0521b"
+  },
+  "capabilities": {
+    "version": 1,
+    "backend": "x11",
+    "width": 1280,
+    "height": 720,
+    "input": {
+      "keyboard": true,
+      "pointer": true,
+      "buttons": true,
+      "wheel": true
+    },
+    "snapshot": "/snapshot.png",
+    "control": "/control",
+    "wayland": false,
+    "max_input_pending": 32,
+    "cursor": true,
+    "audio": false,
+    "clipboard": false,
+    "resize": false,
+    "ime": false
+  }
+}

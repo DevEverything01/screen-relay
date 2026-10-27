@@ -1,0 +1,158 @@
+{
+  "url": "http://127.0.0.1:18099",
+  "container": "native-cursor-asan",
+  "checks": [
+    {
+      "name": "actual desktop arrow pixels and hotspot",
+      "passed": true,
+      "evidence": {
+        "name": "left_ptr",
+        "serial": 24,
+        "width": 24,
+        "height": 24,
+        "hotspot": [
+          3,
+          1
+        ],
+        "pixelsMatch": true,
+        "scale": 1
+      }
+    },
+    {
+      "name": "real Thunar address-field text cursor",
+      "passed": true,
+      "evidence": {
+        "name": "text",
+        "serial": 35,
+        "width": 24,
+        "height": 24,
+        "hotspot": [
+          11,
+          12
+        ],
+        "pixelsMatch": true,
+        "scale": 1
+      }
+    },
+    {
+      "name": "real XFCE window-border resize cursor",
+      "passed": true,
+      "evidence": {
+        "name": "left_side",
+        "serial": 31,
+        "width": 24,
+        "height": 24,
+        "hotspot": [
+          6,
+          13
+        ],
+        "pixelsMatch": true,
+        "scale": 1
+      }
+    },
+    {
+      "name": "stationary cursor is resent on reconnect",
+      "passed": true,
+      "evidence": {
+        "name": "left_side",
+        "serial": 31,
+        "width": 24,
+        "height": 24,
+        "hotspot": [
+          6,
+          13
+        ],
+        "pixelsMatch": true,
+        "scale": 1
+      }
+    },
+    {
+      "name": "scaled desktop preserves cursor image and hotspot",
+      "passed": true,
+      "evidence": {
+        "name": "text",
+        "serial": 35,
+        "width": 24,
+        "height": 24,
+        "hotspot": [
+          11,
+          12
+        ],
+        "pixelsMatch": true,
+        "scale": 0.5
+      }
+    },
+    {
+      "name": "cursor leaves the desktop without an overlay ghost",
+      "passed": true,
+      "evidence": {
+        "hiddenOutsideDesktop": true
+      }
+    },
+    {
+      "name": "cursor messages use independent sequencing",
+      "passed": true,
+      "evidence": {
+        "messages": 43,
+        "cursorMessages": 5
+      }
+    },
+    {
+      "name": "cursor changes while video has no ACK credit",
+      "passed": true,
+      "evidence": {
+        "name": "left_side",
+        "serial": 31,
+        "width": 24,
+        "height": 24,
+        "hotspot": [
+          6,
+          13
+        ],
+        "pixelsMatch": true,
+        "scale": 1,
+        "videoFrames": 1
+      }
+    },
+    {
+      "name": "rejects cursor with oversized dimensions",
+      "passed": true,
+      "evidence": {
+        "rejected": true,
+        "staleCursorCleared": true
+      }
+    },
+    {
+      "name": "rejects cursor with hotspot outside image",
+      "passed": true,
+      "evidence": {
+        "rejected": true,
+        "staleCursorCleared": true
+      }
+    },
+    {
+      "name": "rejects cursor with wrong generation",
+      "passed": true,
+      "evidence": {
+        "rejected": true,
+        "staleCursorCleared": true
+      }
+    },
+    {
+      "name": "rejects cursor with video sequence on cursor",
+      "passed": true,
+      "evidence": {
+        "rejected": true,
+        "staleCursorCleared": true
+      }
+    },
+    {
+      "name": "rejects cursor with truncated pixels",
+      "passed": true,
+      "evidence": {
+        "rejected": true,
+        "staleCursorCleared": true
+      }
+    }
+  ]
+}

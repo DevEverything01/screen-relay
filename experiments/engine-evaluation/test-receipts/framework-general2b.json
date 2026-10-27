@@ -1,0 +1,61 @@
+{
+  "url": "http://127.0.0.1:18100",
+  "container": "native-general-two-b",
+  "checks": [
+    {
+      "name": "discovery and fresh PNG work with no viewer or controller",
+      "passed": true,
+      "evidence": {
+        "discovery": {
+          "version": 1,
+          "backend": "x11",
+          "width": 1280,
+          "height": 720,
+          "input": {
+            "keyboard": true,
+            "pointer": true,
+            "buttons": true,
+            "wheel": true
+          },
+          "snapshot": "/snapshot.png",
+          "control": "/control",
+          "wayland": false,
+          "max_input_pending": 32,
+          "cursor": false,
+          "audio": false,
+          "clipboard": false,
+          "resize": false,
+          "ime": false
+        },
+        "before": {
+          "width": 1280,
+          "height": 720,
+          "rgba": [
+            32,
+            176,
+            96,
+            255
+          ]
+        },
+        "after": {
+          "width": 1280,
+          "height": 720,
+          "rgba": [
+            192,
+            48,
+            176,
+            255
+          ]
+        }
+      },
+      "ms": 929
+    },
+    {
+      "name": "SDK acknowledged input reaches native application and disconnect releases controls",
+      "passed": false,
+      "error": "Error: Timed out: {\"pid\":111,\"entry\":\"\",\"events\":[{\"type\":\"Motion\",\"key\":\"??\",\"button\":\"??\",\"x\":200,\"y\":130},{\"type\":\"ButtonPress\",\"key\":\"??\",\"button\":\"1\",\"x\":200,\"y\":130},{\"type\":\"Motion\",\"key\":\"??\",\"button\":\"??\",\"x\":200,\"y\":130},{\"type\":\"ButtonRelease\",\"key\":\"??\",\"button\":\"1\",\"x\":200,\"y\":130},{\"type\":\"KeyRelease\",\"key\":\"a\",\"button\":\"??\",\"x\":200,\"y\":130}],\"shift\":false,\"button1\":false,\"pointer\":[200,130],\"changed\":true,\"animationTick\":0,\"animating\":false,\"xFocus\":25165849,\"entryWindow\":25165849,\"rootWindow\":25165847,\"tkFocus\":\".!entry\"}\n    at poll (file:///Users/lahfir/Documents/Projects/sandbox-ui/native-stream-lab/tests/framework-integration.mjs:26:9)\n    at async file:///Users/lahfir/Documents/Projects/sandbox-ui/native-stream-lab/tests/framework-integration.mjs:118:5\n    at async check (file:///Users/lahfir/Documents/Projects/sandbox-ui/native-stream-lab/tests/framework-integration.mjs:30:56)\n    at async file:///Users/lahfir/Documents/Projects/sandbox-ui/native-stream-lab/tests/framework-integration.mjs:112:3"
+    }
+  ],
+  "passed": false,
+  "error": "Error: Timed out: {\"pid\":111,\"entry\":\"\",\"events\":[{\"type\":\"Motion\",\"key\":\"??\",\"button\":\"??\",\"x\":200,\"y\":130},{\"type\":\"ButtonPress\",\"key\":\"??\",\"button\":\"1\",\"x\":200,\"y\":130},{\"type\":\"Motion\",\"key\":\"??\",\"button\":\"??\",\"x\":200,\"y\":130},{\"type\":\"ButtonRelease\",\"key\":\"??\",\"button\":\"1\",\"x\":200,\"y\":130},{\"type\":\"KeyRelease\",\"key\":\"a\",\"button\":\"??\",\"x\":200,\"y\":130}],\"shift\":false,\"button1\":false,\"pointer\":[200,130],\"changed\":true,\"animationTick\":0,\"animating\":false,\"xFocus\":25165849,\"entryWindow\":25165849,\"rootWindow\":25165847,\"tkFocus\":\".!entry\"}\n    at poll (file:///Users/lahfir/Documents/Projects/sandbox-ui/native-stream-lab/tests/framework-integration.mjs:26:9)\n    at async file:///Users/lahfir/Documents/Projects/sandbox-ui/native-stream-lab/tests/framework-integration.mjs:118:5\n    at async check (file:///Users/lahfir/Documents/Projects/sandbox-ui/native-stream-lab/tests/framework-integration.mjs:30:56)\n    at async file:///Users/lahfir/Documents/Projects/sandbox-ui/native-stream-lab/tests/framework-integration.mjs:112:3"
+}

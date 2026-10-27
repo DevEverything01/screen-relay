@@ -1,0 +1,123 @@
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 1.90kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/debian:trixie-slim@sha256:62bd423aeee912639ca8ee681c2b762cb3e25137e0a92b20be455898a9f034ad
+#2 DONE 0.0s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 121B done
+#3 DONE 0.0s
+
+#4 [ 1/16] FROM docker.io/library/debian:trixie-slim@sha256:62bd423aeee912639ca8ee681c2b762cb3e25137e0a92b20be455898a9f034ad
+#4 resolve docker.io/library/debian:trixie-slim@sha256:62bd423aeee912639ca8ee681c2b762cb3e25137e0a92b20be455898a9f034ad 0.0s done
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 transferring context: 786B done
+#5 DONE 0.0s
+
+#6 [ 7/16] COPY viewer/ ./viewer/
+#6 CACHED
+
+#7 [ 5/16] WORKDIR /opt/native-src
+#7 CACHED
+
+#8 [ 9/16] COPY tests/flow-test.cpp ./tests/flow-test.cpp
+#8 CACHED
+
+#9 [ 6/16] COPY src/ ./src/
+#9 CACHED
+
+#10 [ 3/16] RUN id -u bench >/dev/null 2>&1 || useradd --create-home --shell /bin/bash bench
+#10 CACHED
+
+#11 [ 8/16] COPY tests/color-test.cpp ./tests/color-test.cpp
+#11 CACHED
+
+#12 [10/16] COPY tests/backend-source-test.cpp ./tests/backend-source-test.cpp
+#12 CACHED
+
+#13 [ 4/16] RUN mkdir -p /opt/bench /home/bench/.vnc /home/bench/runtime /tmp/.X11-unix     && chown -R bench:bench /home/bench /opt/bench     && chmod 700 /home/bench/runtime     && chmod 1777 /tmp/.X11-unix
+#13 CACHED
+
+#14 [11/16] COPY Makefile ./Makefile
+#14 CACHED
+
+#15 [ 2/16] RUN apt-get update && apt-get install -y --no-install-recommends     xfce4 dbus-x11 at-spi2-core xvfb xauth x11-utils x11-xserver-utils xdotool     python3 python3-tk python3-pil fonts-dejavu-core procps iproute2 pulseaudio scrot     libavcodec-dev libavutil-dev libswscale-dev     build-essential pkg-config libx11-dev libxext-dev libxdamage-dev     libxfixes-dev libxtst-dev libwebsockets-dev
+#15 CACHED
+
+#16 [12/16] COPY bench/fixture.py /opt/bench/fixture.py
+#16 CACHED
+
+#17 [13/16] RUN make CXXFLAGS="-O1 -g -std=c++17 -Wall -Wextra -Wpedantic -pthread -fsanitize=address,undefined -fno-omit-frame-pointer" test-color     && make CXXFLAGS="-O1 -g -std=c++17 -Wall -Wextra -Wpedantic -pthread -fsanitize=address,undefined -fno-omit-frame-pointer" test-flow     && make CXXFLAGS="-O1 -g -std=c++17 -Wall -Wextra -Wpedantic -pthread -fsanitize=address,undefined -fno-omit-frame-pointer" test-backend     && make CXXFLAGS="-O1 -g -std=c++17 -Wall -Wextra -Wpedantic -pthread -fsanitize=address,undefined -fno-omit-frame-pointer"     && mkdir -p /opt/native/viewer     && install -m 0755 native-stream /opt/native/native-stream     && install -m 0644 viewer/index.html viewer/viewer.js /opt/native/viewer/
+#17 0.211 mkdir -p build
+#17 0.214 g++ -O1 -g -std=c++17 -Wall -Wextra -Wpedantic -pthread -fsanitize=address,undefined -fno-omit-frame-pointer tests/color-test.cpp src/color.cpp -o build/color-test
+#17 1.269 ./build/color-test
+#17 1.280 BT.709 colors, box chroma, random pixels, tails, strides and guards passed
+#17 1.281 mkdir -p build
+#17 1.282 g++ -O1 -g -std=c++17 -Wall -Wextra -Wpedantic -pthread -fsanitize=address,undefined -fno-omit-frame-pointer tests/flow-test.cpp -o build/flow-test
+#17 2.273 ./build/flow-test
+#17 2.281 flow policy checks passed
+#17 2.284 mkdir -p build
+#17 2.284 g++ -O1 -g -std=c++17 -Wall -Wextra -Wpedantic -pthread -fsanitize=address,undefined -fno-omit-frame-pointer tests/backend-source-test.cpp src/capture.cpp src/color.cpp -o build/backend-source-test -I/usr/include/aarch64-linux-gnu -lavcodec -lavutil -lswscale 
+#17 5.222 ./build/backend-source-test
+#17 5.247 [libx264 @ 0x518000000080] using cpu capabilities: ARMv8 NEON
+#17 5.248 [libx264 @ 0x518000000080] profile Constrained Baseline, level 3.2, 4:2:0, 8-bit
+#17 5.267 [swscaler @ 0x52f000000400] No accelerated colorspace conversion found from yuv420p to rgb24.
+#17 5.466 [swscaler @ 0x52f00000e400] No accelerated colorspace conversion found from yuv420p to rgb24.
+#17 5.469 [libx264 @ 0x518000000080] frame I:2     Avg QP: 6.00  size:  3170
+#17 5.469 [libx264 @ 0x518000000080] frame P:1     Avg QP: 5.00  size:  4135
+#17 5.469 [libx264 @ 0x518000000080] mb I  I16..4: 100.0%  0.0%  0.0%
+#17 5.469 [libx264 @ 0x518000000080] mb P  I16..4: 100.0%  0.0%  0.0%  P16..4:  0.0%  0.0%  0.0%  0.0%  0.0%    skip: 0.0%
+#17 5.469 [libx264 @ 0x518000000080] coded y,uvDC,uvAC intra: 0.0% 0.1% 0.0%
+#17 5.469 [libx264 @ 0x518000000080] i16 v,h,dc,p: 96%  0%  4%  0%
+#17 5.469 [libx264 @ 0x518000000080] i8c dc,h,v,p: 100%  0%  0%  0%
+#17 5.469 [libx264 @ 0x518000000080] kb/s:1676.00
+#17 5.527 [libx264 @ 0x518000020080] using cpu capabilities: ARMv8 NEON
+#17 5.528 [libx264 @ 0x518000020080] profile Constrained Baseline, level 3.2, 4:2:0, 8-bit
+#17 5.540 capture: invalid capture frame; retrying with IDR
+#17 5.544 [libx264 @ 0x518000020480] using cpu capabilities: ARMv8 NEON
+#17 5.545 [libx264 @ 0x518000020480] profile Constrained Baseline, level 3.2, 4:2:0, 8-bit
+#17 6.562 capture: invalid capture frame; retrying with IDR
+#17 6.570 [libx264 @ 0x518000020880] using cpu capabilities: ARMv8 NEON
+#17 6.573 [libx264 @ 0x518000020880] profile Constrained Baseline, level 3.2, 4:2:0, 8-bit
+#17 7.600 capture: invalid capture frame; retrying with IDR
+#17 7.602 capture worker stopped: capture failed three consecutive times: invalid capture frame
+#17 7.617 [libx264 @ 0x518000020c80] using cpu capabilities: ARMv8 NEON
+#17 7.620 [libx264 @ 0x518000020c80] profile Constrained Baseline, level 3.2, 4:2:0, 8-bit
+#17 7.634 capture: invalid capture frame; retrying with IDR
+#17 7.639 [libx264 @ 0x518000021080] using cpu capabilities: ARMv8 NEON
+#17 7.642 [libx264 @ 0x518000021080] profile Constrained Baseline, level 3.2, 4:2:0, 8-bit
+#17 8.660 capture: invalid capture frame; retrying with IDR
+#17 8.666 [libx264 @ 0x518000021480] using cpu capabilities: ARMv8 NEON
+#17 8.669 [libx264 @ 0x518000021480] profile Constrained Baseline, level 3.2, 4:2:0, 8-bit
+#17 9.685 capture: invalid capture frame; retrying with IDR
+#17 9.690 capture worker stopped: capture failed three consecutive times: invalid capture frame
+#17 9.731 backend source: decoded fresh IDRs, damage, idle, shutdown and invalid frames passed
+#17 9.745 g++ -I/usr/include/aarch64-linux-gnu  -O1 -g -std=c++17 -Wall -Wextra -Wpedantic -pthread -fsanitize=address,undefined -fno-omit-frame-pointer src/capture.cpp src/server.cpp src/color.cpp src/x11-capture.cpp src/x11-input.cpp -o native-stream -lX11 -lXext -lXdamage -lXfixes -lXtst -lavcodec -lavutil -lswscale -lwebsockets -lcap  -pthread
+#17 DONE 17.6s
+
+#18 [14/16] COPY session.sh /opt/native/session.sh
+#18 DONE 0.0s
+
+#19 [15/16] RUN chmod 0755 /opt/native/session.sh
+#19 DONE 0.2s
+
+#20 [16/16] WORKDIR /home/bench
+#20 DONE 0.0s
+
+#21 exporting to image
+#21 exporting layers
+#21 exporting layers 0.3s done
+#21 exporting manifest sha256:2ca52c2f57315dbfd3fc60b601d4cd33bef6e7e60703660e9e764714bdce4bd4 done
+#21 exporting config sha256:7829b2f234678e946533f6474a60ebefb313462cddee73ceaaea8d657dc03ca4 done
+#21 exporting attestation manifest sha256:742618f65fbe71c83436d1ab1d3453456fafe82a58acc7cbfc6aed6ffb21d0ba 0.0s done
+#21 exporting manifest list sha256:1b9eb592b212099043dd03bb08f2e28ddb489fe3fb60a1b9019a931523db234d done
+#21 naming to docker.io/library/native-stream-lab:general2b-asan done
+#21 unpacking to docker.io/library/native-stream-lab:general2b-asan 0.1s done
+#21 DONE 0.4s
+
+View build details: docker-desktop://dashboard/build/desktop-linux/desktop-linux/g87xmcelprmji3d2m1swakpce

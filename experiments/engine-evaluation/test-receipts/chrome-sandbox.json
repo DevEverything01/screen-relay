@@ -1,0 +1,47 @@
+[
+  {
+    "pid": "298",
+    "Uid": "1000\t1000\t1000\t1000",
+    "NSpid": "298\t14\t1",
+    "NoNewPrivs": "1",
+    "Seccomp": "2",
+    "Seccomp_filters": "2",
+    "sandboxDisabled": false
+  },
+  {
+    "pid": "1052",
+    "Uid": "1000\t1000\t1000\t1000",
+    "NSpid": "1052\t630\t1",
+    "NoNewPrivs": "1",
+    "Seccomp": "2",
+    "Seccomp_filters": "2",
+    "sandboxDisabled": false
+  },
+  {
+    "pid": "1081",
+    "Uid": "1000\t1000\t1000\t1000",
+    "NSpid": "1081\t659\t1",
+    "NoNewPrivs": "1",
+    "Seccomp": "2",
+    "Seccomp_filters": "2",
+    "sandboxDisabled": false
+  },
+  {
+    "pid": "1096",
+    "Uid": "1000\t1000\t1000\t1000",
+    "NSpid": "1096\t674\t1",
+    "NoNewPrivs": "1",
+    "Seccomp": "2",
+    "Seccomp_filters": "2",
+    "sandboxDisabled": false
+  },
+  {
+    "pid": "1186",
+    "Uid": "1000\t1000\t1000\t1000",
+    "NSpid": "1186\t735\t1",
+    "NoNewPrivs": "1",
+    "Seccomp": "2",
+    "Seccomp_filters": "2",
+    "sandboxDisabled": false
+  }
+]

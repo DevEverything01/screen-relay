@@ -1,0 +1,30 @@
+[libx264 @ 0x519000010480] using cpu capabilities: ARMv8 NEON
+[libx264 @ 0x519000010480] profile Constrained Baseline, level 3.2, 4:2:0, 8-bit
+[2026/10/27 13:18:25:8507] N: lws_create_context: LWS: 4.3.3-unknown, NET CLI SRV H1 H2 WS ConMon IPV6-on
+[2026/10/27 13:18:25:8508] N: __lws_lc_tag:  ++ [wsi|0|pipe] (1)
+[2026/10/27 13:18:25:8508] N: __lws_lc_tag:  ++ [vh|0|netlink] (1)
+[2026/10/27 13:18:25:8510] N: __lws_lc_tag:  ++ [vh|1|default|0.0.0.0|0.0.0.0|18114] (2)
+[2026/10/27 13:18:25:8513] N: [vh|1|default|0.0.0.0|0.0.0.0|18114]: lws_socket_bind: source ads 0.0.0.0
+[2026/10/27 13:18:25:8514] N: __lws_lc_tag:  ++ [wsi|1|listen|default|0.0.0.0|18114] (2)
+Native stream listening on 0.0.0.0:18114
+{"ready":true,"pid":8476,"port":18114}
+[2026/10/27 13:18:26:4719] N: __lws_lc_tag:  ++ [wsisrv|0|adopted] (1)
+[2026/10/27 13:18:26:4935] N: __lws_lc_tag:  ++ [wsisrv|1|adopted] (2)
+[2026/10/27 13:18:26:4938] W: User code denied connection
+[2026/10/27 13:18:26:4939] N: __lws_lc_untag:  -- [wsisrv|1|adopted] (1) 435μs
+[2026/10/27 13:18:26:5740] N: __lws_lc_tag:  ++ [wsisrv|2|adopted] (2)
+[2026/10/27 13:18:26:6920] N: __lws_lc_untag:  -- [wsisrv|0|adopted] (1) 220.126ms
+[2026/10/27 13:18:26:7025] N: __lws_lc_untag:  -- [wsisrv|2|adopted] (0) 128.575ms
+[libx264 @ 0x519000010480] frame I:1     Avg QP: 7.00  size:  6380
+[libx264 @ 0x519000010480] frame P:1     Avg QP: 5.00  size:   110
+[libx264 @ 0x519000010480] mb I  I16..4: 100.0%  0.0%  0.0%
+[libx264 @ 0x519000010480] mb P  I16..4:  0.0%  0.0%  0.0%  P16..4:  0.3%  0.0%  0.0%  0.0%  0.0%    skip:99.7%
+[libx264 @ 0x519000010480] coded y,uvDC,uvAC intra: 0.5% 0.5% 0.5% inter: 0.1% 0.0% 0.0%
+[libx264 @ 0x519000010480] i16 v,h,dc,p: 92%  4%  4%  0%
+[libx264 @ 0x519000010480] i8c dc,h,v,p: 96%  3%  1%  0%
+[libx264 @ 0x519000010480] kb/s:1557.60
+capture_stats captures=2 encoded=2 capture_ns=1379433 convert_ns=4346969 encode_ns=6695289
+[2026/10/27 13:18:27:3018] N: __lws_lc_untag:  -- [wsi|0|pipe] (1) 1.451s
+[2026/10/27 13:18:27:3019] N: __lws_lc_untag:  -- [vh|1|default|0.0.0.0|0.0.0.0|18114] (1) 1.450s
+[2026/10/27 13:18:27:3019] N: __lws_lc_untag:  -- [wsi|1|listen|default|0.0.0.0|18114] (0) 1.450s
+[2026/10/27 13:18:27:3019] N: __lws_lc_untag:  -- [vh|0|netlink] (0) 1.451s

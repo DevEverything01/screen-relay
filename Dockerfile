@@ -19,9 +19,7 @@ WORKDIR /opt/native-src
 ARG BUILD_FLAGS="-O2 -std=c++17 -Wall -Wextra -Wpedantic -pthread"
 COPY src/ ./src/
 COPY viewer/ ./viewer/
-COPY tests/color-test.cpp ./tests/color-test.cpp
-COPY tests/flow-test.cpp ./tests/flow-test.cpp
-COPY tests/backend-source-test.cpp ./tests/backend-source-test.cpp
+COPY tests/unit/ ./tests/unit/
 COPY Makefile ./Makefile
 RUN make CXXFLAGS="${BUILD_FLAGS}" test-color \
     && make CXXFLAGS="${BUILD_FLAGS}" test-flow \
@@ -31,7 +29,7 @@ RUN make CXXFLAGS="${BUILD_FLAGS}" test-color \
     && install -m 0755 native-stream /opt/native/native-stream \
     && install -m 0644 viewer/index.html viewer/viewer.js /opt/native/viewer/
 
-COPY session.sh /opt/native/session.sh
+COPY scripts/docker-session.sh /opt/native/session.sh
 RUN chmod 0755 /opt/native/session.sh
 
 USER bench

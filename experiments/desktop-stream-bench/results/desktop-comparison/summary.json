@@ -1,0 +1,147 @@
+{
+  "title": "Measured comparison \u00b7 Xfce vs GNOME \u00b7 1280 \u00d7 720",
+  "state": "Comparison complete: four configurations, 240 input trials, 36 resource runs, and eight received-frame tests.",
+  "table": [
+    [
+      "Metric",
+      "Selkies \u00b7 Xfce",
+      "Selkies \u00b7 GNOME",
+      "KasmVNC \u00b7 Xfce",
+      "KasmVNC \u00b7 GNOME"
+    ],
+    [
+      "Idle input latency \u00b7 median",
+      "25.2 ms",
+      "25.5 ms",
+      "59.9 ms",
+      "75.5 ms"
+    ],
+    [
+      "Idle input latency \u00b7 p95",
+      "29.3 ms",
+      "27.5 ms",
+      "83.3 ms",
+      "87.9 ms"
+    ],
+    [
+      "Motion input latency \u00b7 median",
+      "24.6 ms",
+      "26.7 ms",
+      "73.2 ms",
+      "75.2 ms"
+    ],
+    [
+      "Motion input latency \u00b7 p95",
+      "39.8 ms",
+      "44.0 ms",
+      "76.7 ms",
+      "77.7 ms"
+    ],
+    [
+      "Idle \u00b7 CPU",
+      "45.9%",
+      "45.7%",
+      "3.7%",
+      "4.2%"
+    ],
+    [
+      "Idle \u00b7 memory",
+      "218.2 MiB",
+      "470.2 MiB",
+      "158.0 MiB",
+      "398.7 MiB"
+    ],
+    [
+      "Idle \u00b7 bandwidth",
+      "0.207 Mbps",
+      "0.231 Mbps",
+      "0.000 Mbps",
+      "0.000 Mbps"
+    ],
+    [
+      "Scroll \u00b7 CPU",
+      "47.4%",
+      "74.5%",
+      "40.0%",
+      "48.6%"
+    ],
+    [
+      "Scroll \u00b7 memory",
+      "219.0 MiB",
+      "466.8 MiB",
+      "158.9 MiB",
+      "394.9 MiB"
+    ],
+    [
+      "Scroll \u00b7 bandwidth",
+      "2.601 Mbps",
+      "2.452 Mbps",
+      "2.430 Mbps",
+      "2.323 Mbps"
+    ],
+    [
+      "Motion \u00b7 CPU",
+      "46.0%",
+      "74.2%",
+      "38.1%",
+      "49.6%"
+    ],
+    [
+      "Motion \u00b7 memory",
+      "220.3 MiB",
+      "466.6 MiB",
+      "158.8 MiB",
+      "395.4 MiB"
+    ],
+    [
+      "Motion \u00b7 bandwidth",
+      "1.866 Mbps",
+      "1.455 Mbps",
+      "1.599 Mbps",
+      "1.558 Mbps"
+    ],
+    [
+      "Scroll \u00b7 browser-visible updates/s",
+      "55.3",
+      "55.7",
+      "24.3",
+      "24.4"
+    ],
+    [
+      "Scroll \u00b7 app-produced updates/s",
+      "55.8",
+      "56.9",
+      "49.7",
+      "52.7"
+    ],
+    [
+      "Motion \u00b7 browser-visible updates/s",
+      "54.5",
+      "54.7",
+      "24.3",
+      "24.4"
+    ],
+    [
+      "Motion \u00b7 app-produced updates/s",
+      "54.7",
+      "55.6",
+      "48.1",
+      "49.1"
+    ],
+    [
+      "Text PSNR \u00b7 higher is closer",
+      "38.5 dB",
+      "37.8 dB",
+      "38.8 dB",
+      "38.1 dB"
+    ],
+    [
+      "Text ink error \u00b7 lower is closer",
+      "3.99",
+      "4.33",
+      "3.82",
+      "4.13"
+    ]
+  ],
+  "note": "100% CPU = one core; each container has a two-core quota. Memory includes the desktop and app. Visible updates/s counts unique native frame IDs received in browser pixels, sampled at browser animation-frame cadence; it is not maximum encoder FPS. FPS tests use a small marker and are separate from resource averages. Local ARM64 Docker, software rendering/encoding, default client quality. No WAN/GPU/full-screen-video result is implied."
+}

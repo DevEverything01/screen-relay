@@ -1,11 +1,22 @@
 CXX ?= g++
-CPPFLAGS += $(shell pkg-config --cflags x11 xext xdamage xfixes xtst libavcodec libavutil libswscale libwebsockets)
+BACKEND ?= x11
+BACKEND_PKGS_x11 = x11 xext xdamage xfixes xtst
+ifeq ($(BACKEND_PKGS_$(BACKEND)),)
+$(error Unknown BACKEND '$(BACKEND)'; available: x11)
+endif
+CODEC_PKGS = libavcodec libavutil libswscale
+PKGS = $(BACKEND_PKGS_$(BACKEND)) $(CODEC_PKGS) libwebsockets
+CPPFLAGS += -Isrc $(shell pkg-config --cflags $(PKGS))
 CXXFLAGS ?= -O2
 CXXFLAGS += -std=c++17 -Wall -Wextra -Wpedantic -pthread
-LDLIBS += $(shell pkg-config --libs x11 xext xdamage xfixes xtst libavcodec libavutil libswscale libwebsockets) -pthread
+LDLIBS += $(shell pkg-config --libs $(PKGS)) -pthread
+
+CORE_SRCS = $(wildcard src/core/*.cpp)
+ENGINE_SRCS = $(CORE_SRCS) $(wildcard src/server/*.cpp src/backends/$(BACKEND)/*.cpp)
+HEADERS = $(wildcard src/*/*.hpp src/backends/$(BACKEND)/*.hpp)
 
 PREFIX ?= /usr/local
-.PHONY: all install test-color test-flow test-backend
+.PHONY: all install test test-color test-flow test-backend clean
 all: native-stream
 
 install: native-stream
@@ -15,26 +26,31 @@ install: native-stream
 	ln -sfn ../lib/native-stream/native-stream-engine "$(DESTDIR)$(PREFIX)/bin/native-stream-engine"
 	install -m 0755 scripts/native-stream-desktop "$(DESTDIR)$(PREFIX)/bin/native-stream-desktop"
 
-native-stream: src/capture.cpp src/server.cpp src/color.cpp src/x11-capture.cpp src/x11-input.cpp src/capture.hpp src/color.hpp src/flow.hpp src/capture-source.hpp src/input.hpp src/snapshot.hpp
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) src/capture.cpp src/server.cpp src/color.cpp src/x11-capture.cpp src/x11-input.cpp -o $@ $(LDLIBS)
+native-stream: $(ENGINE_SRCS) $(HEADERS)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(ENGINE_SRCS) -o $@ $(LDLIBS)
 
-build/color-test: tests/color-test.cpp src/color.cpp src/color.hpp
+build/color-test: tests/unit/color-test.cpp src/core/color.cpp src/core/color.hpp
 	mkdir -p build
-	$(CXX) $(CXXFLAGS) tests/color-test.cpp src/color.cpp -o $@
+	$(CXX) -Isrc $(CXXFLAGS) tests/unit/color-test.cpp src/core/color.cpp -o $@
 
 test-color: build/color-test
 	./build/color-test
 
-build/flow-test: tests/flow-test.cpp src/flow.hpp
+build/flow-test: tests/unit/flow-test.cpp src/core/flow.hpp
 	mkdir -p build
-	$(CXX) $(CXXFLAGS) tests/flow-test.cpp -o $@
+	$(CXX) -Isrc $(CXXFLAGS) tests/unit/flow-test.cpp -o $@
 
 test-flow: build/flow-test
 	./build/flow-test
 
-build/backend-source-test: tests/backend-source-test.cpp src/capture.cpp src/color.cpp src/capture.hpp src/capture-source.hpp src/color.hpp src/flow.hpp
+build/backend-source-test: tests/unit/backend-source-test.cpp $(CORE_SRCS) $(wildcard src/core/*.hpp)
 	mkdir -p build
-	$(CXX) $(CXXFLAGS) tests/backend-source-test.cpp src/capture.cpp src/color.cpp -o $@ $(shell pkg-config --cflags --libs libavcodec libavutil libswscale)
+	$(CXX) -Isrc $(CXXFLAGS) tests/unit/backend-source-test.cpp $(CORE_SRCS) -o $@ $(shell pkg-config --cflags --libs $(CODEC_PKGS))
 
 test-backend: build/backend-source-test
 	./build/backend-source-test
+
+test: test-color test-flow test-backend
+
+clean:
+	rm -rf build native-stream

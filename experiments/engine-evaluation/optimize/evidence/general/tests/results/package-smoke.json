@@ -1,0 +1,33 @@
+{
+  "nodeVersions": [
+    "22.22.2",
+    "26.12.0"
+  ],
+  "sdkTests": {
+    "Node22": {
+      "passed": 10,
+      "failed": 0
+    },
+    "Node26": {
+      "passed": 10,
+      "failed": 0
+    }
+  },
+  "localInstall": {
+    "consumer": "/private/tmp/native-stream-consumer.V8Luet",
+    "command": "npm install --offline --ignore-scripts --no-audit --no-fund /Users/lahfir/Documents/Projects/sandbox-ui/native-stream-lab",
+    "result": "added 1 package in 403ms"
+  },
+  "verified": [
+    "package self import",
+    "local consumer bare import",
+    "installed CLI --help"
+  ],
+  "nativeServer": "tested separately; no runtime npm dependencies",
+  "typescript": {
+    "version": "Version 6.0.3",
+    "command": "tsc --noEmit --strict --module NodeNext --target ES2022 tests/sdk-types.mts",
+    "exitCode": 0,
+    "sourceSha256": "473b9009b488e8cd5493b95df8d9b922dcaac7b6be81e7bd2671cf55dfa0096f"
+  }
+}
