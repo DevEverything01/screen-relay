@@ -40,7 +40,7 @@ const id = `${new Date().toISOString().replace(/[:.]/g,"-")}-${engine}-${randomU
 const directory = path.join(here,"results",id);
 await mkdir(directory,{recursive:true});
 const fixture = path.join(here,"fixture.py");
-const result = {id,engine,image,command,started:new Date().toISOString(),fixtureSha256:createHash("sha256").update(await readFile(fixture)).digest("hex"),runs:{},latency:{},errors:[],limits:"Browser animation-frame sampling, fixture producer rate, static text quality only; not maximum FPS or matched motion quality."};
+const result = {id,engine,image,command,started:new Date().toISOString(),fixtureSha256:createHash("sha256").update(await readFile(fixture)).digest("hex"),runnerSha256:createHash("sha256").update(await readFile(fileURLToPath(import.meta.url))).digest("hex"),inputLatencyStartEvent:"pointerdown",runs:{},latency:{},errors:[],limits:"Browser animation-frame sampling, fixture producer rate, static text quality only; not maximum FPS or matched motion quality."};
 const progress = phase => console.error(`${engine}: ${phase}`);
 const save = () => writeFile(path.join(directory,"raw.json"),JSON.stringify(result,null,2));
 const name = `native-stream-bench-${id.toLowerCase()}`;
@@ -89,7 +89,7 @@ try {
     window.surface=[...document.querySelectorAll("video,canvas")].find(e=>e.getBoundingClientRect().width===1280&&e.getBoundingClientRect().height===720);
     const canvas=document.createElement("canvas");canvas.width=112;canvas.height=12;window.probe=canvas.getContext("2d",{willReadFrequently:true});
     window.pixel=()=>{probe.drawImage(surface,x+1050,y+565,1,1,0,0,1,1);return [...probe.getImageData(0,0,1,1).data];};
-    window.latencies=[];window.addEventListener("mousedown",()=>{if(!window.measureLatency)return;const before=pixel(),start=performance.now();function check(){const after=pixel();if((before[0]>before[1])!==(after[0]>after[1]))latencies.push(performance.now()-start);else if(performance.now()-start<3000)requestAnimationFrame(check);else latencies.push(null);}requestAnimationFrame(check);},true);
+    window.latencies=[];window.addEventListener("pointerdown",()=>{if(!window.measureLatency)return;const before=pixel(),start=performance.now();function check(){const after=pixel();if((before[0]>before[1])!==(after[0]>after[1]))latencies.push(performance.now()-start);else if(performance.now()-start<3000)requestAnimationFrame(check);else latencies.push(null);}requestAnimationFrame(check);},true);
     window.readFrame=()=>{probe.drawImage(surface,x+24,y+540,112,12,0,0,112,12);const d=probe.getImageData(0,6,112,1).data;if(d[16]>80||d[48]<175)return null;let v=0;for(let b=0;b<12;b++)v|=(d[((b+2)*8+4)*4]>128?1:0)<<b;return v;};
   },result.geometry);
   const flashPixel = await page.evaluate(()=>pixel());
