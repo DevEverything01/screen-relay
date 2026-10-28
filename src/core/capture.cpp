@@ -141,14 +141,16 @@ struct CaptureEncoder::Impl {
       unsigned consecutive_failures = 0;
       const auto frame_interval = std::chrono::nanoseconds(16666667);
       const auto refinement_delay = std::chrono::milliseconds(150);
-      constexpr unsigned refinement_max_frames = 30;
+      constexpr unsigned refinement_max_frames = 8;
       auto deadline = Clock::now();
       auto last_publish = deadline;
       bool last_was_refinement = true, refining = false;
       unsigned cascade_frames = 0;
+      uint64_t first_refinement_size = 0;
       auto reset_refinement = [&] {
         refining = false;
         cascade_frames = 0;
+        first_refinement_size = 0;
       };
       while (true) {
         if (source->drainDamage()) dirty = true;
@@ -275,10 +277,13 @@ struct CaptureEncoder::Impl {
                 last_publish = Clock::now();
                 last_was_refinement = refinement;
                 if (refinement) {
+                  if (cascade_frames == 0) first_refinement_size = uint64_t(size);
                   ++cascade_frames;
-                  refining = !converged && cascade_frames < refinement_max_frames;
+                  refining = !converged && cascade_frames < refinement_max_frames &&
+                             uint64_t(size) * 8 > first_refinement_size;
                 } else {
                   cascade_frames = 0;
+                  first_refinement_size = 0;
                   refining = true;
                 }
               }
