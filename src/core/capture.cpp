@@ -129,6 +129,7 @@ struct CaptureEncoder::Impl {
       uint64_t seen_revision = 0;
       int64_t last_pts = -1;
       unsigned consecutive_failures = 0;
+      const auto frame_interval = std::chrono::nanoseconds(16666667);
       auto deadline = Clock::now();
       while (true) {
         if (source->drainDamage()) dirty = true;
@@ -225,7 +226,9 @@ struct CaptureEncoder::Impl {
               force_idr = true;
             }
             consecutive_failures = 0;
-            deadline = capture_start + std::chrono::nanoseconds(16666667);
+            deadline += frame_interval;
+            const auto next = Clock::now();
+            if (deadline < next - frame_interval) deadline = capture_start + frame_interval;
           } catch (const std::exception& error) {
             std::fprintf(stderr, "capture: %s; retrying with IDR\n", error.what());
             dirty = true;
