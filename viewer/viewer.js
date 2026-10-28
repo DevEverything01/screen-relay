@@ -169,8 +169,10 @@ function presentDecoded(item) {
     decoded.push(item);
   }
   while (decoded.length > 3) {
-    decoded.shift().frame.close();
+    const dropped = decoded.shift();
+    dropped.frame.close();
     stats.superseded++;
+    if (!ackFrame(dropped)) return false;
   }
   schedulePresent();
   return true;
