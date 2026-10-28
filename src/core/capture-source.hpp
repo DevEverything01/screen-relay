@@ -5,7 +5,8 @@
 #include <optional>
 #include <vector>
 
-namespace nsl {
+namespace relay {
+constexpr int frame_width = 1280, frame_height = 720;
 enum class PixelFormat { BGRA, ARGB };
 // CPU-accessible pixels remain valid until the next capture or source destruction.
 // GPU zero-copy would require a separate encoder interface.

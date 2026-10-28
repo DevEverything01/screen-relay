@@ -16,15 +16,17 @@ ENGINE_SRCS = $(CORE_SRCS) $(wildcard src/server/*.cpp src/backends/$(BACKEND)/*
 HEADERS = $(wildcard src/*/*.hpp src/backends/$(BACKEND)/*.hpp)
 
 PREFIX ?= /usr/local
-.PHONY: all install test test-color test-flow test-backend clean
+.PHONY: all install test test-color test-flow test-backend test-server clean
 all: relay-engine
 
 install: relay-engine
-	install -d "$(DESTDIR)$(PREFIX)/lib/relay/viewer" "$(DESTDIR)$(PREFIX)/bin"
+	install -d "$(DESTDIR)$(PREFIX)/lib/relay/viewer" "$(DESTDIR)$(PREFIX)/lib/relay/relaycli" "$(DESTDIR)$(PREFIX)/bin"
 	install -m 0755 relay-engine "$(DESTDIR)$(PREFIX)/lib/relay/relay-engine"
 	install -m 0644 viewer/index.html viewer/viewer.js "$(DESTDIR)$(PREFIX)/lib/relay/viewer/"
 	ln -sfn ../lib/relay/relay-engine "$(DESTDIR)$(PREFIX)/bin/relay-engine"
-	install -m 0755 scripts/relay "$(DESTDIR)$(PREFIX)/bin/relay"
+	install -m 0755 scripts/relay "$(DESTDIR)$(PREFIX)/lib/relay/relay"
+	install -m 0644 scripts/relaycli/*.py "$(DESTDIR)$(PREFIX)/lib/relay/relaycli/"
+	ln -sfn ../lib/relay/relay "$(DESTDIR)$(PREFIX)/bin/relay"
 
 relay-engine: $(ENGINE_SRCS) $(HEADERS)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(ENGINE_SRCS) -o $@ $(LDLIBS)
@@ -50,7 +52,16 @@ build/backend-source-test: tests/unit/backend-source-test.cpp $(CORE_SRCS) $(wil
 test-backend: build/backend-source-test
 	./build/backend-source-test
 
-test: test-color test-flow test-backend
+SERVER_TEST_SRCS = src/server/config.cpp src/server/metrics.cpp src/server/wire.cpp
+
+build/server-test: tests/unit/server-test.cpp $(SERVER_TEST_SRCS) $(wildcard src/server/*.hpp) $(wildcard src/core/*.hpp)
+	mkdir -p build
+	$(CXX) -Isrc $(shell pkg-config --cflags libwebsockets) $(CXXFLAGS) tests/unit/server-test.cpp $(SERVER_TEST_SRCS) -o $@ $(shell pkg-config --libs libwebsockets)
+
+test-server: build/server-test
+	./build/server-test
+
+test: test-color test-flow test-backend test-server
 
 clean:
 	rm -rf build relay-engine

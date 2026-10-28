@@ -4,7 +4,7 @@
 #include <utility>
 
 int main() {
-  using nsl::FlowControl;
+  using relay::FlowControl;
   FlowControl f;
   assert(f.window == 1 && f.target_bitrate == 8000000);
   assert(!f.ack(1, 1));

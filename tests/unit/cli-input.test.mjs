@@ -4,11 +4,13 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { connect } from '../../sdk/index.js';
 
-const cli = fileURLToPath(new URL('../../scripts/relay', import.meta.url));
-const python = (code, input) => JSON.parse(execFileSync('python3', ['-c', `import importlib.machinery,json,sys
-ns=importlib.machinery.SourceFileLoader('ns',sys.argv[1]).load_module()
+const scripts = fileURLToPath(new URL('../../scripts', import.meta.url));
+const python = (code, input) => JSON.parse(execFileSync('python3', ['-c', `import json,sys,types
+sys.path.insert(0,sys.argv[1])
+from relaycli import common,keys
+ns=types.SimpleNamespace(Failure=common.Failure,encode=keys.encode,type_groups=keys.type_groups,combo_events=keys.combo_events)
 data=json.load(sys.stdin)
-${code}`, cli], { input: JSON.stringify(input), encoding: 'utf8' }));
+${code}`, scripts], { input: JSON.stringify(input), encoding: 'utf8' }));
 
 async function sdkRecords(events) {
   const original = globalThis.WebSocket;

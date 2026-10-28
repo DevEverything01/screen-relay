@@ -1,6 +1,6 @@
 # CLI reference
 
-`relay` is one Python 3 command (stdlib only). Host commands (`up`, `down`, `logs`, `doctor`) manage a session on the Linux machine; `up` and `down` fail with `unsupported_platform` elsewhere. Client commands (`status`, `screenshot`, `click`, `move`, `scroll`, `key`, `type`, `input`) run anywhere.
+`relay` is one Python 3 command (stdlib only). Host commands (`up`, `down`, `logs`, `doctor`, `run`) manage a session on the Linux machine; `up`, `down` and `run` fail with `unsupported_platform` elsewhere. Client commands (`status`, `screenshot`, `click`, `move`, `scroll`, `key`, `type`, `input`) run anywhere.
 
 ## Common
 
@@ -10,7 +10,7 @@
 | Error shape | `{"error":{"code","message","hint","component"?,"log"?,"logs"?,"applied"?}}`. Codes are listed under [Error codes](#error-codes). |
 | Human errors | `error: ...` and `hint: ...` on stderr, plus the log tail when a component failed. |
 | `--name N` | Session name, default `default`. Letters, digits, `.`, `_`, `-`, up to 64 characters. |
-| State directory | `${XDG_STATE_HOME:-~/.local/state}/relay/<name>/` (mode 0700): `session.json`, `token` (0600), `display.log`, `desktop.log`, `engine.log`, `supervisor.log` (`-d` only). |
+| State directory | `${XDG_STATE_HOME:-~/.local/state}/relay/<name>/` (mode 0700): `session.json`, `token` (0600), `display.log`, `desktop.log`, `engine.log`, `apps.log` (after `run`), `supervisor.log` (`-d` only). |
 
 ### Exit codes
 
@@ -20,6 +20,7 @@
 | 1 | Failure. The error carries a code. |
 | 2 | Usage error from argument parsing. The code is `invalid_input`, and it is JSON with `--json`. |
 | 3 | `status` found the session but it is not running. |
+| 130 | Interrupted with Ctrl-C. A foreground `up` stops cleanly and exits 0. |
 
 ### Client target
 
@@ -46,7 +47,7 @@ URL rules: an origin only (no path, query or credentials). Plain HTTP only for `
 | `--no-deps` | Skip apt. Dependencies must already be present. |
 | `--client-only` | Install only the CLI, for example on a laptop. Installs `python3` only. Works off Linux. |
 
-Apt needs root or passwordless sudo. The full install adds build tools, the X11 and FFmpeg libraries, `xvfb`, `xauth`, `x11-utils`, and with the desktop: D-Bus, XFCE (`xfce4-session`, `xfwm4`, `xfce4-panel`, `xfdesktop4`, `xfce4-settings`, `thunar`, `xfce4-terminal`) and `glycin-loaders` when the distro has it. Safe to re-run.
+Apt needs root or passwordless sudo. The full install adds build tools, the X11 libraries, `libx264`, `libwebsockets`, `xvfb`, `xauth`, `x11-utils`, and with the desktop: D-Bus, XFCE (`xfce4-session`, `xfwm4`, `xfce4-panel`, `xfdesktop4`, `xfce4-settings`, `thunar`, `xfce4-terminal`) and `glycin-loaders` when the distro has it. Safe to re-run.
 
 It installs `<prefix>/bin/relay` and the engine in `<prefix>/lib/relay/` (linked as `<prefix>/bin/relay-engine`). When `<prefix>/bin` is not on `PATH` it prints:
 
@@ -72,7 +73,7 @@ Starts Xvfb (1280x720), the desktop and the engine, then supervises them. Withou
 | `--port N` | `8080` | Listen port. |
 | `--desktop` | `xfce`; `none` with `--display` | `xfce`, `none` (no desktop), or a command such as `openbox`. Runs under `dbus-run-session` when it is installed. |
 | `--display :N` | new Xvfb | Attach to an existing display. Uses your `XAUTHORITY`. The CLI never stops or changes a display it did not start. |
-| `--public URL` | off | HTTPS origin of a TLS proxy. Binds `0.0.0.0`, generates a token and allows that origin. See [Remote access](remote-access.md). |
+| `--public URL` | off | Public HTTPS origin. Binds `0.0.0.0` unless `--bind` is set, generates a token and allows that origin. Expects a TLS proxy in front unless `--tls-cert` is given. See [Remote access](remote-access.md). |
 | `--tls-cert F`, `--tls-key F` | off | Serve TLS natively. Both are required together. |
 | `--bind ADDR` | `127.0.0.1` | Listen address. Any other address generates a token. |
 | `--timeout S` | `30` | Seconds to wait for readiness. |
@@ -82,7 +83,7 @@ Ready means:
 1. The engine this run started has logged its ready line, and `GET /screenshot.png` returns a PNG.
 2. The desktop shows its own signal on the display: for `xfce`, a window manager (`_NET_SUPPORTING_WM_CHECK`) with at least one managed window (`_NET_CLIENT_LIST`); for a custom command, at least one window on the root. Skipped for `--desktop none`.
 
-If that does not happen within `--timeout`, `up` fails with `timeout`. If a component exits first, it fails with `component_failed`. Both errors name the component and include its log tail. After ready, the supervisor keeps watching. If a component exits later, the whole session stops and `status` shows the error.
+If that does not happen within `--timeout`, `up` fails with `timeout`. If a component exits first, it fails with `component_failed`. Both errors name the component and include its log tail. After ready, the supervisor keeps watching. If the display, desktop or engine exits later, the whole session stops and `status` shows the error. Apps started with `run` are not supervised; they stop with `down`.
 
 `up` prints the token once, when there is one ([Tokens](remote-access.md#tokens)).
 
@@ -195,7 +196,7 @@ http://127.0.0.1:18200: up (x11 1280x720, 0 frames encoded)
 relay logs [--name N] [display|desktop|engine|apps] [-f|--follow]
 ```
 
-Prints the last 200 lines of one component's log, or of all three. `--follow` keeps printing new lines. `--json` gives `{"display": "...", "desktop": "...", "engine": "..."}` and cannot be combined with `--follow`. The `-d` supervisor's own output is in `supervisor.log` in the state directory.
+Prints the last 200 lines of one component's log, or of every log that exists. `--follow` keeps printing new lines. `--json` gives one key per log, for example `{"display": "...", "desktop": "...", "engine": "..."}` and cannot be combined with `--follow`. The `-d` supervisor's own output is in `supervisor.log` in the state directory.
 
 ## doctor
 
@@ -313,10 +314,13 @@ relay input '[{"type":"keyDown","key":4},{"type":"keyUp","key":4}]'
 | `unreachable` | Cannot connect to the URL. |
 | `timeout` | No reply within `--timeout`, or `up` did not become ready in time (`component` and `log` set). |
 | `not_running` | No session or logs with that name. |
+| `not_found` | `run` found no running session with that name. |
+| `invalid_option` | `run` was given no app. |
+| `spawn_failed` | `run` could not start the app. |
 | `already_running` | A session with that name is already running. |
-| `component_failed` | display, desktop, engine or the background supervisor exited or could not start; `component`, `log` and `logs` are set. |
-| `missing_dependency` | A required program or the engine binary is missing. |
-| `unsupported_platform` | A host command was run off Linux. |
+| `component_failed` | display, desktop, engine or the background supervisor exited or could not start (`component`, `log` and `logs` are set), or an app started by `run` exited within a second (`component` is `apps`, `log` is set, no `logs`). |
+| `missing_dependency` | A required program (including the `run` app) or the engine binary is missing. |
+| `unsupported_platform` | `up`, `down` or `run` was run off Linux. |
 | `internal` | Unexpected engine response or a CLI bug. |
 
 Input commands that fail after some batches report `applied` (events already applied) in the error.

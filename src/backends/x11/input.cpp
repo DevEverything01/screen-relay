@@ -1,17 +1,17 @@
+#include "core/capture-source.hpp"
 #include "core/input.hpp"
 #include <X11/Xlib.h>
 #include <X11/keysym.h>
 #include <X11/extensions/XTest.h>
 #include <set>
-#include <cassert>
 #include <stdexcept>
 
-namespace nsl {
+namespace relay {
 namespace {
-int pixelCoordinate(uint16_t normalized, uint16_t extent) {
+constexpr int pixelCoordinate(uint16_t normalized, uint16_t extent) {
   return int((uint64_t(normalized) * (extent - 1) + 32767) / 65535);
 }
-KeySym hidSym(uint16_t hid) {
+constexpr KeySym hidSym(uint16_t hid) {
   if (hid >= 4 && hid <= 29) return XK_a + hid - 4;
   if (hid >= 30 && hid <= 38) return XK_1 + hid - 30;
   if (hid >= 58 && hid <= 69) return XK_F1 + hid - 58;
@@ -41,11 +41,15 @@ KeySym hidSym(uint16_t hid) {
     default: return NoSymbol;
   }
 }
+static_assert(pixelCoordinate(0, frame_width) == 0 && pixelCoordinate(65535, frame_width) == frame_width - 1 &&
+              pixelCoordinate(10248, frame_width) == 200 && pixelCoordinate(40992, frame_width) == 800 &&
+              pixelCoordinate(65535, frame_height) == frame_height - 1 && pixelCoordinate(36459, frame_height) == 400);
+static_assert(hidSym(4) == XK_a && hidSym(225) == XK_Shift_L && hidSym(3) == NoSymbol);
 class X11Input final : public InputBackend {
   Display* display = nullptr;
   std::set<KeyCode> keys;
   std::set<unsigned> buttons;
-  uint16_t width = 1280, height = 720;
+  uint16_t width = frame_width, height = frame_height;
  public:
   X11Input() {
     display = XOpenDisplay(nullptr);
@@ -105,10 +109,6 @@ class X11Input final : public InputBackend {
 };
 }  // namespace
 std::unique_ptr<InputBackend> makeInputBackend() {
-  assert(pixelCoordinate(0, 1280) == 0 && pixelCoordinate(65535, 1280) == 1279);
-  assert(pixelCoordinate(10248, 1280) == 200 && pixelCoordinate(40992, 1280) == 800);
-  assert(pixelCoordinate(65535, 720) == 719 && pixelCoordinate(36459, 720) == 400);
-  assert(hidSym(4) == XK_a && hidSym(225) == XK_Shift_L && hidSym(3) == NoSymbol);
   return std::make_unique<X11Input>();
 }
-}  // namespace nsl
+}  // namespace relay

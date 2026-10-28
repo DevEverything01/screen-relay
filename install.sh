@@ -50,8 +50,10 @@ on_path() {
   case ":$PATH:" in *":$prefix/bin:"*) ;; *) printf 'Not on PATH; add it with: export PATH="%s/bin:$PATH"\n' "$prefix" ;; esac
 }
 if [ "$client" = 1 ]; then
-  install -d "$prefix/bin"
-  install -m 0755 scripts/relay "$prefix/bin/relay"
+  install -d "$prefix/bin" "$prefix/lib/relay/relaycli"
+  install -m 0755 scripts/relay "$prefix/lib/relay/relay"
+  install -m 0644 scripts/relaycli/*.py "$prefix/lib/relay/relaycli/"
+  ln -sfn ../lib/relay/relay "$prefix/bin/relay"
   printf '\nInstalled client: %s/bin/relay\n' "$prefix"
   on_path
   exit 0

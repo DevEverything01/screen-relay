@@ -4,10 +4,10 @@ Use disposable desktops. Integration tests send real input and cover the screen.
 
 | Layer | Command | Needs |
 | --- | --- | --- |
-| Native unit (color, flow, injected source through the real encoder) | `make test` | Build dependencies. No X11. |
+| Native unit (color, flow, server config/wire/metrics, injected source through the real encoder) | `make test` | Build dependencies, including FFmpeg dev libraries for `test-backend`. No X11. |
 | SDK | `npm ci --ignore-scripts && npm test` | Node 22+ |
 | SDK types | `tsc --noEmit --strict --module NodeNext --target ES2022 tests/unit/sdk-types.mts` | TypeScript |
-| Smoke, any target | `tests/smoke.sh` | A running `relay up` session |
+| Smoke | `tests/smoke.sh` | An installed `relay` on Linux. It starts and stops its own session on port 18090 (`SMOKE_PORT`). |
 | Browser video and input | `TEST_CONTAINER=<name> TEST_URL=http://127.0.0.1:8080 npm run test:integration` | Chrome, a container from this repo's image with test tools added (see below) |
 | SDK against a real desktop | `TEST_CONTAINER=<name> TEST_URL=... npm run test:framework` | Same |
 | Remote cursor | `TEST_CONTAINER=<name> TEST_URL=... npm run test:cursor` | Same, on a fresh container with no windows open |
@@ -19,8 +19,8 @@ The Docker runners read the display, Xauthority and token from `relay status --s
 
 ```sh
 docker build -t relay:test .
-docker run -d --name ns-test -p 127.0.0.1:8080:8080 relay:test
-docker exec -u root ns-test sh -c 'apt-get update && apt-get install -y --no-install-recommends python3-tk xdotool'
+docker run -d --name relay-test -p 127.0.0.1:8080:8080 relay:test
+docker exec -u root relay-test sh -c 'apt-get update && apt-get install -y --no-install-recommends python3-tk xdotool'
 ```
 
 ## Native VM run

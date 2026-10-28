@@ -42,6 +42,10 @@ relay scroll 0.5 0.5 --dy 3
 
 Behind an HTTPS proxy: `relay up -d --public https://HOST`. Share the viewer link or token through the user's secret channel, never in logs or URLs. From another machine, set `RELAY_URL` and `RELAY_TOKEN_FILE`. See `docs/remote-access.md`.
 
+## Start apps
+
+Start apps with `relay run -- APP [ARGS...]`, not from another shell: it gives the app the session's display and drops inherited ambient capabilities, which stop the bubblewrap image-loader sandbox from running. Output: `relay logs apps`.
+
 ## Stop
 
 ```sh
@@ -50,7 +54,7 @@ relay down
 
 ## Errors
 
-With `--json`, errors are `{"error":{"code","message","hint"}}` on stderr, plus `component`, `log` and `logs` when a component failed and `applied` for input commands. Exit codes: 0 success, 1 failure, 2 usage error, 3 `status` of a session that is not running.
+With `--json`, errors are `{"error":{"code","message","hint"}}` on stderr, plus `component` and `log` (and `logs` for session components) when a component failed and `applied` for input commands. Exit codes: 0 success, 1 failure, 2 usage error, 3 `status` of a session that is not running, 130 interrupted. Full list: `docs/cli.md#error-codes`.
 
 | Code | Meaning |
 | --- | --- |
@@ -60,10 +64,13 @@ With `--json`, errors are `{"error":{"code","message","hint"}}` on stderr, plus 
 | `unreachable` | Cannot connect to the URL. |
 | `timeout` | No reply within `--timeout`, or `up` did not become ready in time (`component` and `log` set). |
 | `not_running` | No session or logs with that name. |
+| `not_found` | `run` found no running session with that name. |
+| `invalid_option` | `run` was given no app. |
+| `spawn_failed` | `run` could not start the app. |
 | `already_running` | A session with that name is already running. |
-| `component_failed` | display, desktop, engine or the background supervisor exited or could not start; `component`, `log` and `logs` are set. |
+| `component_failed` | display, desktop, engine or the background supervisor exited or could not start, including an app started with `run` that exited at once. `component` and `log` are set. |
 | `missing_dependency` | A required program or the engine binary is missing. |
-| `unsupported_platform` | A host command was run off Linux. |
+| `unsupported_platform` | `up`, `down` or `run` was run off Linux. |
 | `internal` | Unexpected engine response or a CLI bug. |
 
 Fixes: `busy`, ask the user to close the viewer, then retry. `unauthorized`, pass `--token-file` or set `RELAY_TOKEN_FILE`. `unreachable`, check `relay status` and the URL. `component_failed` or `timeout` from `up`, read `relay logs <component>` and run `relay doctor`.

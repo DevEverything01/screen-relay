@@ -21,7 +21,7 @@
 #include <stdexcept>
 #include <thread>
 
-namespace nsl {
+namespace relay {
 namespace {
 using Clock = std::chrono::steady_clock;
 constexpr timespec pollTimeout(int64_t nanoseconds) {
@@ -51,9 +51,9 @@ struct Resources {
   PixelFormat format;
   x264_t* codec = nullptr;
   x264_picture_t frame{};
-  std::vector<uint8_t> mb_info = std::vector<uint8_t>(80 * 45);
+  std::vector<uint8_t> mb_info = std::vector<uint8_t>((frame_width / 16) * (frame_height / 16));
   bool frame_allocated = false;
-  uint64_t bitrate = 8000000;
+  uint64_t bitrate = FlowControl::initial_bitrate;
   explicit Resources(PixelFormat f) : format(f) {}
   ~Resources() {
     if (codec) x264_encoder_close(codec);
@@ -65,7 +65,7 @@ struct Resources {
     x264_param_t params;
     require(x264_param_default_preset(&params, "ultrafast", "zerolatency") >= 0,
             "setting x264 options failed");
-    params.i_width = 1280; params.i_height = 720; params.i_csp = X264_CSP_NV12;
+    params.i_width = frame_width; params.i_height = frame_height; params.i_csp = X264_CSP_NV12;
     params.i_timebase_num = 1; params.i_timebase_den = 1000000;
     params.i_fps_num = 60; params.i_fps_den = 1;
     params.i_threads = 1; params.i_keyint_max = 600; params.i_bframe = 0;
@@ -79,11 +79,11 @@ struct Resources {
     params.vui.i_chroma_loc = 1;
     codec = x264_encoder_open(&params);
     require(codec, "opening libx264 failed");
-    bitrate = 8000000;
+    bitrate = FlowControl::initial_bitrate;
   }
   void init() {
     openEncoder();
-    require(x264_picture_alloc(&frame, X264_CSP_NV12, 1280, 720) == 0,
+    require(x264_picture_alloc(&frame, X264_CSP_NV12, frame_width, frame_height) == 0,
             "allocating YUV buffer failed");
     frame_allocated = true;
   }
@@ -105,7 +105,7 @@ struct CaptureEncoder::Impl {
   std::string fatal_error;
   uint32_t generation = 0, sequence = 0, acknowledged = 0;
   unsigned window = 1;
-  uint64_t bitrate = 8000000, admit_until_us = 0;
+  uint64_t bitrate = FlowControl::initial_bitrate, admit_until_us = 0;
   bool paused = false;
   uint64_t revision = 0;
   bool active = false;
@@ -180,10 +180,10 @@ struct CaptureEncoder::Impl {
               captured = Clock::now();
               require(view.data && view.width > 0 && view.height > 0 &&
                       view.x >= 0 && view.y >= 0 &&
-                      view.x + view.width <= 1280 && view.y + view.height <= 720 &&
-                      view.stride >= view.width * 4 && view.stride <= 1280 * 8 &&
+                      view.x + view.width <= frame_width && view.y + view.height <= frame_height &&
+                      view.stride >= view.width * 4 && view.stride <= frame_width * 8 &&
                       !(view.x & 1) && !(view.y & 1) && !(view.width & 1) && !(view.height & 1) &&
-                      !(force_idr && (view.width != 1280 || view.height != 720)) &&
+                      !(force_idr && (view.width != frame_width || view.height != frame_height)) &&
                       view.format == r.format, "invalid capture frame");
               const auto convert = view.format == PixelFormat::BGRA ? bgraToNv12 : argbToNv12;
               require(convert(view.data, view.stride,
@@ -210,10 +210,10 @@ struct CaptureEncoder::Impl {
               std::fill(r.mb_info.begin(), r.mb_info.end(), uint8_t(X264_MBINFO_CONSTANT));
               for (const DamageRect& d : rects) {
                 const int x0 = std::max(d.x, 0) / 16, y0 = std::max(d.y, 0) / 16;
-                const int x1 = std::min((std::min(d.x + d.width, 1280) + 15) / 16, 80);
-                const int y1 = std::min((std::min(d.y + d.height, 720) + 15) / 16, 45);
+                const int x1 = std::min((std::min(d.x + d.width, frame_width) + 15) / 16, frame_width / 16);
+                const int y1 = std::min((std::min(d.y + d.height, frame_height) + 15) / 16, frame_height / 16);
                 for (int y = y0; y < y1; ++y)
-                  for (int x = x0; x < x1; ++x) r.mb_info[y * 80 + x] = 0;
+                  for (int x = x0; x < x1; ++x) r.mb_info[y * (frame_width / 16) + x] = 0;
               }
               r.frame.prop.mb_info = r.mb_info.data();
             }
@@ -226,7 +226,7 @@ struct CaptureEncoder::Impl {
                     "invalid or delayed encoded access unit");
             EncodedFrame output;
             output.generation = gen; output.sequence = seq; output.pts_us = last_pts;
-            output.width = 1280; output.height = 720;
+            output.width = frame_width; output.height = frame_height;
             output.keyframe = picture.b_keyframe;
             output.annex_b.assign(nals[0].p_payload, nals[0].p_payload + size);
             require(!force_idr || (output.keyframe &&
@@ -341,7 +341,7 @@ void CaptureEncoder::beginSession(uint32_t generation) {
     i.generation = generation;
     i.sequence = 0;
     i.acknowledged = 0;
-    i.window = 1; i.bitrate = 8000000; i.paused = false; i.admit_until_us = 0;
+    i.window = 1; i.bitrate = FlowControl::initial_bitrate; i.paused = false; i.admit_until_us = 0;
     i.active = true;
     ++i.revision;
     i.wake();
@@ -369,7 +369,7 @@ void CaptureEncoder::setFlowControl(uint32_t generation, unsigned window, uint64
   std::lock_guard<std::mutex> lock(i.mutex);
   if (!generation || generation != i.generation) return;
   i.window = std::clamp(window, 1u, unsigned(FlowControl::max_frames));
-  i.bitrate = std::clamp<uint64_t>(bitrate, 1000000, 40000000);
+  i.bitrate = std::clamp<uint64_t>(bitrate, FlowControl::min_bitrate, FlowControl::max_bitrate);
   i.paused = paused;
   i.admit_until_us = admit_until_us;
   i.wake();
@@ -395,4 +395,4 @@ void CaptureEncoder::stop() {
   i.generation = 0;
   i.active = false;
 }
-}  // namespace nsl
+}  // namespace relay
