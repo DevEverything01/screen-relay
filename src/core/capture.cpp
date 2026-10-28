@@ -23,8 +23,11 @@
 
 namespace relay {
 namespace {
-/** VBV buffer, in kbit, that holds about 1/15 s of video at `bitrate` bits per second. */
-constexpr int vbvBufferKbit(uint64_t bitrate) { return int(bitrate / 15000); }
+/// VBV buffer in kbit: about 1/15 s of `bitrate`, or 2/15 s while refining a quiet picture.
+constexpr int vbvBufferKbit(uint64_t bitrate, bool refinement = false) {
+  return int(bitrate / (refinement ? 7500 : 15000));
+}
+constexpr float encoder_crf = 10;
 using Clock = std::chrono::steady_clock;
 constexpr timespec pollTimeout(int64_t nanoseconds) {
   return {static_cast<time_t>(nanoseconds / 1000000000),
@@ -56,6 +59,7 @@ struct Resources {
   std::vector<uint8_t> mb_info = std::vector<uint8_t>((frame_width / 16) * (frame_height / 16));
   bool frame_allocated = false;
   uint64_t bitrate = FlowControl::initial_bitrate;
+  bool refinement_vbv = false;
   explicit Resources(PixelFormat f) : format(f) {}
   ~Resources() {
     if (codec) x264_encoder_close(codec);
@@ -72,7 +76,7 @@ struct Resources {
     params.i_fps_num = 60; params.i_fps_den = 1;
     params.i_threads = 1; params.i_keyint_max = X264_KEYINT_MAX_INFINITE; params.i_bframe = 0;
     params.i_scenecut_threshold = 0; params.i_sync_lookahead = 0;
-    params.rc.i_rc_method = X264_RC_CRF; params.rc.f_rf_constant = 10;
+    params.rc.i_rc_method = X264_RC_CRF; params.rc.f_rf_constant = encoder_crf;
     params.rc.i_lookahead = 0; params.rc.i_vbv_max_bitrate = int(FlowControl::initial_bitrate / 1000); params.rc.i_vbv_buffer_size = vbvBufferKbit(FlowControl::initial_bitrate);
     params.analyse.b_mb_info = 1; params.analyse.b_mb_info_update = 0;
     params.b_annexb = 1; params.b_repeat_headers = 1;
@@ -82,6 +86,7 @@ struct Resources {
     codec = x264_encoder_open(&params);
     require(codec, "opening libx264 failed");
     bitrate = FlowControl::initial_bitrate;
+    refinement_vbv = false;
   }
   void init() {
     openEncoder();
@@ -136,16 +141,14 @@ struct CaptureEncoder::Impl {
       unsigned consecutive_failures = 0;
       const auto frame_interval = std::chrono::nanoseconds(16666667);
       const auto refinement_delay = std::chrono::milliseconds(150);
-      constexpr unsigned refinement_max_frames = 12;
+      constexpr unsigned refinement_max_frames = 30;
       auto deadline = Clock::now();
       auto last_publish = deadline;
       bool last_was_refinement = true, refining = false;
       unsigned cascade_frames = 0;
-      uint64_t first_refinement_bytes = 0, prev_refinement_bytes = 0;
       auto reset_refinement = [&] {
         refining = false;
         cascade_frames = 0;
-        first_refinement_bytes = prev_refinement_bytes = 0;
       };
       while (true) {
         if (source->drainDamage()) dirty = true;
@@ -209,13 +212,14 @@ struct CaptureEncoder::Impl {
             }
             const int64_t timestamp = std::chrono::duration_cast<std::chrono::microseconds>(capture_start.time_since_epoch()).count();
             r.frame.i_pts = last_pts = std::max(last_pts + 1, timestamp);
-            if (rate != r.bitrate) {
+            if (rate != r.bitrate || refinement != r.refinement_vbv) {
               x264_param_t params;
               x264_encoder_parameters(r.codec, &params);
               params.rc.i_vbv_max_bitrate = int(rate / 1000);
-              params.rc.i_vbv_buffer_size = vbvBufferKbit(rate);
+              params.rc.i_vbv_buffer_size = vbvBufferKbit(rate, refinement);
               require(x264_encoder_reconfig(r.codec, &params) == 0, "encoder reconfiguration failed");
               r.bitrate = rate;
+              r.refinement_vbv = refinement;
             }
             r.frame.i_type = force_idr ? X264_TYPE_IDR : X264_TYPE_AUTO;
             r.frame.prop.mb_info = nullptr; r.frame.prop.mb_info_free = nullptr;
@@ -237,9 +241,8 @@ struct CaptureEncoder::Impl {
             require(size > 0 && nal_count > 0 && nals && picture.i_pts == last_pts &&
                     static_cast<size_t>(size) <= FlowControl::max_bytes,
                     "invalid or delayed encoded access unit");
-            const bool converged = refinement && cascade_frames > 0 &&
-                (uint64_t(size) * 10 >= prev_refinement_bytes * 9 ||
-                 uint64_t(size) * 20 < first_refinement_bytes);
+            const bool converged = refinement && picture.prop.f_crf_avg <= encoder_crf + 1 &&
+                                   uint64_t(size) <= rate / 240;
             EncodedFrame output;
             output.generation = gen; output.sequence = seq; output.pts_us = last_pts;
             output.width = frame_width; output.height = frame_height;
@@ -272,13 +275,10 @@ struct CaptureEncoder::Impl {
                 last_publish = Clock::now();
                 last_was_refinement = refinement;
                 if (refinement) {
-                  if (cascade_frames == 0) first_refinement_bytes = uint64_t(size);
-                  prev_refinement_bytes = uint64_t(size);
                   ++cascade_frames;
                   refining = !converged && cascade_frames < refinement_max_frames;
                 } else {
                   cascade_frames = 0;
-                  first_refinement_bytes = prev_refinement_bytes = 0;
                   refining = true;
                 }
               }
