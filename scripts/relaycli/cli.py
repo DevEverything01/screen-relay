@@ -52,6 +52,7 @@ def parser():
     logs.add_argument('-f', '--follow', action='store_true', help='keep printing new lines')
     add('doctor', cmd_doctor, 'check this machine and print fix commands', [common])
     run = add('run', cmd_run, 'start an app on the session desktop (output: logs apps)', [common, named])
+    run.add_argument('--restart', action='store_true', help='restart the app when it exits')
     run.add_argument('app', nargs=argparse.REMAINDER, metavar='-- APP [ARGS...]')
     screenshot = add('screenshot', cmd_screenshot, 'save a PNG of the screen', [client])
     screenshot.add_argument('file', nargs='?', default='screen.png', help='output file, or - for stdout (default: screen.png)')

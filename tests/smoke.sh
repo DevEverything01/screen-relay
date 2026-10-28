@@ -63,6 +63,45 @@ for _ in $(seq 25); do python3 -c "$check" "$work/typed" && break; sleep 0.2; do
 python3 -c "$check" "$work/typed" || fail "xterm did not receive the click and text: $(od -c "$work/typed" | head -5)"
 "$relay" screenshot --name "$name" "$work/after.png" >/dev/null || fail 'screenshot after input'
 
+step 'run shares the desktop bus and restarts apps'
+python3 - "$relay" "$name" "$logs/session.json" <<'PY' || fail 'run environment or restart'
+import json
+import os
+from pathlib import Path
+import signal
+import subprocess
+import sys
+import time
+
+relay, name, record = sys.argv[1:]
+session = json.loads(Path(record).read_text())
+
+def environment(pid):
+    return dict(item.split(b'=', 1) for item in Path(f'/proc/{pid}/environ').read_bytes().split(b'\0') if b'=' in item)
+
+desktop = environment(session['components']['desktop']['pid'])
+for options in ([], ['--restart']):
+    command = [relay, 'run', '--name', name, '--json', *options, '--', 'xterm', '-T', f'{name}-restart']
+    app = json.loads(subprocess.check_output(command))
+    actual = environment(app['pid'])
+    for key in (b'DBUS_SESSION_BUS_ADDRESS', b'XDG_RUNTIME_DIR', b'XDG_CONFIG_HOME', b'XDG_CACHE_HOME', b'ICEAUTHORITY'):
+        assert actual[key] == desktop[key], (key, actual, desktop)
+    if options:
+        watcher = Path(f'/proc/{app["pid"]}/stat').read_text().split(') ', 1)[1].split()[1]
+        assert environment(watcher)[b'RELAY_SESSION'] == str(Path(record).parent).encode()
+        os.kill(app['pid'], signal.SIGTERM)
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            children = Path(f'/proc/{watcher}/task/{watcher}/children').read_text().split()
+            if children and children[0] != str(app['pid']):
+                assert environment(children[0])[b'DBUS_SESSION_BUS_ADDRESS'] == desktop[b'DBUS_SESSION_BUS_ADDRESS']
+                print(f'Restarted xterm: {app["pid"]} -> {children[0]}')
+                break
+            time.sleep(0.1)
+        else:
+            raise AssertionError('xterm did not restart')
+PY
+
 step 'down (twice: must be idempotent)'
 "$relay" down --name "$name" || fail down
 "$relay" down --name "$name" || fail 'second down'

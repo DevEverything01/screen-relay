@@ -19,6 +19,7 @@ from .state import identity, sweep, tail, write_session
 
 HINTS = {
     'display': 'Check Xvfb and /tmp/.X11-unix with `relay doctor`.',
+    'dbus': 'Read `relay logs dbus` and check dbus-daemon is installed.',
     'desktop': 'Run `relay doctor` (icon decoding, D-Bus) and read `relay logs desktop`.',
     'engine': 'If the port is taken, pick another with --port; otherwise run `relay doctor`.',
 }
@@ -123,12 +124,36 @@ class Session:
             if process.poll() is not None:
                 raise self.failure(name, 'component_failed', f'{name} exited with code {process.returncode}')
 
+    def start_bus(self):
+        """Start a supervised session bus and share its address with desktop apps."""
+        read_fd, write_fd = os.pipe()
+        try:
+            self.spawn('dbus', ['dbus-daemon', '--session', '--nofork', f'--print-address={write_fd}'],
+                       pass_fds=(write_fd,))
+            os.close(write_fd)
+            write_fd = None
+            address, deadline = b'', time.monotonic() + 5
+            while b'\n' not in address:
+                self.check_children()
+                if time.monotonic() > deadline or len(address) > 4096:
+                    raise self.failure('dbus', 'timeout', 'Session bus did not report its address')
+                if select.select([read_fd], [], [], 0.2)[0]:
+                    chunk = os.read(read_fd, 4096)
+                    if not chunk:
+                        raise self.failure('dbus', 'component_failed', 'Session bus closed its address pipe')
+                    address += chunk
+            self.env['DBUS_SESSION_BUS_ADDRESS'] = address.decode().strip()
+        finally:
+            os.close(read_fd)
+            if write_fd is not None:
+                os.close(write_fd)
+
     def start(self):
         args, directory = self.args, self.dir
         runtime = directory / 'runtime'
         shutil.rmtree(runtime, ignore_errors=True)
         runtime.mkdir(mode=0o700)
-        self.env = desktop_env(directory)
+        self.env = dict(os.environ, RELAY_SESSION=str(directory)) if args.display else desktop_env(directory)
         engine = find_engine()
         if not engine:
             raise Failure('missing_dependency', 'relay-engine not found', 'Run ./install.sh first.', component='engine')
@@ -136,9 +161,10 @@ class Session:
         command = ['xfce4-session'] if desktop == 'xfce' else [] if desktop == 'none' else shlex.split(desktop)
         needed = ([] if args.display else ['Xvfb', 'xauth']) + (['xprop', 'xwininfo', command[0]] if command else [])
         missing = [p for p in needed if not shutil.which(p)]
-        if command and shutil.which('dbus-run-session'):
+        own_bus = bool(command and not args.display and shutil.which('dbus-daemon'))
+        if command and not args.display and not own_bus and shutil.which('dbus-run-session'):
             command = ['dbus-run-session', '--', *command]
-        elif desktop == 'xfce':
+        elif desktop == 'xfce' and not args.display and not own_bus:
             missing.append('dbus-run-session')
         if missing:
             raise Failure('missing_dependency', 'Missing ' + ', '.join(missing), 'Run ./install.sh, or check with `relay doctor`.')
@@ -153,7 +179,12 @@ class Session:
                 self.env['DISPLAY'] = start_xvfb(lambda cmd, **kw: self.spawn('display', cmd, **kw), auth)
             except Failure as failure:
                 raise self.failure('display', failure.code, failure.message) from None
-        self.save(display=self.env['DISPLAY'], xauthority=self.env.get('XAUTHORITY'), ownsDisplay=not args.display, desktop=desktop)
+        if own_bus:
+            self.start_bus()
+        environment = {key: self.env[key] for key in ('DBUS_SESSION_BUS_ADDRESS', 'XDG_RUNTIME_DIR', 'XDG_CONFIG_HOME',
+                                                      'XDG_CACHE_HOME', 'ICEAUTHORITY') if key in self.env}
+        self.save(display=self.env['DISPLAY'], xauthority=self.env.get('XAUTHORITY'), ownsDisplay=not args.display,
+                  desktop=desktop, environment=environment)
         if command:
             self.spawn('desktop', command)
         bind = args.bind or ('0.0.0.0' if args.public else '127.0.0.1')
