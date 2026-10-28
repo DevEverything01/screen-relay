@@ -158,6 +158,10 @@ function presentDecoded(item) {
   } else {
     decoded.push(item);
   }
+  while (decoded.length > 3) {
+    decoded.shift().frame.close();
+    stats.superseded++;
+  }
   schedulePresent();
   return true;
 }
@@ -170,7 +174,7 @@ function present() {
     decoded.shift().frame.close();
     stats.superseded++;
   }
-  if (decoded.length) schedulePresent();
+  schedulePresent();
 }
 function codecFromSps(bytes) {
   for (let i = 0; i + 7 < bytes.length; i++) {
