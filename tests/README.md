@@ -1,0 +1,36 @@
+# Tests
+
+Use disposable desktops. Integration tests send real input and cover the screen. New results go to `tests/results/` (untracked).
+
+| Layer | Command | Needs |
+| --- | --- | --- |
+| Native unit (color, flow, injected source through the real encoder) | `make test` | Build dependencies. No X11. |
+| SDK | `npm ci --ignore-scripts && npm test` | Node 22+ |
+| SDK types | `tsc --noEmit --strict --module NodeNext --target ES2022 tests/unit/sdk-types.mts` | TypeScript |
+| Smoke, any target | `tests/smoke.sh` | A running `relay up` session |
+| Browser video and input | `TEST_CONTAINER=<name> TEST_URL=http://127.0.0.1:8080 npm run test:integration` | Chrome, a container from this repo's image with test tools added (see below) |
+| SDK against a real desktop | `TEST_CONTAINER=<name> TEST_URL=... npm run test:framework` | Same |
+| Remote cursor | `TEST_CONTAINER=<name> TEST_URL=... npm run test:cursor` | Same, on a fresh container with no windows open |
+| Native Linux VM, no Docker | see below | SSH to a disposable VM, Chrome |
+
+The integration tests inspect decoded pixels, real X11 key and pointer state and held-input release. An input ACK alone is not treated as proof. They do not measure throughput, latency or soak behavior.
+
+The Docker runners read the display, Xauthority and token from `relay status --show-token --json` inside the container. The image leaves out test-only tools, so add them first:
+
+```sh
+docker build -t relay:test .
+docker run -d --name ns-test -p 127.0.0.1:8080:8080 relay:test
+docker exec -u root ns-test sh -c 'apt-get update && apt-get install -y --no-install-recommends python3-tk xdotool'
+```
+
+## Native VM run
+
+```sh
+TEST_SSH_CONFIG=/path/to/ssh.config TEST_SSH_TARGET=my-test-vm \
+  TEST_REMOTE_ROOT=/home/test/relay-src \
+  npm run test:portable
+```
+
+Install the source on the VM first (`./install.sh`; the input fixture also needs `python3-tk`, the TLS test needs `openssl`). The runner writes `tests/results/portable/verification.json`.
+
+Earlier verification results are kept outside the repository.

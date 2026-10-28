@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Relay</title>
+<link rel="icon" href="data:,">
+<style>
+:root{color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:#000}
+body{font:13px/1.2 system-ui,-apple-system,"Segoe UI",sans-serif;color:#ededed}
+[hidden]{display:none!important}
+#stage{position:fixed;inset:0;display:flex;overflow:hidden}
+#screen{display:block;margin:auto;flex:none;background:#000;outline:none;touch-action:none;cursor:default;
+  width:min(100vw,calc(100vh*16/9));height:min(100vh,calc(100vw*9/16));
+  width:min(100vw,calc(100dvh*16/9));height:min(100dvh,calc(100vw*9/16))}
+body.actual #stage{overflow:auto}
+body.actual #screen{width:1280px;height:720px}
+#cursor{position:fixed;pointer-events:none;z-index:1}
+#toolbar{position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:3;display:flex;flex-direction:column;align-items:center;gap:6px}
+.bar,.panel{background:rgba(12,12,12,.86);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);
+  border:1px solid rgba(255,255,255,.12);box-shadow:0 8px 24px rgba(0,0,0,.45)}
+.bar{display:flex;align-items:center;gap:2px;padding:3px;border-radius:999px;transition:opacity .15s}
+#toolbar:not(.open) .bar{opacity:.6}
+#toolbar:not(.open) .bar:hover,#toolbar .bar:focus-within{opacity:1}
+#toolbar-actions{display:flex;align-items:center;gap:2px}
+.bar button{display:grid;place-items:center;width:28px;height:28px;padding:0;border:0;border-radius:999px;
+  background:transparent;color:#a1a1a1;font:600 11px/1 system-ui,sans-serif;cursor:pointer}
+.bar button:hover{background:rgba(255,255,255,.1);color:#fff}
+.bar button[aria-pressed=true],.bar button[aria-expanded=true]{background:rgba(255,255,255,.16);color:#fff}
+svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+.dot{width:8px;height:8px;border-radius:50%;background:#f5a623;transition:background .2s}
+.dot.live{background:#3fb950}.dot.error{background:#f85149}
+#status{max-width:34vw;padding:0 8px 0 2px;overflow:hidden;color:#a1a1a1;white-space:nowrap;text-overflow:ellipsis}
+.divider{width:1px;height:16px;margin:0 3px;background:rgba(255,255,255,.14)}
+.panel{display:flex;align-items:center;gap:6px;padding:6px;border-radius:12px}
+.panel button{padding:6px 10px;border:0;border-radius:8px;background:rgba(255,255,255,.08);color:#ededed;font:inherit;cursor:pointer;white-space:nowrap}
+.panel button:hover{background:rgba(255,255,255,.16)}
+.panel label{padding:0 2px 0 4px;color:#a1a1a1}
+#access-token{width:22ch;padding:6px 8px;border:1px solid rgba(255,255,255,.14);border-radius:8px;background:rgba(255,255,255,.06);color:#ededed;font:inherit}
+button:focus-visible,input:focus-visible{outline:2px solid #3b82f6;outline-offset:2px}
+#stats{position:fixed;left:8px;bottom:8px;z-index:2;padding:5px 8px;border-radius:6px;background:rgba(12,12,12,.8);
+  color:#d4d4d4;font:12px/1.3 ui-monospace,SFMono-Regular,Menlo,monospace;pointer-events:none}
+</style>
+</head>
+<body>
+<main id="stage"><canvas id="screen" width="1280" height="720" tabindex="0" aria-label="Remote desktop. Focus to send keyboard and pointer input."></canvas></main>
+<canvas id="cursor" width="1" height="1" aria-hidden="true" hidden></canvas>
+<div id="stats" hidden><span id="hud" aria-label="Stream statistics">Drawn FPS: 0.0 · Stream Mbps: 0.00 · Cgroup CPU (one core): unavailable · Cgroup RAM: unavailable</span></div>
+<nav id="toolbar" aria-label="Viewer controls">
+  <div class="bar">
+    <button id="toolbar-toggle" type="button" aria-expanded="false" aria-controls="toolbar-actions" aria-label="Viewer controls"><span id="dot" class="dot"></span></button>
+    <div id="toolbar-actions" hidden>
+      <span id="status" role="status" aria-live="polite">Connecting…</span>
+      <span class="divider"></span>
+      <button type="button" data-action="fullscreen" aria-pressed="false" aria-label="Fullscreen" title="Fullscreen"><svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></svg></button>
+      <button type="button" data-action="scale" aria-pressed="false" aria-label="Actual size" title="Actual size (1:1)">1:1</button>
+      <button type="button" data-action="keys" aria-expanded="false" aria-controls="keys-panel" aria-label="Send keys" title="Send keys"><svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg></button>
+      <button type="button" data-action="screenshot" aria-label="Save screenshot" title="Save screenshot"><svg viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3z"/><circle cx="12" cy="13" r="3"/></svg></button>
+      <button type="button" data-action="viewonly" aria-pressed="false" aria-label="View only" title="View only (stop sending input)"><svg viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button>
+      <button type="button" data-action="stats" aria-pressed="false" aria-label="Stream statistics" title="Stream statistics"><svg viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></button>
+      <button type="button" data-action="connection" aria-expanded="false" aria-controls="connection-panel" aria-label="Connection" title="Connection"><svg viewBox="0 0 24 24"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/></svg></button>
+    </div>
+  </div>
+  <div id="keys-panel" class="panel" hidden>
+    <button type="button" data-keys="ControlLeft+AltLeft+Delete">Ctrl+Alt+Del</button>
+    <button type="button" data-keys="Escape">Esc</button>
+    <button type="button" data-keys="Tab">Tab</button>
+    <button type="button" data-keys="MetaLeft">Super</button>
+    <button type="button" data-keys="AltLeft+Tab">Alt+Tab</button>
+  </div>
+  <form id="connection-panel" class="panel" hidden>
+    <label for="access-token">Access token</label>
+    <input id="access-token" type="password" autocomplete="off" spellcheck="false">
+    <button id="reconnect" type="submit">Reconnect</button>
+  </form>
+</nav>
+<script src="viewer.js"></script>
+</body>
+</html>
