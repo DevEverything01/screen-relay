@@ -193,7 +193,7 @@ http://127.0.0.1:18200: up (x11 1280x720, 0 frames encoded)
 ## logs
 
 ```sh
-relay logs [--name N] [display|desktop|engine|apps] [-f|--follow]
+relay logs [--name N] [display|dbus|desktop|engine|apps] [-f|--follow]
 ```
 
 Prints the last 200 lines of one component's log, or of every log that exists. `--follow` keeps printing new lines. `--json` gives one key per log, for example `{"display": "...", "desktop": "...", "engine": "..."}` and cannot be combined with `--follow`. The `-d` supervisor's own output is in `supervisor.log` in the state directory.
@@ -225,10 +225,12 @@ Checks this machine and prints the fix command for each problem. Exits 1 if any 
 ## run
 
 ```sh
-relay run [--name N] -- APP [ARGS...]
+relay run [--name N] [--restart] -- APP [ARGS...]
 ```
 
-Starts an app on the session's desktop and returns its pid. The app gets the session's display, X authority and runtime directories, runs with ambient capabilities cleared (as the desktop's own children do), and stops with `relay down`. Output goes to `relay logs apps`. Use it instead of starting apps from another shell, such as `sbx exec`, `ssh` or an agent tool, where inherited capabilities make GTK image loaders refuse to run.
+Starts an app on the session's desktop and returns its pid. The app gets the desktop's D-Bus session bus, display, X authority, runtime, config and cache directories, and ICE authority. Sharing the bus lets accessibility clients find the app. With `up --display :N`, apps inherit the caller's session environment instead. Apps run with ambient capabilities cleared and stop with `relay down`. Output goes to `relay logs apps`.
+
+`--restart` starts the app again whenever it exits, until the session stops. Retries wait 1 second, doubling up to 30 seconds; the delay resets after the app stays up for 60 seconds. Each restart is recorded in `relay logs apps`. The returned pid is the first app process, not its watcher; it changes on restart. Without this flag, apps start once as before.
 
 ```console
 $ relay run -- mousepad notes.txt

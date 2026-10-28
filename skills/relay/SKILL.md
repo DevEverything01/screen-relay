@@ -44,7 +44,7 @@ Behind an HTTPS proxy: `relay up -d --public https://HOST`. Share the viewer lin
 
 ## Start apps
 
-Start apps with `relay run -- APP [ARGS...]`, not from another shell: it gives the app the session's display and drops inherited ambient capabilities, which stop the bubblewrap image-loader sandbox from running. Output: `relay logs apps`.
+Start apps with `relay run -- APP [ARGS...]`, not from another shell: it shares the desktop's display, D-Bus session bus (so accessibility clients can find the app), runtime, config and cache directories, and ICE authority, and drops inherited ambient capabilities. Attach mode (`up --display :N`) keeps the caller's session environment. Add `--restart` to restart the app after it exits until `relay down`; retries back off from 1 to 30 seconds and reset after 60 seconds of uptime. The returned pid belongs to the first app process and changes on restart. Output and restarts: `relay logs apps`.
 
 ## Stop
 

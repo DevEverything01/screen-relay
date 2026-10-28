@@ -14,8 +14,9 @@ from .client import http, target
 from .common import LAUNCHER_DIR, Failure, emit
 from .state import alive, lock, read_session, reap, state_dir, tail, write_session
 from .supervisor import Session, clear_ambient_caps, desktop_env
+from .watcher import start_watcher
 
-COMPONENTS = ('display', 'desktop', 'engine', 'apps')
+COMPONENTS = ('display', 'dbus', 'desktop', 'engine', 'apps')
 
 
 def ready_text(info, args):
@@ -224,23 +225,33 @@ def cmd_run(args):
     if not session or session.get('state') != 'ready' or not alive(session.get('supervisor')):
         raise Failure('not_found', f'No running session named "{args.name}"', 'Start one with `relay up -d`.')
     directory = state_dir(args.name)
-    env = dict(desktop_env(directory), DISPLAY=session['display'])
+    if session.get('ownsDisplay', True):
+        env = desktop_env(directory)
+        env.update(session.get('environment', {}))
+    else:
+        env = dict(os.environ, RELAY_SESSION=str(directory))
+    env['DISPLAY'] = session['display']
     if session.get('xauthority'):
         env['XAUTHORITY'] = session['xauthority']
     path = directory / 'apps.log'
     with open(path, 'ab') as log:
         try:
-            process = subprocess.Popen(command, env=env, cwd=Path.home(), stdin=subprocess.DEVNULL, stdout=log, stderr=log,
-                                       start_new_session=True, preexec_fn=clear_ambient_caps)
+            if args.restart:
+                pid = start_watcher(command, env, log)
+            else:
+                process = subprocess.Popen(command, env=env, cwd=Path.home(), stdin=subprocess.DEVNULL, stdout=log, stderr=log,
+                                           start_new_session=True, preexec_fn=clear_ambient_caps)
+                pid = process.pid
         except OSError as error:
             raise Failure('spawn_failed', f'Cannot start {command[0]}: {error}') from None
-    try:
-        code = process.wait(1)
-    except subprocess.TimeoutExpired:
-        code = None
-    if code:
-        raise Failure('component_failed', f'{command[0]} exited with code {code}', 'Read `relay logs apps`.',
-                      component='apps', log=tail(path))
-    emit(args, {'pid': process.pid, 'command': command, 'display': session['display'], 'log': str(path)},
-         f'Started {command[0]} (pid {process.pid}) on {session["display"]}; output in {path}')
+    if not args.restart:
+        try:
+            code = process.wait(1)
+        except subprocess.TimeoutExpired:
+            code = None
+        if code:
+            raise Failure('component_failed', f'{command[0]} exited with code {code}', 'Read `relay logs apps`.',
+                          component='apps', log=tail(path))
+    emit(args, {'pid': pid, 'command': command, 'display': session['display'], 'log': str(path)},
+         f'Started {command[0]} (pid {pid}) on {session["display"]}; output in {path}')
     return 0
