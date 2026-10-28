@@ -33,6 +33,7 @@ browser or agent input -> InputBackend (XTest)
 ## Threads and ownership
 
 - The service thread owns libwebsockets, the `InputBackend`, flow-control state and all socket writes.
+- On Linux, the service thread sets `TCP_NODELAY`, `TCP_NOTSENT_LOWAT` and a 256 KiB `SO_SNDBUF` on the stream socket.
 - The capture worker owns its `CaptureSource`, a reusable YUV frame and the x264 encoder. It publishes owning `EncodedFrame` vectors to a bounded queue and wakes the service thread with `lws_cancel_service`.
 - A separate screenshot worker owns its own `CaptureSource`.
 - Each X11 backend object owns its own X connection. Xlib threading is initialized once by `initializeNativeBackend()`.
