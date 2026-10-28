@@ -20,11 +20,13 @@ PREFIX ?= /usr/local
 all: relay-engine
 
 install: relay-engine
-	install -d "$(DESTDIR)$(PREFIX)/lib/relay/viewer" "$(DESTDIR)$(PREFIX)/bin"
+	install -d "$(DESTDIR)$(PREFIX)/lib/relay/viewer" "$(DESTDIR)$(PREFIX)/lib/relay/relaycli" "$(DESTDIR)$(PREFIX)/bin"
 	install -m 0755 relay-engine "$(DESTDIR)$(PREFIX)/lib/relay/relay-engine"
 	install -m 0644 viewer/index.html viewer/viewer.js "$(DESTDIR)$(PREFIX)/lib/relay/viewer/"
 	ln -sfn ../lib/relay/relay-engine "$(DESTDIR)$(PREFIX)/bin/relay-engine"
-	install -m 0755 scripts/relay "$(DESTDIR)$(PREFIX)/bin/relay"
+	install -m 0755 scripts/relay "$(DESTDIR)$(PREFIX)/lib/relay/relay"
+	install -m 0644 scripts/relaycli/*.py "$(DESTDIR)$(PREFIX)/lib/relay/relaycli/"
+	ln -sfn ../lib/relay/relay "$(DESTDIR)$(PREFIX)/bin/relay"
 
 relay-engine: $(ENGINE_SRCS) $(HEADERS)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(ENGINE_SRCS) -o $@ $(LDLIBS)
