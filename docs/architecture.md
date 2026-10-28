@@ -57,6 +57,8 @@ browser or agent input -> InputBackend (XTest)
 
 ACK time includes network, decode, draw and scheduling. It is not pure RTT. Paths with latency near 200 ms can back off repeatedly.
 
+Quality recovery: when damage stops for 150 ms, the capture worker re-encodes the full picture as a P frame at the current CRF without capturing again. If the transport queue is empty it keeps refining at up to 60 fps, so the VBV budget re-spends over successive frames and the picture climbs back toward CRF quality. Refinement stops after two consecutive frames that carry practically no residual, after 120 refinement frames, or as soon as new damage arrives. It never runs while frames are in flight, so it adds no queueing delay and cannot compete with live damage.
+
 Failure handling: a capture or encode failure keeps pending work and forces an IDR in the same generation. The first two consecutive failures reopen the encoder after 1 s. The third, or a failed reopen, is fatal and the server exits.
 
 Color: little-endian BGRA and big-endian ARGB convert to NV12 with limited-range BT.709 in `src/core/color.cpp` (NEON on AArch64, SSE2 on x86, scalar elsewhere), chroma signaled as center-sited. 4:2:0 loses colored-text detail.
