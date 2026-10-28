@@ -46,7 +46,7 @@ function receiveCursor(data) {
 const stats = window.nativeStats = {
   received: 0, drawn: 0, superseded: 0, bytes: 0, decodeerrors: 0, outstanding: 0, pendingBytes: 0, pendingHighWater: 0,
 };
-let socket, decoder, retryTimer, deadline, frameHandle;
+let socket, decoder, retryTimer, deadline, frameHandle, drawnThisFrame = false;
 let generation = 0, sequence = 0, lastTimestamp = -1, ready = false, retry = 0, epoch = 0;
 let buttons = 0, modifiers = 0, x = 0, y = 0, viewOnly = false;
 const pending = new Map(), decoded = [], held = new Set();
@@ -102,6 +102,7 @@ function reset() {
   clearTimeout(deadline);
   cancelAnimationFrame(frameHandle);
   frameHandle = 0;
+  drawnThisFrame = false;
   pending.clear();
   for (const item of decoded) item.frame.close();
   decoded.length = 0;
@@ -132,17 +133,14 @@ function watchPending(current) {
 function schedulePresent() {
   if (!frameHandle) frameHandle = requestAnimationFrame(present);
 }
-function present() {
-  frameHandle = 0;
-  const item = decoded.shift();
-  if (!item) return;
+function draw(item) {
   try {
     if (item.gen !== generation) throw new Error("Stale decoded frame");
     ctx.drawImage(item.frame, 0, 0, 1280, 720);
   } catch (error) {
     item.frame.close();
     fail(`Draw failed: ${error.message}`);
-    return;
+    return false;
   }
   item.frame.close();
   stats.drawn++;
@@ -151,6 +149,23 @@ function present() {
   if (!wasReady) renderCursor();
   retry = 0;
   status.textContent = "Live · click to control";
+  drawnThisFrame = true;
+  return true;
+}
+function presentDecoded(item) {
+  if (!decoded.length && !drawnThisFrame) {
+    if (!draw(item)) return false;
+  } else {
+    decoded.push(item);
+  }
+  schedulePresent();
+  return true;
+}
+function present() {
+  frameHandle = 0;
+  drawnThisFrame = false;
+  const item = decoded.shift();
+  if (!item || !draw(item)) return;
   while (decoded.length > 2) {
     decoded.shift().frame.close();
     stats.superseded++;
@@ -252,8 +267,7 @@ function connect() {
               pending.delete(frame.timestamp);
               stats.pendingBytes -= item.bytes;
               stats.outstanding = pending.size;
-              decoded.push({ gen: item.gen, seq: item.seq, frame });
-              schedulePresent();
+              if (!presentDecoded({ gen: item.gen, seq: item.seq, frame })) return;
               if (ws.readyState !== WebSocket.OPEN) throw new Error("Connection closed before ACK");
               ws.send(header(2, item.gen, item.seq, 0));
               watchPending(current);
