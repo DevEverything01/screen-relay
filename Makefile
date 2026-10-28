@@ -16,7 +16,7 @@ ENGINE_SRCS = $(CORE_SRCS) $(wildcard src/server/*.cpp src/backends/$(BACKEND)/*
 HEADERS = $(wildcard src/*/*.hpp src/backends/$(BACKEND)/*.hpp)
 
 PREFIX ?= /usr/local
-.PHONY: all install test test-color test-flow test-backend clean
+.PHONY: all install test test-color test-flow test-backend test-server clean
 all: relay-engine
 
 install: relay-engine
@@ -52,7 +52,16 @@ build/backend-source-test: tests/unit/backend-source-test.cpp $(CORE_SRCS) $(wil
 test-backend: build/backend-source-test
 	./build/backend-source-test
 
-test: test-color test-flow test-backend
+SERVER_TEST_SRCS = src/server/config.cpp src/server/metrics.cpp src/server/wire.cpp
+
+build/server-test: tests/unit/server-test.cpp $(SERVER_TEST_SRCS) $(wildcard src/server/*.hpp) $(wildcard src/core/*.hpp)
+	mkdir -p build
+	$(CXX) -Isrc $(shell pkg-config --cflags libwebsockets) $(CXXFLAGS) tests/unit/server-test.cpp $(SERVER_TEST_SRCS) -o $@ $(shell pkg-config --libs libwebsockets)
+
+test-server: build/server-test
+	./build/server-test
+
+test: test-color test-flow test-backend test-server
 
 clean:
 	rm -rf build relay-engine
