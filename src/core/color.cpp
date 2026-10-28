@@ -67,7 +67,7 @@ __m128i boxAverage4(__m128i top, __m128i bottom) {
   const auto pairs = _mm_madd_epi16(_mm_add_epi16(top, bottom), _mm_set1_epi16(1));
   return _mm_srai_epi32(_mm_add_epi32(pairs, _mm_set1_epi32(2)), 2);
 }
-void chromaBlock4(__m128i blue, __m128i green, __m128i red, uint8_t* u, uint8_t* v) {
+void chromaBlock4(__m128i blue, __m128i green, __m128i red, uint8_t* u, uint8_t* v, int step) {
   const auto zero = _mm_setzero_si128();
   const auto b = _mm_packs_epi32(blue, blue);
   const auto g = _mm_packs_epi32(green, green);
@@ -91,8 +91,8 @@ void chromaBlock4(__m128i blue, __m128i green, __m128i red, uint8_t* u, uint8_t*
   uint8_t values[16];
   _mm_storeu_si128(reinterpret_cast<__m128i*>(values), _mm_packus_epi16(packed, packed));
   for (int k = 0; k < 4; ++k) {
-    u[k] = values[k];
-    v[k] = values[k + 4];
+    u[k * step] = values[k];
+    v[k * step] = values[k + 4];
   }
 }
 #endif
@@ -141,14 +141,14 @@ bool convertToYuv420(const uint8_t* source, int sourceStride,
     }
 #endif
 #if defined(__SSE2__)
-    for (; x <= width - 8; x += 8) {
+    if constexpr (!argb) for (; x <= width - 8; x += 8) {
       __m128i tb, tg, tr, bb, bg, br;
       splitBgra8(top + x * 4, tb, tg, tr);
       splitBgra8(bottom + x * 4, bb, bg, br);
       _mm_storel_epi64(reinterpret_cast<__m128i*>(y0 + x), lumaBlock8(tb, tg, tr));
       _mm_storel_epi64(reinterpret_cast<__m128i*>(y1 + x), lumaBlock8(bb, bg, br));
       chromaBlock4(boxAverage4(tb, bb), boxAverage4(tg, bg), boxAverage4(tr, br),
-                   u0 + x / 2, v0 + x / 2);
+                   nv12 ? u0 + x : u0 + x / 2, nv12 ? u0 + x + 1 : v0 + x / 2, nv12 ? 2 : 1);
     }
 #endif
     for (; x < width; x += 2) {
