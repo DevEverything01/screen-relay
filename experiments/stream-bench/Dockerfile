@@ -4,7 +4,7 @@ RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
        build-essential pkg-config libx11-dev libxext-dev libxdamage-dev libxfixes-dev libxtst-dev \
        libavcodec-dev libavutil-dev libswscale-dev libwebsockets-dev xvfb xauth x11-utils \
-       python3 python3-numpy python3-websockets ffmpeg \
+       libx264-dev libopenh264-dev python3 python3-numpy python3-websockets ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 COPY workload.c bench.py /bench/
 RUN cc -O2 -Wall -o /bench/workload /bench/workload.c -lX11 -lXext -lm
