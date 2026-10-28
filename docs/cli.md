@@ -85,7 +85,7 @@ $ native-stream status --json
 ## logs
 
 ```sh
-native-stream logs [--name N] [display|desktop|engine] [--follow]
+native-stream logs [--name N] [display|desktop|engine|apps] [--follow]
 ```
 
 Prints logs for one component, or all. `--follow` streams new lines.
@@ -103,7 +103,21 @@ Checks the machine and prints the exact fix command for each failure.
 - port free, Xvfb and xauth present
 - X extensions XTest, XDamage, XFixes, MIT-SHM
 - libx264, python3
-- icon decoding under your real user and environment, and blocked user namespaces
+- icon decoding (PNG and SVG) under your real user and environment, and blocked user namespaces
+- inherited ambient capabilities, which make GTK apps started outside `native-stream run` crash on icons
+
+## run
+
+```sh
+native-stream run [--name N] -- APP [ARGS...]
+```
+
+Starts an app on the session's desktop and returns its pid. The app gets the session's display, X authority and runtime directories, runs with ambient capabilities cleared (as the desktop's own children do), and stops with `native-stream down`. Output goes to `native-stream logs apps`. Use it instead of starting apps from another shell, such as `sbx exec`, `ssh` or an agent tool, where inherited capabilities make GTK image loaders refuse to run.
+
+```console
+$ native-stream run -- mousepad notes.txt
+Started mousepad (pid 4412) on :0; output in ~/.local/state/native-stream/default/apps.log
+```
 
 ## snapshot
 

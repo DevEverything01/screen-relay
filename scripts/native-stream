@@ -28,7 +28,7 @@ import zlib
 
 DEFAULT_PORT = 8080
 MAX_BATCH = 256
-COMPONENTS = ('display', 'desktop', 'engine')
+COMPONENTS = ('display', 'desktop', 'engine', 'apps')
 TOKEN = re.compile(r'[0-9a-f]{64}')
 HINTS = {
     'display': 'Check Xvfb and /tmp/.X11-unix with `native-stream doctor`.',
@@ -312,6 +312,15 @@ def clear_ambient_caps():
         ctypes.CDLL(None).prctl(47, 4, 0, 0, 0)
 
 
+def desktop_env(directory):
+    """Environment shared by the desktop and apps started in a session; carries the marker `down` sweeps."""
+    env = dict(os.environ, XDG_RUNTIME_DIR=str(directory / 'runtime'), XDG_CONFIG_HOME=str(directory / 'config'),
+               XDG_CACHE_HOME=str(directory / 'cache'), ICEAUTHORITY=str(directory / 'ICEauthority'),
+               NATIVE_STREAM_SESSION=str(directory))
+    env.pop('DBUS_SESSION_BUS_ADDRESS', None)
+    return env
+
+
 def sweep(directory):
     """Kill leftover processes that carry this session's marker in their environment."""
     marker = f'NATIVE_STREAM_SESSION={directory}'.encode()
@@ -419,10 +428,7 @@ class Session:
         runtime = directory / 'runtime'
         shutil.rmtree(runtime, ignore_errors=True)
         runtime.mkdir(mode=0o700)
-        self.env = dict(os.environ, XDG_RUNTIME_DIR=str(runtime), XDG_CONFIG_HOME=str(directory / 'config'),
-                        XDG_CACHE_HOME=str(directory / 'cache'), ICEAUTHORITY=str(directory / 'ICEauthority'),
-                        NATIVE_STREAM_SESSION=str(directory))
-        self.env.pop('DBUS_SESSION_BUS_ADDRESS', None)
+        self.env = desktop_env(directory)
         engine = find_engine()
         if not engine:
             raise Failure('missing_engine', 'native-stream-engine not found', 'Run ./install.sh first.', component='engine')
@@ -751,6 +757,39 @@ def cmd_logs(args):
     os.execvp('tail', ['tail', '-n', '200', *(['-F'] if args.follow else []), *map(str, files)])
 
 
+def cmd_run(args):
+    require_linux()
+    command = args.app[1:] if args.app[:1] == ['--'] else args.app
+    if not command:
+        raise Failure('invalid_option', 'Name the app to start', 'Example: native-stream run -- mousepad notes.txt')
+    if not shutil.which(command[0]):
+        raise Failure('missing_dependency', f'{command[0]} not found', f'Install it first, for example: sudo apt install {command[0]}')
+    session = read_session(args.name)
+    if not session or session.get('state') != 'ready' or not alive(session.get('supervisor')):
+        raise Failure('not_found', f'No running session named "{args.name}"', 'Start one with `native-stream up -d`.')
+    directory = state_dir(args.name)
+    env = dict(desktop_env(directory), DISPLAY=session['display'])
+    if session.get('xauthority'):
+        env['XAUTHORITY'] = session['xauthority']
+    path = directory / 'apps.log'
+    with open(path, 'ab') as log:
+        try:
+            process = subprocess.Popen(command, env=env, cwd=Path.home(), stdin=subprocess.DEVNULL, stdout=log, stderr=log,
+                                       start_new_session=True, preexec_fn=clear_ambient_caps)
+        except OSError as error:
+            raise Failure('spawn_failed', f'Cannot start {command[0]}: {error}') from None
+    try:
+        code = process.wait(1)
+    except subprocess.TimeoutExpired:
+        code = None
+    if code:
+        raise Failure('component_failed', f'{command[0]} exited with code {code}', 'Read `native-stream logs apps`.',
+                      component='apps', log=tail(path))
+    emit(args, {'pid': process.pid, 'command': command, 'display': session['display'], 'log': str(path)},
+         f'Started {command[0]} (pid {process.pid}) on {session["display"]}; output in {path}')
+    return 0
+
+
 def tiny_png():
     def chunk(kind, data):
         return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data))
@@ -758,10 +797,13 @@ def tiny_png():
             + chunk(b'IDAT', zlib.compress(b'\0\0\0\0\0')) + chunk(b'IEND', b''))
 
 
-def icon_probe(library):
-    """Decode a PNG through gdk-pixbuf in a child with ambient caps cleared, as desktop children run."""
-    with tempfile.NamedTemporaryFile(suffix='.png') as image:
-        image.write(tiny_png())
+TINY_SVG = b'<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>'
+
+
+def icon_probe(library, suffix, data):
+    """Decode an image through gdk-pixbuf in a child with ambient caps cleared, as desktop children run."""
+    with tempfile.NamedTemporaryFile(suffix=suffix) as image:
+        image.write(data)
         image.flush()
         read_fd, write_fd = os.pipe()
         pid = os.fork()
@@ -863,10 +905,15 @@ def cmd_doctor(args):
                         child.terminate()
                         child.wait()
         caps = next((l.split()[1] for l in Path('/proc/self/status').read_text().splitlines() if l.startswith('CapAmb:')), '0')
-        check('ambient caps', True, 'none' if int(caps, 16) == 0 else f'{caps} (cleared for desktop children)')
+        check('ambient caps', int(caps, 16) == 0, 'none' if int(caps, 16) == 0 else f'{caps}: apps that inherit them crash on icons',
+              'Start apps with `native-stream run -- APP`, which clears them; the desktop and its menus already do.', 'warn')
         library = ctypes.util.find_library('gdk_pixbuf-2.0')
         if library:
-            ok, message = icon_probe(library)
+            ok, message = icon_probe(library, '.png', tiny_png())
+            kind = 'PNG'
+            if ok:
+                ok, message = icon_probe(library, '.svg', TINY_SVG)
+                kind = 'SVG'
             fix = 'See the detail; read `native-stream logs desktop` after a failed start.'
             if not ok and subprocess.run(['apt-cache', 'show', 'glycin-loaders'], capture_output=True).returncode == 0 \
                     and subprocess.run(['dpkg', '-s', 'glycin-loaders'], capture_output=True).returncode != 0:
@@ -878,7 +925,8 @@ def cmd_doctor(args):
                     message += f'; bubblewrap failed: {sandbox.stderr.strip()}'
                     fix = ('Image loaders sandbox with bubblewrap, which needs unprivileged user namespaces: allow them for '
                            'bwrap (AppArmor profile or kernel.unprivileged_userns_clone=1). native-stream never disables sandboxing.')
-            check('icon decoding', ok, 'gdk-pixbuf decodes PNG' if ok else message, fix)
+            check('icon decoding', ok, 'gdk-pixbuf decodes PNG and SVG' if ok else f'{kind}: {message}', fix,
+                  'warn' if kind == 'SVG' else 'fail')
         else:
             check('icon decoding', False, 'gdk-pixbuf not installed (desktop not installed)', './install.sh', 'warn')
     failed = any(c['status'] == 'fail' for c in checks)
@@ -997,6 +1045,8 @@ def parser():
     logs.add_argument('component', nargs='?', choices=COMPONENTS)
     logs.add_argument('-f', '--follow', action='store_true', help='keep printing new lines')
     add('doctor', cmd_doctor, 'check this machine and print fix commands', [common])
+    run = add('run', cmd_run, 'start an app on the session desktop (output: logs apps)', [common, named])
+    run.add_argument('app', nargs=argparse.REMAINDER, metavar='-- APP [ARGS...]')
     snapshot = add('snapshot', cmd_snapshot, 'save a PNG of the screen', [client])
     snapshot.add_argument('file', nargs='?', default='screen.png', help='output file, or - for stdout (default: screen.png)')
     click = add('click', cmd_click, 'click at X Y', [client])
