@@ -1,6 +1,6 @@
 # Troubleshooting
 
-Start with `relay doctor`. It prints the fix command for each problem it finds. Logs: `relay logs [display|desktop|engine]`. Error codes: [CLI reference](cli.md#error-codes).
+Start with `relay doctor`. It prints the fix command for each problem it finds. Logs: `relay logs [display|desktop|engine|apps]`. Error codes: [CLI reference](cli.md#error-codes).
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |

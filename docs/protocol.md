@@ -6,7 +6,7 @@ Wire format and HTTP API of the engine. All integers are unsigned big-endian unl
 
 | Route | Purpose |
 | --- | --- |
-| `GET /`, `GET /viewer.js` | Viewer |
+| `GET /`, `GET /index.html`, `GET /viewer.js` | Viewer |
 | `WS /stream` | Video, cursor and human input. Subprotocol `nsl1`. |
 | `WS /control` | Agent input. Subprotocol `nsl1`. Exclusive with `/stream`. |
 | `POST /input` | Batch of input records over HTTP |
@@ -132,7 +132,7 @@ JSON. Real output:
 Uncached JSON.
 
 ```json
-{"usage_usec":1234,"memory_current":5678,"inactive_file":90}
+{"usage_usec":1002503,"memory_current":130478080,"inactive_file":98304,"inflight_frames":0,"inflight_bytes":0,"window_frames":1,"target_bitrate_bps":8000000,"ack_rtt_ms":0.000000,"oldest_frame_ms":0.000000,"frames_acked":0,"frames_encoded":0,"observed_busy_goodput_bps":0.000000,"max_inflight_frames":8,"max_inflight_bytes":8388608,"max_frame_bytes":8388608,"admission_age_ms":250,"no_ack_timeout_ms":3000,"max_frame_age_ms":3000}
 ```
 
 CPU is cumulative microseconds. Memory is bytes, from the mounted cgroup v2. If cgroup data is missing: HTTP 200, `resources_available: false`, and those three fields are `null`. Flow fields are scoped to the current generation: `inflight_frames`, `inflight_bytes`, `window_frames`, `target_bitrate_bps`, `ack_rtt_ms`, `oldest_frame_ms`, `frames_acked`, `frames_encoded`, `observed_busy_goodput_bps`, plus the limits `max_inflight_frames`, `max_inflight_bytes`, `max_frame_bytes`, `admission_age_ms`, `no_ack_timeout_ms`, `max_frame_age_ms`.
@@ -143,9 +143,7 @@ CPU is cumulative microseconds. Memory is bytes, from the mounted cgroup v2. If 
 | --- | --- |
 | Surface | 1280x720 |
 | Frame message | 8,388,640 bytes |
-| In flight | 8 frames, 8 MiB |
-| Admission pause | oldest capture 250 ms |
-| Generation timeout | 3 s without ACK progress or oldest capture 3 s old |
+| Flow control | See [Architecture](architecture.md#flow-control) |
 | Viewer first-frame and decoder deadline | 5 s |
 | Viewer reconnect | 1, 2, 4, 8, 8 s, then stop after five attempts unless a draw succeeds |
 | Hidden tab | Pauses. On return it reconnects with a new generation and an IDR. |

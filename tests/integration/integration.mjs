@@ -13,7 +13,7 @@ const {token, x11} = session(container);
 const viewerURL = `${url}/#token=${token}`;
 const results = fileURLToPath(new URL('../results/', import.meta.url));
 mkdirSync(results, {recursive: true});
-const tag = `nsl-integration-${process.pid}-${Date.now()}`;
+const tag = `relay-integration-${process.pid}-${Date.now()}`;
 const statePath = `/tmp/${tag}.json`;
 const fixturePath = `/tmp/${tag}.py`;
 const docker = (...args) => execFileSync('docker', args, {encoding: 'utf8', timeout: 15000});

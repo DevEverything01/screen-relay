@@ -20,11 +20,11 @@ Use this for any gateway that terminates HTTPS and forwards to the VM (a cloud s
 relay up -d --public https://desktop.example.com
 ```
 
-`--public` binds `0.0.0.0`, generates a token, and accepts only that origin. The engine serves plain HTTP and expects the proxy to terminate TLS; `up` prints `Expects a TLS proxy in front: ...` as a reminder. Run it only where the port is reachable just by the proxy. `up` prints the viewer link with the token in the URL fragment.
+`--public` binds `0.0.0.0` (unless `--bind` says otherwise), generates a token, and accepts only that origin. Without `--tls-cert` the engine serves plain HTTP and expects the proxy to terminate TLS; `up` prints `Expects a TLS proxy in front: ...` as a reminder. Run it only where the port is reachable just by the proxy. `up` prints the viewer link with the token in the URL fragment.
 
 The proxy must:
 
-- forward `/`, `/viewer.js`, `/stream`, `/control`, `/input`, `/screenshot.png`, `/capabilities`, `/metrics` with no path prefix
+- forward `/` (and `/index.html`), `/viewer.js`, `/stream`, `/control`, `/input`, `/screenshot.png`, `/capabilities`, `/metrics` with no path prefix
 - forward WebSocket upgrades over HTTP/1.1
 - keep the `Host`, `Origin` and `Authorization` headers and the WebSocket subprotocol header unchanged
 - not log `Authorization` or the subprotocol header (the token travels in both)

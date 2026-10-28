@@ -1,6 +1,6 @@
 # Docker
 
-The `Dockerfile` builds on `debian:trixie-slim` with the same `install.sh` as a VM, runs the unit tests, and installs into `/usr/local`. The container runs as the non-root user `stream`. The entrypoint is `tini -- relay up --bind 0.0.0.0`: tini reaps child processes, and `relay up` runs in the foreground as the supervisor.
+The `Dockerfile` builds on `debian:trixie-slim` with the same `install.sh` as a VM, runs the unit tests, and installs into `/usr/local`. The container runs as the non-root user `relay`. The entrypoint is `tini -- relay up --bind 0.0.0.0`: tini reaps child processes, and `relay up` runs in the foreground as the supervisor.
 
 ```sh
 docker build -t relay .

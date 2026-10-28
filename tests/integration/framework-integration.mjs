@@ -14,7 +14,7 @@ const {token, x11} = session(container);
 const viewerURL = `${url}/#token=${token}`;
 const output = fileURLToPath(new URL('../results/', import.meta.url));
 mkdirSync(output, {recursive:true});
-const tag = `/tmp/nsl-framework-${process.pid}-${Date.now()}`;
+const tag = `/tmp/relay-framework-${process.pid}-${Date.now()}`;
 const docker = (...args) => execFileSync('docker', args, {encoding:'utf8', timeout:15000});
 const state = () => JSON.parse(docker('exec', container, 'cat', tag+'.json'));
 const report = {url, container, checks:[]};
