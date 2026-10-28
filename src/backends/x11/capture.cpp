@@ -9,6 +9,8 @@
 #include <stdexcept>
 #include <mutex>
 #include <algorithm>
+#include <memory>
+#include <vector>
 namespace nsl {
 namespace {
 void require(bool ok, const char* message) { if (!ok) throw std::runtime_error(message); }
@@ -25,6 +27,9 @@ int attachError(Display* display, XErrorEvent* event) {
 class X11CaptureSource final : public CaptureSource {
   Display* display = nullptr;
   Damage damage = 0;
+  XserverRegion parts = 0;
+  std::vector<DamageRect> rects;
+  bool rects_valid = false;
   XImage* image = nullptr;
   XShmSegmentInfo shm{};
   bool attached = false;
@@ -38,6 +43,7 @@ class X11CaptureSource final : public CaptureSource {
     if (image) { image->data = nullptr; XDestroyImage(image); }
     if (shm.shmaddr != reinterpret_cast<char*>(-1)) shmdt(shm.shmaddr);
     if (shm.shmid >= 0) shmctl(shm.shmid, IPC_RMID, nullptr);
+    if (parts) XFixesDestroyRegion(display, parts);
     if (damage) XDamageDestroy(display, damage);
     if (display) XCloseDisplay(display);
   }
@@ -80,6 +86,7 @@ class X11CaptureSource final : public CaptureSource {
     shm.shmid = -1;
     damage = XDamageCreate(display, RootWindow(display, screen), XDamageReportNonEmpty);
     require(damage != 0, "creating XDamage failed");
+    parts = XFixesCreateRegion(display, nullptr, 0);
     XFixesSelectCursorInput(display, RootWindow(display, screen), XFixesDisplayCursorNotifyMask);
     XFlush(display);
   }
@@ -121,8 +128,21 @@ class X11CaptureSource final : public CaptureSource {
   PixelFormat pixelFormat() const override {
     return image->byte_order == LSBFirst ? PixelFormat::BGRA : PixelFormat::ARGB;
   }
+  bool changedRects(std::vector<DamageRect>& out) override {
+    if (!rects_valid) return false;
+    out = rects;
+    return true;
+  }
   FrameView capture() override {
-    XDamageSubtract(display, damage, None, None);
+    XDamageSubtract(display, damage, None, parts);
+    rects.clear(); rects_valid = false;
+    int count = 0;
+    std::unique_ptr<XRectangle, decltype(&XFree)> fetched(XFixesFetchRegion(display, parts, &count), &XFree);
+    if (fetched && count > 0) {
+      for (int i = 0; i < count; ++i)
+        rects.push_back({fetched.get()[i].x, fetched.get()[i].y, fetched.get()[i].width, fetched.get()[i].height});
+      rects_valid = true;
+    }
     require(XShmGetImage(display, RootWindow(display, DefaultScreen(display)), image, 0, 0, AllPlanes),
             "XShmGetImage failed");
     return {reinterpret_cast<const uint8_t*>(image->data), image->bytes_per_line,

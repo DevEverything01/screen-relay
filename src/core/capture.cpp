@@ -6,6 +6,7 @@
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavutil/opt.h>
+#include <libavutil/video_hint.h>
 #include <libswscale/swscale.h>
 }
 #include <sys/eventfd.h>
@@ -50,6 +51,34 @@ bool hasNal(const std::vector<uint8_t>& bytes, uint8_t type) {
 void require(bool ok, const char* message) {
   if (!ok) throw std::runtime_error(message);
 }
+/** Attaches a changed-macroblock hint to the frame, or none when the whole frame must be analysed. */
+void setVideoHint(AVFrame* frame, bool known, const std::vector<DamageRect>& rects) {
+  av_frame_remove_side_data(frame, AV_FRAME_DATA_VIDEO_HINT);
+  if (!known || rects.empty()) return;
+  constexpr int cols = 1280 / 16, rows = 720 / 16;
+  bool blocks[rows][cols] = {};
+  for (const auto& r : rects) {
+    const int x0 = std::max(r.x, 0) / 16, y0 = std::max(r.y, 0) / 16;
+    const int x1 = std::min(r.x + r.width + 15, 1280) / 16, y1 = std::min(r.y + r.height + 15, 720) / 16;
+    for (int y = y0; y < y1; ++y) for (int x = x0; x < x1; ++x) blocks[y][x] = true;
+  }
+  std::vector<AVVideoRect> runs;
+  for (int y = 0; y < rows; ++y) {
+    for (int x = 0; x < cols;) {
+      if (!blocks[y][x]) { ++x; continue; }
+      const int start = x;
+      while (x < cols && blocks[y][x]) ++x;
+      runs.push_back({uint32_t(start * 16), uint32_t(y * 16), uint32_t((x - start) * 16), 16});
+    }
+  }
+  const bool full = runs.size() == size_t(rows) && std::all_of(runs.begin(), runs.end(),
+      [](const AVVideoRect& r) { return r.width == 1280; });
+  if (runs.empty() || full) return;
+  AVVideoHint* hint = av_video_hint_create_side_data(frame, runs.size());
+  if (!hint) return;
+  hint->type = AV_VIDEO_HINT_TYPE_CHANGED;
+  for (size_t i = 0; i < runs.size(); ++i) *av_video_hint_get_rect(hint, i) = runs[i];
+}
 struct Resources {
   PixelFormat format;
   AVCodecContext* codec = nullptr;
@@ -86,6 +115,7 @@ struct Resources {
             av_opt_set(codec->priv_data, "tune", "zerolatency", 0) >= 0 &&
             av_opt_set(codec->priv_data, "crf", "10", 0) >= 0 &&
             av_opt_set_int(codec->priv_data, "forced-idr", 1, 0) >= 0 &&
+            av_opt_set_int(codec->priv_data, "mb_info", 1, 0) >= 0 &&
             av_opt_set(codec->priv_data, "x264-params",
                        "annexb=1:repeat-headers=1:scenecut=0:rc-lookahead=0:sync-lookahead=0", 0) >= 0,
             "setting x264 options failed");
@@ -212,6 +242,8 @@ struct CaptureEncoder::Impl {
             r.frame->pts = last_pts = std::max(last_pts + 1, timestamp);
             // FFmpeg libx264 reconfigures VBV per frame in CRF mode (bits and bits/s).
             r.codec->rc_max_rate = rate; r.codec->rc_buffer_size = int(rate / 4);
+            std::vector<DamageRect> damage;
+            setVideoHint(r.frame, !force_idr && source->changedRects(damage), damage);
             r.frame->pict_type = force_idr ? AV_PICTURE_TYPE_I : AV_PICTURE_TYPE_NONE;
             require(avcodec_send_frame(r.codec, r.frame) >= 0, "encoder rejected frame");
             EncodedFrame output;
