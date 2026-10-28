@@ -136,13 +136,17 @@ struct CaptureEncoder::Impl {
       unsigned consecutive_failures = 0;
       const auto frame_interval = std::chrono::nanoseconds(16666667);
       const auto refinement_delay = std::chrono::milliseconds(150);
-      constexpr int refinement_settled_bytes = 4096;
-      constexpr unsigned refinement_settled_frames = 2;
-      constexpr unsigned refinement_max_frames = 120;
+      constexpr unsigned refinement_max_frames = 12;
       auto deadline = Clock::now();
       auto last_publish = deadline;
       bool last_was_refinement = true, refining = false;
-      unsigned settled_refinements = 0, cascade_frames = 0;
+      unsigned cascade_frames = 0;
+      uint64_t first_refinement_bytes = 0, prev_refinement_bytes = 0;
+      auto reset_refinement = [&] {
+        refining = false;
+        cascade_frames = 0;
+        first_refinement_bytes = prev_refinement_bytes = 0;
+      };
       while (true) {
         if (source->drainDamage()) dirty = true;
         uint32_t gen, seq;
@@ -153,7 +157,7 @@ struct CaptureEncoder::Impl {
           if (stopping) break;
           if (revision != seen_revision) {
             seen_revision = revision; dirty = true; force_idr = true;
-            refining = false; settled_refinements = cascade_frames = 0;
+            reset_refinement();
             refresh_cursor = true;
           }
           gen = generation; rev = revision; rate = bitrate;
@@ -233,8 +237,9 @@ struct CaptureEncoder::Impl {
             require(size > 0 && nal_count > 0 && nals && picture.i_pts == last_pts &&
                     static_cast<size_t>(size) <= FlowControl::max_bytes,
                     "invalid or delayed encoded access unit");
-            const bool settled = refinement && size <= refinement_settled_bytes &&
-                                 uint64_t(size) * 960 <= rate;
+            const bool converged = refinement && cascade_frames > 0 &&
+                (uint64_t(size) * 10 >= prev_refinement_bytes * 9 ||
+                 uint64_t(size) * 20 < first_refinement_bytes);
             EncodedFrame output;
             output.generation = gen; output.sequence = seq; output.pts_us = last_pts;
             output.width = frame_width; output.height = frame_height;
@@ -261,25 +266,26 @@ struct CaptureEncoder::Impl {
                 std::fprintf(stderr, "capture: publish rejected; awaiting new session\n");
                 { std::lock_guard<std::mutex> lock(mutex); if (generation == gen) active = false; }
                 dirty = true; force_idr = true;
-                refining = false; settled_refinements = cascade_frames = 0;
+                reset_refinement();
               } else {
                 force_idr = false;
                 last_publish = Clock::now();
                 last_was_refinement = refinement;
                 if (refinement) {
+                  if (cascade_frames == 0) first_refinement_bytes = uint64_t(size);
+                  prev_refinement_bytes = uint64_t(size);
                   ++cascade_frames;
-                  settled_refinements = settled ? settled_refinements + 1 : 0;
-                  refining = settled_refinements < refinement_settled_frames &&
-                             cascade_frames < refinement_max_frames;
+                  refining = !converged && cascade_frames < refinement_max_frames;
                 } else {
-                  settled_refinements = cascade_frames = 0;
+                  cascade_frames = 0;
+                  first_refinement_bytes = prev_refinement_bytes = 0;
                   refining = true;
                 }
               }
             } else {
               dirty = true;
               force_idr = true;
-              refining = false; settled_refinements = cascade_frames = 0;
+              reset_refinement();
             }
             consecutive_failures = 0;
             deadline += frame_interval;
@@ -289,7 +295,7 @@ struct CaptureEncoder::Impl {
             std::fprintf(stderr, "capture: %s; retrying with IDR\n", error.what());
             dirty = true;
             force_idr = true;
-            refining = false; settled_refinements = cascade_frames = 0;
+            reset_refinement();
             if (++consecutive_failures >= 3) {
               throw std::runtime_error(std::string("capture failed three consecutive times: ") + error.what());
             }
