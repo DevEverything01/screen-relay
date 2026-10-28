@@ -12,7 +12,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "test": "node --test sdk/index.test.js tests/unit/cli-input.test.mjs",
+    "test": "node --test sdk/index.test.js tests/unit/cli-input.test.mjs tests/unit/viewer-ack.test.mjs",
     "test:integration": "node tests/integration/integration.mjs",
     "test:framework": "node tests/integration/framework-integration.mjs",
     "test:cursor": "node tests/integration/cursor-integration.mjs",

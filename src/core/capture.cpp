@@ -23,6 +23,11 @@
 
 namespace relay {
 namespace {
+/// VBV buffer in kbit: about 1/15 s of `bitrate`, or 2/15 s while refining a quiet picture or encoding a forced keyframe.
+constexpr int vbvBufferKbit(uint64_t bitrate, bool refinement = false) {
+  return int(bitrate / (refinement ? 7500 : 15000));
+}
+constexpr float encoder_crf = 10;
 using Clock = std::chrono::steady_clock;
 constexpr timespec pollTimeout(int64_t nanoseconds) {
   return {static_cast<time_t>(nanoseconds / 1000000000),
@@ -52,8 +57,10 @@ struct Resources {
   x264_t* codec = nullptr;
   x264_picture_t frame{};
   std::vector<uint8_t> mb_info = std::vector<uint8_t>((frame_width / 16) * (frame_height / 16));
+  std::vector<uint8_t> scratch = std::vector<uint8_t>(frame_width * 24);
   bool frame_allocated = false;
   uint64_t bitrate = FlowControl::initial_bitrate;
+  bool wide_vbv = false;
   explicit Resources(PixelFormat f) : format(f) {}
   ~Resources() {
     if (codec) x264_encoder_close(codec);
@@ -68,10 +75,10 @@ struct Resources {
     params.i_width = frame_width; params.i_height = frame_height; params.i_csp = X264_CSP_NV12;
     params.i_timebase_num = 1; params.i_timebase_den = 1000000;
     params.i_fps_num = 60; params.i_fps_den = 1;
-    params.i_threads = 1; params.i_keyint_max = 600; params.i_bframe = 0;
+    params.i_threads = 1; params.i_keyint_max = X264_KEYINT_MAX_INFINITE; params.i_bframe = 0;
     params.i_scenecut_threshold = 0; params.i_sync_lookahead = 0;
-    params.rc.i_rc_method = X264_RC_CRF; params.rc.f_rf_constant = 10;
-    params.rc.i_lookahead = 0; params.rc.i_vbv_max_bitrate = 8000; params.rc.i_vbv_buffer_size = 2000;
+    params.rc.i_rc_method = X264_RC_CRF; params.rc.f_rf_constant = encoder_crf;
+    params.rc.i_lookahead = 0; params.rc.i_vbv_max_bitrate = int(FlowControl::initial_bitrate / 1000); params.rc.i_vbv_buffer_size = vbvBufferKbit(FlowControl::initial_bitrate, true);
     params.analyse.b_mb_info = 1; params.analyse.b_mb_info_update = 0;
     params.b_annexb = 1; params.b_repeat_headers = 1;
     params.vui.b_fullrange = 0; params.vui.i_colmatrix = 1;
@@ -80,12 +87,64 @@ struct Resources {
     codec = x264_encoder_open(&params);
     require(codec, "opening libx264 failed");
     bitrate = FlowControl::initial_bitrate;
+    wide_vbv = true;
   }
   void init() {
     openEncoder();
     require(x264_picture_alloc(&frame, X264_CSP_NV12, frame_width, frame_height) == 0,
             "allocating YUV buffer failed");
     frame_allocated = true;
+  }
+  bool convertDamage(const FrameView& view, const std::vector<DamageRect>& rects) {
+    constexpr int columns = frame_width / 16;
+    std::fill(mb_info.begin(), mb_info.end(), uint8_t(X264_MBINFO_CONSTANT));
+    for (const auto& rect : rects) {
+      const int64_t x0 = std::max<int64_t>(view.x, rect.x);
+      const int64_t y0 = std::max<int64_t>(view.y, rect.y);
+      const int64_t x1 = std::min<int64_t>(view.x + view.width, int64_t(rect.x) + rect.width);
+      const int64_t y1 = std::min<int64_t>(view.y + view.height, int64_t(rect.y) + rect.height);
+      if (x1 <= x0 || y1 <= y0) continue;
+      for (int row = int(y0) / 16; row <= (y1 - 1) / 16; ++row)
+        for (int column = int(x0) / 16; column <= (x1 - 1) / 16; ++column)
+          mb_info[row * columns + column] = 0;
+    }
+    const auto convert = view.format == PixelFormat::BGRA ? bgraToNv12 : argbToNv12;
+    bool changed = false;
+    for (int row = view.y / 16; row <= (view.y + view.height - 1) / 16; ++row) {
+      const int y0 = std::max(row * 16, view.y);
+      const int y1 = std::min(row * 16 + 16, view.y + view.height);
+      for (int column = view.x / 16; column <= (view.x + view.width - 1) / 16;) {
+        if (mb_info[row * columns + column]) { ++column; continue; }
+        const int first = column;
+        while (column <= (view.x + view.width - 1) / 16 && !mb_info[row * columns + column]) ++column;
+        const int x0 = std::max(first * 16, view.x);
+        const int x1 = std::min(column * 16, view.x + view.width);
+        require(convert(view.data + (y0 - view.y) * view.stride + (x0 - view.x) * 4, view.stride,
+                        scratch.data(), frame_width, scratch.data() + frame_width * 16, frame_width,
+                        x1 - x0, y1 - y0), "RGB conversion failed");
+        for (int block = first; block < column; ++block) {
+          const int left = std::max(block * 16, x0);
+          const int right = std::min(block * 16 + 16, x1);
+          bool different = false;
+          for (int plane = 0; plane < 2; ++plane) {
+            const int height = plane ? (y1 - y0) / 2 : y1 - y0;
+            uint8_t* target = frame.img.plane[plane] + (plane ? y0 / 2 : y0) * frame.img.i_stride[plane] + left;
+            const uint8_t* source = scratch.data() + (plane ? frame_width * 16 : 0) + left - x0;
+            for (int line = 0; line < height; ++line) {
+              if (std::memcmp(target, source, right - left) != 0) {
+                std::memcpy(target, source, right - left);
+                different = true;
+              }
+              target += frame.img.i_stride[plane];
+              source += frame_width;
+            }
+          }
+          mb_info[row * columns + block] = different ? 0 : uint8_t(X264_MBINFO_CONSTANT);
+          changed |= different;
+        }
+      }
+    }
+    return changed;
   }
 };
 }  // namespace
@@ -134,23 +193,33 @@ struct CaptureEncoder::Impl {
       unsigned consecutive_failures = 0;
       const auto frame_interval = std::chrono::nanoseconds(16666667);
       const auto refinement_delay = std::chrono::milliseconds(150);
+      constexpr unsigned refinement_max_frames = 8;
       auto deadline = Clock::now();
       auto last_publish = deadline;
-      bool last_was_refinement = true;
+      bool last_was_refinement = true, refining = false;
+      unsigned cascade_frames = 0;
+      uint64_t first_refinement_size = 0;
+      auto reset_refinement = [&] {
+        refining = false;
+        cascade_frames = 0;
+        first_refinement_size = 0;
+      };
       while (true) {
         if (source->drainDamage()) dirty = true;
         uint32_t gen, seq;
         uint64_t rev, rate;
-        bool admitted, cursor_active, refresh_cursor = false;
+        bool admitted, cursor_active, queue_empty, refresh_cursor = false;
         {
           std::lock_guard<std::mutex> lock(mutex);
           if (stopping) break;
           if (revision != seen_revision) {
             seen_revision = revision; dirty = true; force_idr = true;
+            reset_refinement();
             refresh_cursor = true;
           }
           gen = generation; rev = revision; rate = bitrate;
           cursor_active = gen != 0 && active && bool(publish_cursor);
+          queue_empty = sequence == acknowledged;
           admitted = gen != 0 && active && !paused &&
                      (!admit_until_us || uint64_t(std::chrono::duration_cast<std::chrono::microseconds>(
                          Clock::now().time_since_epoch()).count()) < admit_until_us) &&
@@ -165,11 +234,13 @@ struct CaptureEncoder::Impl {
           }
         }
         const auto now = Clock::now();
-        const bool refinement_pending = !dirty && !last_was_refinement;
+        const bool refinement_pending = !dirty && refining;
+        const auto refinement_pace = last_was_refinement ? frame_interval : refinement_delay;
         const auto encode_deadline = refinement_pending
-            ? std::max(deadline, last_publish + refinement_delay) : deadline;
-        if (admitted && (dirty || refinement_pending) && now >= encode_deadline) {
-          const bool refinement = !dirty;
+            ? std::max(deadline, last_publish + refinement_pace) : deadline;
+        if (admitted && (dirty || (refinement_pending && queue_empty)) && now >= encode_deadline) {
+          bool refinement = !dirty;
+          const bool captured_frame = !refinement;
           const auto capture_start = Clock::now();
           try {
             assert(!refinement || (!force_idr && last_pts >= 0));
@@ -179,44 +250,53 @@ struct CaptureEncoder::Impl {
               const FrameView view = source->captureChanged(force_idr);
               captured = Clock::now();
               require(view.data && view.width > 0 && view.height > 0 &&
-                      view.x >= 0 && view.y >= 0 &&
-                      view.x + view.width <= frame_width && view.y + view.height <= frame_height &&
+                      view.x >= 0 && view.x <= frame_width && view.y >= 0 && view.y <= frame_height &&
+                      view.width <= frame_width - view.x && view.height <= frame_height - view.y &&
                       view.stride >= view.width * 4 && view.stride <= frame_width * 8 &&
                       !(view.x & 1) && !(view.y & 1) && !(view.width & 1) && !(view.height & 1) &&
                       !(force_idr && (view.width != frame_width || view.height != frame_height)) &&
                       view.format == r.format, "invalid capture frame");
-              const auto convert = view.format == PixelFormat::BGRA ? bgraToNv12 : argbToNv12;
-              require(convert(view.data, view.stride,
-                              r.frame.img.plane[0] + view.y * r.frame.img.i_stride[0] + view.x,
-                              r.frame.img.i_stride[0],
-                              r.frame.img.plane[1] + (view.y / 2) * r.frame.img.i_stride[1] + view.x,
-                              r.frame.img.i_stride[1], view.width, view.height),
-                      "RGB conversion failed");
+              bool changed = true;
+              if (force_idr) {
+                const auto convert = view.format == PixelFormat::BGRA ? bgraToNv12 : argbToNv12;
+                require(convert(view.data, view.stride, r.frame.img.plane[0], r.frame.img.i_stride[0],
+                                r.frame.img.plane[1], r.frame.img.i_stride[1], view.width, view.height),
+                        "RGB conversion failed");
+              } else {
+                if (!source->changedRects(rects)) rects = {{view.x, view.y, view.width, view.height}};
+                changed = r.convertDamage(view, rects);
+              }
               converted = Clock::now();
+              if (!changed) {
+                if (refining && queue_empty && converted >= last_publish + refinement_pace) {
+                  refinement = true;
+                } else {
+                  { std::lock_guard<std::mutex> lock(mutex);
+                    ++counters.captures;
+                    counters.capture_ns += ns(captured - capture_start);
+                    counters.convert_ns += ns(converted - captured);
+                  }
+                  consecutive_failures = 0;
+                  deadline = std::max(deadline + frame_interval, capture_start + frame_interval);
+                  continue;
+                }
+              }
             }
             const int64_t timestamp = std::chrono::duration_cast<std::chrono::microseconds>(capture_start.time_since_epoch()).count();
             r.frame.i_pts = last_pts = std::max(last_pts + 1, timestamp);
-            if (rate != r.bitrate) {
+            const bool wide_vbv = refinement || force_idr;
+            if (rate != r.bitrate || wide_vbv != r.wide_vbv) {
               x264_param_t params;
               x264_encoder_parameters(r.codec, &params);
               params.rc.i_vbv_max_bitrate = int(rate / 1000);
-              params.rc.i_vbv_buffer_size = int(rate / 4000);
+              params.rc.i_vbv_buffer_size = vbvBufferKbit(rate, wide_vbv);
               require(x264_encoder_reconfig(r.codec, &params) == 0, "encoder reconfiguration failed");
               r.bitrate = rate;
+              r.wide_vbv = wide_vbv;
             }
             r.frame.i_type = force_idr ? X264_TYPE_IDR : X264_TYPE_AUTO;
             r.frame.prop.mb_info = nullptr; r.frame.prop.mb_info_free = nullptr;
-            if (!refinement && !force_idr && source->changedRects(rects)) {
-              std::fill(r.mb_info.begin(), r.mb_info.end(), uint8_t(X264_MBINFO_CONSTANT));
-              for (const DamageRect& d : rects) {
-                const int x0 = std::max(d.x, 0) / 16, y0 = std::max(d.y, 0) / 16;
-                const int x1 = std::min((std::min(d.x + d.width, frame_width) + 15) / 16, frame_width / 16);
-                const int y1 = std::min((std::min(d.y + d.height, frame_height) + 15) / 16, frame_height / 16);
-                for (int y = y0; y < y1; ++y)
-                  for (int x = x0; x < x1; ++x) r.mb_info[y * (frame_width / 16) + x] = 0;
-              }
-              r.frame.prop.mb_info = r.mb_info.data();
-            }
+            if (!refinement && !force_idr) r.frame.prop.mb_info = r.mb_info.data();
             x264_nal_t* nals = nullptr;
             int nal_count = 0;
             x264_picture_t picture;
@@ -224,6 +304,8 @@ struct CaptureEncoder::Impl {
             require(size > 0 && nal_count > 0 && nals && picture.i_pts == last_pts &&
                     static_cast<size_t>(size) <= FlowControl::max_bytes,
                     "invalid or delayed encoded access unit");
+            const bool converged = refinement && picture.prop.f_crf_avg <= encoder_crf + 1 &&
+                                   uint64_t(size) <= rate / 240;
             EncodedFrame output;
             output.generation = gen; output.sequence = seq; output.pts_us = last_pts;
             output.width = frame_width; output.height = frame_height;
@@ -236,7 +318,7 @@ struct CaptureEncoder::Impl {
             bool current;
             {
               std::lock_guard<std::mutex> lock(mutex);
-              if (!refinement) ++counters.captures;
+              if (captured_frame) ++counters.captures;
               ++counters.encoded;
               counters.capture_ns += ns(captured - capture_start);
               counters.convert_ns += ns(converted - captured);
@@ -250,14 +332,26 @@ struct CaptureEncoder::Impl {
                 std::fprintf(stderr, "capture: publish rejected; awaiting new session\n");
                 { std::lock_guard<std::mutex> lock(mutex); if (generation == gen) active = false; }
                 dirty = true; force_idr = true;
+                reset_refinement();
               } else {
                 force_idr = false;
                 last_publish = Clock::now();
                 last_was_refinement = refinement;
+                if (refinement) {
+                  if (cascade_frames == 0) first_refinement_size = uint64_t(size);
+                  ++cascade_frames;
+                  refining = !converged && cascade_frames < refinement_max_frames &&
+                             uint64_t(size) * 8 > first_refinement_size;
+                } else {
+                  cascade_frames = 0;
+                  first_refinement_size = 0;
+                  refining = true;
+                }
               }
             } else {
               dirty = true;
               force_idr = true;
+              reset_refinement();
             }
             consecutive_failures = 0;
             deadline += frame_interval;
@@ -267,6 +361,7 @@ struct CaptureEncoder::Impl {
             std::fprintf(stderr, "capture: %s; retrying with IDR\n", error.what());
             dirty = true;
             force_idr = true;
+            reset_refinement();
             if (++consecutive_failures >= 3) {
               throw std::runtime_error(std::string("capture failed three consecutive times: ") + error.what());
             }
@@ -279,7 +374,7 @@ struct CaptureEncoder::Impl {
         if (cursor_published) continue;
         timespec timeout{};
         const timespec* timeout_ptr = nullptr;
-        if (admitted && (dirty || refinement_pending)) {
+        if (admitted && (dirty || (refinement_pending && queue_empty))) {
           const auto remaining = std::chrono::duration_cast<std::chrono::nanoseconds>(
               encode_deadline - Clock::now()).count();
           timeout = pollTimeout(std::max<int64_t>(0, remaining));

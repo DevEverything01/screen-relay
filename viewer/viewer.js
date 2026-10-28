@@ -44,12 +44,12 @@ function receiveCursor(data) {
   renderCursor();
 }
 const stats = window.nativeStats = {
-  received: 0, drawn: 0, bytes: 0, decodeerrors: 0, outstanding: 0, pendingBytes: 0, pendingHighWater: 0,
+  received: 0, drawn: 0, superseded: 0, bytes: 0, decodeerrors: 0, outstanding: 0, pendingBytes: 0, pendingHighWater: 0,
 };
-let socket, decoder, retryTimer, deadline;
+let socket, decoder, retryTimer, deadline, frameHandle, drawnThisFrame = false, transportBroken = false;
 let generation = 0, sequence = 0, lastTimestamp = -1, ready = false, retry = 0, epoch = 0;
 let buttons = 0, modifiers = 0, x = 0, y = 0, viewOnly = false;
-const pending = new Map(), held = new Set();
+const pending = new Map(), decoded = [], held = new Set();
 const keys = {};
 const assignKeys = (first, names) => names.split(" ").forEach((name, i) => keys[name] = first + i);
 assignKeys(4, Array.from({ length: 26 }, (_, i) => `Key${String.fromCharCode(65 + i)}`).join(" "));
@@ -100,8 +100,12 @@ function reset() {
   cursor.width = cursor.height = 1;
   renderCursor();
   clearTimeout(deadline);
-  for (const item of pending.values()) item.frame?.close();
+  cancelAnimationFrame(frameHandle);
+  frameHandle = 0;
+  drawnThisFrame = false;
   pending.clear();
+  for (const item of decoded) item.frame.close();
+  decoded.length = 0;
   stats.outstanding = 0;
   stats.pendingBytes = 0;
   generation = 0;
@@ -126,6 +130,64 @@ function watchPending(current) {
     }, Math.max(0, oldest.arrived + 5000 - performance.now()));
   }
 }
+function schedulePresent() {
+  if (!frameHandle) frameHandle = requestAnimationFrame(present);
+}
+function ackFrame(item) {
+  try {
+    if (socket?.readyState !== WebSocket.OPEN) throw new Error("Connection closed before ACK");
+    socket.send(header(2, item.gen, item.seq, 0));
+    return true;
+  } catch (error) {
+    fail(`ACK failed: ${error.message}`);
+    return false;
+  }
+}
+function retireDecoded() {
+  if (transportBroken || socket?.readyState !== WebSocket.OPEN) return;
+  for (const item of decoded) if (!ackFrame(item)) break;
+}
+function draw(item) {
+  try {
+    if (item.gen !== generation) throw new Error("Stale decoded frame");
+    ctx.drawImage(item.frame, 0, 0, 1280, 720);
+  } catch (error) {
+    item.frame.close();
+    fail(`Draw failed: ${error.message}`);
+    return false;
+  }
+  item.frame.close();
+  stats.drawn++;
+  const wasReady = ready;
+  ready = true;
+  if (!wasReady) renderCursor();
+  retry = 0;
+  status.textContent = "Live · click to control";
+  drawnThisFrame = true;
+  return ackFrame(item);
+}
+function presentDecoded(item) {
+  if (!decoded.length && !drawnThisFrame) {
+    if (!draw(item)) return false;
+  } else {
+    decoded.push(item);
+  }
+  while (decoded.length > 3) {
+    const dropped = decoded.shift();
+    dropped.frame.close();
+    stats.superseded++;
+    if (!ackFrame(dropped)) return false;
+  }
+  schedulePresent();
+  return true;
+}
+function present() {
+  frameHandle = 0;
+  drawnThisFrame = false;
+  const item = decoded.shift();
+  if (!item || !draw(item)) return;
+  schedulePresent();
+}
 function codecFromSps(bytes) {
   for (let i = 0; i + 7 < bytes.length; i++) {
     let n = 0;
@@ -143,6 +205,7 @@ function connect() {
   const current = epoch;
   if (socket && socket.readyState < WebSocket.CLOSING) {
     release();
+    retireDecoded();
     socket.close();
   }
   reset();
@@ -155,6 +218,7 @@ function connect() {
     `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/stream`,
     accessToken ? ['nsl1', `bearer.${accessToken}`] : 'nsl1',
   );
+  transportBroken = false;
   const ws = socket;
   ws.binaryType = "arraybuffer";
   ws.onopen = () => {
@@ -214,29 +278,14 @@ function connect() {
             try {
               if (current !== epoch || decoder !== instance) return;
               const item = pending.get(frame.timestamp);
-              if (!item || item.gen !== generation || item.frame) {
+              if (!item || item.gen !== generation) {
                 throw new Error("Unexpected decoded frame");
               }
-              item.frame = frame;
               retained = true;
-              while (pending.size) {
-                const [timestamp, next] = pending.entries().next().value;
-                if (!next.frame) break;
-                ctx.drawImage(next.frame, 0, 0, 1280, 720);
-                if (ws.readyState !== WebSocket.OPEN) throw new Error("Connection closed before ACK");
-                ws.send(header(2, next.gen, next.seq, 0));
-                next.frame.close();
-                next.frame = null;
-                pending.delete(timestamp);
-                stats.pendingBytes -= next.bytes;
-                stats.outstanding = pending.size;
-                stats.drawn++;
-                const wasReady = ready;
-                ready = true;
-                if (!wasReady) renderCursor();
-                retry = 0;
-                status.textContent = "Live · click to control";
-              }
+              pending.delete(frame.timestamp);
+              stats.pendingBytes -= item.bytes;
+              stats.outstanding = pending.size;
+              if (!presentDecoded({ gen: item.gen, seq: item.seq, frame })) return;
               watchPending(current);
             } catch (error) {
               fail(`Draw failed: ${error.message}`);
@@ -259,7 +308,7 @@ function connect() {
     }
   };
   ws.onerror = () => {
-    if (current === epoch) status.textContent = "Connection error";
+    if (current === epoch) { transportBroken = true; status.textContent = "Connection error"; }
   };
   ws.onclose = () => {
     if (current !== epoch) return;
@@ -409,6 +458,7 @@ document.addEventListener("visibilitychange", () => {
       `Drawn FPS: 0.0 · Stream Mbps: 0.00 · ${METRICS_UNAVAILABLE}`;
     release();
     epoch++;
+    retireDecoded();
     if (socket) socket.close();
     reset();
     clearTimeout(retryTimer);

@@ -33,6 +33,7 @@ browser or agent input -> InputBackend (XTest)
 ## Threads and ownership
 
 - The service thread owns libwebsockets, the `InputBackend`, flow-control state and all socket writes.
+- On Linux, the service thread sets `TCP_NODELAY` and `TCP_NOTSENT_LOWAT` on the stream socket.
 - The capture worker owns its `CaptureSource`, a reusable YUV frame and the x264 encoder. It publishes owning `EncodedFrame` vectors to a bounded queue and wakes the service thread with `lws_cancel_service`.
 - A separate screenshot worker owns its own `CaptureSource`.
 - Each X11 backend object owns its own X connection. Xlib threading is initialized once by `initializeNativeBackend()`.
@@ -50,12 +51,14 @@ browser or agent input -> InputBackend (XTest)
 | In flight | At most 8 frames and 8 MiB |
 | Admission pause | Oldest outstanding capture reaches 250 ms |
 | Generation closed | No ACK progress for 3 s, or oldest capture 3 s old (checked every 100 ms) |
-| x264 | ultrafast, zerolatency, CRF 10, no B frames, no lookahead, GOP 600, 1 thread |
-| Bitrate target | Starts 8 Mbps, clamped 1 to 40 Mbps. VBV buffer is target/4. |
+| x264 | ultrafast, zerolatency, CRF 10, no B frames, no lookahead, no scheduled IDRs (IDR only at session start and recovery), 1 thread |
+| Bitrate target | Starts 8 Mbps, clamped 1 to 40 Mbps. VBV buffer holds about 1/15 s at the target rate. |
 | Decrease | Target x 0.75 (and at most 90% of measured goodput) when 2+ frames and enough bytes are outstanding, oldest capture is 200 ms old, and 500 ms since the last decrease. Floor 1 Mbps. |
 | Increase | Target x 1.10 after a busy 1 s sample, oldest under 100 ms, 1 s since last increase, 2 s since last decrease. |
 
-ACK time includes network, decode, draw and scheduling. It is not pure RTT. Paths with latency near 200 ms can back off repeatedly.
+ACK time includes network, decode, scheduling, and waiting for a frame to be drawn or superseded. It is not pure RTT. Paths with latency near 200 ms can back off repeatedly.
+
+Quality recovery: when the picture is unchanged for 150 ms, the capture worker re-encodes the full picture as a P frame. If the transport queue is empty it keeps refining at up to 60 fps, using a VBV buffer twice the motion size at the current target bitrate. Forced IDR frames at session start and recovery use that same larger buffer. Refinement stops when x264 reports an effective CRF within 1 of the target and the frame is small enough to transfer in two frame intervals at the target rate, when a refinement frame is at most one eighth the size of the cascade's first refinement frame, after 8 refinement frames, or when changed pixels arrive. The worker restores the motion VBV before encoding the next changed frame. Refinement starts only when no frames are in flight, although an already published refinement frame can delay later damage.
 
 Failure handling: a capture or encode failure keeps pending work and forces an IDR in the same generation. The first two consecutive failures reopen the encoder after 1 s. The third, or a failed reopen, is fatal and the server exits.
 

@@ -137,6 +137,32 @@ static void healthySource() {
   require(state->captures == stopped, "capture continued after shutdown");
   require(encoder.error().empty(), "healthy source produced fatal error");
 }
+static void identicalDamageRefines() {
+  auto state = std::make_shared<SourceState>(); Frames frames;
+  relay::CaptureEncoder encoder([&](relay::EncodedFrame&& frame) { return frames.publish(std::move(frame)); },
+      [state] { return std::make_unique<CpuSource>(state); });
+  std::string error; require(encoder.start(error), error.c_str()); encoder.beginSession(19);
+  frames.at(0);
+  encoder.setFlowControl(19, 2, 8000000, false, 0);
+  const auto blocked_until = std::chrono::steady_clock::now() + 200ms;
+  while (std::chrono::steady_clock::now() < blocked_until) {
+    state->damage(); std::this_thread::sleep_for(2ms);
+  }
+  { std::lock_guard<std::mutex> lock(frames.mutex);
+    require(frames.items.size() == 1, "refinement ran with a frame in flight");
+  }
+  state->damage(); encoder.acknowledge(19, 1);
+  bool refined = false;
+  const auto timeout = std::chrono::steady_clock::now() + 2s;
+  while (std::chrono::steady_clock::now() < timeout) {
+    state->damage(); std::this_thread::sleep_for(2ms);
+    std::lock_guard<std::mutex> lock(frames.mutex);
+    if (frames.items.size() > 1) { refined = true; break; }
+  }
+  require(refined, "identical damage starved refinement");
+  require(state->captures > 2, "identical damage was not captured");
+  encoder.stop();
+}
 static void invalidSource(int invalid) {
   auto state = std::make_shared<SourceState>(); state->invalid = invalid;
   std::atomic<unsigned> published{0};
@@ -153,8 +179,8 @@ static void invalidSource(int invalid) {
 }
 int main() {
   try {
-    healthySource(); invalidSource(1); invalidSource(2);
-    std::puts("backend source: decoded fresh IDRs, damage, idle, shutdown and invalid frames passed");
+    healthySource(); identicalDamageRefines(); invalidSource(1); invalidSource(2);
+    std::puts("backend source: decoded fresh IDRs, damage, refinement, idle, shutdown and invalid frames passed");
     return 0;
   } catch (const std::exception& error) {
     std::fprintf(stderr, "backend source: %s\n", error.what()); return 1;
