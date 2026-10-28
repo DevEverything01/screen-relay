@@ -14,6 +14,7 @@ struct FrameView {
   int stride, width, height;
   PixelFormat format;
 };
+struct DamageRect { int x, y, width, height; };
 struct CursorImage {
   static constexpr unsigned max_extent = 256;
   uint16_t width = 0, height = 0, xhot = 0, yhot = 0;
@@ -27,6 +28,8 @@ class CaptureSource {
   virtual bool drainDamage() = 0;
   virtual PixelFormat pixelFormat() const = 0;
   virtual FrameView capture() = 0;
+  /** Fills the pixel rectangles changed since the previous capture(); false means unknown, treat the whole frame as changed. */
+  virtual bool changedRects(std::vector<DamageRect>& /*rects*/) { return false; }
   virtual bool cursorSupported() const { return false; }
   // Called on the source owner thread after draining events, even when video is paused.
   virtual std::optional<CursorImage> cursor(bool /*force*/) { return std::nullopt; }

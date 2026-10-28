@@ -51,6 +51,7 @@ struct Resources {
   PixelFormat format;
   x264_t* codec = nullptr;
   x264_picture_t frame{};
+  std::vector<uint8_t> mb_info = std::vector<uint8_t>(80 * 45);
   bool frame_allocated = false;
   uint64_t bitrate = 8000000;
   explicit Resources(PixelFormat f) : format(f) {}
@@ -71,6 +72,7 @@ struct Resources {
     params.i_scenecut_threshold = 0; params.i_sync_lookahead = 0;
     params.rc.i_rc_method = X264_RC_CRF; params.rc.f_rf_constant = 10;
     params.rc.i_lookahead = 0; params.rc.i_vbv_max_bitrate = 8000; params.rc.i_vbv_buffer_size = 2000;
+    params.analyse.b_mb_info = 1; params.analyse.b_mb_info_update = 0;
     params.b_annexb = 1; params.b_repeat_headers = 1;
     params.vui.b_fullrange = 0; params.vui.i_colmatrix = 1;
     params.vui.i_colorprim = 1; params.vui.i_transfer = 1;
@@ -128,6 +130,7 @@ struct CaptureEncoder::Impl {
       bool dirty = true, force_idr = true;
       uint64_t seen_revision = 0;
       int64_t last_pts = -1;
+      std::vector<DamageRect> rects;
       unsigned consecutive_failures = 0;
       const auto frame_interval = std::chrono::nanoseconds(16666667);
       auto deadline = Clock::now();
@@ -186,6 +189,18 @@ struct CaptureEncoder::Impl {
               r.bitrate = rate;
             }
             r.frame.i_type = force_idr ? X264_TYPE_IDR : X264_TYPE_AUTO;
+            r.frame.prop.mb_info = nullptr; r.frame.prop.mb_info_free = nullptr;
+            if (!force_idr && source->changedRects(rects)) {
+              std::fill(r.mb_info.begin(), r.mb_info.end(), uint8_t(X264_MBINFO_CONSTANT));
+              for (const DamageRect& d : rects) {
+                const int x0 = std::max(d.x, 0) / 16, y0 = std::max(d.y, 0) / 16;
+                const int x1 = std::min((std::min(d.x + d.width, 1280) + 15) / 16, 80);
+                const int y1 = std::min((std::min(d.y + d.height, 720) + 15) / 16, 45);
+                for (int y = y0; y < y1; ++y)
+                  for (int x = x0; x < x1; ++x) r.mb_info[y * 80 + x] = 0;
+              }
+              r.frame.prop.mb_info = r.mb_info.data();
+            }
             x264_nal_t* nals = nullptr;
             int nal_count = 0;
             x264_picture_t picture;
