@@ -44,12 +44,12 @@ function receiveCursor(data) {
   renderCursor();
 }
 const stats = window.nativeStats = {
-  received: 0, drawn: 0, bytes: 0, decodeerrors: 0, outstanding: 0, pendingBytes: 0, pendingHighWater: 0,
+  received: 0, drawn: 0, superseded: 0, bytes: 0, decodeerrors: 0, outstanding: 0, pendingBytes: 0, pendingHighWater: 0,
 };
-let socket, decoder, retryTimer, deadline;
+let socket, decoder, retryTimer, deadline, frameHandle;
 let generation = 0, sequence = 0, lastTimestamp = -1, ready = false, retry = 0, epoch = 0;
 let buttons = 0, modifiers = 0, x = 0, y = 0, viewOnly = false;
-const pending = new Map(), held = new Set();
+const pending = new Map(), decoded = [], held = new Set();
 const keys = {};
 const assignKeys = (first, names) => names.split(" ").forEach((name, i) => keys[name] = first + i);
 assignKeys(4, Array.from({ length: 26 }, (_, i) => `Key${String.fromCharCode(65 + i)}`).join(" "));
@@ -100,8 +100,11 @@ function reset() {
   cursor.width = cursor.height = 1;
   renderCursor();
   clearTimeout(deadline);
-  for (const item of pending.values()) item.frame?.close();
+  cancelAnimationFrame(frameHandle);
+  frameHandle = 0;
   pending.clear();
+  for (const item of decoded) item.frame.close();
+  decoded.length = 0;
   stats.outstanding = 0;
   stats.pendingBytes = 0;
   generation = 0;
@@ -125,6 +128,34 @@ function watchPending(current) {
       if (current === epoch) fail("Decoder timed out; reconnecting");
     }, Math.max(0, oldest.arrived + 5000 - performance.now()));
   }
+}
+function schedulePresent() {
+  if (!frameHandle) frameHandle = requestAnimationFrame(present);
+}
+function present() {
+  frameHandle = 0;
+  const item = decoded.shift();
+  if (!item) return;
+  try {
+    if (item.gen !== generation) throw new Error("Stale decoded frame");
+    ctx.drawImage(item.frame, 0, 0, 1280, 720);
+  } catch (error) {
+    item.frame.close();
+    fail(`Draw failed: ${error.message}`);
+    return;
+  }
+  item.frame.close();
+  stats.drawn++;
+  const wasReady = ready;
+  ready = true;
+  if (!wasReady) renderCursor();
+  retry = 0;
+  status.textContent = "Live · click to control";
+  while (decoded.length > 2) {
+    decoded.shift().frame.close();
+    stats.superseded++;
+  }
+  if (decoded.length) schedulePresent();
 }
 function codecFromSps(bytes) {
   for (let i = 0; i + 7 < bytes.length; i++) {
@@ -214,29 +245,17 @@ function connect() {
             try {
               if (current !== epoch || decoder !== instance) return;
               const item = pending.get(frame.timestamp);
-              if (!item || item.gen !== generation || item.frame) {
+              if (!item || item.gen !== generation) {
                 throw new Error("Unexpected decoded frame");
               }
-              item.frame = frame;
               retained = true;
-              while (pending.size) {
-                const [timestamp, next] = pending.entries().next().value;
-                if (!next.frame) break;
-                ctx.drawImage(next.frame, 0, 0, 1280, 720);
-                if (ws.readyState !== WebSocket.OPEN) throw new Error("Connection closed before ACK");
-                ws.send(header(2, next.gen, next.seq, 0));
-                next.frame.close();
-                next.frame = null;
-                pending.delete(timestamp);
-                stats.pendingBytes -= next.bytes;
-                stats.outstanding = pending.size;
-                stats.drawn++;
-                const wasReady = ready;
-                ready = true;
-                if (!wasReady) renderCursor();
-                retry = 0;
-                status.textContent = "Live · click to control";
-              }
+              pending.delete(frame.timestamp);
+              stats.pendingBytes -= item.bytes;
+              stats.outstanding = pending.size;
+              decoded.push({ gen: item.gen, seq: item.seq, frame });
+              schedulePresent();
+              if (ws.readyState !== WebSocket.OPEN) throw new Error("Connection closed before ACK");
+              ws.send(header(2, item.gen, item.seq, 0));
               watchPending(current);
             } catch (error) {
               fail(`Draw failed: ${error.message}`);

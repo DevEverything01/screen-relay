@@ -48,11 +48,11 @@ Generation starts at 1 and increments per connection. Zero is invalid. Sequence 
 | 4 | 8 | Capture timestamp, microseconds |
 | 12 | 1 to 8,388,608 | H.264 Annex B access unit |
 
-Payload length is `12 + access unit length`. Maximum message 8,388,640 bytes. First and recovery frames are IDRs with SPS/PPS. The viewer decodes, draws, then sends the ACK, so an ACK means "drawn by the page".
+Payload length is `12 + access unit length`. Maximum message 8,388,640 bytes. First and recovery frames are IDRs with SPS/PPS. The viewer decodes every frame in order and sends the ACK as soon as the frame is decoded. Drawing is paced to the display: each animation frame presents at most the oldest decoded frame, so an ACK means "decoded for display", not that the frame was drawn.
 
 ## ACK (type 2, viewer to server)
 
-Payload length zero. Generation and sequence name the oldest sent frame. Only an exact match restores credit. Stale and future ACKs are ignored.
+Payload length zero. Generation and sequence name the oldest sent frame. The viewer ACKs in decode order and may present fewer frames than it ACKs when a backlog is held or trimmed. Only an exact match restores credit. Stale and future ACKs are ignored.
 
 ## Cursor image (type 6, server to viewer, `/stream` only)
 

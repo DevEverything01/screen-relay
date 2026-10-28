@@ -55,7 +55,7 @@ browser or agent input -> InputBackend (XTest)
 | Decrease | Target x 0.75 (and at most 90% of measured goodput) when 2+ frames and enough bytes are outstanding, oldest capture is 200 ms old, and 500 ms since the last decrease. Floor 1 Mbps. |
 | Increase | Target x 1.10 after a busy 1 s sample, oldest under 100 ms, 1 s since last increase, 2 s since last decrease. |
 
-ACK time includes network, decode, draw and scheduling. It is not pure RTT. Paths with latency near 200 ms can back off repeatedly.
+ACK time includes network, decode and scheduling. It is not pure RTT. Drawing is paced separately to the display, so an ACK no longer waits for a presented frame. Paths with latency near 200 ms can back off repeatedly.
 
 Failure handling: a capture or encode failure keeps pending work and forces an IDR in the same generation. The first two consecutive failures reopen the encoder after 1 s. The third, or a failed reopen, is fatal and the server exits.
 
