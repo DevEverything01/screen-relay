@@ -57,6 +57,7 @@ struct Resources {
   x264_t* codec = nullptr;
   x264_picture_t frame{};
   std::vector<uint8_t> mb_info = std::vector<uint8_t>((frame_width / 16) * (frame_height / 16));
+  std::vector<uint8_t> scratch = std::vector<uint8_t>(frame_width * 24);
   bool frame_allocated = false;
   uint64_t bitrate = FlowControl::initial_bitrate;
   bool refinement_vbv = false;
@@ -93,6 +94,57 @@ struct Resources {
     require(x264_picture_alloc(&frame, X264_CSP_NV12, frame_width, frame_height) == 0,
             "allocating YUV buffer failed");
     frame_allocated = true;
+  }
+  bool convertDamage(const FrameView& view, const std::vector<DamageRect>& rects) {
+    constexpr int columns = frame_width / 16;
+    std::fill(mb_info.begin(), mb_info.end(), uint8_t(X264_MBINFO_CONSTANT));
+    for (const auto& rect : rects) {
+      const int64_t x0 = std::max<int64_t>(view.x, rect.x);
+      const int64_t y0 = std::max<int64_t>(view.y, rect.y);
+      const int64_t x1 = std::min<int64_t>(view.x + view.width, int64_t(rect.x) + rect.width);
+      const int64_t y1 = std::min<int64_t>(view.y + view.height, int64_t(rect.y) + rect.height);
+      if (x1 <= x0 || y1 <= y0) continue;
+      for (int row = int(y0) / 16; row <= (y1 - 1) / 16; ++row)
+        for (int column = int(x0) / 16; column <= (x1 - 1) / 16; ++column)
+          mb_info[row * columns + column] = 0;
+    }
+    const auto convert = view.format == PixelFormat::BGRA ? bgraToNv12 : argbToNv12;
+    bool changed = false;
+    for (int row = view.y / 16; row <= (view.y + view.height - 1) / 16; ++row) {
+      const int y0 = std::max(row * 16, view.y);
+      const int y1 = std::min(row * 16 + 16, view.y + view.height);
+      for (int column = view.x / 16; column <= (view.x + view.width - 1) / 16;) {
+        if (mb_info[row * columns + column]) { ++column; continue; }
+        const int first = column;
+        while (column <= (view.x + view.width - 1) / 16 && !mb_info[row * columns + column]) ++column;
+        const int x0 = std::max(first * 16, view.x);
+        const int x1 = std::min(column * 16, view.x + view.width);
+        require(convert(view.data + (y0 - view.y) * view.stride + (x0 - view.x) * 4, view.stride,
+                        scratch.data(), frame_width, scratch.data() + frame_width * 16, frame_width,
+                        x1 - x0, y1 - y0), "RGB conversion failed");
+        for (int block = first; block < column; ++block) {
+          const int left = std::max(block * 16, x0);
+          const int right = std::min(block * 16 + 16, x1);
+          bool different = false;
+          for (int plane = 0; plane < 2; ++plane) {
+            const int height = plane ? (y1 - y0) / 2 : y1 - y0;
+            uint8_t* target = frame.img.plane[plane] + (plane ? y0 / 2 : y0) * frame.img.i_stride[plane] + left;
+            const uint8_t* source = scratch.data() + (plane ? frame_width * 16 : 0) + left - x0;
+            for (int line = 0; line < height; ++line) {
+              if (std::memcmp(target, source, right - left) != 0) {
+                std::memcpy(target, source, right - left);
+                different = true;
+              }
+              target += frame.img.i_stride[plane];
+              source += frame_width;
+            }
+          }
+          mb_info[row * columns + block] = different ? 0 : uint8_t(X264_MBINFO_CONSTANT);
+          changed |= different;
+        }
+      }
+    }
+    return changed;
   }
 };
 }  // namespace
@@ -197,20 +249,33 @@ struct CaptureEncoder::Impl {
               const FrameView view = source->captureChanged(force_idr);
               captured = Clock::now();
               require(view.data && view.width > 0 && view.height > 0 &&
-                      view.x >= 0 && view.y >= 0 &&
-                      view.x + view.width <= frame_width && view.y + view.height <= frame_height &&
+                      view.x >= 0 && view.x <= frame_width && view.y >= 0 && view.y <= frame_height &&
+                      view.width <= frame_width - view.x && view.height <= frame_height - view.y &&
                       view.stride >= view.width * 4 && view.stride <= frame_width * 8 &&
                       !(view.x & 1) && !(view.y & 1) && !(view.width & 1) && !(view.height & 1) &&
                       !(force_idr && (view.width != frame_width || view.height != frame_height)) &&
                       view.format == r.format, "invalid capture frame");
-              const auto convert = view.format == PixelFormat::BGRA ? bgraToNv12 : argbToNv12;
-              require(convert(view.data, view.stride,
-                              r.frame.img.plane[0] + view.y * r.frame.img.i_stride[0] + view.x,
-                              r.frame.img.i_stride[0],
-                              r.frame.img.plane[1] + (view.y / 2) * r.frame.img.i_stride[1] + view.x,
-                              r.frame.img.i_stride[1], view.width, view.height),
-                      "RGB conversion failed");
+              bool changed = true;
+              if (force_idr) {
+                const auto convert = view.format == PixelFormat::BGRA ? bgraToNv12 : argbToNv12;
+                require(convert(view.data, view.stride, r.frame.img.plane[0], r.frame.img.i_stride[0],
+                                r.frame.img.plane[1], r.frame.img.i_stride[1], view.width, view.height),
+                        "RGB conversion failed");
+              } else {
+                if (!source->changedRects(rects)) rects = {{view.x, view.y, view.width, view.height}};
+                changed = r.convertDamage(view, rects);
+              }
               converted = Clock::now();
+              if (!changed) {
+                { std::lock_guard<std::mutex> lock(mutex);
+                  ++counters.captures;
+                  counters.capture_ns += ns(captured - capture_start);
+                  counters.convert_ns += ns(converted - captured);
+                }
+                consecutive_failures = 0;
+                deadline = std::max(deadline + frame_interval, capture_start + frame_interval);
+                continue;
+              }
             }
             const int64_t timestamp = std::chrono::duration_cast<std::chrono::microseconds>(capture_start.time_since_epoch()).count();
             r.frame.i_pts = last_pts = std::max(last_pts + 1, timestamp);
@@ -225,17 +290,7 @@ struct CaptureEncoder::Impl {
             }
             r.frame.i_type = force_idr ? X264_TYPE_IDR : X264_TYPE_AUTO;
             r.frame.prop.mb_info = nullptr; r.frame.prop.mb_info_free = nullptr;
-            if (!refinement && !force_idr && source->changedRects(rects)) {
-              std::fill(r.mb_info.begin(), r.mb_info.end(), uint8_t(X264_MBINFO_CONSTANT));
-              for (const DamageRect& d : rects) {
-                const int x0 = std::max(d.x, 0) / 16, y0 = std::max(d.y, 0) / 16;
-                const int x1 = std::min((std::min(d.x + d.width, frame_width) + 15) / 16, frame_width / 16);
-                const int y1 = std::min((std::min(d.y + d.height, frame_height) + 15) / 16, frame_height / 16);
-                for (int y = y0; y < y1; ++y)
-                  for (int x = x0; x < x1; ++x) r.mb_info[y * (frame_width / 16) + x] = 0;
-              }
-              r.frame.prop.mb_info = r.mb_info.data();
-            }
+            if (!refinement && !force_idr) r.frame.prop.mb_info = r.mb_info.data();
             x264_nal_t* nals = nullptr;
             int nal_count = 0;
             x264_picture_t picture;
