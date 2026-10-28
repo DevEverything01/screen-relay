@@ -50,7 +50,7 @@ browser or agent input -> InputBackend (XTest)
 | In flight | At most 8 frames and 8 MiB |
 | Admission pause | Oldest outstanding capture reaches 250 ms |
 | Generation closed | No ACK progress for 3 s, or oldest capture 3 s old (checked every 100 ms) |
-| x264 | ultrafast, zerolatency, CRF 10, no B frames, no lookahead, GOP 600, 1 thread |
+| x264 | ultrafast, zerolatency, CRF 10, no B frames, no lookahead, no scheduled IDRs (IDR only at session start and recovery), 1 thread |
 | Bitrate target | Starts 8 Mbps, clamped 1 to 40 Mbps. VBV buffer is target/4. |
 | Decrease | Target x 0.75 (and at most 90% of measured goodput) when 2+ frames and enough bytes are outstanding, oldest capture is 200 ms old, and 500 ms since the last decrease. Floor 1 Mbps. |
 | Increase | Target x 1.10 after a busy 1 s sample, oldest under 100 ms, 1 s since last increase, 2 s since last decrease. |

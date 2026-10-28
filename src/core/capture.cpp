@@ -68,7 +68,7 @@ struct Resources {
     params.i_width = frame_width; params.i_height = frame_height; params.i_csp = X264_CSP_NV12;
     params.i_timebase_num = 1; params.i_timebase_den = 1000000;
     params.i_fps_num = 60; params.i_fps_den = 1;
-    params.i_threads = 1; params.i_keyint_max = 600; params.i_bframe = 0;
+    params.i_threads = 1; params.i_keyint_max = X264_KEYINT_MAX_INFINITE; params.i_bframe = 0;
     params.i_scenecut_threshold = 0; params.i_sync_lookahead = 0;
     params.rc.i_rc_method = X264_RC_CRF; params.rc.f_rf_constant = 10;
     params.rc.i_lookahead = 0; params.rc.i_vbv_max_bitrate = 8000; params.rc.i_vbv_buffer_size = 2000;
