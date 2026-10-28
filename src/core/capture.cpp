@@ -23,7 +23,7 @@
 
 namespace relay {
 namespace {
-/// VBV buffer in kbit: about 1/15 s of `bitrate`, or 2/15 s while refining a quiet picture.
+/// VBV buffer in kbit: about 1/15 s of `bitrate`, or 2/15 s while refining a quiet picture or encoding a forced keyframe.
 constexpr int vbvBufferKbit(uint64_t bitrate, bool refinement = false) {
   return int(bitrate / (refinement ? 7500 : 15000));
 }
@@ -60,7 +60,7 @@ struct Resources {
   std::vector<uint8_t> scratch = std::vector<uint8_t>(frame_width * 24);
   bool frame_allocated = false;
   uint64_t bitrate = FlowControl::initial_bitrate;
-  bool refinement_vbv = false;
+  bool wide_vbv = false;
   explicit Resources(PixelFormat f) : format(f) {}
   ~Resources() {
     if (codec) x264_encoder_close(codec);
@@ -87,7 +87,7 @@ struct Resources {
     codec = x264_encoder_open(&params);
     require(codec, "opening libx264 failed");
     bitrate = FlowControl::initial_bitrate;
-    refinement_vbv = false;
+    wide_vbv = false;
   }
   void init() {
     openEncoder();
@@ -279,14 +279,15 @@ struct CaptureEncoder::Impl {
             }
             const int64_t timestamp = std::chrono::duration_cast<std::chrono::microseconds>(capture_start.time_since_epoch()).count();
             r.frame.i_pts = last_pts = std::max(last_pts + 1, timestamp);
-            if (rate != r.bitrate || refinement != r.refinement_vbv) {
+            const bool wide_vbv = refinement || force_idr;
+            if (rate != r.bitrate || wide_vbv != r.wide_vbv) {
               x264_param_t params;
               x264_encoder_parameters(r.codec, &params);
               params.rc.i_vbv_max_bitrate = int(rate / 1000);
-              params.rc.i_vbv_buffer_size = vbvBufferKbit(rate, refinement);
+              params.rc.i_vbv_buffer_size = vbvBufferKbit(rate, wide_vbv);
               require(x264_encoder_reconfig(r.codec, &params) == 0, "encoder reconfiguration failed");
               r.bitrate = rate;
-              r.refinement_vbv = refinement;
+              r.wide_vbv = wide_vbv;
             }
             r.frame.i_type = force_idr ? X264_TYPE_IDR : X264_TYPE_AUTO;
             r.frame.prop.mb_info = nullptr; r.frame.prop.mb_info_free = nullptr;
