@@ -3,11 +3,8 @@
 #include "flow.hpp"
 #include "capture-source.hpp"
 
-extern "C" {
-#include <libavcodec/avcodec.h>
-#include <libavutil/opt.h>
-#include <libswscale/swscale.h>
-}
+#include <cstdint>
+#include <x264.h>
 #include <sys/eventfd.h>
 #include <poll.h>
 #include <unistd.h>
@@ -52,64 +49,41 @@ void require(bool ok, const char* message) {
 }
 struct Resources {
   PixelFormat format;
-  AVCodecContext* codec = nullptr;
-  AVFrame* frame = nullptr;
-  AVPacket* packet = nullptr;
-  SwsContext* sws = nullptr;
+  x264_t* codec = nullptr;
+  x264_picture_t frame{};
+  bool frame_allocated = false;
+  uint64_t bitrate = 8000000;
   explicit Resources(PixelFormat f) : format(f) {}
   ~Resources() {
-    sws_freeContext(sws);
-    av_packet_free(&packet);
-    av_frame_free(&frame);
-    avcodec_free_context(&codec);
+    if (codec) x264_encoder_close(codec);
+    if (frame_allocated) x264_picture_clean(&frame);
   }
   void openEncoder() {
-    avcodec_free_context(&codec);
-    const AVCodec* encoder = avcodec_find_encoder_by_name("libx264");
-    require(encoder, "libx264 unavailable");
-    codec = avcodec_alloc_context3(encoder);
-    require(codec, "allocating encoder failed");
-    codec->width = 1280; codec->height = 720;
-    codec->pix_fmt = AV_PIX_FMT_YUV420P;
-    codec->time_base = AVRational{1, 1000000};
-    codec->framerate = AVRational{60, 1};
-    codec->rc_max_rate = 8000000; codec->rc_buffer_size = 2000000;
-    codec->max_b_frames = 0; codec->gop_size = 600; codec->thread_count = 2;
-    codec->color_range = AVCOL_RANGE_MPEG;
-    codec->colorspace = AVCOL_SPC_BT709;
-    codec->color_primaries = AVCOL_PRI_BT709;
-    codec->color_trc = AVCOL_TRC_BT709;
-    // The fast converter averages each 2x2 block, so chroma samples are centered.
-    codec->chroma_sample_location = format == PixelFormat::BGRA
-        ? AVCHROMA_LOC_CENTER : AVCHROMA_LOC_LEFT;
-    require(av_opt_set(codec->priv_data, "preset", "ultrafast", 0) >= 0 &&
-            av_opt_set(codec->priv_data, "tune", "zerolatency", 0) >= 0 &&
-            av_opt_set(codec->priv_data, "crf", "10", 0) >= 0 &&
-            av_opt_set_int(codec->priv_data, "forced-idr", 1, 0) >= 0 &&
-            av_opt_set(codec->priv_data, "x264-params",
-                       "annexb=1:repeat-headers=1:scenecut=0:rc-lookahead=0:sync-lookahead=0", 0) >= 0,
+    if (codec) x264_encoder_close(codec);
+    codec = nullptr;
+    x264_param_t params;
+    require(x264_param_default_preset(&params, "ultrafast", "zerolatency") >= 0,
             "setting x264 options failed");
-    require(avcodec_open2(codec, encoder, nullptr) >= 0, "opening libx264 failed");
+    params.i_width = 1280; params.i_height = 720; params.i_csp = X264_CSP_I420;
+    params.i_timebase_num = 1; params.i_timebase_den = 1000000;
+    params.i_fps_num = 60; params.i_fps_den = 1;
+    params.i_threads = 2; params.i_keyint_max = 600; params.i_bframe = 0;
+    params.i_scenecut_threshold = 0; params.i_sync_lookahead = 0;
+    params.rc.i_rc_method = X264_RC_CRF; params.rc.f_rf_constant = 10;
+    params.rc.i_lookahead = 0; params.rc.i_vbv_max_bitrate = 8000; params.rc.i_vbv_buffer_size = 2000;
+    params.b_annexb = 1; params.b_repeat_headers = 1;
+    params.vui.b_fullrange = 0; params.vui.i_colmatrix = 1;
+    params.vui.i_colorprim = 1; params.vui.i_transfer = 1;
+    params.vui.i_chroma_loc = format == PixelFormat::BGRA ? 1 : 0;
+    codec = x264_encoder_open(&params);
+    require(codec, "opening libx264 failed");
+    bitrate = 8000000;
   }
   void init() {
     openEncoder();
-    frame = av_frame_alloc(); packet = av_packet_alloc();
-    require(frame && packet, "allocating video buffers failed");
-    frame->format = codec->pix_fmt; frame->width = 1280; frame->height = 720;
-    frame->color_range = codec->color_range; frame->colorspace = codec->colorspace;
-    frame->color_primaries = codec->color_primaries; frame->color_trc = codec->color_trc;
-    frame->chroma_location = codec->chroma_sample_location;
-    require(av_frame_get_buffer(frame, 32) >= 0, "allocating YUV buffer failed");
-    if (format == PixelFormat::ARGB) {
-      sws = sws_getContext(1280, 720, AV_PIX_FMT_ARGB,
-                           1280, 720, AV_PIX_FMT_YUV420P, SWS_FAST_BILINEAR,
-                           nullptr, nullptr, nullptr);
-      require(sws, "creating RGB conversion failed");
-      const int* coefficients = sws_getCoefficients(SWS_CS_ITU709);
-      require(sws_setColorspaceDetails(sws, coefficients, 1, coefficients, 0,
-                                       0, 1 << 16, 1 << 16) >= 0,
-              "setting RGB/YUV color conversion failed");
-    }
+    require(x264_picture_alloc(&frame, X264_CSP_I420, 1280, 720) == 0,
+            "allocating YUV buffer failed");
+    frame_allocated = true;
   }
 };
 }  // namespace
@@ -193,45 +167,38 @@ struct CaptureEncoder::Impl {
             require(view.data && view.width == 1280 && view.height == 720 &&
                     view.stride >= 1280 * 4 && view.stride <= 1280 * 8 &&
                     view.format == r.format, "invalid capture frame");
-            require(av_frame_make_writable(r.frame) >= 0, "making YUV frame writable failed");
-            if (view.format == PixelFormat::BGRA) {
-              require(bgraToYuv420(view.data, view.stride,
-                                   r.frame->data[0], r.frame->linesize[0],
-                                   r.frame->data[1], r.frame->linesize[1],
-                                   r.frame->data[2], r.frame->linesize[2], 1280, 720),
-                      "BGRA conversion failed");
-            } else {
-              const uint8_t* pixels[4] = {view.data, nullptr, nullptr, nullptr};
-              const int stride[4] = {view.stride, 0, 0, 0};
-              require(sws_scale(r.sws, pixels, stride, 0, 720,
-                                 r.frame->data, r.frame->linesize) == 720,
-                      "ARGB conversion failed");
-            }
+            const auto convert = view.format == PixelFormat::BGRA ? bgraToYuv420 : argbToYuv420;
+            require(convert(view.data, view.stride,
+                            r.frame.img.plane[0], r.frame.img.i_stride[0],
+                            r.frame.img.plane[1], r.frame.img.i_stride[1],
+                            r.frame.img.plane[2], r.frame.img.i_stride[2], 1280, 720),
+                    "RGB conversion failed");
             const auto converted = Clock::now();
             const int64_t timestamp = std::chrono::duration_cast<std::chrono::microseconds>(capture_start.time_since_epoch()).count();
-            r.frame->pts = last_pts = std::max(last_pts + 1, timestamp);
-            // FFmpeg libx264 reconfigures VBV per frame in CRF mode (bits and bits/s).
-            r.codec->rc_max_rate = rate; r.codec->rc_buffer_size = int(rate / 4);
-            r.frame->pict_type = force_idr ? AV_PICTURE_TYPE_I : AV_PICTURE_TYPE_NONE;
-            require(avcodec_send_frame(r.codec, r.frame) >= 0, "encoder rejected frame");
+            r.frame.i_pts = last_pts = std::max(last_pts + 1, timestamp);
+            if (rate != r.bitrate) {
+              x264_param_t params;
+              x264_encoder_parameters(r.codec, &params);
+              params.rc.i_vbv_max_bitrate = int(rate / 1000);
+              params.rc.i_vbv_buffer_size = int(rate / 4000);
+              require(x264_encoder_reconfig(r.codec, &params) == 0, "encoder reconfiguration failed");
+              r.bitrate = rate;
+            }
+            r.frame.i_type = force_idr ? X264_TYPE_IDR : X264_TYPE_AUTO;
+            x264_nal_t* nals = nullptr;
+            int nal_count = 0;
+            x264_picture_t picture;
+            const int size = x264_encoder_encode(r.codec, &nals, &nal_count, &r.frame, &picture);
+            require(size > 0 && nal_count > 0 && nals && picture.i_pts == last_pts &&
+                    static_cast<size_t>(size) <= FlowControl::max_bytes,
+                    "invalid or delayed encoded access unit");
             EncodedFrame output;
             output.generation = gen; output.sequence = seq; output.pts_us = last_pts;
             output.width = 1280; output.height = 720;
-            int packets = 0;
-            while (true) {
-              const int result = avcodec_receive_packet(r.codec, r.packet);
-              if (result == AVERROR(EAGAIN)) break;
-              require(result >= 0, "receiving encoded frame failed");
-              ++packets;
-              const bool valid = packets == 1 && r.packet->pts == last_pts && r.packet->size > 0 &&
-                  output.annex_b.size() + static_cast<size_t>(r.packet->size) <= FlowControl::max_bytes;
-              if (!valid) { av_packet_unref(r.packet); throw std::runtime_error("invalid or delayed encoded access unit"); }
-              output.keyframe |= (r.packet->flags & AV_PKT_FLAG_KEY) != 0;
-              output.annex_b.insert(output.annex_b.end(), r.packet->data, r.packet->data + r.packet->size);
-              av_packet_unref(r.packet);
-            }
-            require(packets > 0 && (!force_idr || (output.keyframe &&
-                    hasNal(output.annex_b, 5) && hasNal(output.annex_b, 7) && hasNal(output.annex_b, 8))),
+            output.keyframe = picture.b_keyframe;
+            output.annex_b.assign(nals[0].p_payload, nals[0].p_payload + size);
+            require(!force_idr || (output.keyframe &&
+                    hasNal(output.annex_b, 5) && hasNal(output.annex_b, 7) && hasNal(output.annex_b, 8)),
                     "encoder buffered frame or omitted IDR/SPS/PPS");
             const auto encoded = Clock::now();
             bool current;
@@ -263,7 +230,6 @@ struct CaptureEncoder::Impl {
             std::fprintf(stderr, "capture: %s; retrying with IDR\n", error.what());
             dirty = true;
             force_idr = true;
-            av_packet_unref(r.packet);
             if (++consecutive_failures >= 3) {
               throw std::runtime_error(std::string("capture failed three consecutive times: ") + error.what());
             }

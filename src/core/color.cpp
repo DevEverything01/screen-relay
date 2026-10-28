@@ -40,7 +40,8 @@ uint16x4_t box4(uint8x8_t top, uint8x8_t bottom) {
 #endif
 }  // namespace
 
-bool bgraToYuv420(const uint8_t* source, int sourceStride,
+template<bool argb>
+bool convertToYuv420(const uint8_t* source, int sourceStride,
                   uint8_t* y, int yStride, uint8_t* u, int uStride,
                   uint8_t* v, int vStride, int width, int height) {
   if (!source || !y || !u || !v || width <= 0 || height <= 0 ||
@@ -56,7 +57,7 @@ bool bgraToYuv420(const uint8_t* source, int sourceStride,
     auto* v0 = v + static_cast<ptrdiff_t>(row / 2) * vStride;
     int x = 0;
 #if defined(__aarch64__)
-    for (; x <= width - 8; x += 8) {
+    if constexpr (!argb) for (; x <= width - 8; x += 8) {
       const auto a = vld4_u8(top + x * 4);
       const auto b = vld4_u8(bottom + x * 4);
       luma8(y0 + x, a);
@@ -81,17 +82,30 @@ bool bgraToYuv420(const uint8_t* source, int sourceStride,
     for (; x < width; x += 2) {
       const auto* a = top + x * 4;
       const auto* b = bottom + x * 4;
-      y0[x] = luma(a[0], a[1], a[2]);
-      y0[x + 1] = luma(a[4], a[5], a[6]);
-      y1[x] = luma(b[0], b[1], b[2]);
-      y1[x + 1] = luma(b[4], b[5], b[6]);
-      const int blue = (a[0] + a[4] + b[0] + b[4] + 2) / 4;
-      const int green = (a[1] + a[5] + b[1] + b[5] + 2) / 4;
-      const int red = (a[2] + a[6] + b[2] + b[6] + 2) / 4;
+      constexpr int blueOffset = argb ? 3 : 0;
+      constexpr int greenOffset = argb ? 2 : 1;
+      constexpr int redOffset = argb ? 1 : 2;
+      y0[x] = luma(a[blueOffset], a[greenOffset], a[redOffset]);
+      y0[x + 1] = luma(a[4 + blueOffset], a[4 + greenOffset], a[4 + redOffset]);
+      y1[x] = luma(b[blueOffset], b[greenOffset], b[redOffset]);
+      y1[x + 1] = luma(b[4 + blueOffset], b[4 + greenOffset], b[4 + redOffset]);
+      const int blue = (a[blueOffset] + a[4 + blueOffset] + b[blueOffset] + b[4 + blueOffset] + 2) / 4;
+      const int green = (a[greenOffset] + a[4 + greenOffset] + b[greenOffset] + b[4 + greenOffset] + 2) / 4;
+      const int red = (a[redOffset] + a[4 + redOffset] + b[redOffset] + b[4 + redOffset] + 2) / 4;
       u0[x / 2] = blueChroma(blue, green, red);
       v0[x / 2] = redChroma(blue, green, red);
     }
   }
   return true;
+}
+bool bgraToYuv420(const uint8_t* source, int sourceStride,
+                  uint8_t* y, int yStride, uint8_t* u, int uStride,
+                  uint8_t* v, int vStride, int width, int height) {
+  return convertToYuv420<false>(source, sourceStride, y, yStride, u, uStride, v, vStride, width, height);
+}
+bool argbToYuv420(const uint8_t* source, int sourceStride,
+                  uint8_t* y, int yStride, uint8_t* u, int uStride,
+                  uint8_t* v, int vStride, int width, int height) {
+  return convertToYuv420<true>(source, sourceStride, y, yStride, u, uStride, v, vStride, width, height);
 }
 }  // namespace nsl
