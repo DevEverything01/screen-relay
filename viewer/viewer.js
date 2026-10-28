@@ -22,8 +22,8 @@ function renderCursor() {
   const sx = r.width / canvas.width, sy = r.height / canvas.height;
   cursor.style.width = `${cursor.width * sx}px`;
   cursor.style.height = `${cursor.height * sy}px`;
-  cursor.style.left = `${p.clientX - r.left - cursorHotX * sx}px`;
-  cursor.style.top = `${p.clientY - r.top - cursorHotY * sy}px`;
+  cursor.style.left = `${p.clientX - cursorHotX * sx}px`;
+  cursor.style.top = `${p.clientY - cursorHotY * sy}px`;
 }
 function receiveCursor(data) {
   const v = new DataView(data);
@@ -62,7 +62,7 @@ let socket,
   retryTimer,
   deadline,
   epoch = 0;
-let buttons = 0, modifiers = 0, x = 0, y = 0;
+let buttons = 0, modifiers = 0, x = 0, y = 0, viewOnly = false;
 const pending = new Map(), held = new Set();
 const keys = {
   Enter: 40,
@@ -136,7 +136,7 @@ function header(type, gen, seq, size) {
   return b;
 }
 function sendInput(event, code = 0, value = 0) {
-  if (!ready || socket?.readyState !== WebSocket.OPEN) return;
+  if (!ready || socket?.readyState !== WebSocket.OPEN || (viewOnly && event !== 7)) return;
   const b = header(3, generation, 0, 16), v = new DataView(b);
   v.setUint8(20, event);
   v.setUint16(22, code);
@@ -365,6 +365,7 @@ function connect() {
     const delay = Math.min(1000 * 2 ** retry++, 8000);
     status.textContent += ` · retrying in ${delay / 1000}s`;
     retryTimer = setTimeout(connect, delay);
+    checkAccess(current);
   };
 }
 function position(e) {
@@ -546,7 +547,98 @@ document.addEventListener("visibilitychange", () => {
     connect();
   }
 });
-document.querySelector("#reconnect").addEventListener("click", () => {
+function checkAccess(current) {
+  fetch("/capabilities", { cache: "no-store", redirect: "error",
+    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {} })
+    .then((response) => {
+      if (response.status !== 401 || current !== epoch) return;
+      clearTimeout(retryTimer);
+      status.textContent = accessToken ? "Access token rejected" : "Access token required";
+      setExpanded(true);
+      showPanel("connection", true);
+      document.querySelector("#access-token").focus();
+    })
+    .catch(() => {});
+}
+const toolbar = document.querySelector("#toolbar"),
+  toggle = document.querySelector("#toolbar-toggle"),
+  actions = document.querySelector("#toolbar-actions"),
+  dot = document.querySelector("#dot"),
+  panels = { keys: document.querySelector("#keys-panel"), connection: document.querySelector("#connection-panel") };
+function showPanel(name, open = panels[name]?.hidden) {
+  for (const [key, panel] of Object.entries(panels)) {
+    panel.hidden = !(key === name && open);
+    toolbar.querySelector(`[data-action="${key}"]`).setAttribute("aria-expanded", String(!panel.hidden));
+  }
+}
+function setExpanded(open) {
+  actions.hidden = !open;
+  toolbar.classList.toggle("open", open);
+  toggle.setAttribute("aria-expanded", String(open));
+  if (!open) showPanel(null);
+}
+function syncStatus() {
+  const text = status.textContent;
+  dot.className = "dot" + (text.startsWith("Live") ? " live" : /^(Connecting|Waiting|Paused)/.test(text) ? "" : " error");
+  toggle.title = text;
+  toggle.setAttribute("aria-label", `Viewer controls: ${text}`);
+}
+new MutationObserver(syncStatus).observe(status, { childList: true, characterData: true, subtree: true });
+syncStatus();
+toggle.addEventListener("click", () => setExpanded(actions.hidden));
+canvas.addEventListener("pointerdown", () => showPanel(null));
+const toolbarActions = {
+  fullscreen: () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen())
+    .catch(() => {}),
+  scale: (button) => {
+    button.setAttribute("aria-pressed", String(document.body.classList.toggle("actual")));
+    renderCursor();
+  },
+  keys: () => showPanel("keys"),
+  connection: () => showPanel("connection"),
+  screenshot: () => canvas.toBlob((blob) => {
+    if (!blob) return;
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `desktop-${new Date().toISOString().replace(/[:.]/g, "-")}.png`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  }, "image/png"),
+  viewonly: (button) => {
+    release();
+    viewOnly = !viewOnly;
+    button.setAttribute("aria-pressed", String(viewOnly));
+  },
+  stats: (button) => {
+    const panel = document.querySelector("#stats");
+    panel.hidden = !panel.hidden;
+    button.setAttribute("aria-pressed", String(!panel.hidden));
+  },
+};
+actions.addEventListener("click", (e) => {
+  const button = e.target.closest("[data-action]");
+  if (button) toolbarActions[button.dataset.action](button);
+});
+document.addEventListener("fullscreenchange", () => {
+  toolbar.querySelector('[data-action="fullscreen"]').setAttribute("aria-pressed", String(Boolean(document.fullscreenElement)));
+});
+panels.keys.addEventListener("click", (e) => {
+  const button = e.target.closest("[data-keys]");
+  if (!button) return;
+  const codes = button.dataset.keys.split("+").map((name) => keys[name]);
+  for (const code of codes) {
+    if (code >= 224) modifiers |= 1 << (code - 224);
+    sendInput(1, code);
+  }
+  for (const code of codes.reverse()) {
+    if (code >= 224) modifiers &= ~(1 << (code - 224));
+    sendInput(2, code);
+  }
+  showPanel(null);
+  canvas.focus();
+});
+panels.connection.addEventListener("submit", (e) => {
+  e.preventDefault();
   const value = document.querySelector('#access-token').value.trim();
   if (value && (!/^[0-9a-f]{64}$/.test(value) || !trustedPage)) {
     status.textContent = 'Use a 64-character token over HTTPS or a localhost tunnel';

@@ -14,6 +14,10 @@ const tag = `nsl-integration-${process.pid}-${Date.now()}`;
 const statePath = `/tmp/${tag}.json`;
 const fixturePath = `/tmp/${tag}.py`;
 const docker = (...args) => execFileSync('docker', args, {encoding: 'utf8', timeout: 15000});
+const at = async (x, y) => {
+  const box = await page.locator('#screen').boundingBox();
+  return [box.x + x * box.width / 1280, box.y + y * box.height / 720];
+};
 const state = () => JSON.parse(docker('exec', container, 'cat', statePath));
 const report = {url, container, started: new Date().toISOString(), checks: []};
 let browser, page, fixturePID, pausedFixtures = [];
@@ -160,24 +164,24 @@ print(json.dumps(paused))`));
     const hud = await poll(() => page.locator('#hud').textContent(), text =>
       /Cgroup CPU \(one core\): [\d.]+%/.test(text) && /Cgroup RAM: [\d.]+ MiB/.test(text));
     const drawn = await page.evaluate(() => nativeStats.drawn);
-    await page.mouse.click(200,130);
+    await page.mouse.click(...await at(200,130));
     await poll(() => page.evaluate(() => nativeStats), s => s.drawn > drawn && s.decodeerrors === 0);
     return {samples, hud, statsAfterMetrics: await page.evaluate(() => nativeStats)};
   });
   await check('viewer pointer, keyboard, modifiers and wheel reach X11 application', async () => {
-    await page.mouse.click(200,130);
+    await page.mouse.click(...await at(200,130));
     await page.keyboard.type('native42');
     await page.keyboard.down('Shift'); await page.keyboard.press('KeyA'); await page.keyboard.up('Shift');
-    await page.mouse.move(800,400); await page.mouse.wheel(0,100);
+    await page.mouse.move(...await at(800,400)); await page.mouse.wheel(0,100);
     const s = await poll(state, s => s.entry === 'native42A' && s.events.some(e => e.type === 'ButtonPress' && e.button === '5'));
     assert(Math.abs(s.pointer[0]-800) < 3 && Math.abs(s.pointer[1]-400) < 3);
     return s;
   });
   await check('held controls release on canvas blur with independent X server state', async () => {
     await page.locator('#screen').focus(); await page.keyboard.down('Shift');
-    await page.mouse.move(800,400); await page.mouse.down();
+    await page.mouse.move(...await at(800,400)); await page.mouse.down();
     await poll(state, s => s.shift && s.button1);
-    await page.locator('#reconnect').focus();
+    await page.locator('#toolbar-toggle').focus();
     const s = await poll(state, s => !s.shift && !s.button1);
     await page.keyboard.up('Shift'); await page.mouse.up();
     return {shift: s.shift, button1: s.button1};
@@ -212,7 +216,7 @@ print(json.dumps(paused))`));
   });
   await check('disconnect releases held controls and reconnect renders fresh desktop', async () => {
     await page.locator('#screen').focus(); await page.keyboard.down('Shift');
-    await page.mouse.move(800,400); await page.mouse.down();
+    await page.mouse.move(...await at(800,400)); await page.mouse.down();
     await poll(state, s => s.shift && s.button1);
     await page.close();
     await poll(state, s => !s.shift && !s.button1);
