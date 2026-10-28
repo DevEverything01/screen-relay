@@ -37,7 +37,7 @@ if [ "$deps" = 1 ] && [ "$(uname -s)" = Linux ]; then
     apt_install python3
   else
     apt_install python3 build-essential pkg-config libx11-dev libxext-dev libxdamage-dev libxfixes-dev \
-      libxtst-dev libavcodec-dev libavutil-dev libswscale-dev libwebsockets-dev xvfb xauth x11-utils
+      libxtst-dev libx264-dev libwebsockets-dev xvfb xauth x11-utils
     if [ "$desktop" = 1 ]; then
       apt_install dbus dbus-x11 at-spi2-core xfce4-session xfwm4 xfce4-panel xfdesktop4 xfce4-settings \
         thunar fonts-dejavu-core

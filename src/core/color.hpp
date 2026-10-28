@@ -10,4 +10,7 @@ namespace nsl {
 bool bgraToYuv420(const uint8_t* source, int sourceStride,
                   uint8_t* y, int yStride, uint8_t* u, int uStride,
                   uint8_t* v, int vStride, int width, int height);
+bool argbToYuv420(const uint8_t* source, int sourceStride,
+                  uint8_t* y, int yStride, uint8_t* u, int uStride,
+                  uint8_t* v, int vStride, int width, int height);
 }  // namespace nsl

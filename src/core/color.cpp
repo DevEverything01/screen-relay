@@ -21,26 +21,20 @@ uint8_t redChroma(int b, int g, int r) {
 }
 
 #if defined(__aarch64__)
-uint16x4_t luma4(uint16x4_t b, uint16x4_t g, uint16x4_t r) {
-  auto sum = vmlal_n_u16(vmull_n_u16(r, 2991), g, 10064);
-  sum = vmlal_n_u16(sum, b, 1016);
-  return vadd_u16(vshrn_n_u32(vaddq_u32(sum, vdupq_n_u32(8192)), 14), vdup_n_u16(16));
+/** BT.709 limited-range luma for 8 pixels with 8-bit coefficients in 16-bit lanes. */
+uint8x8_t luma8(uint8x8_t b, uint8x8_t g, uint8x8_t r) {
+  auto sum = vmlal_u8(vmlal_u8(vmull_u8(r, vdup_n_u8(47)), g, vdup_n_u8(157)), b, vdup_n_u8(16));
+  return vadd_u8(vshrn_n_u16(vaddq_u16(sum, vdupq_n_u16(128)), 8), vdup_n_u8(16));
 }
-void luma8(uint8_t* out, const uint8x8x4_t& pixels) {
-  auto b = vmovl_u8(pixels.val[0]);
-  auto g = vmovl_u8(pixels.val[1]);
-  auto r = vmovl_u8(pixels.val[2]);
-  vst1_u8(out, vqmovn_u16(vcombine_u16(
-      luma4(vget_low_u16(b), vget_low_u16(g), vget_low_u16(r)),
-      luma4(vget_high_u16(b), vget_high_u16(g), vget_high_u16(r)))));
-}
-uint16x4_t box4(uint8x8_t top, uint8x8_t bottom) {
-  return vrshrn_n_u32(vpaddlq_u16(vaddl_u8(top, bottom)), 2);
+/** Averages vertically adjacent pixel pairs and then horizontal neighbours, rounding to nearest. */
+uint8x8_t box8(uint8x16_t top, uint8x16_t bottom) {
+  return vmovn_u16(vrshrq_n_u16(vaddq_u16(vpaddlq_u8(top), vpaddlq_u8(bottom)), 2));
 }
 #endif
 }  // namespace
 
-bool bgraToYuv420(const uint8_t* source, int sourceStride,
+template<bool argb>
+bool convertToYuv420(const uint8_t* source, int sourceStride,
                   uint8_t* y, int yStride, uint8_t* u, int uStride,
                   uint8_t* v, int vStride, int width, int height) {
   if (!source || !y || !u || !v || width <= 0 || height <= 0 ||
@@ -56,42 +50,52 @@ bool bgraToYuv420(const uint8_t* source, int sourceStride,
     auto* v0 = v + static_cast<ptrdiff_t>(row / 2) * vStride;
     int x = 0;
 #if defined(__aarch64__)
-    for (; x <= width - 8; x += 8) {
-      const auto a = vld4_u8(top + x * 4);
-      const auto b = vld4_u8(bottom + x * 4);
-      luma8(y0 + x, a);
-      luma8(y1 + x, b);
-      const auto blue = box4(a.val[0], b.val[0]);
-      const auto green = box4(a.val[1], b.val[1]);
-      const auto red = box4(a.val[2], b.val[2]);
-      auto cb = vmlal_n_u16(vdupq_n_u32(128 * 16384 + 8192), blue, 7196);
-      cb = vmlsl_n_u16(vmlsl_n_u16(cb, red, 1649), green, 5547);
-      auto cr = vmlal_n_u16(vdupq_n_u32(128 * 16384 + 8192), red, 7196);
-      cr = vmlsl_n_u16(vmlsl_n_u16(cr, green, 6536), blue, 660);
-      const auto chroma = vqmovn_u16(vcombine_u16(vshrn_n_u32(cb, 14), vshrn_n_u32(cr, 14)));
-      // Four-byte stores avoid writing into the next chroma block or row padding.
-      uint8_t values[8];
-      vst1_u8(values, chroma);
-      for (int k = 0; k < 4; ++k) {
-        u0[x / 2 + k] = values[k];
-        v0[x / 2 + k] = values[k + 4];
-      }
+    if constexpr (!argb) for (; x <= width - 16; x += 16) {
+      const auto a = vld4q_u8(top + x * 4);
+      const auto b = vld4q_u8(bottom + x * 4);
+      vst1q_u8(y0 + x, vcombine_u8(luma8(vget_low_u8(a.val[0]), vget_low_u8(a.val[1]), vget_low_u8(a.val[2])),
+                                   luma8(vget_high_u8(a.val[0]), vget_high_u8(a.val[1]), vget_high_u8(a.val[2]))));
+      vst1q_u8(y1 + x, vcombine_u8(luma8(vget_low_u8(b.val[0]), vget_low_u8(b.val[1]), vget_low_u8(b.val[2])),
+                                   luma8(vget_high_u8(b.val[0]), vget_high_u8(b.val[1]), vget_high_u8(b.val[2]))));
+      const auto blue = box8(a.val[0], b.val[0]);
+      const auto green = box8(a.val[1], b.val[1]);
+      const auto red = box8(a.val[2], b.val[2]);
+      const auto bias = vdupq_n_u16(128 * 256 + 128);
+      auto cb = vmlal_u8(bias, blue, vdup_n_u8(112));
+      cb = vmlsl_u8(vmlsl_u8(cb, red, vdup_n_u8(26)), green, vdup_n_u8(86));
+      auto cr = vmlal_u8(bias, red, vdup_n_u8(112));
+      cr = vmlsl_u8(vmlsl_u8(cr, green, vdup_n_u8(102)), blue, vdup_n_u8(10));
+      vst1_u8(u0 + x / 2, vshrn_n_u16(cb, 8));
+      vst1_u8(v0 + x / 2, vshrn_n_u16(cr, 8));
     }
 #endif
     for (; x < width; x += 2) {
       const auto* a = top + x * 4;
       const auto* b = bottom + x * 4;
-      y0[x] = luma(a[0], a[1], a[2]);
-      y0[x + 1] = luma(a[4], a[5], a[6]);
-      y1[x] = luma(b[0], b[1], b[2]);
-      y1[x + 1] = luma(b[4], b[5], b[6]);
-      const int blue = (a[0] + a[4] + b[0] + b[4] + 2) / 4;
-      const int green = (a[1] + a[5] + b[1] + b[5] + 2) / 4;
-      const int red = (a[2] + a[6] + b[2] + b[6] + 2) / 4;
+      constexpr int blueOffset = argb ? 3 : 0;
+      constexpr int greenOffset = argb ? 2 : 1;
+      constexpr int redOffset = argb ? 1 : 2;
+      y0[x] = luma(a[blueOffset], a[greenOffset], a[redOffset]);
+      y0[x + 1] = luma(a[4 + blueOffset], a[4 + greenOffset], a[4 + redOffset]);
+      y1[x] = luma(b[blueOffset], b[greenOffset], b[redOffset]);
+      y1[x + 1] = luma(b[4 + blueOffset], b[4 + greenOffset], b[4 + redOffset]);
+      const int blue = (a[blueOffset] + a[4 + blueOffset] + b[blueOffset] + b[4 + blueOffset] + 2) / 4;
+      const int green = (a[greenOffset] + a[4 + greenOffset] + b[greenOffset] + b[4 + greenOffset] + 2) / 4;
+      const int red = (a[redOffset] + a[4 + redOffset] + b[redOffset] + b[4 + redOffset] + 2) / 4;
       u0[x / 2] = blueChroma(blue, green, red);
       v0[x / 2] = redChroma(blue, green, red);
     }
   }
   return true;
+}
+bool bgraToYuv420(const uint8_t* source, int sourceStride,
+                  uint8_t* y, int yStride, uint8_t* u, int uStride,
+                  uint8_t* v, int vStride, int width, int height) {
+  return convertToYuv420<false>(source, sourceStride, y, yStride, u, uStride, v, vStride, width, height);
+}
+bool argbToYuv420(const uint8_t* source, int sourceStride,
+                  uint8_t* y, int yStride, uint8_t* u, int uStride,
+                  uint8_t* v, int vStride, int width, int height) {
+  return convertToYuv420<true>(source, sourceStride, y, yStride, u, uStride, v, vStride, width, height);
 }
 }  // namespace nsl

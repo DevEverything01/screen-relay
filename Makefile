@@ -4,8 +4,8 @@ BACKEND_PKGS_x11 = x11 xext xdamage xfixes xtst
 ifeq ($(BACKEND_PKGS_$(BACKEND)),)
 $(error Unknown BACKEND '$(BACKEND)'; available: x11)
 endif
-CODEC_PKGS = libavcodec libavutil libswscale
-PKGS = $(BACKEND_PKGS_$(BACKEND)) $(CODEC_PKGS) libwebsockets
+CODEC_PKGS = x264
+PKGS = $(BACKEND_PKGS_$(BACKEND)) $(CODEC_PKGS) libwebsockets zlib
 CPPFLAGS += -Isrc $(shell pkg-config --cflags $(PKGS))
 CXXFLAGS ?= -O2
 CXXFLAGS += -std=c++17 -Wall -Wextra -Wpedantic -pthread
@@ -45,7 +45,7 @@ test-flow: build/flow-test
 
 build/backend-source-test: tests/unit/backend-source-test.cpp $(CORE_SRCS) $(wildcard src/core/*.hpp)
 	mkdir -p build
-	$(CXX) -Isrc $(CXXFLAGS) tests/unit/backend-source-test.cpp $(CORE_SRCS) -o $@ $(shell pkg-config --cflags --libs $(CODEC_PKGS))
+	$(CXX) -Isrc $(CXXFLAGS) tests/unit/backend-source-test.cpp $(CORE_SRCS) -o $@ $(shell pkg-config --cflags --libs $(CODEC_PKGS) libavcodec libavutil libswscale)
 
 test-backend: build/backend-source-test
 	./build/backend-source-test

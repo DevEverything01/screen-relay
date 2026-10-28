@@ -5,6 +5,7 @@ COPY . /opt/native-stream-src
 RUN apt-get update \
     && apt-get install -y --no-install-recommends tini \
     && /opt/native-stream-src/install.sh --prefix /usr/local \
+    && apt-get install -y --no-install-recommends libavcodec-dev libavutil-dev libswscale-dev \
     && make -C /opt/native-stream-src test clean \
     && rm -rf /opt/native-stream-src /var/lib/apt/lists/* \
     && useradd --create-home --shell /bin/bash stream \
