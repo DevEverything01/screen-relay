@@ -1,7 +1,7 @@
 #include "core/capture.hpp"
 #include "core/flow.hpp"
 #include "core/input.hpp"
-#include "snapshot.hpp"
+#include "screenshot.hpp"
 #include "core/capture-source.hpp"
 #include <libwebsockets.h>
 #include <array>
@@ -100,14 +100,14 @@ struct HttpResponse {
   size_t length, input_length, input_expected;
   std::vector<uint8_t>* image;
   size_t offset;
-  bool image_headers, snapshot_error, control;
+  bool image_headers, screenshot_error, control;
 };
 struct Server {
   lws_context* context = nullptr;
   lws* viewer = nullptr;
   std::unique_ptr<nsl::InputBackend> input;
-  nsl::Snapshot snapshot;
-  lws* snapshot_client = nullptr;
+  nsl::Screenshot screenshot;
+  lws* screenshot_client = nullptr;
   bool controller = false, control_ready = false;
   std::deque<std::pair<uint32_t, nsl::InputStatus>> replies;
   std::mutex mutex;
@@ -291,12 +291,12 @@ int jsonResponse(lws* wsi, HttpResponse* response, unsigned status, const std::s
 int errorResponse(lws* wsi, HttpResponse* response, unsigned status, const char* error) {
   return jsonResponse(wsi, response, status, "{\"error\":\"" + std::string(error) + "\"}");
 }
-void closeSnapshot(Server* server, lws* wsi, HttpResponse* response) {
-  if (server->snapshot_client == wsi) {
-    server->snapshot_client = nullptr;
+void closeScreenshot(Server* server, lws* wsi, HttpResponse* response) {
+  if (server->screenshot_client == wsi) {
+    server->screenshot_client = nullptr;
     lws_set_timer_usecs(wsi, LWS_SET_TIMER_USEC_CANCEL);
     // During capture the slot stays busy until its worker result is safely discarded.
-    if (response && response->image) server->snapshot.finish();
+    if (response && response->image) server->screenshot.finish();
   }
   if (response) { delete response->image; response->image = nullptr; response->offset = 0; }
 }
@@ -398,24 +398,24 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
         if (s->viewer) return errorResponse(wsi, response, HTTP_STATUS_CONFLICT, "busy");
         response->input_length = 0; response->input_expected = length; return 0;
       }
-      if (path == "/metrics" || path == "/capabilities" || path == "/snapshot.png") {
+      if (path == "/metrics" || path == "/capabilities" || path == "/screenshot.png") {
         if (lws_hdr_total_length(wsi, WSI_TOKEN_GET_URI) <= 0) {
           return errorResponse(wsi, response, HTTP_STATUS_METHOD_NOT_ALLOWED, "method_not_allowed");
         }
         if (!localRequest(wsi)) return errorResponse(wsi, response, HTTP_STATUS_FORBIDDEN, "forbidden");
         if (!authenticated(wsi)) return errorResponse(wsi, response, HTTP_STATUS_UNAUTHORIZED, "unauthorized");
         if (path == "/metrics") return metricsResponse(wsi, response, s);
-        if (path == "/snapshot.png") {
-          if (s->snapshot_client || !s->snapshot.request()) {
+        if (path == "/screenshot.png") {
+          if (s->screenshot_client || !s->screenshot.request()) {
             return errorResponse(wsi, response, HTTP_STATUS_SERVICE_UNAVAILABLE, "busy");
           }
-          s->snapshot_client = wsi; response->image_headers = false; response->offset = 0;
+          s->screenshot_client = wsi; response->image_headers = false; response->offset = 0;
           lws_set_timer_usecs(wsi, 5000000); return 0;
         }
         const std::string json = "{\"version\":1,\"backend\":\"" + std::string(s->input->name()) +
             "\",\"width\":" + std::to_string(s->width) + ",\"height\":" + std::to_string(s->height) +
             ",\"input\":{\"keyboard\":true,\"pointer\":true,\"buttons\":true,\"wheel\":true}," +
-            "\"snapshot\":\"/snapshot.png\",\"control\":\"/control\",\"wayland\":false," +
+            "\"screenshot\":\"/screenshot.png\",\"control\":\"/control\",\"wayland\":false," +
             "\"max_input_pending\":32,\"cursor\":" + (s->capture.stats().cursor_supported ? "true" : "false") +
             ",\"input_endpoint\":\"/input\",\"max_input_batch\":" + std::to_string(max_input_batch) +
             ",\"audio\":false,\"clipboard\":false,\"resize\":false,\"ime\":false}";
@@ -433,8 +433,8 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
       if (response->image) {
         if (!response->image_headers) {
           response->image_headers = true;
-          return responseHeaders(wsi, response->snapshot_error ? HTTP_STATUS_SERVICE_UNAVAILABLE : HTTP_STATUS_OK,
-                                 response->snapshot_error ? "application/json" : "image/png", response->image->size());
+          return responseHeaders(wsi, response->screenshot_error ? HTTP_STATUS_SERVICE_UNAVAILABLE : HTTP_STATUS_OK,
+                                 response->screenshot_error ? "application/json" : "image/png", response->image->size());
         }
         unsigned char chunk[LWS_PRE + 16384];
         const size_t count = std::min<size_t>(16384, response->image->size() - response->offset);
@@ -443,7 +443,7 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
         if (lws_write(wsi, chunk+LWS_PRE, count, final ? LWS_WRITE_HTTP_FINAL : LWS_WRITE_HTTP) != int(count)) return -1;
         response->offset += count;
         if (!final) { lws_callback_on_writable(wsi); return 0; }
-        closeSnapshot(s, wsi, response); return lws_http_transaction_completed(wsi);
+        closeScreenshot(s, wsi, response); return lws_http_transaction_completed(wsi);
       }
       if (!response->length) return 0;
       unsigned char buffer[LWS_PRE+2048];
@@ -464,7 +464,7 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
       auto* response = static_cast<HttpResponse*>(user);
       return response && response->input_expected ? inputResponse(wsi, response, s) : 0;
     }
-    case LWS_CALLBACK_CLOSED_HTTP: closeSnapshot(s, wsi, static_cast<HttpResponse*>(user)); return 0;
+    case LWS_CALLBACK_CLOSED_HTTP: closeScreenshot(s, wsi, static_cast<HttpResponse*>(user)); return 0;
     case LWS_CALLBACK_HTTP_FILE_COMPLETION: return lws_http_transaction_completed(wsi);
     case LWS_CALLBACK_FILTER_PROTOCOL_CONNECTION: {
       char uri[256] = {};
@@ -499,23 +499,23 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
     case LWS_CALLBACK_EVENT_WAIT_CANCELLED: {
       if (s->viewer) lws_callback_on_writable(s->viewer);
       std::vector<uint8_t> image; std::string error;
-      if (s->snapshot.take(image, error)) {
-        if (!s->snapshot_client) { s->snapshot.finish(); return 0; }
-        auto* response = static_cast<HttpResponse*>(lws_wsi_user(s->snapshot_client));
-        if (!response) { s->snapshot_client = nullptr; s->snapshot.finish(); return 0; }
-        response->snapshot_error = !error.empty();
+      if (s->screenshot.take(image, error)) {
+        if (!s->screenshot_client) { s->screenshot.finish(); return 0; }
+        auto* response = static_cast<HttpResponse*>(lws_wsi_user(s->screenshot_client));
+        if (!response) { s->screenshot_client = nullptr; s->screenshot.finish(); return 0; }
+        response->screenshot_error = !error.empty();
         if (!error.empty()) {
-          std::cerr << "Snapshot failed: " << error << '\n';
-          const std::string body = "{\"error\":\"snapshot_unavailable\"}";
+          std::cerr << "Screenshot failed: " << error << '\n';
+          const std::string body = "{\"error\":\"screenshot_unavailable\"}";
           image.assign(body.begin(), body.end());
         }
         response->image = new std::vector<uint8_t>(std::move(image));
-        lws_callback_on_writable(s->snapshot_client);
+        lws_callback_on_writable(s->screenshot_client);
       }
       return 0;
     }
     case LWS_CALLBACK_TIMER:
-      if (s->snapshot_client == wsi) { closeSnapshot(s, wsi, static_cast<HttpResponse*>(user)); return -1; }
+      if (s->screenshot_client == wsi) { closeScreenshot(s, wsi, static_cast<HttpResponse*>(user)); return -1; }
       if (s->viewer != wsi) return -1;
       if (s->timedOut()) {
         std::cerr << "Viewer flow failure, 3s frame age, or no ACK progress for 3s\n"; s->end(); return -1;
@@ -627,7 +627,7 @@ int main(int argc, char** argv) {
   info.uid=-1; info.gid=-1;
   s.context=lws_create_context(&info);
   if (!s.context) { std::cerr << "Cannot listen on " << config.bind << ':' << config.port << '\n'; s.capture.stop(); return 1; }
-  s.snapshot.start(s.context);
+  s.screenshot.start(s.context);
   heartbeatContext=s.context;
   lws_sul_schedule(s.context, 0, &heartbeat, heartbeatTick, 100000);
   int result = 0;
@@ -644,7 +644,7 @@ int main(int argc, char** argv) {
       result = 1; break;
     }
   }
-  s.end(); s.capture.stop(); s.snapshot.stop();
+  s.end(); s.capture.stop(); s.screenshot.stop();
   const auto stats=s.capture.stats();
   std::cerr << "capture_stats captures=" << stats.captures << " encoded=" << stats.encoded
             << " capture_ns=" << stats.capture_ns << " convert_ns=" << stats.convert_ns << " encode_ns=" << stats.encode_ns << '\n';

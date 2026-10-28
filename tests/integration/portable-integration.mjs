@@ -8,7 +8,7 @@ import {connect as connectTCP} from 'node:net';
 import {once} from 'node:events';
 import {chromium} from 'playwright';
 import {PNG} from 'pngjs';
-import {capabilities, connect, snapshot, status} from '../../sdk/index.js';
+import {capabilities, connect, screenshot, status} from '../../sdk/index.js';
 
 // Run only against a disposable, explicitly selected SSH target.
 const target = process.env.TEST_SSH_TARGET;
@@ -114,7 +114,7 @@ print(json.dumps({'kernel':platform.release(),'machine':platform.machine(),'osRe
     const discovery=await poll(()=>capabilities({url:url(0)}));
     assert.equal(discovery.backend,'x11');
     assert.deepEqual([discovery.width,discovery.height],[1280,720]);
-    await poll(()=>snapshot({url:url(1)}));
+    await poll(()=>screenshot({url:url(1)}));
     const desktop=await poll(()=>remote(`import pathlib,sys
 for p in pathlib.Path('/proc').glob('[0-9]*'):
  try:
@@ -133,16 +133,16 @@ print(json.dumps({'code':p.returncode,'stdout':p.stdout,'stderr':p.stderr}))`,St
     const {error}=JSON.parse(result.stderr.trim().split('\n').at(-1));
     assert.equal(error.component,'engine');
     await poll(()=>activePids({xauthority:error.logs+'/Xauthority'}),p=>p.length===0);
-    await snapshot({url:url(0)});
+    await screenshot({url:url(0)});
     return {exitCode:result.code,cleanupVerified:true};
   });
   await check('direct engine attaches to an existing display and leaves it alive on exit',async()=>{
     const attached=attach(first,remotePort+3);
     await poll(()=>capabilities({url:url(3)}));
-    assert.equal((await snapshot({url:url(3)})).subarray(1,4).toString(),'PNG');
+    assert.equal((await screenshot({url:url(3)})).subarray(1,4).toString(),'PNG');
     terminate(attached.pid);
     await poll(()=>read(attached.log),text=>text.includes('capture_stats'));
-    await snapshot({url:url(0)});
+    await screenshot({url:url(0)});
     return {attachedPid:attached.pid,existingDisplayStillCapturable:true};
   });
 
@@ -155,8 +155,8 @@ print(json.dumps({'pid':p.pid}))`,JSON.stringify(first),remoteRoot,fixtureState)
   processes.push(fixture);
   const state=()=>JSON.parse(read(fixtureState));
   await poll(state,s=>s.pid);
-  await check('SDK snapshot and input reach a real X11 application outside Docker',async()=>{
-    const before=pixel(await snapshot({url:url(0)}),[32,176,96]);
+  await check('SDK screenshot and input reach a real X11 application outside Docker',async()=>{
+    const before=pixel(await screenshot({url:url(0)}),[32,176,96]);
     controller=await connect({url:url(0)});
     await controller.input({type:'buttonDown',button:1,x:200/1279,y:130/719});
     await controller.input({type:'buttonUp',button:1,x:200/1279,y:130/719});
@@ -168,7 +168,7 @@ print(json.dumps({'pid':p.pid}))`,JSON.stringify(first),remoteRoot,fixtureState)
     await poll(state,s=>!s.shift);
     remote('import os,signal,sys; os.kill(int(sys.argv[1]),signal.SIGUSR1)',String(fixture.pid));
     await poll(state,s=>s.changed);
-    const after=await poll(async()=>pixel(await snapshot({url:url(0)}),[192,48,176]));
+    const after=await poll(async()=>pixel(await screenshot({url:url(0)}),[192,48,176]));
     return {before,after,entry:state().entry,heldKeyReleased:true};
   });
   browser=await chromium.launch({channel:'chrome',headless:true});
@@ -215,7 +215,7 @@ print(json.dumps({'cert':str(cert),'key':str(key),'tokenFile':str(token),'spki':
     writeFileSync(certPath,read(tls.cert));
     tls.token=read(tls.tokenFile).trim(); tls.url=remoteURL;
     const code=`import assert from 'node:assert/strict';
-import {capabilities,connect,snapshot} from ${JSON.stringify(new URL('../../sdk/index.js',import.meta.url).href)};
+import {capabilities,connect,screenshot} from ${JSON.stringify(new URL('../../sdk/index.js',import.meta.url).href)};
 let input=''; for await(const chunk of process.stdin) input+=chunk;
 const {url,token}=JSON.parse(input);
 await assert.rejects(capabilities({url}),{code:'UNAUTHORIZED'});
@@ -228,8 +228,8 @@ const caps=await session.capabilities(); assert.equal(caps.backend,'x11');
 await session.input({type:'buttonDown',button:1,x:200/1279,y:130/719});
 await session.input({type:'buttonUp',button:1,x:200/1279,y:130/719});
 await session.input({type:'keyDown',key:6}); await session.input({type:'keyUp',key:6});
-const bytes=await session.snapshot(); assert.equal(bytes.subarray(1,4).toString(),'PNG');
-session.close(); console.log(JSON.stringify({authenticated:true,wss:true,missingAndWrongTokenRejected:true,foreignOriginRejected:true,snapshotBytes:bytes.length}));`;
+const bytes=await session.screenshot(); assert.equal(bytes.subarray(1,4).toString(),'PNG');
+session.close(); console.log(JSON.stringify({authenticated:true,wss:true,missingAndWrongTokenRejected:true,foreignOriginRejected:true,screenshotBytes:bytes.length}));`;
     const result=JSON.parse(execFileSync(process.execPath,['--input-type=module','-e',code],{
       input:JSON.stringify({url:remoteURL,token:tls.token}),encoding:'utf8',timeout:20000,
       env:{...process.env,NODE_EXTRA_CA_CERTS:certPath}}));
@@ -274,7 +274,7 @@ session.close(); console.log(JSON.stringify({authenticated:true,wss:true,missing
       await page.locator('#access-token').fill(tls.token); await page.locator('#reconnect').click();
       await page.waitForFunction(()=>nativeStats.drawn>0);
       const result=await page.evaluate(async token=>{
-        const response=await fetch('/snapshot.png',{headers:{Authorization:'Bearer '+token}});
+        const response=await fetch('/screenshot.png',{headers:{Authorization:'Bearer '+token}});
         return {status:response.status,type:response.headers.get('content-type'),bytes:(await response.arrayBuffer()).byteLength,drawn:nativeStats.drawn};
       },tls.token);
       assert.equal(result.status,200); assert.match(result.type,/image\/png/); assert(result.bytes>100);
@@ -289,7 +289,7 @@ session.close(); console.log(JSON.stringify({authenticated:true,wss:true,missing
   await check('stopping one managed display leaves the other session running',async()=>{
     down(second);
     await poll(()=>activePids(second),p=>p.length===0);
-    pixel(await snapshot({url:url(0)}),[192,48,176]);
+    pixel(await screenshot({url:url(0)}),[192,48,176]);
     return {stoppedDisplay:second.display,survivingDisplay:first.display};
   });
   report.passed=true;

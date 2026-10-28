@@ -16,7 +16,7 @@ browser or agent input -> InputBackend (XTest)
 | Path | Contents |
 | --- | --- |
 | `src/core/` | Backend-neutral pipeline: `CaptureSource`, `InputBackend`, encoder, color conversion, flow control |
-| `src/server/` | HTTP and WebSocket transport (libwebsockets), snapshots, entry point |
+| `src/server/` | HTTP and WebSocket transport (libwebsockets), screenshots, entry point |
 | `src/backends/x11/` | X11 capture (XDamage, MIT-SHM, XFixes cursor) and XTest input |
 | `viewer/` | Browser decoder, renderer, cursor overlay, human input |
 | `sdk/` | Node client library |
@@ -34,7 +34,7 @@ browser or agent input -> InputBackend (XTest)
 
 - The service thread owns libwebsockets, the `InputBackend`, flow-control state and all socket writes.
 - The capture worker owns its `CaptureSource`, a reusable YUV frame and the x264 encoder. It publishes owning `EncodedFrame` vectors to a bounded queue and wakes the service thread with `lws_cancel_service`.
-- A separate snapshot worker owns its own `CaptureSource`.
+- A separate screenshot worker owns its own `CaptureSource`.
 - Each X11 backend object owns its own X connection. Xlib threading is initialized once by `initializeNativeBackend()`.
 - Workers finish before the resources they use are destroyed.
 - A full queue fails the generation. It never drops an encoded reference frame.

@@ -24,7 +24,7 @@ relay up -d --public https://desktop.example.com
 
 The proxy must:
 
-- forward `/`, `/viewer.js`, `/stream`, `/control`, `/input`, `/snapshot.png`, `/capabilities`, `/metrics` with no path prefix
+- forward `/`, `/viewer.js`, `/stream`, `/control`, `/input`, `/screenshot.png`, `/capabilities`, `/metrics` with no path prefix
 - forward WebSocket upgrades over HTTP/1.1
 - keep the `Host`, `Origin` and `Authorization` headers and the WebSocket subprotocol header unchanged
 - not log `Authorization` or the subprotocol header (the token travels in both)
@@ -57,7 +57,7 @@ Install the CLI with `./install.sh --client-only`. Copy the token from the VM (`
 export RELAY_URL=https://desktop.example.com
 export RELAY_TOKEN_FILE=./token
 relay status
-relay snapshot screen.png
+relay screenshot screen.png
 ```
 
 Remote plain HTTP is refused. Redirects are not followed. Rules and flags: [CLI reference](cli.md#client-target).

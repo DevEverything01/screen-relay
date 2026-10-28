@@ -45,7 +45,7 @@ To run as root, add `--user root`. State then lives in `/root/.local/state/relay
 Inside the container, client commands find the session on their own:
 
 ```sh
-docker exec desk relay snapshot - > screen.png
+docker exec desk relay screenshot - > screen.png
 docker exec desk relay click 0.5 0.5
 ```
 
@@ -56,7 +56,7 @@ docker exec desk sh -c 'cat ~/.local/state/relay/default/token' > token
 export RELAY_URL=http://127.0.0.1:8080
 export RELAY_TOKEN_FILE=$PWD/token
 relay status
-relay snapshot screen.png
+relay screenshot screen.png
 ```
 
 The host CLI can be installed with `./install.sh --client-only`. The token file is only read by the client, so its mode does not matter there. A new container generates a new token.

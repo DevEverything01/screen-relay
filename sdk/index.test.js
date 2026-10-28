@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
-import { capabilities, connect, snapshot } from './index.js';
+import { capabilities, connect, screenshot } from './index.js';
 
 function packet(type, generation, sequence, payload) {
   const b = Buffer.alloc(20 + payload.length);
@@ -114,35 +114,35 @@ test('JSON parse errors and body timeouts have stable codes', async () => {
   } finally { globalThis.fetch = original; }
 });
 
-test('HTTP error bodies distinguish snapshot contention from service failure', async () => {
+test('HTTP error bodies distinguish screenshot contention from service failure', async () => {
   const original = globalThis.fetch;
   try {
     globalThis.fetch = async () => new Response('{"error":"busy"}', { status: 503 });
     await assert.rejects(capabilities(), { code: 'BUSY' });
-    globalThis.fetch = async () => new Response('{"error":"snapshot_unavailable"}', { status: 503 });
+    globalThis.fetch = async () => new Response('{"error":"screenshot_unavailable"}', { status: 503 });
     await assert.rejects(capabilities(), { code: 'HTTP_ERROR' });
   } finally { globalThis.fetch = original; }
 });
 
-test('snapshot body failures and file failures have stable codes', async () => {
+test('screenshot body failures and file failures have stable codes', async () => {
   const originalSocket = globalThis.WebSocket, originalFetch = globalThis.fetch;
   globalThis.WebSocket = FakeSocket;
   try {
     const session = await connect();
     globalThis.fetch = async () => new Response(new ReadableStream({ pull(controller) { controller.error(new Error('broken body')); } }));
-    await assert.rejects(session.snapshot(), { code: 'NETWORK_ERROR' });
+    await assert.rejects(session.screenshot(), { code: 'NETWORK_ERROR' });
     globalThis.fetch = async () => new Response(new Uint8Array([1, 2, 3]));
-    await assert.rejects(session.snapshot('/nonexistent-directory/screen.png'), { code: 'IO_ERROR' });
+    await assert.rejects(session.screenshot('/nonexistent-directory/screen.png'), { code: 'IO_ERROR' });
     session.close();
   } finally { globalThis.WebSocket = originalSocket; globalThis.fetch = originalFetch; }
 });
 
-test('SDK snapshots do not open a control connection', async () => {
+test('SDK screenshots do not open a control connection', async () => {
   const original = globalThis.WebSocket, originalFetch = globalThis.fetch;
   globalThis.WebSocket = class { constructor() { throw new Error('Unexpected control connection'); } };
-  globalThis.fetch = async url => { assert.equal(url.pathname, '/snapshot.png'); return new Response(new Uint8Array([1, 2, 3])); };
+  globalThis.fetch = async url => { assert.equal(url.pathname, '/screenshot.png'); return new Response(new Uint8Array([1, 2, 3])); };
   try {
-    assert.deepEqual(await snapshot(), Buffer.from([1, 2, 3]));
+    assert.deepEqual(await screenshot(), Buffer.from([1, 2, 3]));
   } finally {
     globalThis.WebSocket = original; globalThis.fetch = originalFetch;
   }
@@ -162,7 +162,7 @@ test('remote credentials require HTTPS and are not forwarded through redirects',
   target.listen(0, '127.0.0.1'); await once(target, 'listening');
   const server = createServer((req, res) => {
     if (req.headers.authorization !== `Bearer ${token}`) { res.writeHead(401); res.end('{}'); }
-    else if (req.url === '/snapshot.png') { res.writeHead(302, { Location: `http://127.0.0.1:${target.address().port}/` }); res.end(); }
+    else if (req.url === '/screenshot.png') { res.writeHead(302, { Location: `http://127.0.0.1:${target.address().port}/` }); res.end(); }
     else { res.setHeader('Content-Type', 'application/json'); res.end('{"version":1}'); }
   });
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
@@ -170,7 +170,7 @@ test('remote credentials require HTTPS and are not forwarded through redirects',
   try {
     await assert.rejects(capabilities({ url }), { code: 'UNAUTHORIZED' });
     assert.deepEqual(await capabilities({ url, token }), { version: 1 });
-    await assert.rejects(snapshot({ url, token }), { code: 'NETWORK_ERROR' });
+    await assert.rejects(screenshot({ url, token }), { code: 'NETWORK_ERROR' });
     assert.equal(redirected, 0);
   } finally {
     server.closeAllConnections(); target.closeAllConnections();

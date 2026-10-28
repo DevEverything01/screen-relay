@@ -37,9 +37,9 @@ step 'status --json'
 set -- $(field "$work/status.json" display xauthority logs)
 display=$1 xauthority=$2 logs=$3
 
-step snapshot
-"$ns" snapshot --name "$name" --json "$work/screen.png" > "$work/snapshot.json" || fail snapshot
-[ "$(field "$work/snapshot.json" width height)" = '1280 720' ] || fail "snapshot is not 1280x720: $(cat "$work/snapshot.json")"
+step screenshot
+"$ns" screenshot --name "$name" --json "$work/screen.png" > "$work/screenshot.json" || fail screenshot
+[ "$(field "$work/screenshot.json" width height)" = '1280 720' ] || fail "screenshot is not 1280x720: $(cat "$work/screenshot.json")"
 
 step 'start xterm with mouse reporting'
 DISPLAY=$display XAUTHORITY=$xauthority xterm -T ns-smoke -geometry 60x8+200+150 \
@@ -61,7 +61,7 @@ sleep 1
 check='import sys; d=open(sys.argv[1],"rb").read(); sys.exit(0 if b"\x1b[M" in d and b"hello smoke\n" in d else 1)'
 for _ in $(seq 25); do python3 -c "$check" "$work/typed" && break; sleep 0.2; done
 python3 -c "$check" "$work/typed" || fail "xterm did not receive the click and text: $(od -c "$work/typed" | head -5)"
-"$ns" snapshot --name "$name" "$work/after.png" >/dev/null || fail 'snapshot after input'
+"$ns" screenshot --name "$name" "$work/after.png" >/dev/null || fail 'screenshot after input'
 
 step 'down (twice: must be idempotent)'
 "$ns" down --name "$name" || fail down

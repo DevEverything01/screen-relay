@@ -1,9 +1,9 @@
 // Compile-only consumer: this never connects to a desktop.
-import { connect, snapshot, capabilities, RelayError } from 'relay';
+import { connect, screenshot, capabilities, RelayError } from 'relay';
 
 const checkTypes = async () => {
   const desktop = await connect({ url: 'http://127.0.0.1:18094', timeout: 5000 });
-  const pixels: Uint8Array = await snapshot({ url: 'http://127.0.0.1:18094' });
+  const pixels: Uint8Array = await screenshot({ url: 'http://127.0.0.1:18094' });
   const width: number = (await capabilities()).width;
   await desktop.input({ type: 'pointerMove', x: 0.5, y: 0.5 });
   await desktop.input({ type: 'wheel', axis: 'vertical', delta: 120, x: 0, y: 1 });

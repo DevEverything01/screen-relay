@@ -10,7 +10,7 @@ Wire format and HTTP API of the engine. All integers are unsigned big-endian unl
 | `WS /stream` | Video, cursor and human input. Subprotocol `nsl1`. |
 | `WS /control` | Agent input. Subprotocol `nsl1`. Exclusive with `/stream`. |
 | `POST /input` | Batch of input records over HTTP |
-| `GET /snapshot.png` | Fresh native PNG |
+| `GET /screenshot.png` | Fresh native PNG |
 | `GET /capabilities` | Backend, dimensions, features |
 | `GET /metrics` | Transport and cgroup metrics (JSON) |
 
@@ -109,11 +109,11 @@ Body: 1 to 256 type-3 records, 16 bytes each, same encoding as the `/control` pa
 
 Records are applied in order and stop at the first failure. The request holds the control slot only while it is applied. Held keys and buttons are released when the batch ends or fails. The server never retries.
 
-## GET /snapshot.png
+## GET /screenshot.png
 
 Fresh native PNG, independent of who owns control. Works with a viewer connected. The cursor overlay is not included.
 
-- One snapshot at a time. A busy request gets HTTP 503 with a JSON error.
+- One screenshot at a time. A busy request gets HTTP 503 with a JSON error.
 - 5 s response timer. At most 8 MiB, written in chunks.
 - Errors complete the HTTP transaction so the connection can be reused.
 
@@ -122,7 +122,7 @@ Fresh native PNG, independent of who owns control. Works with a viewer connected
 JSON. Real output:
 
 ```json
-{"version":1,"backend":"x11","width":1280,"height":720,"input":{"keyboard":true,"pointer":true,"buttons":true,"wheel":true},"snapshot":"/snapshot.png","control":"/control","wayland":false,"max_input_pending":32,"cursor":true,"input_endpoint":"/input","max_input_batch":256,"audio":false,"clipboard":false,"resize":false,"ime":false}
+{"version":1,"backend":"x11","width":1280,"height":720,"input":{"keyboard":true,"pointer":true,"buttons":true,"wheel":true},"screenshot":"/screenshot.png","control":"/control","wayland":false,"max_input_pending":32,"cursor":true,"input_endpoint":"/input","max_input_batch":256,"audio":false,"clipboard":false,"resize":false,"ime":false}
 ```
 
 `cursor` says whether `/stream` sends cursor images. `max_input_batch` is the `POST /input` record limit.
