@@ -133,7 +133,10 @@ struct CaptureEncoder::Impl {
       std::vector<DamageRect> rects;
       unsigned consecutive_failures = 0;
       const auto frame_interval = std::chrono::nanoseconds(16666667);
+      const auto refinement_delay = std::chrono::milliseconds(150);
       auto deadline = Clock::now();
+      auto last_publish = deadline;
+      bool last_was_refinement = true;
       while (true) {
         if (source->drainDamage()) dirty = true;
         uint32_t gen, seq;
@@ -162,22 +165,30 @@ struct CaptureEncoder::Impl {
           }
         }
         const auto now = Clock::now();
-        if (admitted && dirty && now >= deadline) {
+        const bool refinement_pending = !dirty && !last_was_refinement;
+        const auto encode_deadline = refinement_pending
+            ? std::max(deadline, last_publish + refinement_delay) : deadline;
+        if (admitted && (dirty || refinement_pending) && now >= encode_deadline) {
+          const bool refinement = !dirty;
           const auto capture_start = Clock::now();
           try {
+            assert(!refinement || (!force_idr && last_pts >= 0));
             dirty = false;
-            const FrameView view = source->capture();
-            const auto captured = Clock::now();
-            require(view.data && view.width == 1280 && view.height == 720 &&
-                    view.stride >= 1280 * 4 && view.stride <= 1280 * 8 &&
-                    view.format == r.format, "invalid capture frame");
-            const auto convert = view.format == PixelFormat::BGRA ? bgraToYuv420 : argbToYuv420;
-            require(convert(view.data, view.stride,
-                            r.frame.img.plane[0], r.frame.img.i_stride[0],
-                            r.frame.img.plane[1], r.frame.img.i_stride[1],
-                            r.frame.img.plane[2], r.frame.img.i_stride[2], 1280, 720),
-                    "RGB conversion failed");
-            const auto converted = Clock::now();
+            auto captured = capture_start, converted = capture_start;
+            if (!refinement) {
+              const FrameView view = source->capture();
+              captured = Clock::now();
+              require(view.data && view.width == 1280 && view.height == 720 &&
+                      view.stride >= 1280 * 4 && view.stride <= 1280 * 8 &&
+                      view.format == r.format, "invalid capture frame");
+              const auto convert = view.format == PixelFormat::BGRA ? bgraToYuv420 : argbToYuv420;
+              require(convert(view.data, view.stride,
+                              r.frame.img.plane[0], r.frame.img.i_stride[0],
+                              r.frame.img.plane[1], r.frame.img.i_stride[1],
+                              r.frame.img.plane[2], r.frame.img.i_stride[2], 1280, 720),
+                      "RGB conversion failed");
+              converted = Clock::now();
+            }
             const int64_t timestamp = std::chrono::duration_cast<std::chrono::microseconds>(capture_start.time_since_epoch()).count();
             r.frame.i_pts = last_pts = std::max(last_pts + 1, timestamp);
             if (rate != r.bitrate) {
@@ -190,7 +201,7 @@ struct CaptureEncoder::Impl {
             }
             r.frame.i_type = force_idr ? X264_TYPE_IDR : X264_TYPE_AUTO;
             r.frame.prop.mb_info = nullptr; r.frame.prop.mb_info_free = nullptr;
-            if (!force_idr && source->changedRects(rects)) {
+            if (!refinement && !force_idr && source->changedRects(rects)) {
               std::fill(r.mb_info.begin(), r.mb_info.end(), uint8_t(X264_MBINFO_CONSTANT));
               for (const DamageRect& d : rects) {
                 const int x0 = std::max(d.x, 0) / 16, y0 = std::max(d.y, 0) / 16;
@@ -220,7 +231,8 @@ struct CaptureEncoder::Impl {
             bool current;
             {
               std::lock_guard<std::mutex> lock(mutex);
-              ++counters.captures; ++counters.encoded;
+              if (!refinement) ++counters.captures;
+              ++counters.encoded;
               counters.capture_ns += ns(captured - capture_start);
               counters.convert_ns += ns(converted - captured);
               counters.encode_ns += ns(encoded - converted);
@@ -235,6 +247,8 @@ struct CaptureEncoder::Impl {
                 dirty = true; force_idr = true;
               } else {
                 force_idr = false;
+                last_publish = Clock::now();
+                last_was_refinement = refinement;
               }
             } else {
               dirty = true;
@@ -260,9 +274,9 @@ struct CaptureEncoder::Impl {
         if (cursor_published) continue;
         timespec timeout{};
         const timespec* timeout_ptr = nullptr;
-        if (admitted && dirty) {
+        if (admitted && (dirty || refinement_pending)) {
           const auto remaining = std::chrono::duration_cast<std::chrono::nanoseconds>(
-              deadline - Clock::now()).count();
+              encode_deadline - Clock::now()).count();
           timeout = pollTimeout(std::max<int64_t>(0, remaining));
           timeout_ptr = &timeout;
         }
