@@ -4,7 +4,7 @@ import {mkdirSync, writeFileSync} from 'node:fs';
 import {request} from 'node:http';
 import {fileURLToPath} from 'node:url';
 import {chromium} from 'playwright';
-import {connect, capabilities, snapshot} from '../../sdk/index.js';
+import {connect, capabilities, screenshot} from '../../sdk/index.js';
 import {session} from './session.mjs';
 
 const container = process.env.TEST_CONTAINER;
@@ -44,9 +44,9 @@ async function http(path, headers={}) {
     req.on('error',reject); req.end();
   });
 }
-async function snapshotPixel(expected, bytes, decodePage) {
+async function screenshotPixel(expected, bytes, decodePage) {
   if (!bytes) {
-    const response=await http('/snapshot.png');
+    const response=await http('/screenshot.png');
     assert.equal(response.status,200);
     assert.match(response.headers['content-type'],/^image\/png/);
     bytes=response.bytes;
@@ -106,13 +106,13 @@ try {
     const discovery=await capabilities({url,token});
     assert.equal(discovery.version,1); assert.equal(discovery.backend,'x11');
     assert.equal(discovery.width,1280); assert.equal(discovery.height,720);
-    assert.equal(discovery.snapshot,'/snapshot.png'); assert.equal(discovery.control,'/control');
+    assert.equal(discovery.screenshot,'/screenshot.png'); assert.equal(discovery.control,'/control');
     assert.deepEqual(discovery.input,{keyboard:true,pointer:true,buttons:true,wheel:true});
     assert.equal(discovery.wayland,false);
-    const before=await snapshotPixel([32,176,96]);
+    const before=await screenshotPixel([32,176,96]);
     docker('exec',container,'kill','-USR1',String(fixturePID));
     await poll(state,s=>s.changed);
-    const after=await poll(()=>snapshotPixel([192,48,176]),Boolean);
+    const after=await poll(()=>screenshotPixel([192,48,176]),Boolean);
     return {discovery,before,after};
   });
   await check('SDK acknowledged input reaches native application and disconnect releases controls',async()=>{
@@ -142,13 +142,13 @@ try {
   });
   await check('Host and Origin validation reject HTTP access',async()=>{
     const badHost=await http('/capabilities',{Host:'untrusted.invalid'});
-    const badOrigin=await http('/snapshot.png',{Origin:'https://untrusted.invalid'});
+    const badOrigin=await http('/screenshot.png',{Origin:'https://untrusted.invalid'});
     const longOrigin=await http('/capabilities',{Origin:'https://'+('a'.repeat(256))+'.invalid'});
     assert.equal(badHost.status,403); assert.equal(badOrigin.status,403);
     assert.equal(longOrigin.status,403);
     return {host:badHost.status,origin:badOrigin.status,longOrigin:longOrigin.status};
   });
-  await check('concurrent snapshots stay bounded and live viewer continues decoding',async()=>{
+  await check('concurrent screenshots stay bounded and live viewer continues decoding',async()=>{
     const viewer=await browser.newPage(); await viewer.goto(viewerURL);
     await viewer.waitForFunction(()=>window.nativeStats?.drawn>0);
     await assert.rejects(connect({url,token,timeout:2000}));
@@ -157,10 +157,10 @@ try {
     try {
       await viewer.locator('#screen').focus(); await viewer.keyboard.down('Shift');
       await poll(state,s=>s.shift);
-      const sdkPixel=await snapshotPixel([192,48,176],await snapshot({url,token}),viewer);
-      assert(state().shift,'SDK snapshot disrupted the viewer control session');
+      const sdkPixel=await screenshotPixel([192,48,176],await screenshot({url,token}),viewer);
+      assert(state().shift,'SDK screenshot disrupted the viewer control session');
       await viewer.keyboard.up('Shift'); await poll(state,s=>!s.shift);
-      const responses=await Promise.all(Array.from({length:12},()=>http('/snapshot.png')));
+      const responses=await Promise.all(Array.from({length:12},()=>http('/screenshot.png')));
       assert(responses.some(r=>r.status===200));
       for(const response of responses) assert([200,409,429,503].includes(response.status),String(response.status));
       await viewer.waitForFunction(previous=>nativeStats.drawn>previous+2&&nativeStats.decodeerrors===0,before);

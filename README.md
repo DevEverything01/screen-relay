@@ -40,7 +40,7 @@ See [Remote access](docs/remote-access.md) for what `--public` does, native TLS 
 ## Agent control
 
 ```sh
-relay snapshot screen.png
+relay screenshot screen.png
 relay click 0.5 0.5
 relay type "hello"
 relay key ctrl+l
@@ -56,12 +56,12 @@ Coordinates are 0 to 1. See the [CLI reference](docs/cli.md) and the [agent skil
 | --- | --- |
 | Display server | X11 only. Wayland is planned behind the same interfaces. |
 | Resolution | 1280x720, fixed. No resize. |
-| Control | One controller at a time: a browser viewer or one agent. Snapshots work any time. |
+| Control | One controller at a time: a browser viewer or one agent. Screenshots work any time. |
 | Not supported | Audio, clipboard, IME, relative pointer, hardware encoding |
 | Auth | One shared token per session. No multi-user identity. |
 | Install | `install.sh` supports apt (Debian/Ubuntu) only. |
 
-Experimental. The v1 CLI was verified in two places. On a fresh Vercel Sandbox (Ubuntu 26.04 x86_64): install, `up -d --public`, the viewer link, remote snapshot, click, type and key, `busy` while a viewer is open, `tests/smoke.sh` passing, and a clean `down`. In Docker (Debian trixie arm64), as non-root and as root. Earlier Ubuntu 24.04 ARM64 results came from the previous launcher. Not tested on other distributions, WAN links or long runs.
+Experimental. The v1 CLI was verified in two places. On a fresh Vercel Sandbox (Ubuntu 26.04 x86_64): install, `up -d --public`, the viewer link, remote screenshot, click, type and key, `busy` while a viewer is open, `tests/smoke.sh` passing, and a clean `down`. In Docker (Debian trixie arm64), as non-root and as root. Earlier Ubuntu 24.04 ARM64 results came from the previous launcher. Not tested on other distributions, WAN links or long runs.
 
 ## Docs
 

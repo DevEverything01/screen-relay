@@ -15,9 +15,9 @@
 
 namespace nsl {
 // One job/result globally. The worker owns its capture source and PNG codec.
-class Snapshot {
+class Screenshot {
  public:
-  ~Snapshot() { stop(); }
+  ~Screenshot() { stop(); }
   void start(lws_context* context) {
     worker_ = std::thread([this, context] { run(context); });
   }
@@ -51,7 +51,7 @@ class Snapshot {
     std::unique_ptr<CaptureSource> source;
     void init() {
       source = makeCaptureSource();
-      require(bool(source), "snapshot source unavailable");
+      require(bool(source), "screenshot source unavailable");
     }
     static void append32(std::vector<uint8_t>& bytes, uint32_t value) {
       bytes.push_back(value >> 24); bytes.push_back(value >> 16);
@@ -69,7 +69,7 @@ class Snapshot {
       const auto image = source->capture();
       require(image.data && image.width == 1280 && image.height == 720 && image.stride >= 5120 &&
               image.stride <= 10240 && (image.format == PixelFormat::BGRA || image.format == PixelFormat::ARGB),
-              "unsupported snapshot frame");
+              "unsupported screenshot frame");
       std::vector<uint8_t> pixels(720 * (1280 * 3 + 1));
       for (int y = 0; y < 720; ++y) {
         const auto* source = image.data + y * image.stride;

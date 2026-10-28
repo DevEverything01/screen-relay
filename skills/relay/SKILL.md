@@ -1,6 +1,6 @@
 ---
 name: relay
-description: Start a streamed Linux X11 desktop and control it with the relay CLI (snapshot, click, type, key). Use when an agent needs to see and operate a GUI on a Linux VM, sandbox or container.
+description: Start a streamed Linux X11 desktop and control it with the relay CLI (screenshot, click, type, key). Use when an agent needs to see and operate a GUI on a Linux VM, sandbox or container.
 ---
 
 # relay
@@ -25,7 +25,7 @@ In the Docker image the session is already running; prefix commands with `docker
 ## Operate
 
 ```sh
-relay snapshot screen.png
+relay screenshot screen.png
 relay click 0.5 0.5
 relay type "hello"
 relay key ctrl+l Enter
@@ -33,7 +33,7 @@ relay scroll 0.5 0.5 --dy 3
 ```
 
 - Coordinates are 0 to 1 from the top-left.
-- Take a snapshot, act, then take another to confirm. Success means the engine applied the input, not that the app reacted.
+- Take a screenshot, act, then take another to confirm. Success means the engine applied the input, not that the app reacted.
 - Add `--json` to parse output. Input commands print `{"applied": N}`.
 - `type` is US layout only: printable ASCII, newline, tab.
 - A long `type` is sent in batches of 256 events. If it fails partway, the error has `applied`; do not resend the whole text blindly.
@@ -56,7 +56,7 @@ With `--json`, errors are `{"error":{"code","message","hint"}}` on stderr, plus 
 | --- | --- |
 | `invalid_input` | Bad argument or usage, JSON, input event, key combo, unmappable character, port, session name, URL, `--public` origin, TLS or token file; also an event or batch the engine rejected (HTTP 400/413/422). |
 | `unauthorized` | Token missing or wrong (HTTP 401), or Host/Origin rejected (HTTP 403). |
-| `busy` | A viewer or SDK session holds control (HTTP 409), or a snapshot is already running (HTTP 503). Never retried. |
+| `busy` | A viewer or SDK session holds control (HTTP 409), or a screenshot is already running (HTTP 503). Never retried. |
 | `unreachable` | Cannot connect to the URL. |
 | `timeout` | No reply within `--timeout`, or `up` did not become ready in time (`component` and `log` set). |
 | `not_running` | No session or logs with that name. |

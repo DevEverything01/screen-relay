@@ -239,7 +239,7 @@ def http(where, path, timeout, body=None, binary=False):
             403: ('unauthorized', 'Rejected by the Host/Origin policy', 'Connect through a loopback address or the configured public URL.'),
             409: ('busy', 'A viewer or SDK session holds control', 'Close it and run the command again; input is never retried.'),
             413: ('invalid_input', 'Input batch too large', f'Send at most {MAX_BATCH} events per batch.'),
-            503: ('busy', 'Engine busy or snapshot unavailable', 'Try again in a moment.'),
+            503: ('busy', 'Engine busy or screenshot unavailable', 'Try again in a moment.'),
         }
         code, message, hint = known.get(error.code, ('internal', f'Engine returned HTTP {error.code}', ''))
         if 'index' in detail:
@@ -525,7 +525,7 @@ class Session:
         if not own:
             return False
         try:
-            return http(where, '/snapshot.png', 3, binary=True)[:8] == b'\x89PNG\r\n\x1a\n'
+            return http(where, '/screenshot.png', 3, binary=True)[:8] == b'\x89PNG\r\n\x1a\n'
         except Failure:
             return False
 
@@ -597,7 +597,7 @@ def ready_text(info, args):
 def require_linux():
     if not sys.platform.startswith('linux'):
         raise Failure('unsupported_platform', 'Host commands run on Linux only',
-                      'Run this on the Linux machine; client commands (status, snapshot, click, ...) work anywhere with --url.')
+                      'Run this on the Linux machine; client commands (status, screenshot, click, ...) work anywhere with --url.')
 
 
 def lock(name, directory):
@@ -970,8 +970,8 @@ def cmd_doctor(args):
     return 1 if failed else 0
 
 
-def cmd_snapshot(args):
-    data = http(target(args), '/snapshot.png', args.timeout, binary=True)
+def cmd_screenshot(args):
+    data = http(target(args), '/screenshot.png', args.timeout, binary=True)
     if data[:8] != b'\x89PNG\r\n\x1a\n' or len(data) < 24:
         raise Failure('internal', 'Engine did not return a PNG')
     width, height = struct.unpack('>II', data[16:24])
@@ -1085,8 +1085,8 @@ def parser():
     add('doctor', cmd_doctor, 'check this machine and print fix commands', [common])
     run = add('run', cmd_run, 'start an app on the session desktop (output: logs apps)', [common, named])
     run.add_argument('app', nargs=argparse.REMAINDER, metavar='-- APP [ARGS...]')
-    snapshot = add('snapshot', cmd_snapshot, 'save a PNG of the screen', [client])
-    snapshot.add_argument('file', nargs='?', default='screen.png', help='output file, or - for stdout (default: screen.png)')
+    screenshot = add('screenshot', cmd_screenshot, 'save a PNG of the screen', [client])
+    screenshot.add_argument('file', nargs='?', default='screen.png', help='output file, or - for stdout (default: screen.png)')
     click = add('click', cmd_click, 'click at X Y', [client])
     move = add('move', cmd_move, 'move the pointer to X Y', [client])
     scroll = add('scroll', cmd_scroll, 'scroll at X Y by wheel notches', [client])

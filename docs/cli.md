@@ -1,6 +1,6 @@
 # CLI reference
 
-`relay` is one Python 3 command (stdlib only). Host commands (`up`, `down`, `logs`, `doctor`) manage a session on the Linux machine; `up` and `down` fail with `unsupported_platform` elsewhere. Client commands (`status`, `snapshot`, `click`, `move`, `scroll`, `key`, `type`, `input`) run anywhere.
+`relay` is one Python 3 command (stdlib only). Host commands (`up`, `down`, `logs`, `doctor`) manage a session on the Linux machine; `up` and `down` fail with `unsupported_platform` elsewhere. Client commands (`status`, `screenshot`, `click`, `move`, `scroll`, `key`, `type`, `input`) run anywhere.
 
 ## Common
 
@@ -79,7 +79,7 @@ Starts Xvfb (1280x720), the desktop and the engine, then supervises them. Withou
 
 Ready means:
 
-1. The engine this run started has logged its ready line, and `GET /snapshot.png` returns a PNG.
+1. The engine this run started has logged its ready line, and `GET /screenshot.png` returns a PNG.
 2. The desktop shows its own signal on the display: for `xfce`, a window manager (`_NET_SUPPORTING_WM_CHECK`) with at least one managed window (`_NET_CLIENT_LIST`); for a custom command, at least one window on the root. Skipped for `--desktop none`.
 
 If that does not happen within `--timeout`, `up` fails with `timeout`. If a component exits first, it fails with `component_failed`. Both errors name the component and include its log tail. After ready, the supervisor keeps watching. If a component exits later, the whole session stops and `status` shows the error.
@@ -234,10 +234,10 @@ $ relay run -- mousepad notes.txt
 Started mousepad (pid 4412) on :0; output in ~/.local/state/relay/default/apps.log
 ```
 
-## snapshot
+## screenshot
 
 ```sh
-relay snapshot [FILE|-]
+relay screenshot [FILE|-]
 ```
 
 Saves a PNG of the screen. Default file `screen.png`. `-` writes the PNG to stdout. Works while a viewer is connected. `--json` prints `{"path", "bytes", "width", "height"}`.
@@ -301,7 +301,7 @@ relay input '[{"type":"keyDown","key":4},{"type":"keyUp","key":4}]'
 - `type` sends one group per character (2 events, 4 with shift) and `key` one group per combo. Groups are packed into as many batches as needed and never split.
 - If a viewer or SDK session holds control, the batch fails with `busy` (HTTP 409). It is never retried. Another controller can take control between batches, so a long `type` or `key` can stop partway. The error then carries `applied`, the number of events already applied.
 - Held keys and buttons are released at the end of each batch, and when it fails.
-- `--json` prints `{"applied": N}`. Success means the engine applied the events, not that the application reacted. Take a snapshot to confirm.
+- `--json` prints `{"applied": N}`. Success means the engine applied the events, not that the application reacted. Take a screenshot to confirm.
 
 ## Error codes
 
@@ -309,7 +309,7 @@ relay input '[{"type":"keyDown","key":4},{"type":"keyUp","key":4}]'
 | --- | --- |
 | `invalid_input` | Bad argument or usage, JSON, input event, key combo, unmappable character, port, session name, URL, `--public` origin, TLS or token file; also an event or batch the engine rejected (HTTP 400/413/422). |
 | `unauthorized` | Token missing or wrong (HTTP 401), or Host/Origin rejected (HTTP 403). |
-| `busy` | A viewer or SDK session holds control (HTTP 409), or a snapshot is already running (HTTP 503). Never retried. |
+| `busy` | A viewer or SDK session holds control (HTTP 409), or a screenshot is already running (HTTP 503). Never retried. |
 | `unreachable` | Cannot connect to the URL. |
 | `timeout` | No reply within `--timeout`, or `up` did not become ready in time (`component` and `log` set). |
 | `not_running` | No session or logs with that name. |

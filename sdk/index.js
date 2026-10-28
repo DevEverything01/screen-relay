@@ -65,7 +65,7 @@ async function request(base, path, timeout, binary = false, token) {
       const chunks = []; let size = 0;
       for await (const chunk of response.body) {
         size += chunk.length;
-        if (size > 8 * 1024 * 1024) throw fail('PROTOCOL_ERROR', 'Snapshot exceeds 8 MiB');
+        if (size > 8 * 1024 * 1024) throw fail('PROTOCOL_ERROR', 'Screenshot exceeds 8 MiB');
         chunks.push(chunk);
       }
       return Buffer.concat(chunks, size);
@@ -84,10 +84,10 @@ export async function capabilities({ url = 'http://127.0.0.1:8080', timeout = 50
 export async function status({ url = 'http://127.0.0.1:8080', timeout = 5000, token } = {}) {
   return request(baseUrl(url, token), '/metrics', integer(timeout, 1, 2147483647, 'timeout'), false, token);
 }
-export async function snapshot({ url = 'http://127.0.0.1:8080', timeout = 5000, token } = {}, path) {
-  const bytes = await request(baseUrl(url, token), '/snapshot.png', integer(timeout, 1, 2147483647, 'timeout'), true, token);
+export async function screenshot({ url = 'http://127.0.0.1:8080', timeout = 5000, token } = {}, path) {
+  const bytes = await request(baseUrl(url, token), '/screenshot.png', integer(timeout, 1, 2147483647, 'timeout'), true, token);
   if (path !== undefined) {
-    try { await writeFile(path, bytes); } catch (error) { throw fail('IO_ERROR', `Snapshot write failed: ${error.message}`); }
+    try { await writeFile(path, bytes); } catch (error) { throw fail('IO_ERROR', `Screenshot write failed: ${error.message}`); }
   }
   return bytes;
 }
@@ -134,9 +134,9 @@ export async function connect({ url = 'http://127.0.0.1:8080', timeout = 5000, t
     surface,
     async capabilities() { return request(base, '/capabilities', timeout, false, token); },
     async status() { return request(base, '/metrics', timeout, false, token); },
-    async snapshot(path) {
+    async screenshot(path) {
       if (closed) throw fail('DISCONNECTED', 'Control connection closed');
-      return snapshot({ url: base.href, timeout, token }, path);
+      return screenshot({ url: base.href, timeout, token }, path);
     },
     input(event) {
       if (closed) return Promise.reject(fail('DISCONNECTED', 'Control connection closed'));
