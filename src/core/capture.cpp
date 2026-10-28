@@ -136,23 +136,29 @@ struct CaptureEncoder::Impl {
       unsigned consecutive_failures = 0;
       const auto frame_interval = std::chrono::nanoseconds(16666667);
       const auto refinement_delay = std::chrono::milliseconds(150);
+      constexpr int refinement_settled_bytes = 4096;
+      constexpr unsigned refinement_settled_frames = 2;
+      constexpr unsigned refinement_max_frames = 120;
       auto deadline = Clock::now();
       auto last_publish = deadline;
-      bool last_was_refinement = true;
+      bool last_was_refinement = true, refining = false;
+      unsigned settled_refinements = 0, cascade_frames = 0;
       while (true) {
         if (source->drainDamage()) dirty = true;
         uint32_t gen, seq;
         uint64_t rev, rate;
-        bool admitted, cursor_active, refresh_cursor = false;
+        bool admitted, cursor_active, queue_empty, refresh_cursor = false;
         {
           std::lock_guard<std::mutex> lock(mutex);
           if (stopping) break;
           if (revision != seen_revision) {
             seen_revision = revision; dirty = true; force_idr = true;
+            refining = false; settled_refinements = cascade_frames = 0;
             refresh_cursor = true;
           }
           gen = generation; rev = revision; rate = bitrate;
           cursor_active = gen != 0 && active && bool(publish_cursor);
+          queue_empty = sequence == acknowledged;
           admitted = gen != 0 && active && !paused &&
                      (!admit_until_us || uint64_t(std::chrono::duration_cast<std::chrono::microseconds>(
                          Clock::now().time_since_epoch()).count()) < admit_until_us) &&
@@ -167,10 +173,11 @@ struct CaptureEncoder::Impl {
           }
         }
         const auto now = Clock::now();
-        const bool refinement_pending = !dirty && !last_was_refinement;
+        const bool refinement_pending = !dirty && refining;
+        const auto refinement_pace = last_was_refinement ? frame_interval : refinement_delay;
         const auto encode_deadline = refinement_pending
-            ? std::max(deadline, last_publish + refinement_delay) : deadline;
-        if (admitted && (dirty || refinement_pending) && now >= encode_deadline) {
+            ? std::max(deadline, last_publish + refinement_pace) : deadline;
+        if (admitted && (dirty || (refinement_pending && queue_empty)) && now >= encode_deadline) {
           const bool refinement = !dirty;
           const auto capture_start = Clock::now();
           try {
@@ -226,6 +233,8 @@ struct CaptureEncoder::Impl {
             require(size > 0 && nal_count > 0 && nals && picture.i_pts == last_pts &&
                     static_cast<size_t>(size) <= FlowControl::max_bytes,
                     "invalid or delayed encoded access unit");
+            const bool settled = refinement && size <= refinement_settled_bytes &&
+                                 uint64_t(size) * 960 <= rate;
             EncodedFrame output;
             output.generation = gen; output.sequence = seq; output.pts_us = last_pts;
             output.width = frame_width; output.height = frame_height;
@@ -252,14 +261,25 @@ struct CaptureEncoder::Impl {
                 std::fprintf(stderr, "capture: publish rejected; awaiting new session\n");
                 { std::lock_guard<std::mutex> lock(mutex); if (generation == gen) active = false; }
                 dirty = true; force_idr = true;
+                refining = false; settled_refinements = cascade_frames = 0;
               } else {
                 force_idr = false;
                 last_publish = Clock::now();
                 last_was_refinement = refinement;
+                if (refinement) {
+                  ++cascade_frames;
+                  settled_refinements = settled ? settled_refinements + 1 : 0;
+                  refining = settled_refinements < refinement_settled_frames &&
+                             cascade_frames < refinement_max_frames;
+                } else {
+                  settled_refinements = cascade_frames = 0;
+                  refining = true;
+                }
               }
             } else {
               dirty = true;
               force_idr = true;
+              refining = false; settled_refinements = cascade_frames = 0;
             }
             consecutive_failures = 0;
             deadline += frame_interval;
@@ -269,6 +289,7 @@ struct CaptureEncoder::Impl {
             std::fprintf(stderr, "capture: %s; retrying with IDR\n", error.what());
             dirty = true;
             force_idr = true;
+            refining = false; settled_refinements = cascade_frames = 0;
             if (++consecutive_failures >= 3) {
               throw std::runtime_error(std::string("capture failed three consecutive times: ") + error.what());
             }
@@ -281,7 +302,7 @@ struct CaptureEncoder::Impl {
         if (cursor_published) continue;
         timespec timeout{};
         const timespec* timeout_ptr = nullptr;
-        if (admitted && (dirty || refinement_pending)) {
+        if (admitted && (dirty || (refinement_pending && queue_empty))) {
           const auto remaining = std::chrono::duration_cast<std::chrono::nanoseconds>(
               encode_deadline - Clock::now()).count();
           timeout = pollTimeout(std::max<int64_t>(0, remaining));
