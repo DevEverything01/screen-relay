@@ -176,16 +176,23 @@ struct CaptureEncoder::Impl {
             dirty = false;
             auto captured = capture_start, converted = capture_start;
             if (!refinement) {
-              const FrameView view = source->capture();
+              const FrameView view = source->captureChanged(force_idr);
               captured = Clock::now();
-              require(view.data && view.width == 1280 && view.height == 720 &&
-                      view.stride >= 1280 * 4 && view.stride <= 1280 * 8 &&
+              require(view.data && view.width > 0 && view.height > 0 &&
+                      view.x >= 0 && view.y >= 0 &&
+                      view.x + view.width <= 1280 && view.y + view.height <= 720 &&
+                      view.stride >= view.width * 4 && view.stride <= 1280 * 8 &&
+                      !(view.x & 1) && !(view.y & 1) && !(view.width & 1) && !(view.height & 1) &&
+                      !(force_idr && (view.width != 1280 || view.height != 720)) &&
                       view.format == r.format, "invalid capture frame");
               const auto convert = view.format == PixelFormat::BGRA ? bgraToYuv420 : argbToYuv420;
               require(convert(view.data, view.stride,
-                              r.frame.img.plane[0], r.frame.img.i_stride[0],
-                              r.frame.img.plane[1], r.frame.img.i_stride[1],
-                              r.frame.img.plane[2], r.frame.img.i_stride[2], 1280, 720),
+                              r.frame.img.plane[0] + view.y * r.frame.img.i_stride[0] + view.x,
+                              r.frame.img.i_stride[0],
+                              r.frame.img.plane[1] + (view.y / 2) * r.frame.img.i_stride[1] + view.x / 2,
+                              r.frame.img.i_stride[1],
+                              r.frame.img.plane[2] + (view.y / 2) * r.frame.img.i_stride[2] + view.x / 2,
+                              r.frame.img.i_stride[2], view.width, view.height),
                       "RGB conversion failed");
               converted = Clock::now();
             }

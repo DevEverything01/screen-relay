@@ -133,7 +133,7 @@ class X11CaptureSource final : public CaptureSource {
     out = rects;
     return true;
   }
-  FrameView capture() override {
+  void collectDamage() {
     XDamageSubtract(display, damage, None, parts);
     rects.clear(); rects_valid = false;
     int count = 0;
@@ -143,10 +143,49 @@ class X11CaptureSource final : public CaptureSource {
         rects.push_back({fetched.get()[i].x, fetched.get()[i].y, fetched.get()[i].width, fetched.get()[i].height});
       rects_valid = true;
     }
-    require(XShmGetImage(display, RootWindow(display, DefaultScreen(display)), image, 0, 0, AllPlanes),
-            "XShmGetImage failed");
-    return {reinterpret_cast<const uint8_t*>(image->data), image->bytes_per_line,
-            image->width, image->height, pixelFormat()};
+  }
+  FrameView grab(int x, int y, int width, int height) {
+    const Window root = RootWindow(display, DefaultScreen(display));
+    if (x == 0 && y == 0 && width == image->width && height == image->height) {
+      require(XShmGetImage(display, root, image, 0, 0, AllPlanes), "XShmGetImage failed");
+      return {reinterpret_cast<const uint8_t*>(image->data), image->bytes_per_line,
+              image->width, image->height, pixelFormat(), 0, 0};
+    }
+    XImage* scratch = XShmCreateImage(display, DefaultVisual(display, DefaultScreen(display)),
+                                      DefaultDepth(display, DefaultScreen(display)), ZPixmap,
+                                      shm.shmaddr, &shm, width, height);
+    require(scratch, "creating sub-rect X image failed");
+    scratch->data = shm.shmaddr;
+    require(scratch->bytes_per_line == width * 4, "unexpected sub-rect X image stride");
+    const bool ok = XShmGetImage(display, root, scratch, x, y, AllPlanes);
+    FrameView view{reinterpret_cast<const uint8_t*>(scratch->data), scratch->bytes_per_line,
+                   width, height, pixelFormat(), x, y};
+    scratch->data = nullptr;
+    XDestroyImage(scratch);
+    require(ok, "XShmGetImage failed");
+    return view;
+  }
+  FrameView capture() override {
+    collectDamage();
+    return grab(0, 0, image->width, image->height);
+  }
+  FrameView captureChanged(bool full) override {
+    collectDamage();
+    if (full || !rects_valid || rects.empty() || pixelFormat() == PixelFormat::ARGB)
+      return grab(0, 0, image->width, image->height);
+    int x0 = image->width, y0 = image->height, x1 = 0, y1 = 0;
+    for (const auto& r : rects) {
+      if (r.width <= 0 || r.height <= 0) continue;
+      x0 = std::min(x0, std::clamp(r.x, 0, image->width));
+      y0 = std::min(y0, std::clamp(r.y, 0, image->height));
+      x1 = std::max(x1, std::clamp(r.x + r.width, 0, image->width));
+      y1 = std::max(y1, std::clamp(r.y + r.height, 0, image->height));
+    }
+    if (x1 <= x0 || y1 <= y0) return grab(0, 0, image->width, image->height);
+    x0 &= ~15; y0 &= ~15;
+    x1 = std::min((x1 + 15) & ~15, image->width);
+    y1 = std::min((y1 + 15) & ~15, image->height);
+    return grab(x0, y0, x1 - x0, y1 - y0);
   }
 };
 }
