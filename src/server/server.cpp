@@ -5,6 +5,11 @@
 #include <chrono>
 #include <cstring>
 #include <iostream>
+#ifdef __linux__
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+#endif
 
 namespace relay {
 namespace {
@@ -12,6 +17,19 @@ using Clock = std::chrono::steady_clock;
 uint64_t nowUs() {
   return std::chrono::duration_cast<std::chrono::microseconds>(Clock::now().time_since_epoch()).count();
 }
+#ifdef __linux__
+void configureStreamSocket(lws* wsi) {
+  const int fd = lws_get_socket_fd(wsi);
+  if (fd < 0) return;
+  const int enabled = 1, send_buffer = 256 * 1024;
+  (void)setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &enabled, sizeof(enabled));
+  (void)setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &send_buffer, sizeof(send_buffer));
+#ifdef TCP_NOTSENT_LOWAT
+  const int notsent_lowat = 128 * 1024;
+  (void)setsockopt(fd, IPPROTO_TCP, TCP_NOTSENT_LOWAT, &notsent_lowat, sizeof(notsent_lowat));
+#endif
+}
+#endif
 }  // namespace
 Server::Server(Config settings) : config(std::move(settings)), capture([this](EncodedFrame&& frame) {
   std::lock_guard<std::mutex> lock(mutex);
@@ -299,6 +317,9 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
     case LWS_CALLBACK_ESTABLISHED: {
       if (s->viewer || s->nextGeneration == UINT32_MAX) return -1;
       s->viewer = wsi; s->controller = static_cast<HttpResponse*>(user)->control;
+#ifdef __linux__
+      if (!s->controller) configureStreamSocket(wsi);
+#endif
       { std::lock_guard<std::mutex> lock(s->mutex); s->generation = ++s->nextGeneration; s->pending.clear(); s->pending_cursor.reset(); s->flow = {}; s->failed=false; }
       s->last_write_cursor = false;
       s->lastSequence=0; s->received.clear();
