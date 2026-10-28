@@ -3,7 +3,7 @@
 #include <memory>
 #include <utility>
 
-namespace nsl {
+namespace relay {
 enum class InputStatus : uint8_t { ok = 0, invalid = 1, unsupported = 2 };
 struct InputEvent {
   uint8_t type = 0, reserved = 0;
@@ -21,4 +21,4 @@ class InputBackend {
 };
 // Selected native backend; unsupported display systems fail explicitly.
 std::unique_ptr<InputBackend> makeInputBackend();
-}  // namespace nsl
+}  // namespace relay

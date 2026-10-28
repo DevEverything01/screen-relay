@@ -89,7 +89,7 @@ bool localRequest(lws* wsi) {
   const auto origin = header(wsi, WSI_TOKEN_ORIGIN);
   return (loopbackHost(host) && loopbackOrigin(origin)) || (!config.token.empty() && !origin.empty() && origin == config.origin);
 }
-nsl::InputEvent inputEvent(const uint8_t* p) {
+relay::InputEvent inputEvent(const uint8_t* p) {
   const uint32_t raw = u32(p + 4);
   const int64_t value = raw <= INT32_MAX ? int64_t(raw) : int64_t(raw) - (int64_t(1) << 32);
   return {p[0], p[1], u16(p+2), int32_t(value), u16(p+8), u16(p+10), u16(p+12), u16(p+14)};
@@ -105,22 +105,22 @@ struct HttpResponse {
 struct Server {
   lws_context* context = nullptr;
   lws* viewer = nullptr;
-  std::unique_ptr<nsl::InputBackend> input;
-  nsl::Screenshot screenshot;
+  std::unique_ptr<relay::InputBackend> input;
+  relay::Screenshot screenshot;
   lws* screenshot_client = nullptr;
   bool controller = false, control_ready = false;
-  std::deque<std::pair<uint32_t, nsl::InputStatus>> replies;
+  std::deque<std::pair<uint32_t, relay::InputStatus>> replies;
   std::mutex mutex;
-  std::deque<nsl::EncodedFrame> pending;
-  std::optional<nsl::CursorImage> pending_cursor;
+  std::deque<relay::EncodedFrame> pending;
+  std::optional<relay::CursorImage> pending_cursor;
   bool last_write_cursor = false;
-  nsl::FlowControl flow;
-  nsl::CaptureEncoder capture;
+  relay::FlowControl flow;
+  relay::CaptureEncoder capture;
   uint32_t generation = 0, lastSequence = 0;
   uint16_t width = 1280, height = 720;
   bool failed = false;
   std::vector<uint8_t> received;
-  Server() : capture([this](nsl::EncodedFrame&& frame) {
+  Server() : capture([this](relay::EncodedFrame&& frame) {
     std::lock_guard<std::mutex> lock(mutex);
     if (!context || !generation || frame.generation != generation) return false;
     if (!flow.enqueue(frame.sequence, frame.annex_b.size(), frame.pts_us, nowUs())) {
@@ -129,7 +129,7 @@ struct Server {
     pending.push_back(std::move(frame));
     lws_cancel_service(context);
     return true;
-  }, nsl::makeCaptureSource, [this](uint32_t gen, nsl::CursorImage&& cursor) {
+  }, relay::makeCaptureSource, [this](uint32_t gen, relay::CursorImage&& cursor) {
     std::lock_guard<std::mutex> lock(mutex);
     if (!context || !generation || gen != generation) return;
     pending_cursor = std::move(cursor);
@@ -164,14 +164,14 @@ struct Server {
       return true;
     }
     if (b[5] != 3 || b.size() != 36 || seq || gen != generation) return false;
-    return input->apply(inputEvent(b.data()+20)) != nsl::InputStatus::invalid;
+    return input->apply(inputEvent(b.data()+20)) != relay::InputStatus::invalid;
   }
   void updateFlow() {
     uint32_t gen; unsigned window; uint64_t bitrate, admit_until; bool paused;
     { std::lock_guard<std::mutex> lock(mutex);
       const auto now = nowUs(); flow.update(now);
       gen = generation; window = flow.window; bitrate = flow.target_bitrate; paused = flow.paused(now);
-      admit_until = flow.frames.empty() ? 0 : flow.frames.front().captured_us + nsl::FlowControl::pause_age_us;
+      admit_until = flow.frames.empty() ? 0 : flow.frames.front().captured_us + relay::FlowControl::pause_age_us;
     }
     // Never hold the transport mutex while calling the capture API. Publication takes it later.
     capture.setFlowControl(gen, window, bitrate, paused, admit_until);
@@ -213,8 +213,8 @@ struct Server {
     return 0;
   }
   int write(lws* wsi) {
-    std::optional<nsl::EncodedFrame> frame;
-    std::optional<nsl::CursorImage> cursor;
+    std::optional<relay::EncodedFrame> frame;
+    std::optional<relay::CursorImage> cursor;
     { std::lock_guard<std::mutex> lock(mutex);
       if (failed) return -1;
       // Start with video to establish the generation; then share writes fairly.
@@ -227,7 +227,7 @@ struct Server {
     }
     if (cursor) {
       const auto& c = *cursor;
-      if (c.width > nsl::CursorImage::max_extent || c.height > nsl::CursorImage::max_extent ||
+      if (c.width > relay::CursorImage::max_extent || c.height > relay::CursorImage::max_extent ||
           c.rgba.size() != size_t(c.width) * c.height * 4 ||
           (c.width && c.height ? c.xhot >= c.width || c.yhot >= c.height
                               : c.width || c.height || c.xhot || c.yhot)) return -1;
@@ -248,7 +248,7 @@ struct Server {
     auto& f = *frame;
     if (f.generation != generation) return 0;
     if (!f.sequence || f.sequence != lastSequence + 1 || !f.width || !f.height ||
-        f.width > 1280 || f.height > 720 || f.annex_b.empty() || f.annex_b.size() > nsl::FlowControl::max_bytes ||
+        f.width > 1280 || f.height > 720 || f.annex_b.empty() || f.annex_b.size() > relay::FlowControl::max_bytes ||
         (!lastSequence && !f.keyframe)) return -1;
     std::vector<uint8_t> wire(LWS_PRE + 32 + f.annex_b.size());
     auto* p = wire.data()+LWS_PRE;
@@ -318,11 +318,11 @@ int inputResponse(lws* wsi, HttpResponse* response, Server* s) {
   if (s->viewer) return errorResponse(wsi, response, HTTP_STATUS_CONFLICT, "busy");
   const size_t count = response->input_length / 16;
   size_t index = 0;
-  auto status = nsl::InputStatus::ok;
-  for (; index < count && status == nsl::InputStatus::ok; ++index) status = s->input->apply(inputEvent(response->input + index * 16));
+  auto status = relay::InputStatus::ok;
+  for (; index < count && status == relay::InputStatus::ok; ++index) status = s->input->apply(inputEvent(response->input + index * 16));
   s->release();
-  if (status == nsl::InputStatus::ok) return jsonResponse(wsi, response, HTTP_STATUS_OK, "{\"applied\":" + std::to_string(count) + "}");
-  const bool invalid = status == nsl::InputStatus::invalid;
+  if (status == relay::InputStatus::ok) return jsonResponse(wsi, response, HTTP_STATUS_OK, "{\"applied\":" + std::to_string(count) + "}");
+  const bool invalid = status == relay::InputStatus::invalid;
   return jsonResponse(wsi, response, invalid ? HTTP_STATUS_BAD_REQUEST : 422, std::string("{\"error\":\"") +
                       (invalid ? "invalid_input" : "unsupported_input") + "\",\"index\":" + std::to_string(index - 1) + "}");
 }
@@ -603,7 +603,7 @@ int main(int argc, char** argv) {
       if (!std::filesystem::is_regular_file(std::filesystem::path(config.viewer)/name)) throw std::runtime_error("Viewer assets missing; use --viewer-dir");
   } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 2; }
   selfCheck();
-  if (!nsl::initializeNativeBackend()) { std::cerr << "Native backend initialization failed\n"; return 1; }
+  if (!relay::initializeNativeBackend()) { std::cerr << "Native backend initialization failed\n"; return 1; }
   std::signal(SIGINT, signalStop); std::signal(SIGTERM, signalStop);
   Server s;
   std::string captureError;
@@ -611,7 +611,7 @@ int main(int argc, char** argv) {
     std::cerr << "Capture startup failed: " << captureError << '\n';
     s.capture.stop(); return 1;
   }
-  try { s.input = nsl::makeInputBackend(); }
+  try { s.input = relay::makeInputBackend(); }
   catch (const std::exception& error) { std::cerr << error.what() << '\n'; s.capture.stop(); return 1; }
   const auto dimensions = s.input->dimensions(); s.width = dimensions.first; s.height = dimensions.second;
   lws_protocols protocols[] = {{"http", callback, sizeof(HttpResponse), 4096, 0, nullptr, 0}, {"nsl1", callback, sizeof(HttpResponse), 4096, 0, nullptr, 0}, {nullptr, nullptr, 0, 0, 0, nullptr, 0}};

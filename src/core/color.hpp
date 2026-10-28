@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace nsl {
+namespace relay {
 // Full-range BGRA (alpha ignored) to limited-range BT.709 planar YUV420.
 // Chroma uses a 2x2 box with channels rounded to nearest before conversion.
 // Requires disjoint buffers covering every row and positive, even dimensions.
@@ -19,4 +19,4 @@ bool bgraToNv12(const uint8_t* source, int sourceStride,
 bool argbToNv12(const uint8_t* source, int sourceStride,
                 uint8_t* y, int yStride, uint8_t* uv, int uvStride,
                 int width, int height);
-}  // namespace nsl
+}  // namespace relay

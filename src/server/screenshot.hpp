@@ -13,7 +13,7 @@
 #include <thread>
 #include <vector>
 
-namespace nsl {
+namespace relay {
 // One job/result globally. The worker owns its capture source and PNG codec.
 class Screenshot {
  public:
@@ -114,4 +114,4 @@ class Screenshot {
     }
   }
 };
-}  // namespace nsl
+}  // namespace relay

@@ -6,19 +6,20 @@
 #include <cstdint>
 #include <deque>
 
-namespace nsl {
+namespace relay {
 // All times are server steady-clock microseconds; service thread owns this state.
 struct FlowControl {
   static constexpr size_t max_frames = 8;
   static constexpr size_t max_bytes = 8 * 1024 * 1024;
   static constexpr uint64_t pause_age_us = 250000;
   static constexpr uint64_t timeout_us = 3000000;
+  static constexpr uint64_t min_bitrate = 1000000, initial_bitrate = 8000000, max_bitrate = 40000000;
   struct Frame { uint32_t sequence; size_t bytes; uint64_t captured_us; bool sent = false; uint64_t sent_us = 0; };
   std::deque<Frame> frames;
   size_t bytes = 0;
   uint32_t last_encoded = 0;
   uint64_t acknowledged = 0, encoded = 0, last_progress_us = 0;
-  uint64_t target_bitrate = 8000000;
+  uint64_t target_bitrate = initial_bitrate;
   double ack_rtt_us = 0;
   unsigned window = 1;
   uint64_t sample_start_us = 0, sample_bytes = 0, sample_acks = 0, previous_sent_us = 0;
@@ -75,15 +76,15 @@ struct FlowControl {
         now - last_decrease_us >= 500000) {
       uint64_t next = target_bitrate * 3 / 4;
       if (busy && interval >= 500000) next = std::min(next, uint64_t(goodput_bps * 0.9));
-      target_bitrate = std::max<uint64_t>(1000000, next); last_decrease_us = now;
+      target_bitrate = std::max<uint64_t>(min_bitrate, next); last_decrease_us = now;
       last_increase_us = now;
     } else if (busy && interval >= 1000000 && oldestAge(now) < 100000 &&
                now - last_increase_us >= 1000000 && now - last_decrease_us >= 2000000) {
       // CRF can emit far below its cap; prompt ACKs of sustained demand permit a probe.
-      target_bitrate = std::min<uint64_t>(40000000, target_bitrate + target_bitrate / 10);
+      target_bitrate = std::min<uint64_t>(max_bitrate, target_bitrate + target_bitrate / 10);
       last_increase_us = now;
     }
     if (interval >= 1000000) { sample_start_us = now; sample_bytes = sample_acks = 0; }
   }
 };
-}  // namespace nsl
+}  // namespace relay

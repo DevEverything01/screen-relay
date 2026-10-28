@@ -11,7 +11,7 @@
 #include <algorithm>
 #include <memory>
 #include <vector>
-namespace nsl {
+namespace relay {
 namespace {
 void require(bool ok, const char* message) { if (!ok) throw std::runtime_error(message); }
 // Xlib's handler is process-wide; the attach probe is limited to this Display.

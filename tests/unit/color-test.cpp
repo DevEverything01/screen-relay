@@ -41,7 +41,7 @@ void check(int width, int height, int pattern) {
     }
   }
   const auto original = source;
-  assert(nsl::bgraToYuv420(source.data() + 1, sourceStride, y.data() + 1, yStride,
+  assert(relay::bgraToYuv420(source.data() + 1, sourceStride, y.data() + 1, yStride,
                           u.data() + 1, uStride, v.data() + 1, vStride, width, height));
   assert(source == original);
   for (int row = 0; row < height; ++row) {
@@ -80,13 +80,13 @@ int main() {
   }
   uint8_t value = guard;
   for (const auto dimensions : {std::array<int, 2>{0, 2}, {2, 0}, {3, 2}, {2, 3}, {-2, 2}}) {
-    assert(!nsl::bgraToYuv420(&value, 8, &value, 2, &value, 1, &value, 1,
+    assert(!relay::bgraToYuv420(&value, 8, &value, 2, &value, 1, &value, 1,
                             dimensions[0], dimensions[1]));
   }
-  assert(!nsl::bgraToYuv420(nullptr, 8, &value, 2, &value, 1, &value, 1, 2, 2));
-  assert(!nsl::bgraToYuv420(&value, 7, &value, 2, &value, 1, &value, 1, 2, 2));
-  assert(!nsl::bgraToYuv420(&value, 8, &value, 1, &value, 1, &value, 1, 2, 2));
-  assert(!nsl::bgraToYuv420(&value, 8, &value, 2, &value, 0, &value, 1, 2, 2));
+  assert(!relay::bgraToYuv420(nullptr, 8, &value, 2, &value, 1, &value, 1, 2, 2));
+  assert(!relay::bgraToYuv420(&value, 7, &value, 2, &value, 1, &value, 1, 2, 2));
+  assert(!relay::bgraToYuv420(&value, 8, &value, 1, &value, 1, &value, 1, 2, 2));
+  assert(!relay::bgraToYuv420(&value, 8, &value, 2, &value, 0, &value, 1, 2, 2));
   assert(value == guard);
   std::cout << "BT.709 colors, box chroma, random pixels, tails, strides and guards passed\n";
 }

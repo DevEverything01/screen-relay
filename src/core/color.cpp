@@ -11,7 +11,7 @@
 #include <emmintrin.h>
 #endif
 
-namespace nsl {
+namespace relay {
 namespace {
 // BT.709 coefficients scaled by 2^14; biases keep all shifts nonnegative.
 uint8_t luma(int b, int g, int r) {
@@ -190,4 +190,4 @@ bool argbToNv12(const uint8_t* source, int sourceStride,
                 int width, int height) {
   return convertToYuv420<true, true>(source, sourceStride, y, yStride, uv, uvStride, uv, uvStride, width, height);
 }
-}  // namespace nsl
+}  // namespace relay

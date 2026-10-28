@@ -6,7 +6,7 @@
 #include <cassert>
 #include <stdexcept>
 
-namespace nsl {
+namespace relay {
 namespace {
 int pixelCoordinate(uint16_t normalized, uint16_t extent) {
   return int((uint64_t(normalized) * (extent - 1) + 32767) / 65535);
@@ -111,4 +111,4 @@ std::unique_ptr<InputBackend> makeInputBackend() {
   assert(hidSym(4) == XK_a && hidSym(225) == XK_Shift_L && hidSym(3) == NoSymbol);
   return std::make_unique<X11Input>();
 }
-}  // namespace nsl
+}  // namespace relay

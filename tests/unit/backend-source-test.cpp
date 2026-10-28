@@ -33,7 +33,7 @@ struct SourceState {
   }
 };
 // This source has no display connection or native-backend factory dependency.
-class CpuSource final : public nsl::CaptureSource {
+class CpuSource final : public relay::CaptureSource {
   std::shared_ptr<SourceState> state;
   std::vector<uint8_t> pixels = std::vector<uint8_t>(1280 * 720 * 4);
  public:
@@ -43,8 +43,8 @@ class CpuSource final : public nsl::CaptureSource {
     uint64_t value;
     return read(state->fd, &value, sizeof(value)) == sizeof(value);
   }
-  nsl::PixelFormat pixelFormat() const override { return nsl::PixelFormat::BGRA; }
-  nsl::FrameView capture() override {
+  relay::PixelFormat pixelFormat() const override { return relay::PixelFormat::BGRA; }
+  relay::FrameView capture() override {
     ++state->captures;
     const bool red = state->red.load();
     for (size_t i = 0; i < pixels.size(); i += 4) {
@@ -52,24 +52,24 @@ class CpuSource final : public nsl::CaptureSource {
       pixels[i + 2] = red ? 192 : 32; pixels[i + 3] = 255;
     }
     return {pixels.data(), state->invalid == 2 ? 1 : 1280 * 4,
-            state->invalid == 1 ? 1 : 1280, 720, nsl::PixelFormat::BGRA};
+            state->invalid == 1 ? 1 : 1280, 720, relay::PixelFormat::BGRA};
   }
 };
 struct Frames {
   std::mutex mutex;
   std::condition_variable changed;
-  std::vector<nsl::EncodedFrame> items;
-  bool publish(nsl::EncodedFrame&& frame) {
+  std::vector<relay::EncodedFrame> items;
+  bool publish(relay::EncodedFrame&& frame) {
     { std::lock_guard<std::mutex> lock(mutex); items.push_back(std::move(frame)); }
     changed.notify_all(); return true;
   }
-  nsl::EncodedFrame at(size_t index) {
+  relay::EncodedFrame at(size_t index) {
     std::unique_lock<std::mutex> lock(mutex);
     require(changed.wait_for(lock, 3s, [&] { return items.size() > index; }), "encoded frame timeout");
     return items[index];
   }
 };
-static void decodedPixel(const nsl::EncodedFrame& encoded, bool red) {
+static void decodedPixel(const relay::EncodedFrame& encoded, bool red) {
   const AVCodec* codec = avcodec_find_decoder(AV_CODEC_ID_H264);
   require(codec, "H264 decoder unavailable");
   AVCodecContext* decoder = avcodec_alloc_context3(codec);
@@ -108,7 +108,7 @@ static void decodedPixel(const nsl::EncodedFrame& encoded, bool red) {
 }
 static void healthySource() {
   auto state = std::make_shared<SourceState>(); Frames frames;
-  nsl::CaptureEncoder encoder([&](nsl::EncodedFrame&& f) { return frames.publish(std::move(f)); },
+  relay::CaptureEncoder encoder([&](relay::EncodedFrame&& f) { return frames.publish(std::move(f)); },
       [state] { return std::make_unique<CpuSource>(state); });
   std::string error;
   require(encoder.start(error), error.c_str());
@@ -140,7 +140,7 @@ static void healthySource() {
 static void invalidSource(int invalid) {
   auto state = std::make_shared<SourceState>(); state->invalid = invalid;
   std::atomic<unsigned> published{0};
-  nsl::CaptureEncoder encoder([&](nsl::EncodedFrame&&) { ++published; return true; },
+  relay::CaptureEncoder encoder([&](relay::EncodedFrame&&) { ++published; return true; },
       [state] { return std::make_unique<CpuSource>(state); });
   std::string error; require(encoder.start(error), error.c_str()); encoder.beginSession(1);
   const auto deadline = std::chrono::steady_clock::now() + 4s;

@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-namespace nsl {
+namespace relay {
 struct EncodedFrame {
   uint32_t generation = 0;
   uint32_t sequence = 0;
@@ -49,4 +49,4 @@ class CaptureEncoder {
   struct Impl;
   std::unique_ptr<Impl> impl_;
 };
-}  // namespace nsl
+}  // namespace relay

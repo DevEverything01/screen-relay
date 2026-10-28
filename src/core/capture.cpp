@@ -21,7 +21,7 @@
 #include <stdexcept>
 #include <thread>
 
-namespace nsl {
+namespace relay {
 namespace {
 using Clock = std::chrono::steady_clock;
 constexpr timespec pollTimeout(int64_t nanoseconds) {
@@ -395,4 +395,4 @@ void CaptureEncoder::stop() {
   i.generation = 0;
   i.active = false;
 }
-}  // namespace nsl
+}  // namespace relay
