@@ -23,6 +23,9 @@
 #include <filesystem>
 #include <sys/stat.h>
 #include <unistd.h>
+#if defined(__GLIBC__)
+#include <malloc.h>
+#endif
 
 namespace {
 using Clock = std::chrono::steady_clock;
@@ -547,6 +550,9 @@ void selfCheck() {
 }
 } // namespace
 int main(int argc, char** argv) {
+#if defined(__GLIBC__)
+  mallopt(M_ARENA_MAX, 2);
+#endif
   try {
     config.viewer = (std::filesystem::canonical("/proc/self/exe").parent_path() / "viewer").string();
     for (int i = 1; i < argc; ++i) {
