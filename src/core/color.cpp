@@ -98,22 +98,20 @@ void chromaBlock4(__m128i blue, __m128i green, __m128i red, uint8_t* u, uint8_t*
 #endif
 }  // namespace
 
-template<bool argb, bool nv12>
-bool convertToYuv420(const uint8_t* source, int sourceStride,
-                  uint8_t* y, int yStride, uint8_t* u, int uStride,
-                  uint8_t* v, int vStride, int width, int height) {
-  if (!source || !y || !u || !v || width <= 0 || height <= 0 ||
+template<bool argb>
+bool convertToNv12(const uint8_t* source, int sourceStride,
+                   uint8_t* y, int yStride, uint8_t* uv, int uvStride,
+                   int width, int height) {
+  if (!source || !y || !uv || width <= 0 || height <= 0 ||
       (width & 1) || (height & 1) || width > std::numeric_limits<int>::max() / 4 ||
       sourceStride < width * 4 || yStride < width ||
-      uStride < (nv12 ? width : width / 2) ||
-      vStride < (nv12 ? width : width / 2)) return false;
+      uvStride < width) return false;
   for (int row = 0; row < height; row += 2) {
     const auto* top = source + static_cast<ptrdiff_t>(row) * sourceStride;
     const auto* bottom = top + sourceStride;
     auto* y0 = y + static_cast<ptrdiff_t>(row) * yStride;
     auto* y1 = y0 + yStride;
-    auto* u0 = u + static_cast<ptrdiff_t>(row / 2) * uStride;
-    auto* v0 = v + static_cast<ptrdiff_t>(row / 2) * vStride;
+    auto* uv0 = uv + static_cast<ptrdiff_t>(row / 2) * uvStride;
     int x = 0;
 #if defined(__aarch64__)
     if constexpr (!argb) for (; x <= width - 16; x += 16) {
@@ -131,13 +129,8 @@ bool convertToYuv420(const uint8_t* source, int sourceStride,
       cb = vmlsl_u8(vmlsl_u8(cb, red, vdup_n_u8(26)), green, vdup_n_u8(86));
       auto cr = vmlal_u8(bias, red, vdup_n_u8(112));
       cr = vmlsl_u8(vmlsl_u8(cr, green, vdup_n_u8(102)), blue, vdup_n_u8(10));
-      if constexpr (nv12) {
-        const uint8x8x2_t chroma = {{vshrn_n_u16(cb, 8), vshrn_n_u16(cr, 8)}};
-        vst2_u8(u0 + x, chroma);
-      } else {
-        vst1_u8(u0 + x / 2, vshrn_n_u16(cb, 8));
-        vst1_u8(v0 + x / 2, vshrn_n_u16(cr, 8));
-      }
+      const uint8x8x2_t chroma = {{vshrn_n_u16(cb, 8), vshrn_n_u16(cr, 8)}};
+      vst2_u8(uv0 + x, chroma);
     }
 #endif
 #if defined(__SSE2__)
@@ -148,7 +141,7 @@ bool convertToYuv420(const uint8_t* source, int sourceStride,
       _mm_storel_epi64(reinterpret_cast<__m128i*>(y0 + x), lumaBlock8(tb, tg, tr));
       _mm_storel_epi64(reinterpret_cast<__m128i*>(y1 + x), lumaBlock8(bb, bg, br));
       chromaBlock4(boxAverage4(tb, bb), boxAverage4(tg, bg), boxAverage4(tr, br),
-                   nv12 ? u0 + x : u0 + x / 2, nv12 ? u0 + x + 1 : v0 + x / 2, nv12 ? 2 : 1);
+                   uv0 + x, uv0 + x + 1, 2);
     }
 #endif
     for (; x < width; x += 2) {
@@ -164,30 +157,20 @@ bool convertToYuv420(const uint8_t* source, int sourceStride,
       const int blue = (a[blueOffset] + a[4 + blueOffset] + b[blueOffset] + b[4 + blueOffset] + 2) / 4;
       const int green = (a[greenOffset] + a[4 + greenOffset] + b[greenOffset] + b[4 + greenOffset] + 2) / 4;
       const int red = (a[redOffset] + a[4 + redOffset] + b[redOffset] + b[4 + redOffset] + 2) / 4;
-      u0[nv12 ? x : x / 2] = blueChroma(blue, green, red);
-      v0[nv12 ? x + 1 : x / 2] = redChroma(blue, green, red);
+      uv0[x] = blueChroma(blue, green, red);
+      uv0[x + 1] = redChroma(blue, green, red);
     }
   }
   return true;
 }
-bool bgraToYuv420(const uint8_t* source, int sourceStride,
-                  uint8_t* y, int yStride, uint8_t* u, int uStride,
-                  uint8_t* v, int vStride, int width, int height) {
-  return convertToYuv420<false, false>(source, sourceStride, y, yStride, u, uStride, v, vStride, width, height);
-}
-bool argbToYuv420(const uint8_t* source, int sourceStride,
-                  uint8_t* y, int yStride, uint8_t* u, int uStride,
-                  uint8_t* v, int vStride, int width, int height) {
-  return convertToYuv420<true, false>(source, sourceStride, y, yStride, u, uStride, v, vStride, width, height);
-}
 bool bgraToNv12(const uint8_t* source, int sourceStride,
                 uint8_t* y, int yStride, uint8_t* uv, int uvStride,
                 int width, int height) {
-  return convertToYuv420<false, true>(source, sourceStride, y, yStride, uv, uvStride, uv, uvStride, width, height);
+  return convertToNv12<false>(source, sourceStride, y, yStride, uv, uvStride, width, height);
 }
 bool argbToNv12(const uint8_t* source, int sourceStride,
                 uint8_t* y, int yStride, uint8_t* uv, int uvStride,
                 int width, int height) {
-  return convertToYuv420<true, true>(source, sourceStride, y, yStride, uv, uvStride, uv, uvStride, width, height);
+  return convertToNv12<true>(source, sourceStride, y, yStride, uv, uvStride, width, height);
 }
 }  // namespace relay

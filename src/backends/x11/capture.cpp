@@ -57,11 +57,11 @@ class X11CaptureSource final : public CaptureSource {
             XFixesQueryVersion(display, &major, &minor) && major >= 1, "XFixes cursor tracking unavailable");
     require(XShmQueryExtension(display), "MIT-SHM unavailable");
     const int screen = DefaultScreen(display);
-    require(DisplayWidth(display, screen) == 1280 && DisplayHeight(display, screen) == 720,
+    require(DisplayWidth(display, screen) == frame_width && DisplayHeight(display, screen) == frame_height,
             "capture requires a fixed 1280x720 root");
     image = XShmCreateImage(display, DefaultVisual(display, screen), DefaultDepth(display, screen),
-                            ZPixmap, nullptr, &shm, 1280, 720);
-    require(image && image->bytes_per_line >= 1280 * 4 && image->bytes_per_line <= 1280 * 8 &&
+                            ZPixmap, nullptr, &shm, frame_width, frame_height);
+    require(image && image->bytes_per_line >= frame_width * 4 && image->bytes_per_line <= frame_width * 8 &&
             image->bits_per_pixel == 32 && image->red_mask == 0xff0000 &&
             image->green_mask == 0xff00 && image->blue_mask == 0xff,
             "unsupported X image masks, depth, or stride");
