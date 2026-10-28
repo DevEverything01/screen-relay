@@ -76,7 +76,7 @@ struct Resources {
     params.b_annexb = 1; params.b_repeat_headers = 1;
     params.vui.b_fullrange = 0; params.vui.i_colmatrix = 1;
     params.vui.i_colorprim = 1; params.vui.i_transfer = 1;
-    params.vui.i_chroma_loc = format == PixelFormat::BGRA ? 1 : 0;
+    params.vui.i_chroma_loc = 1;
     codec = x264_encoder_open(&params);
     require(codec, "opening libx264 failed");
     bitrate = 8000000;
