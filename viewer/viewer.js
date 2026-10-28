@@ -46,7 +46,7 @@ function receiveCursor(data) {
 const stats = window.nativeStats = {
   received: 0, drawn: 0, superseded: 0, bytes: 0, decodeerrors: 0, outstanding: 0, pendingBytes: 0, pendingHighWater: 0,
 };
-let socket, decoder, retryTimer, deadline, frameHandle, drawnThisFrame = false;
+let socket, decoder, retryTimer, deadline, frameHandle, drawnThisFrame = false, transportBroken = false;
 let generation = 0, sequence = 0, lastTimestamp = -1, ready = false, retry = 0, epoch = 0;
 let buttons = 0, modifiers = 0, x = 0, y = 0, viewOnly = false;
 const pending = new Map(), decoded = [], held = new Set();
@@ -143,6 +143,10 @@ function ackFrame(item) {
     return false;
   }
 }
+function retireDecoded() {
+  if (transportBroken || socket?.readyState !== WebSocket.OPEN) return;
+  for (const item of decoded) if (!ackFrame(item)) break;
+}
 function draw(item) {
   try {
     if (item.gen !== generation) throw new Error("Stale decoded frame");
@@ -182,12 +186,6 @@ function present() {
   drawnThisFrame = false;
   const item = decoded.shift();
   if (!item || !draw(item)) return;
-  while (decoded.length > 2) {
-    const dropped = decoded.shift();
-    dropped.frame.close();
-    stats.superseded++;
-    if (!ackFrame(dropped)) return;
-  }
   schedulePresent();
 }
 function codecFromSps(bytes) {
@@ -207,6 +205,7 @@ function connect() {
   const current = epoch;
   if (socket && socket.readyState < WebSocket.CLOSING) {
     release();
+    retireDecoded();
     socket.close();
   }
   reset();
@@ -219,6 +218,7 @@ function connect() {
     `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/stream`,
     accessToken ? ['nsl1', `bearer.${accessToken}`] : 'nsl1',
   );
+  transportBroken = false;
   const ws = socket;
   ws.binaryType = "arraybuffer";
   ws.onopen = () => {
@@ -308,7 +308,7 @@ function connect() {
     }
   };
   ws.onerror = () => {
-    if (current === epoch) status.textContent = "Connection error";
+    if (current === epoch) { transportBroken = true; status.textContent = "Connection error"; }
   };
   ws.onclose = () => {
     if (current !== epoch) return;
@@ -458,6 +458,7 @@ document.addEventListener("visibilitychange", () => {
       `Drawn FPS: 0.0 · Stream Mbps: 0.00 · ${METRICS_UNAVAILABLE}`;
     release();
     epoch++;
+    retireDecoded();
     if (socket) socket.close();
     reset();
     clearTimeout(retryTimer);

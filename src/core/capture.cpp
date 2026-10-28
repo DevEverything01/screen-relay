@@ -78,7 +78,7 @@ struct Resources {
     params.i_threads = 1; params.i_keyint_max = X264_KEYINT_MAX_INFINITE; params.i_bframe = 0;
     params.i_scenecut_threshold = 0; params.i_sync_lookahead = 0;
     params.rc.i_rc_method = X264_RC_CRF; params.rc.f_rf_constant = encoder_crf;
-    params.rc.i_lookahead = 0; params.rc.i_vbv_max_bitrate = int(FlowControl::initial_bitrate / 1000); params.rc.i_vbv_buffer_size = vbvBufferKbit(FlowControl::initial_bitrate);
+    params.rc.i_lookahead = 0; params.rc.i_vbv_max_bitrate = int(FlowControl::initial_bitrate / 1000); params.rc.i_vbv_buffer_size = vbvBufferKbit(FlowControl::initial_bitrate, true);
     params.analyse.b_mb_info = 1; params.analyse.b_mb_info_update = 0;
     params.b_annexb = 1; params.b_repeat_headers = 1;
     params.vui.b_fullrange = 0; params.vui.i_colmatrix = 1;
@@ -87,7 +87,7 @@ struct Resources {
     codec = x264_encoder_open(&params);
     require(codec, "opening libx264 failed");
     bitrate = FlowControl::initial_bitrate;
-    wide_vbv = false;
+    wide_vbv = true;
   }
   void init() {
     openEncoder();
@@ -239,7 +239,8 @@ struct CaptureEncoder::Impl {
         const auto encode_deadline = refinement_pending
             ? std::max(deadline, last_publish + refinement_pace) : deadline;
         if (admitted && (dirty || (refinement_pending && queue_empty)) && now >= encode_deadline) {
-          const bool refinement = !dirty;
+          bool refinement = !dirty;
+          const bool captured_frame = !refinement;
           const auto capture_start = Clock::now();
           try {
             assert(!refinement || (!force_idr && last_pts >= 0));
@@ -267,14 +268,18 @@ struct CaptureEncoder::Impl {
               }
               converted = Clock::now();
               if (!changed) {
-                { std::lock_guard<std::mutex> lock(mutex);
-                  ++counters.captures;
-                  counters.capture_ns += ns(captured - capture_start);
-                  counters.convert_ns += ns(converted - captured);
+                if (refining && queue_empty && converted >= last_publish + refinement_pace) {
+                  refinement = true;
+                } else {
+                  { std::lock_guard<std::mutex> lock(mutex);
+                    ++counters.captures;
+                    counters.capture_ns += ns(captured - capture_start);
+                    counters.convert_ns += ns(converted - captured);
+                  }
+                  consecutive_failures = 0;
+                  deadline = std::max(deadline + frame_interval, capture_start + frame_interval);
+                  continue;
                 }
-                consecutive_failures = 0;
-                deadline = std::max(deadline + frame_interval, capture_start + frame_interval);
-                continue;
               }
             }
             const int64_t timestamp = std::chrono::duration_cast<std::chrono::microseconds>(capture_start.time_since_epoch()).count();
@@ -313,7 +318,7 @@ struct CaptureEncoder::Impl {
             bool current;
             {
               std::lock_guard<std::mutex> lock(mutex);
-              if (!refinement) ++counters.captures;
+              if (captured_frame) ++counters.captures;
               ++counters.encoded;
               counters.capture_ns += ns(captured - capture_start);
               counters.convert_ns += ns(converted - captured);

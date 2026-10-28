@@ -21,9 +21,8 @@ uint64_t nowUs() {
 void configureStreamSocket(lws* wsi) {
   const int fd = lws_get_socket_fd(wsi);
   if (fd < 0) return;
-  const int enabled = 1, send_buffer = 256 * 1024;
+  const int enabled = 1;
   (void)setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &enabled, sizeof(enabled));
-  (void)setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &send_buffer, sizeof(send_buffer));
 #ifdef TCP_NOTSENT_LOWAT
   const int notsent_lowat = 128 * 1024;
   (void)setsockopt(fd, IPPROTO_TCP, TCP_NOTSENT_LOWAT, &notsent_lowat, sizeof(notsent_lowat));
