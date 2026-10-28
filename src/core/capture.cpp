@@ -65,10 +65,10 @@ struct Resources {
     x264_param_t params;
     require(x264_param_default_preset(&params, "ultrafast", "zerolatency") >= 0,
             "setting x264 options failed");
-    params.i_width = 1280; params.i_height = 720; params.i_csp = X264_CSP_I420;
+    params.i_width = 1280; params.i_height = 720; params.i_csp = X264_CSP_NV12;
     params.i_timebase_num = 1; params.i_timebase_den = 1000000;
     params.i_fps_num = 60; params.i_fps_den = 1;
-    params.i_threads = 2; params.i_keyint_max = 600; params.i_bframe = 0;
+    params.i_threads = 1; params.i_keyint_max = 600; params.i_bframe = 0;
     params.i_scenecut_threshold = 0; params.i_sync_lookahead = 0;
     params.rc.i_rc_method = X264_RC_CRF; params.rc.f_rf_constant = 10;
     params.rc.i_lookahead = 0; params.rc.i_vbv_max_bitrate = 8000; params.rc.i_vbv_buffer_size = 2000;
@@ -83,7 +83,7 @@ struct Resources {
   }
   void init() {
     openEncoder();
-    require(x264_picture_alloc(&frame, X264_CSP_I420, 1280, 720) == 0,
+    require(x264_picture_alloc(&frame, X264_CSP_NV12, 1280, 720) == 0,
             "allocating YUV buffer failed");
     frame_allocated = true;
   }
@@ -176,16 +176,21 @@ struct CaptureEncoder::Impl {
             dirty = false;
             auto captured = capture_start, converted = capture_start;
             if (!refinement) {
-              const FrameView view = source->capture();
+              const FrameView view = source->captureChanged(force_idr);
               captured = Clock::now();
-              require(view.data && view.width == 1280 && view.height == 720 &&
-                      view.stride >= 1280 * 4 && view.stride <= 1280 * 8 &&
+              require(view.data && view.width > 0 && view.height > 0 &&
+                      view.x >= 0 && view.y >= 0 &&
+                      view.x + view.width <= 1280 && view.y + view.height <= 720 &&
+                      view.stride >= view.width * 4 && view.stride <= 1280 * 8 &&
+                      !(view.x & 1) && !(view.y & 1) && !(view.width & 1) && !(view.height & 1) &&
+                      !(force_idr && (view.width != 1280 || view.height != 720)) &&
                       view.format == r.format, "invalid capture frame");
-              const auto convert = view.format == PixelFormat::BGRA ? bgraToYuv420 : argbToYuv420;
+              const auto convert = view.format == PixelFormat::BGRA ? bgraToNv12 : argbToNv12;
               require(convert(view.data, view.stride,
-                              r.frame.img.plane[0], r.frame.img.i_stride[0],
-                              r.frame.img.plane[1], r.frame.img.i_stride[1],
-                              r.frame.img.plane[2], r.frame.img.i_stride[2], 1280, 720),
+                              r.frame.img.plane[0] + view.y * r.frame.img.i_stride[0] + view.x,
+                              r.frame.img.i_stride[0],
+                              r.frame.img.plane[1] + (view.y / 2) * r.frame.img.i_stride[1] + view.x,
+                              r.frame.img.i_stride[1], view.width, view.height),
                       "RGB conversion failed");
               converted = Clock::now();
             }

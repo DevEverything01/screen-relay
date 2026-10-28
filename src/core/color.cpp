@@ -33,14 +33,15 @@ uint8x8_t box8(uint8x16_t top, uint8x16_t bottom) {
 #endif
 }  // namespace
 
-template<bool argb>
+template<bool argb, bool nv12>
 bool convertToYuv420(const uint8_t* source, int sourceStride,
                   uint8_t* y, int yStride, uint8_t* u, int uStride,
                   uint8_t* v, int vStride, int width, int height) {
   if (!source || !y || !u || !v || width <= 0 || height <= 0 ||
       (width & 1) || (height & 1) || width > std::numeric_limits<int>::max() / 4 ||
       sourceStride < width * 4 || yStride < width ||
-      uStride < width / 2 || vStride < width / 2) return false;
+      uStride < (nv12 ? width : width / 2) ||
+      vStride < (nv12 ? width : width / 2)) return false;
   for (int row = 0; row < height; row += 2) {
     const auto* top = source + static_cast<ptrdiff_t>(row) * sourceStride;
     const auto* bottom = top + sourceStride;
@@ -65,8 +66,13 @@ bool convertToYuv420(const uint8_t* source, int sourceStride,
       cb = vmlsl_u8(vmlsl_u8(cb, red, vdup_n_u8(26)), green, vdup_n_u8(86));
       auto cr = vmlal_u8(bias, red, vdup_n_u8(112));
       cr = vmlsl_u8(vmlsl_u8(cr, green, vdup_n_u8(102)), blue, vdup_n_u8(10));
-      vst1_u8(u0 + x / 2, vshrn_n_u16(cb, 8));
-      vst1_u8(v0 + x / 2, vshrn_n_u16(cr, 8));
+      if constexpr (nv12) {
+        const uint8x8x2_t chroma = {{vshrn_n_u16(cb, 8), vshrn_n_u16(cr, 8)}};
+        vst2_u8(u0 + x, chroma);
+      } else {
+        vst1_u8(u0 + x / 2, vshrn_n_u16(cb, 8));
+        vst1_u8(v0 + x / 2, vshrn_n_u16(cr, 8));
+      }
     }
 #endif
     for (; x < width; x += 2) {
@@ -82,8 +88,8 @@ bool convertToYuv420(const uint8_t* source, int sourceStride,
       const int blue = (a[blueOffset] + a[4 + blueOffset] + b[blueOffset] + b[4 + blueOffset] + 2) / 4;
       const int green = (a[greenOffset] + a[4 + greenOffset] + b[greenOffset] + b[4 + greenOffset] + 2) / 4;
       const int red = (a[redOffset] + a[4 + redOffset] + b[redOffset] + b[4 + redOffset] + 2) / 4;
-      u0[x / 2] = blueChroma(blue, green, red);
-      v0[x / 2] = redChroma(blue, green, red);
+      u0[nv12 ? x : x / 2] = blueChroma(blue, green, red);
+      v0[nv12 ? x + 1 : x / 2] = redChroma(blue, green, red);
     }
   }
   return true;
@@ -91,11 +97,21 @@ bool convertToYuv420(const uint8_t* source, int sourceStride,
 bool bgraToYuv420(const uint8_t* source, int sourceStride,
                   uint8_t* y, int yStride, uint8_t* u, int uStride,
                   uint8_t* v, int vStride, int width, int height) {
-  return convertToYuv420<false>(source, sourceStride, y, yStride, u, uStride, v, vStride, width, height);
+  return convertToYuv420<false, false>(source, sourceStride, y, yStride, u, uStride, v, vStride, width, height);
 }
 bool argbToYuv420(const uint8_t* source, int sourceStride,
                   uint8_t* y, int yStride, uint8_t* u, int uStride,
                   uint8_t* v, int vStride, int width, int height) {
-  return convertToYuv420<true>(source, sourceStride, y, yStride, u, uStride, v, vStride, width, height);
+  return convertToYuv420<true, false>(source, sourceStride, y, yStride, u, uStride, v, vStride, width, height);
+}
+bool bgraToNv12(const uint8_t* source, int sourceStride,
+                uint8_t* y, int yStride, uint8_t* uv, int uvStride,
+                int width, int height) {
+  return convertToYuv420<false, true>(source, sourceStride, y, yStride, uv, uvStride, uv, uvStride, width, height);
+}
+bool argbToNv12(const uint8_t* source, int sourceStride,
+                uint8_t* y, int yStride, uint8_t* uv, int uvStride,
+                int width, int height) {
+  return convertToYuv420<true, true>(source, sourceStride, y, yStride, uv, uvStride, uv, uvStride, width, height);
 }
 }  // namespace nsl
