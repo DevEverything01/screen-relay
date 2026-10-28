@@ -133,6 +133,16 @@ function watchPending(current) {
 function schedulePresent() {
   if (!frameHandle) frameHandle = requestAnimationFrame(present);
 }
+function ackFrame(item) {
+  try {
+    if (socket?.readyState !== WebSocket.OPEN) throw new Error("Connection closed before ACK");
+    socket.send(header(2, item.gen, item.seq, 0));
+    return true;
+  } catch (error) {
+    fail(`ACK failed: ${error.message}`);
+    return false;
+  }
+}
 function draw(item) {
   try {
     if (item.gen !== generation) throw new Error("Stale decoded frame");
@@ -150,7 +160,7 @@ function draw(item) {
   retry = 0;
   status.textContent = "Live · click to control";
   drawnThisFrame = true;
-  return true;
+  return ackFrame(item);
 }
 function presentDecoded(item) {
   if (!decoded.length && !drawnThisFrame) {
@@ -171,8 +181,10 @@ function present() {
   const item = decoded.shift();
   if (!item || !draw(item)) return;
   while (decoded.length > 2) {
-    decoded.shift().frame.close();
+    const dropped = decoded.shift();
+    dropped.frame.close();
     stats.superseded++;
+    if (!ackFrame(dropped)) return;
   }
   schedulePresent();
 }
@@ -272,8 +284,6 @@ function connect() {
               stats.pendingBytes -= item.bytes;
               stats.outstanding = pending.size;
               if (!presentDecoded({ gen: item.gen, seq: item.seq, frame })) return;
-              if (ws.readyState !== WebSocket.OPEN) throw new Error("Connection closed before ACK");
-              ws.send(header(2, item.gen, item.seq, 0));
               watchPending(current);
             } catch (error) {
               fail(`Draw failed: ${error.message}`);
