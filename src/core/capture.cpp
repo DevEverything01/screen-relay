@@ -23,6 +23,8 @@
 
 namespace relay {
 namespace {
+/** VBV buffer, in kbit, that holds about 1/15 s of video at `bitrate` bits per second. */
+constexpr int vbvBufferKbit(uint64_t bitrate) { return int(bitrate / 15000); }
 using Clock = std::chrono::steady_clock;
 constexpr timespec pollTimeout(int64_t nanoseconds) {
   return {static_cast<time_t>(nanoseconds / 1000000000),
@@ -71,7 +73,7 @@ struct Resources {
     params.i_threads = 1; params.i_keyint_max = 600; params.i_bframe = 0;
     params.i_scenecut_threshold = 0; params.i_sync_lookahead = 0;
     params.rc.i_rc_method = X264_RC_CRF; params.rc.f_rf_constant = 10;
-    params.rc.i_lookahead = 0; params.rc.i_vbv_max_bitrate = 8000; params.rc.i_vbv_buffer_size = 2000;
+    params.rc.i_lookahead = 0; params.rc.i_vbv_max_bitrate = int(FlowControl::initial_bitrate / 1000); params.rc.i_vbv_buffer_size = vbvBufferKbit(FlowControl::initial_bitrate);
     params.analyse.b_mb_info = 1; params.analyse.b_mb_info_update = 0;
     params.b_annexb = 1; params.b_repeat_headers = 1;
     params.vui.b_fullrange = 0; params.vui.i_colmatrix = 1;
@@ -200,7 +202,7 @@ struct CaptureEncoder::Impl {
               x264_param_t params;
               x264_encoder_parameters(r.codec, &params);
               params.rc.i_vbv_max_bitrate = int(rate / 1000);
-              params.rc.i_vbv_buffer_size = int(rate / 4000);
+              params.rc.i_vbv_buffer_size = vbvBufferKbit(rate);
               require(x264_encoder_reconfig(r.codec, &params) == 0, "encoder reconfiguration failed");
               r.bitrate = rate;
             }
