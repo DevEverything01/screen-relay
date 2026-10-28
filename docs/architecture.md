@@ -55,7 +55,7 @@ browser or agent input -> InputBackend (XTest)
 | Decrease | Target x 0.75 (and at most 90% of measured goodput) when 2+ frames and enough bytes are outstanding, oldest capture is 200 ms old, and 500 ms since the last decrease. Floor 1 Mbps. |
 | Increase | Target x 1.10 after a busy 1 s sample, oldest under 100 ms, 1 s since last increase, 2 s since last decrease. |
 
-ACK time includes network, decode, draw and scheduling. It is not pure RTT. Paths with latency near 200 ms can back off repeatedly.
+ACK time includes network, decode and scheduling. It is not pure RTT. Drawing is paced separately to the display, so an ACK no longer waits for a presented frame. Paths with latency near 200 ms can back off repeatedly.
 
 Quality recovery: when damage stops for 150 ms, the capture worker re-encodes the full picture as a P frame without capturing again. If the transport queue is empty it keeps refining at up to 60 fps, using a VBV buffer twice the motion size at the current target bitrate. Refinement stops when x264 reports an effective CRF within 1 of the target and the frame is small enough to transfer in two frame intervals at the target rate, after 30 refinement frames, or when new damage arrives. The worker restores the motion VBV before encoding new damage. Refinement starts only when no frames are in flight, although an already published refinement frame can delay later damage.
 
