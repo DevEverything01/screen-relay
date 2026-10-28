@@ -617,6 +617,7 @@ int main(int argc, char** argv) {
   lws_protocols protocols[] = {{"http", callback, sizeof(HttpResponse), 4096, 0, nullptr, 0}, {"nsl1", callback, sizeof(HttpResponse), 4096, 0, nullptr, 0}, {nullptr, nullptr, 0, 0, 0, nullptr, 0}};
   lws_context_creation_info info{};
   info.port=int(config.port); info.iface=config.bind.c_str(); info.protocols=protocols; info.user=&s;
+  info.fd_limit_per_thread = 1024;
   // shortcut: native TLS supports HTTP/1.1 only, enable HTTP/2 after multiplexed-response lifecycle tests.
   info.alpn = "http/1.1";
   if (!config.cert.empty()) {

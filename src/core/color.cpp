@@ -7,6 +7,10 @@
 #include <arm_neon.h>
 #endif
 
+#if defined(__SSE2__)
+#include <emmintrin.h>
+#endif
+
 namespace nsl {
 namespace {
 // BT.709 coefficients scaled by 2^14; biases keep all shifts nonnegative.
@@ -29,6 +33,67 @@ uint8x8_t luma8(uint8x8_t b, uint8x8_t g, uint8x8_t r) {
 /** Averages vertically adjacent pixel pairs and then horizontal neighbours, rounding to nearest. */
 uint8x8_t box8(uint8x16_t top, uint8x16_t bottom) {
   return vmovn_u16(vrshrq_n_u16(vaddq_u16(vpaddlq_u8(top), vpaddlq_u8(bottom)), 2));
+}
+#endif
+
+#if defined(__SSE2__)
+void splitBgra8(const uint8_t* src, __m128i& b, __m128i& g, __m128i& r) {
+  const auto mask = _mm_set1_epi32(0xFF);
+  const auto lo = _mm_loadu_si128(reinterpret_cast<const __m128i*>(src));
+  const auto hi = _mm_loadu_si128(reinterpret_cast<const __m128i*>(src + 16));
+  b = _mm_packs_epi32(_mm_and_si128(lo, mask), _mm_and_si128(hi, mask));
+  g = _mm_packs_epi32(_mm_and_si128(_mm_srli_epi32(lo, 8), mask),
+                      _mm_and_si128(_mm_srli_epi32(hi, 8), mask));
+  r = _mm_packs_epi32(_mm_and_si128(_mm_srli_epi32(lo, 16), mask),
+                      _mm_and_si128(_mm_srli_epi32(hi, 16), mask));
+}
+__m128i lumaBlock8(__m128i b, __m128i g, __m128i r) {
+  const auto ones = _mm_set1_epi16(1);
+  const auto rgCoef = _mm_setr_epi16(2991, 10064, 2991, 10064, 2991, 10064, 2991, 10064);
+  const auto bCoef = _mm_setr_epi16(1016, 8192, 1016, 8192, 1016, 8192, 1016, 8192);
+  const auto bias = _mm_set1_epi32(16);
+  const auto lo = _mm_add_epi32(
+      _mm_srai_epi32(_mm_add_epi32(_mm_madd_epi16(_mm_unpacklo_epi16(r, g), rgCoef),
+                                   _mm_madd_epi16(_mm_unpacklo_epi16(b, ones), bCoef)), 14),
+      bias);
+  const auto hi = _mm_add_epi32(
+      _mm_srai_epi32(_mm_add_epi32(_mm_madd_epi16(_mm_unpackhi_epi16(r, g), rgCoef),
+                                   _mm_madd_epi16(_mm_unpackhi_epi16(b, ones), bCoef)), 14),
+      bias);
+  const auto packed = _mm_packs_epi32(lo, hi);
+  return _mm_packus_epi16(packed, packed);
+}
+__m128i boxAverage4(__m128i top, __m128i bottom) {
+  const auto pairs = _mm_madd_epi16(_mm_add_epi16(top, bottom), _mm_set1_epi16(1));
+  return _mm_srai_epi32(_mm_add_epi32(pairs, _mm_set1_epi32(2)), 2);
+}
+void chromaBlock4(__m128i blue, __m128i green, __m128i red, uint8_t* u, uint8_t* v, int step) {
+  const auto zero = _mm_setzero_si128();
+  const auto b = _mm_packs_epi32(blue, blue);
+  const auto g = _mm_packs_epi32(green, green);
+  const auto r = _mm_packs_epi32(red, red);
+  const auto bias = _mm_set1_epi32(128 * 16384 + 8192);
+  const auto cb = _mm_srai_epi32(
+      _mm_add_epi32(bias,
+                    _mm_add_epi32(_mm_madd_epi16(_mm_unpacklo_epi16(b, g),
+                                                 _mm_setr_epi16(7196, -5547, 7196, -5547, 7196, -5547, 7196, -5547)),
+                                  _mm_madd_epi16(_mm_unpacklo_epi16(r, zero),
+                                                 _mm_setr_epi16(-1649, 0, -1649, 0, -1649, 0, -1649, 0)))),
+      14);
+  const auto cr = _mm_srai_epi32(
+      _mm_add_epi32(bias,
+                    _mm_add_epi32(_mm_madd_epi16(_mm_unpacklo_epi16(r, g),
+                                                 _mm_setr_epi16(7196, -6536, 7196, -6536, 7196, -6536, 7196, -6536)),
+                                  _mm_madd_epi16(_mm_unpacklo_epi16(b, zero),
+                                                 _mm_setr_epi16(-660, 0, -660, 0, -660, 0, -660, 0)))),
+      14);
+  const auto packed = _mm_packs_epi32(cb, cr);
+  uint8_t values[16];
+  _mm_storeu_si128(reinterpret_cast<__m128i*>(values), _mm_packus_epi16(packed, packed));
+  for (int k = 0; k < 4; ++k) {
+    u[k * step] = values[k];
+    v[k * step] = values[k + 4];
+  }
 }
 #endif
 }  // namespace
@@ -73,6 +138,17 @@ bool convertToYuv420(const uint8_t* source, int sourceStride,
         vst1_u8(u0 + x / 2, vshrn_n_u16(cb, 8));
         vst1_u8(v0 + x / 2, vshrn_n_u16(cr, 8));
       }
+    }
+#endif
+#if defined(__SSE2__)
+    if constexpr (!argb) for (; x <= width - 8; x += 8) {
+      __m128i tb, tg, tr, bb, bg, br;
+      splitBgra8(top + x * 4, tb, tg, tr);
+      splitBgra8(bottom + x * 4, bb, bg, br);
+      _mm_storel_epi64(reinterpret_cast<__m128i*>(y0 + x), lumaBlock8(tb, tg, tr));
+      _mm_storel_epi64(reinterpret_cast<__m128i*>(y1 + x), lumaBlock8(bb, bg, br));
+      chromaBlock4(boxAverage4(tb, bb), boxAverage4(tg, bg), boxAverage4(tr, br),
+                   nv12 ? u0 + x : u0 + x / 2, nv12 ? u0 + x + 1 : v0 + x / 2, nv12 ? 2 : 1);
     }
 #endif
     for (; x < width; x += 2) {
