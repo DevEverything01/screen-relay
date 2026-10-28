@@ -44,87 +44,28 @@ function receiveCursor(data) {
   renderCursor();
 }
 const stats = window.nativeStats = {
-  received: 0,
-  drawn: 0,
-  bytes: 0,
-  decodeerrors: 0,
-  outstanding: 0,
-  pendingBytes: 0,
-  pendingHighWater: 0,
+  received: 0, drawn: 0, bytes: 0, decodeerrors: 0, outstanding: 0, pendingBytes: 0, pendingHighWater: 0,
 };
-let socket,
-  decoder,
-  generation = 0,
-  sequence = 0,
-  lastTimestamp = -1,
-  ready = false,
-  retry = 0,
-  retryTimer,
-  deadline,
-  epoch = 0;
+let socket, decoder, retryTimer, deadline;
+let generation = 0, sequence = 0, lastTimestamp = -1, ready = false, retry = 0, epoch = 0;
 let buttons = 0, modifiers = 0, x = 0, y = 0, viewOnly = false;
 const pending = new Map(), held = new Set();
-const keys = {
-  Enter: 40,
-  Escape: 41,
-  Backspace: 42,
-  Tab: 43,
-  Space: 44,
-  Minus: 45,
-  Equal: 46,
-  BracketLeft: 47,
-  BracketRight: 48,
-  Backslash: 49,
-  Semicolon: 51,
-  Quote: 52,
-  Backquote: 53,
-  Comma: 54,
-  Period: 55,
-  Slash: 56,
-  CapsLock: 57,
-  PrintScreen: 70,
-  ScrollLock: 71,
-  Pause: 72,
-  Insert: 73,
-  Home: 74,
-  PageUp: 75,
-  Delete: 76,
-  End: 77,
-  PageDown: 78,
-  ArrowRight: 79,
-  ArrowLeft: 80,
-  ArrowDown: 81,
-  ArrowUp: 82,
-  NumLock: 83,
-  NumpadDivide: 84,
-  NumpadMultiply: 85,
-  NumpadSubtract: 86,
-  NumpadAdd: 87,
-  NumpadEnter: 88,
-  Numpad1: 89,
-  Numpad2: 90,
-  Numpad3: 91,
-  Numpad4: 92,
-  Numpad5: 93,
-  Numpad6: 94,
-  Numpad7: 95,
-  Numpad8: 96,
-  Numpad9: 97,
-  Numpad0: 98,
-  NumpadDecimal: 99,
-  ControlLeft: 224,
-  ShiftLeft: 225,
-  AltLeft: 226,
-  MetaLeft: 227,
-  ControlRight: 228,
-  ShiftRight: 229,
-  AltRight: 230,
-  MetaRight: 231,
-};
-for (let i = 0; i < 26; i++) keys[`Key${String.fromCharCode(65 + i)}`] = 4 + i;
-for (let i = 1; i <= 9; i++) keys[`Digit${i}`] = 29 + i;
-keys.Digit0 = 39;
-for (let i = 1; i <= 12; i++) keys[`F${i}`] = 57 + i;
+const keys = {};
+const assignKeys = (first, names) => names.split(" ").forEach((name, i) => keys[name] = first + i);
+assignKeys(4, Array.from({ length: 26 }, (_, i) => `Key${String.fromCharCode(65 + i)}`).join(" "));
+assignKeys(30, "Digit1 Digit2 Digit3 Digit4 Digit5 Digit6 Digit7 Digit8 Digit9 Digit0");
+assignKeys(40, "Enter Escape Backspace Tab Space Minus Equal BracketLeft BracketRight Backslash");
+assignKeys(51, "Semicolon Quote Backquote Comma Period Slash CapsLock");
+assignKeys(58, Array.from({ length: 12 }, (_, i) => `F${i + 1}`).join(" "));
+assignKeys(70, "PrintScreen ScrollLock Pause Insert Home PageUp Delete End PageDown ArrowRight ArrowLeft ArrowDown ArrowUp NumLock");
+assignKeys(84, "NumpadDivide NumpadMultiply NumpadSubtract NumpadAdd NumpadEnter Numpad1 Numpad2 Numpad3 Numpad4 Numpad5 Numpad6 Numpad7 Numpad8 Numpad9 Numpad0 NumpadDecimal");
+assignKeys(224, "ControlLeft ShiftLeft AltLeft MetaLeft ControlRight ShiftRight AltRight MetaRight");
+const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
+function setModifier(code, down) {
+  if (code < 224 || code > 231) return;
+  modifiers = down ? modifiers | 1 << (code - 224) : modifiers & ~(1 << (code - 224));
+}
+const authHeaders = () => accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
 function header(type, gen, seq, size) {
   const b = new ArrayBuffer(20 + size), v = new DataView(b);
   v.setUint32(0, 0x4e534c31);
@@ -148,14 +89,9 @@ function sendInput(event, code = 0, value = 0) {
   socket.send(b);
 }
 function release() {
-  if (ready) {
-    buttons = 0;
-    modifiers = 0;
-    sendInput(7);
-  }
+  buttons = modifiers = 0;
+  if (ready) sendInput(7);
   held.clear();
-  buttons = 0;
-  modifiers = 0;
 }
 function reset() {
   release();
@@ -194,16 +130,9 @@ function codecFromSps(bytes) {
   for (let i = 0; i + 7 < bytes.length; i++) {
     let n = 0;
     if (bytes[i] === 0 && bytes[i + 1] === 0 && bytes[i + 2] === 1) n = i + 3;
-    else if (
-      bytes[i] === 0 && bytes[i + 1] === 0 && bytes[i + 2] === 0 &&
-      bytes[i + 3] === 1
-    ) n = i + 4;
+    else if (bytes[i] === 0 && bytes[i + 1] === 0 && bytes[i + 2] === 0 && bytes[i + 3] === 1) n = i + 4;
     if (n && n + 3 < bytes.length && (bytes[n] & 31) === 7) {
-      return `avc1.${
-        [bytes[n + 1], bytes[n + 2], bytes[n + 3]].map((v) =>
-          v.toString(16).padStart(2, "0")
-        ).join("")
-      }`;
+      return `avc1.${[bytes[n + 1], bytes[n + 2], bytes[n + 3]].map((v) => v.toString(16).padStart(2, "0")).join("")}`;
     }
   }
   throw new Error("Keyframe is missing SPS");
@@ -223,9 +152,7 @@ function connect() {
     return;
   }
   socket = new WebSocket(
-    `${
-      location.protocol === "https:" ? "wss" : "ws"
-    }://${location.host}/stream`,
+    `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/stream`,
     accessToken ? ['nsl1', `bearer.${accessToken}`] : 'nsl1',
   );
   const ws = socket;
@@ -245,25 +172,17 @@ function connect() {
         !(e.data instanceof ArrayBuffer) || e.data.byteLength < 20 ||
         e.data.byteLength > 8388640
       ) throw new Error("Invalid frame length");
-      const v = new DataView(e.data),
-        gen = v.getUint32(8),
-        seq = v.getUint32(12),
-        flags = v.getUint16(6),
-        len = v.getUint32(16);
-      if (v.getUint32(0) !== 0x4e534c31 || v.getUint8(4) !== 1 || len !== e.data.byteLength - 20) {
+      const v = new DataView(e.data), gen = v.getUint32(8), seq = v.getUint32(12), flags = v.getUint16(6);
+      if (v.getUint32(0) !== 0x4e534c31 || v.getUint8(4) !== 1 || v.getUint32(16) !== e.data.byteLength - 20) {
         throw new Error("Invalid message envelope");
       }
       if (v.getUint8(5) === 6) { receiveCursor(e.data); return; }
       if (e.data.byteLength < 33) throw new Error("Invalid frame length");
-      const
-        width = v.getUint16(20),
-        height = v.getUint16(22),
-        pts = v.getBigUint64(24);
+      const width = v.getUint16(20), height = v.getUint16(22), pts = v.getBigUint64(24);
       if (
-        v.getUint32(0) !== 0x4e534c31 || v.getUint8(4) !== 1 ||
         v.getUint8(5) !== 1 || flags > 1 || !gen || !seq ||
-        len !== e.data.byteLength - 20 || !width || width > 1280 || !height ||
-        height > 720 || pts > BigInt(Number.MAX_SAFE_INTEGER)
+        !width || width > 1280 || !height || height > 720 ||
+        pts > BigInt(Number.MAX_SAFE_INTEGER)
       ) throw new Error("Invalid frame header");
       if (generation && gen < generation) throw new Error("Stale generation");
       if (gen !== generation) {
@@ -288,12 +207,7 @@ function connect() {
       stats.pendingHighWater = Math.max(stats.pendingHighWater, pending.size);
       watchPending(current);
       if (!decoder) {
-        const config = {
-          codec: codecFromSps(data),
-          codedWidth: width,
-          codedHeight: height,
-          optimizeForLatency: true,
-        };
+        const config = { codec: codecFromSps(data), codedWidth: width, codedHeight: height, optimizeForLatency: true };
         const instance = new VideoDecoder({
           output(frame) {
             let retained = false;
@@ -338,11 +252,7 @@ function connect() {
         decoder.configure(config);
       }
       decoder.decode(
-        new EncodedVideoChunk({
-          type: flags & 1 ? "key" : "delta",
-          timestamp,
-          data,
-        }),
+        new EncodedVideoChunk({ type: flags & 1 ? "key" : "delta", timestamp, data }),
       );
     } catch (error) {
       if (current === epoch) fail(error.message);
@@ -373,20 +283,8 @@ function position(e) {
   renderCursor();
   const r = canvas.getBoundingClientRect();
   if (r.width <= 0 || r.height <= 0) return;
-  const px = Math.max(
-    0,
-    Math.min(
-      canvas.width - 1,
-      Math.floor((e.clientX - r.left) * canvas.width / r.width),
-    ),
-  );
-  const py = Math.max(
-    0,
-    Math.min(
-      canvas.height - 1,
-      Math.floor((e.clientY - r.top) * canvas.height / r.height),
-    ),
-  );
+  const px = clamp(Math.floor((e.clientX - r.left) * canvas.width / r.width), 0, canvas.width - 1);
+  const py = clamp(Math.floor((e.clientY - r.top) * canvas.height / r.height), 0, canvas.height - 1);
   x = Math.round(px * 65535 / (canvas.width - 1));
   y = Math.round(py * 65535 / (canvas.height - 1));
 }
@@ -396,7 +294,7 @@ canvas.addEventListener("keydown", (e) => {
   e.preventDefault();
   if (e.repeat || held.has(code)) return;
   held.add(code);
-  if (code >= 224 && code <= 231) modifiers |= 1 << (code - 224);
+  setModifier(code, true);
   sendInput(1, code);
 });
 canvas.addEventListener("keyup", (e) => {
@@ -404,7 +302,7 @@ canvas.addEventListener("keyup", (e) => {
   if (!code) return;
   e.preventDefault();
   if (!held.delete(code)) return;
-  if (code >= 224 && code <= 231) modifiers &= ~(1 << (code - 224));
+  setModifier(code, false);
   sendInput(2, code);
 });
 canvas.addEventListener("pointermove", (e) => {
@@ -446,23 +344,14 @@ canvas.addEventListener("wheel", (e) => {
   position(e);
   for (const [axis, delta] of [[0, e.deltaY], [1, e.deltaX]]) {
     if (delta) {
-      sendInput(
-        6,
-        axis,
-        Math.max(
-          -1200,
-          Math.min(
-            1200,
-            Math.sign(delta) * Math.max(1, Math.round(Math.abs(delta) / 100)) *
-              120,
-          ),
-        ),
-      );
+      const notches = Math.max(1, Math.round(Math.abs(delta) / 100));
+      sendInput(6, axis, clamp(Math.sign(delta) * notches * 120, -1200, 1200));
     }
   }
 }, { passive: false });
 canvas.addEventListener("blur", release);
 window.addEventListener("blur", () => { release(); pointerPosition = null; renderCursor(); });
+const METRICS_UNAVAILABLE = "Cgroup CPU (one core): unavailable · Cgroup RAM: unavailable";
 let hudTimer, metricsRequest;
 function startHud() {
   let previousTime = performance.now(),
@@ -470,55 +359,38 @@ function startHud() {
     previousBytes = stats.bytes,
     previousCpu,
     previousCpuTime,
-    metrics =
-      "Cgroup CPU (one core): unavailable · Cgroup RAM: unavailable";
+    metrics = METRICS_UNAVAILABLE;
   hudTimer = setInterval(() => {
     const now = performance.now(), seconds = (now - previousTime) / 1000;
     const fps = (stats.drawn - previousDrawn) / seconds;
     const mbps = (stats.bytes - previousBytes) * 8 / seconds / 1_000_000;
-    document.querySelector("#hud").textContent = `Drawn FPS: ${
-      fps.toFixed(1)
-    } · Stream Mbps: ${mbps.toFixed(2)} · ${metrics}`;
+    document.querySelector("#hud").textContent = `Drawn FPS: ${fps.toFixed(1)} · Stream Mbps: ${mbps.toFixed(2)} · ${metrics}`;
     previousTime = now;
     previousDrawn = stats.drawn;
     previousBytes = stats.bytes;
     if (!metricsRequest) {
       const controller = metricsRequest = new AbortController();
       const timer = setTimeout(() => controller.abort(), 2000);
-      fetch("/metrics", { cache: "no-store", signal: controller.signal, redirect: 'error',
-        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {} })
+      fetch("/metrics", { cache: "no-store", signal: controller.signal, redirect: 'error', headers: authHeaders() })
         .then((response) => {
           if (!response.ok) throw new Error("Metrics unavailable");
           return response.json();
         })
         .then((data) => {
           const time = performance.now();
-          if (
-            ![data.usage_usec, data.memory_current, data.inactive_file].every(
-              Number.isFinite,
-            ) ||
-            data.usage_usec < 0 || data.memory_current < 0 ||
-            data.inactive_file < 0
-          ) throw new Error("Invalid metrics");
-          const cpu =
-            previousCpu !== undefined && data.usage_usec >= previousCpu &&
-              time > previousCpuTime
-              ? `${
-                ((data.usage_usec - previousCpu) /
-                  ((time - previousCpuTime) * 1000) * 100).toFixed(1)
-              }%`
-              : "unavailable";
-          const ram =
-            (Math.max(0, data.memory_current - data.inactive_file) / 1048576)
-              .toFixed(1);
-          metrics =
-            `Cgroup CPU (one core): ${cpu} · Cgroup RAM: ${ram} MiB`;
+          if (![data.usage_usec, data.memory_current, data.inactive_file].every((n) => Number.isFinite(n) && n >= 0)) {
+            throw new Error("Invalid metrics");
+          }
+          const cpu = previousCpu !== undefined && data.usage_usec >= previousCpu && time > previousCpuTime
+            ? `${((data.usage_usec - previousCpu) / ((time - previousCpuTime) * 1000) * 100).toFixed(1)}%`
+            : "unavailable";
+          const ram = (Math.max(0, data.memory_current - data.inactive_file) / 1048576).toFixed(1);
+          metrics = `Cgroup CPU (one core): ${cpu} · Cgroup RAM: ${ram} MiB`;
           previousCpu = data.usage_usec;
           previousCpuTime = time;
         })
         .catch(() => {
-          metrics =
-            "Cgroup CPU (one core): unavailable · Cgroup RAM: unavailable";
+          metrics = METRICS_UNAVAILABLE;
           previousCpu = undefined;
         })
         .finally(() => {
@@ -534,7 +406,7 @@ document.addEventListener("visibilitychange", () => {
     metricsRequest?.abort();
     metricsRequest = null;
     document.querySelector("#hud").textContent =
-      "Drawn FPS: 0.0 · Stream Mbps: 0.00 · Cgroup CPU (one core): unavailable · Cgroup RAM: unavailable";
+      `Drawn FPS: 0.0 · Stream Mbps: 0.00 · ${METRICS_UNAVAILABLE}`;
     release();
     epoch++;
     if (socket) socket.close();
@@ -548,8 +420,7 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 function checkAccess(current) {
-  fetch("/capabilities", { cache: "no-store", redirect: "error",
-    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {} })
+  fetch("/capabilities", { cache: "no-store", redirect: "error", headers: authHeaders() })
     .then((response) => {
       if (response.status !== 401 || current !== epoch) return;
       clearTimeout(retryTimer);
@@ -627,11 +498,11 @@ panels.keys.addEventListener("click", (e) => {
   if (!button) return;
   const codes = button.dataset.keys.split("+").map((name) => keys[name]);
   for (const code of codes) {
-    if (code >= 224) modifiers |= 1 << (code - 224);
+    setModifier(code, true);
     sendInput(1, code);
   }
   for (const code of codes.reverse()) {
-    if (code >= 224) modifiers &= ~(1 << (code - 224));
+    setModifier(code, false);
     sendInput(2, code);
   }
   showPanel(null);
