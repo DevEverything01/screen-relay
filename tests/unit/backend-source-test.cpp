@@ -35,10 +35,13 @@ struct SourceState {
 // This source has no display connection or native-backend factory dependency.
 class CpuSource final : public relay::CaptureSource {
   std::shared_ptr<SourceState> state;
-  std::vector<uint8_t> pixels = std::vector<uint8_t>(1280 * 720 * 4);
+  int width, height;
+  std::vector<uint8_t> pixels;
  public:
-  explicit CpuSource(std::shared_ptr<SourceState> s) : state(std::move(s)) {}
+  explicit CpuSource(std::shared_ptr<SourceState> s, int w = 1280, int h = 720)
+      : state(std::move(s)), width(w), height(h), pixels(size_t(w) * size_t(h) * 4) {}
   int fd() const override { return state->fd; }
+  std::pair<int, int> dimensions() const override { return {width, height}; }
   bool drainDamage() override {
     uint64_t value;
     return read(state->fd, &value, sizeof(value)) == sizeof(value);
@@ -51,8 +54,8 @@ class CpuSource final : public relay::CaptureSource {
       pixels[i] = red ? 48 : 96; pixels[i + 1] = red ? 64 : 176;
       pixels[i + 2] = red ? 192 : 32; pixels[i + 3] = 255;
     }
-    return {pixels.data(), state->invalid == 2 ? 1 : 1280 * 4,
-            state->invalid == 1 ? 1 : 1280, 720, relay::PixelFormat::BGRA};
+    return {pixels.data(), state->invalid == 2 ? 1 : width * 4,
+            state->invalid == 1 ? 1 : width, height, relay::PixelFormat::BGRA};
   }
 };
 struct Frames {
@@ -69,7 +72,7 @@ struct Frames {
     return items[index];
   }
 };
-static void decodedPixel(const relay::EncodedFrame& encoded, bool red) {
+static void decodedPixel(const relay::EncodedFrame& encoded, bool red, int width, int height) {
   const AVCodec* codec = avcodec_find_decoder(AV_CODEC_ID_H264);
   require(codec, "H264 decoder unavailable");
   AVCodecContext* decoder = avcodec_alloc_context3(codec);
@@ -83,21 +86,21 @@ static void decodedPixel(const relay::EncodedFrame& encoded, bool red) {
     std::copy(encoded.annex_b.begin(), encoded.annex_b.end(), packet->data);
     require(avcodec_send_packet(decoder, packet) >= 0, "decoder rejected IDR");
     require(avcodec_receive_frame(decoder, frame) >= 0, "fresh decoder could not decode IDR");
-    require(frame->width == 1280 && frame->height == 720, "decoded dimensions differ");
-    converter = sws_getContext(1280, 720, AVPixelFormat(frame->format), 1280, 720,
+    require(frame->width == width && frame->height == height, "decoded dimensions differ");
+    converter = sws_getContext(width, height, AVPixelFormat(frame->format), width, height,
                               AV_PIX_FMT_RGB24, SWS_POINT, nullptr, nullptr, nullptr);
     require(converter, "RGB decoder conversion failed");
     const int* coefficients = sws_getCoefficients(SWS_CS_ITU709);
     require(sws_setColorspaceDetails(converter, coefficients, 0, coefficients, 1,
                                     0, 1 << 16, 1 << 16) >= 0, "decoder colorspace failed");
-    std::vector<uint8_t> rgb(1280 * 720 * 3);
+    std::vector<uint8_t> rgb(size_t(width) * height * 3);
     uint8_t* planes[] = {rgb.data(), nullptr, nullptr, nullptr};
-    int strides[] = {1280 * 3, 0, 0, 0};
-    require(sws_scale(converter, frame->data, frame->linesize, 0, 720, planes, strides) == 720,
+    int strides[] = {width * 3, 0, 0, 0};
+    require(sws_scale(converter, frame->data, frame->linesize, 0, height, planes, strides) == height,
             "decoded RGB conversion incomplete");
     const int expected[] = {red ? 192 : 32, red ? 64 : 176, red ? 48 : 96};
     for (int channel = 0; channel < 3; ++channel)
-      require(std::abs(int(rgb[(400 * 1280 + 800) * 3 + channel]) - expected[channel]) <= 12,
+      require(std::abs(int(rgb[(size_t(height) / 2 * width + width / 2) * 3 + channel]) - expected[channel]) <= 12,
               "decoded source pixel differs from independent RGB expectation");
   } catch (...) {
     sws_freeContext(converter); av_packet_free(&packet); av_frame_free(&frame);
@@ -106,10 +109,11 @@ static void decodedPixel(const relay::EncodedFrame& encoded, bool red) {
   sws_freeContext(converter); av_packet_free(&packet); av_frame_free(&frame);
   avcodec_free_context(&decoder);
 }
+static const relay::CaptureSettings capture_settings{60, 1000000, 8000000, 40000000};
 static void healthySource() {
   auto state = std::make_shared<SourceState>(); Frames frames;
   relay::CaptureEncoder encoder([&](relay::EncodedFrame&& f) { return frames.publish(std::move(f)); },
-      [state] { return std::make_unique<CpuSource>(state); });
+      capture_settings, [state] { return std::make_unique<CpuSource>(state); });
   std::string error;
   require(encoder.start(error), error.c_str());
   require(state->captures == 0, "capture occurred with no session");
@@ -117,7 +121,7 @@ static void healthySource() {
   const auto initial = frames.at(0);
   require(initial.generation == 17 && initial.sequence == 1 && initial.keyframe,
           "initial session did not start with sequence-one keyframe");
-  decodedPixel(initial, false);
+  decodedPixel(initial, false, 1280, 720);
   encoder.acknowledge(17, 1);
   const unsigned captured = state->captures;
   std::this_thread::sleep_for(150ms);
@@ -130,17 +134,33 @@ static void healthySource() {
   const auto fresh = frames.at(2);
   require(fresh.generation == 18 && fresh.sequence == 1 && fresh.keyframe,
           "new generation did not reset sequence and IDR");
-  decodedPixel(fresh, true);
+  decodedPixel(fresh, true, 1280, 720);
   encoder.stop();
   const unsigned stopped = state->captures;
   state->damage(); std::this_thread::sleep_for(50ms);
   require(state->captures == stopped, "capture continued after shutdown");
   require(encoder.error().empty(), "healthy source produced fatal error");
 }
+static void runtimeSize(int width, int height) {
+  auto state = std::make_shared<SourceState>(); Frames frames;
+  relay::CaptureEncoder encoder([&](relay::EncodedFrame&& frame) { return frames.publish(std::move(frame)); },
+      capture_settings, [state, width, height] { return std::make_unique<CpuSource>(state, width, height); });
+  std::string error; require(encoder.start(error), error.c_str()); encoder.beginSession(20);
+  const auto initial = frames.at(0);
+  require(initial.width == width && initial.height == height && initial.keyframe,
+          "runtime source dimensions were not encoded");
+  decodedPixel(initial, false, width, height);
+  encoder.acknowledge(20, 1);
+  state->red = true; state->damage();
+  const auto changed = frames.at(1);
+  require(changed.width == width && changed.height == height && !changed.keyframe,
+          "damage frame at runtime dimensions was not encoded");
+  encoder.stop();
+}
 static void identicalDamageRefines() {
   auto state = std::make_shared<SourceState>(); Frames frames;
   relay::CaptureEncoder encoder([&](relay::EncodedFrame&& frame) { return frames.publish(std::move(frame)); },
-      [state] { return std::make_unique<CpuSource>(state); });
+      capture_settings, [state] { return std::make_unique<CpuSource>(state); });
   std::string error; require(encoder.start(error), error.c_str()); encoder.beginSession(19);
   frames.at(0);
   encoder.setFlowControl(19, 2, 8000000, false, 0);
@@ -167,7 +187,7 @@ static void invalidSource(int invalid) {
   auto state = std::make_shared<SourceState>(); state->invalid = invalid;
   std::atomic<unsigned> published{0};
   relay::CaptureEncoder encoder([&](relay::EncodedFrame&&) { ++published; return true; },
-      [state] { return std::make_unique<CpuSource>(state); });
+      capture_settings, [state] { return std::make_unique<CpuSource>(state); });
   std::string error; require(encoder.start(error), error.c_str()); encoder.beginSession(1);
   const auto deadline = std::chrono::steady_clock::now() + 4s;
   while (encoder.error().empty() && std::chrono::steady_clock::now() < deadline)
@@ -179,7 +199,8 @@ static void invalidSource(int invalid) {
 }
 int main() {
   try {
-    healthySource(); identicalDamageRefines(); invalidSource(1); invalidSource(2);
+    healthySource(); runtimeSize(1920, 1080); runtimeSize(1366, 768);
+    identicalDamageRefines(); invalidSource(1); invalidSource(2);
     std::puts("backend source: decoded fresh IDRs, damage, refinement, idle, shutdown and invalid frames passed");
     return 0;
   } catch (const std::exception& error) {

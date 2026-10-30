@@ -150,7 +150,7 @@ function retireDecoded() {
 function draw(item) {
   try {
     if (item.gen !== generation) throw new Error("Stale decoded frame");
-    ctx.drawImage(item.frame, 0, 0, 1280, 720);
+    ctx.drawImage(item.frame, 0, 0, canvas.width, canvas.height);
   } catch (error) {
     item.frame.close();
     fail(`Draw failed: ${error.message}`);
@@ -245,7 +245,7 @@ function connect() {
       const width = v.getUint16(20), height = v.getUint16(22), pts = v.getBigUint64(24);
       if (
         v.getUint8(5) !== 1 || flags > 1 || !gen || !seq ||
-        !width || width > 1280 || !height || height > 720 ||
+        !width || width > 1920 || !height || height > 1080 ||
         pts > BigInt(Number.MAX_SAFE_INTEGER)
       ) throw new Error("Invalid frame header");
       if (generation && gen < generation) throw new Error("Stale generation");
@@ -271,6 +271,10 @@ function connect() {
       stats.pendingHighWater = Math.max(stats.pendingHighWater, pending.size);
       watchPending(current);
       if (!decoder) {
+        if (canvas.width !== width || canvas.height !== height) {
+          canvas.width = width; canvas.height = height;
+          canvas.style.setProperty("--w", width); canvas.style.setProperty("--h", height);
+        }
         const config = { codec: codecFromSps(data), codedWidth: width, codedHeight: height, optimizeForLatency: true };
         const instance = new VideoDecoder({
           output(frame) {

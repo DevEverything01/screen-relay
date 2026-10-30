@@ -12,6 +12,7 @@ import time
 
 from .client import http, target
 from .common import LAUNCHER_DIR, Failure, emit
+from .config import apply_to, load
 from .state import alive, lock, read_session, reap, state_dir, tail, write_session
 from .supervisor import Session, clear_ambient_caps, desktop_env
 from .watcher import start_watcher
@@ -40,6 +41,10 @@ def require_linux():
 
 def cmd_up(args):
     require_linux()
+    settings, _, present = load(args.config)
+    if args.display and 'display.resolution' in present:
+        print('display.resolution is ignored with --display; the existing display size is used', file=sys.stderr)
+    apply_to(args, settings, present)
     if not 1 <= args.port <= 65535:
         raise Failure('invalid_input', 'Port must be between 1 and 65535')
     if args.public and not re.fullmatch(r'https://[^/?#@\\\s]+', args.public):
@@ -188,9 +193,9 @@ def cmd_status(args):
         except Failure as failure:
             session['health'] = failure.payload()
     lines = [f'{args.name}: {session["state"]}']
-    for key in ('url', 'display', 'logs', 'token'):
+    for key in ('url', 'display', 'resolution', 'fps', 'logs', 'token'):
         if session.get(key):
-            lines.append(f'  {key + ":":9}{session[key]}')
+            lines.append(f'  {key + ":":12}{session[key]}')
     if session.get('error'):
         error = session['error']
         lines += [f'  error:   {error["message"]}', f'  hint:    {error.get("hint", "")}']

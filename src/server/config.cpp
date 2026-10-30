@@ -61,15 +61,25 @@ bool unsignedNumber(const std::string& text, uint64_t& value) {
 }
 bool parseConfig(int argc, char** argv, Config& config) {
   config.viewer = (std::filesystem::canonical("/proc/self/exe").parent_path() / "viewer").string();
+  const auto bitrate = [](const std::string& text) {
+    uint64_t value;
+    if (!unsignedNumber(text, value) || value < 250000 || value > 100000000)
+      throw std::runtime_error("Bitrate must be an integer from 250000 to 100000000 bits per second");
+    return value;
+  };
   for (int i = 1; i < argc; ++i) {
     const std::string option = argv[i];
     if (option == "--help") {
       std::cout << "Usage: relay-engine [--bind ADDRESS] [--port PORT] [--viewer-dir DIR]\n"
+                   "  [--fps N] [--bitrate-min BPS] [--bitrate-start BPS] [--bitrate-max BPS]\n"
                    "  [--token-file FILE [--public-origin https://HOST[:PORT]]]\n"
                    "  [--tls-cert FILE --tls-key FILE | --behind-tls-proxy]\n"
                    "  [--insecure-local: unauthenticated, isolated development network only]\n"
-                   "Non-loopback --bind needs --token-file; --public-origin also needs TLS or --behind-tls-proxy.\n"
-                   "Attach to DISPLAY using the caller's XAUTHORITY. Defaults: 127.0.0.1:8080.\n";
+                   "FPS is 10 to 60; bitrates are 250000 to 100000000 bits per second with\n"
+                   "min <= start <= max. Non-loopback --bind needs --token-file;\n"
+                   "--public-origin also needs TLS or --behind-tls-proxy.\n"
+                   "Attach to DISPLAY using the caller's XAUTHORITY. Defaults: 127.0.0.1:8080, 60 fps,\n"
+                   "1000000/8000000/40000000 bps.\n";
       return false;
     }
     if (option == "--behind-tls-proxy") { config.proxy = true; continue; }
@@ -81,7 +91,15 @@ bool parseConfig(int argc, char** argv, Config& config) {
       uint64_t port;
       if (!unsignedNumber(value, port) || !port || port > 65535) throw std::runtime_error("Invalid port");
       config.port = unsigned(port);
-    } else if (option == "--viewer-dir") config.viewer = value;
+    } else if (option == "--fps") {
+      uint64_t fps;
+      if (!unsignedNumber(value, fps) || fps < 10 || fps > 60)
+        throw std::runtime_error("FPS must be an integer from 10 to 60");
+      config.fps = unsigned(fps);
+    } else if (option == "--bitrate-min") config.bitrate_min = bitrate(value);
+    else if (option == "--bitrate-start") config.bitrate_start = bitrate(value);
+    else if (option == "--bitrate-max") config.bitrate_max = bitrate(value);
+    else if (option == "--viewer-dir") config.viewer = value;
     else if (option == "--public-origin") {
       if (value.rfind("https://", 0) != 0 || value.size() <= 8 || value.find_first_of("/?#@\\ \t\r\n", 8) != std::string::npos)
         throw std::runtime_error("Public origin must be an HTTPS origin without path or credentials");
@@ -99,6 +117,8 @@ bool parseConfig(int argc, char** argv, Config& config) {
   }
   if (config.cert.empty() != config.key.empty() || (config.proxy && !config.cert.empty()))
     throw std::runtime_error("Choose a TLS certificate/key pair or a TLS proxy");
+  if (config.bitrate_min > config.bitrate_start || config.bitrate_start > config.bitrate_max)
+    throw std::runtime_error("Bitrates must satisfy min <= start <= max");
   if (!config.origin.empty() && config.token.empty()) throw std::runtime_error("Public origin requires a token");
   if (config.insecure_local && (!config.token.empty() || !config.origin.empty() || !config.cert.empty() || config.proxy))
     throw std::runtime_error("--insecure-local cannot be combined with remote access options");

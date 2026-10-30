@@ -31,9 +31,10 @@ unsigned inputLength(const std::string& text, uint64_t& length) {
   if (!unsignedNumber(text, length) || !length || length % 16) return HTTP_STATUS_BAD_REQUEST;
   return length > max_input_batch * 16 ? HTTP_STATUS_REQ_ENTITY_TOO_LARGE : 0;
 }
-bool frameMessage(std::vector<uint8_t>& out, size_t pre, uint32_t generation, uint32_t lastSequence, const EncodedFrame& f) {
+bool frameMessage(std::vector<uint8_t>& out, size_t pre, uint32_t generation, uint32_t lastSequence, const EncodedFrame& f,
+                  uint16_t width, uint16_t height) {
   if (!f.sequence || f.sequence != lastSequence + 1 || !f.width || !f.height ||
-      f.width > frame_width || f.height > frame_height || f.annex_b.empty() || f.annex_b.size() > FlowControl::max_bytes ||
+      f.width > width || f.height > height || f.annex_b.empty() || f.annex_b.size() > FlowControl::max_bytes ||
       (!lastSequence && !f.keyframe)) return false;
   auto* p = start(out, pre, 32 + f.annex_b.size(), 1, generation);
   put(p+6, f.keyframe ? 1 : 0, 2); put(p+12, f.sequence, 4);

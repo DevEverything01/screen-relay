@@ -48,7 +48,7 @@ def find_engine():
     return Path(found) if found else None
 
 
-def start_xvfb(spawn, auth):
+def start_xvfb(spawn, auth, resolution='1280x720'):
     """Start Xvfb on a free display (via -displayfd) with a private cookie; returns ':N'."""
     cookie = secrets.token_hex(16)
 
@@ -59,7 +59,7 @@ def start_xvfb(spawn, auth):
     authorize(':0')
     read_fd, write_fd = os.pipe()
     try:
-        process = spawn(['Xvfb', '-displayfd', str(write_fd), '-screen', '0', '1280x720x24', '-nolisten', 'tcp',
+        process = spawn(['Xvfb', '-displayfd', str(write_fd), '-screen', '0', f'{resolution}x24', '-nolisten', 'tcp',
                          '-noreset', '-s', '0', '-auth', str(auth)], pass_fds=(write_fd,))
         os.close(write_fd)
         write_fd = None
@@ -88,6 +88,12 @@ def x_query(env, *command):
         return subprocess.run(command, env=env, capture_output=True, text=True, timeout=5).stdout
     except (OSError, subprocess.TimeoutExpired):
         return ''
+
+
+def display_size(env):
+    """Read the root size of an existing display, or None when xdpyinfo cannot tell."""
+    match = re.search(r'dimensions:\s+(\d+)x(\d+)', x_query(env, 'xdpyinfo'))
+    return f'{match.group(1)}x{match.group(2)}' if match else None
 
 
 class Session:
@@ -170,26 +176,30 @@ class Session:
             raise Failure('missing_dependency', 'Missing ' + ', '.join(missing), 'Run ./install.sh, or check with `relay doctor`.')
         if args.display:
             self.env['DISPLAY'] = args.display
+            resolution = display_size(self.env)
         else:
             auth = directory / 'Xauthority'
             auth.write_bytes(b'')
             auth.chmod(0o600)
             self.env['XAUTHORITY'] = str(auth)
             try:
-                self.env['DISPLAY'] = start_xvfb(lambda cmd, **kw: self.spawn('display', cmd, **kw), auth)
+                self.env['DISPLAY'] = start_xvfb(lambda cmd, **kw: self.spawn('display', cmd, **kw), auth, args.resolution)
             except Failure as failure:
                 raise self.failure('display', failure.code, failure.message) from None
+            resolution = args.resolution
         if own_bus:
             self.start_bus()
         environment = {key: self.env[key] for key in ('DBUS_SESSION_BUS_ADDRESS', 'XDG_RUNTIME_DIR', 'XDG_CONFIG_HOME',
                                                       'XDG_CACHE_HOME', 'ICEAUTHORITY') if key in self.env}
         self.save(display=self.env['DISPLAY'], xauthority=self.env.get('XAUTHORITY'), ownsDisplay=not args.display,
-                  desktop=desktop, environment=environment)
+                  desktop=desktop, environment=environment, resolution=resolution, fps=args.fps)
         if command:
             self.spawn('desktop', command)
         bind = args.bind or ('0.0.0.0' if args.public else '127.0.0.1')
         token = None
-        engine_command = [str(engine), '--bind', bind, '--port', str(args.port)]
+        engine_command = [str(engine), '--bind', bind, '--port', str(args.port),
+                          '--fps', str(args.fps), '--bitrate-min', str(args.bitrate_min),
+                          '--bitrate-start', str(args.bitrate_start), '--bitrate-max', str(args.bitrate_max)]
         if bind != '127.0.0.1' or args.public:
             token = secrets.token_hex(32)
             token_file = directory / 'token'

@@ -27,11 +27,17 @@ struct CaptureStats {
   uint64_t encode_ns = 0;
 };
 
+struct CaptureSettings {
+  unsigned fps;
+  uint64_t min_bitrate, start_bitrate, max_bitrate;
+};
+
 class CaptureEncoder {
  public:
   using Publish = std::function<bool(EncodedFrame&&)>;
   using PublishCursor = std::function<void(uint32_t, CursorImage&&)>;
-  explicit CaptureEncoder(Publish publish, CaptureSourceFactory factory = makeCaptureSource,
+  explicit CaptureEncoder(Publish publish, CaptureSettings settings,
+                          CaptureSourceFactory factory = makeCaptureSource,
                           PublishCursor cursor = {});
   ~CaptureEncoder();
   CaptureEncoder(const CaptureEncoder&) = delete;

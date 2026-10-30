@@ -36,7 +36,7 @@ if [ "$deps" = 1 ] && [ "$(uname -s)" = Linux ]; then
   if [ "$client" = 1 ]; then
     apt_install python3
   else
-    apt_install python3 build-essential pkg-config libx11-dev libxext-dev libxdamage-dev libxfixes-dev \
+    apt_install python3 python3-yaml build-essential pkg-config libx11-dev libxext-dev libxdamage-dev libxfixes-dev \
       libxtst-dev libx264-dev libwebsockets-dev xvfb xauth x11-utils
     if [ "$desktop" = 1 ]; then
       apt_install dbus dbus-x11 at-spi2-core xfce4-session xfwm4 xfce4-panel xfdesktop4 xfce4-settings \

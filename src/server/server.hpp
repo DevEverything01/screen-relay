@@ -28,7 +28,7 @@ struct Server {
   Config config;
   lws_context* context = nullptr;
   lws* viewer = nullptr;
-  std::unique_ptr<InputBackend> input;
+  std::unique_ptr<InputController> input;
   Screenshot screenshot;
   lws* screenshot_client = nullptr;
   bool controller = false, control_ready = false;
@@ -40,7 +40,7 @@ struct Server {
   FlowControl flow;
   CaptureEncoder capture;
   uint32_t generation = 0, lastSequence = 0, nextGeneration = 0;
-  uint16_t width = frame_width, height = frame_height;
+  uint16_t width = 0, height = 0;
   bool failed = false;
   std::vector<uint8_t> received;
   explicit Server(Config settings);

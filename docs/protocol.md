@@ -43,8 +43,8 @@ Generation starts at 1 and increments per connection. Zero is invalid. Sequence 
 
 | Payload offset | Size | Field |
 | --- | ---: | --- |
-| 0 | 2 | Width, 1 to 1280 |
-| 2 | 2 | Height, 1 to 720 |
+| 0 | 2 | Width, 1 to 1920 |
+| 2 | 2 | Height, 1 to 1080 |
 | 4 | 8 | Capture timestamp, microseconds |
 | 12 | 1 to 8,388,608 | H.264 Annex B access unit |
 
@@ -141,7 +141,7 @@ CPU is cumulative microseconds. Memory is bytes, from the mounted cgroup v2. If 
 
 | Item | Value |
 | --- | --- |
-| Surface | 1280x720 |
+| Surface | Even width 320 to 1920, even height 240 to 1080 |
 | Frame message | 8,388,640 bytes |
 | Flow control | See [Architecture](architecture.md#flow-control) |
 | Viewer first-frame and decoder deadline | 5 s |
