@@ -1,6 +1,7 @@
 #pragma once
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <memory>
 #include <optional>
 #include <set>
@@ -20,8 +21,43 @@ using NativeKey = uint32_t;
 class InputFence {
  public:
   virtual ~InputFence() = default;
-  /// Runs once after every event posted before the fence, reporting whether all of them applied and how many were dropped.
+  /// Runs once after every action posted before the fence, reporting whether all of them applied and how many records were dropped.
   virtual void complete(bool applied, size_t dropped) = 0;
+};
+/// One queued backend action; the actions posted for a single protocol record form one queue unit.
+struct InputJob {
+  enum class Kind : uint8_t { key, text, button, motion, scroll, locks, flush, fence } kind = Kind::flush;
+  uint32_t code = 0, codepoint = 0;
+  unsigned number = 0;
+  int x = 0, y = 0, notches = 0;
+  bool press = false;
+  size_t dropped = 0;
+  std::shared_ptr<InputFence> fence;
+  InputJob() = default;
+  explicit InputJob(Kind value) : kind(value) {}
+  /// Completes the fence after the work before it reached the platform, reporting the records dropped from before it.
+  void complete() const { if (fence) fence->complete(dropped == 0, dropped); }
+};
+/// Backend work queue that counts one protocol record as one unit however many actions it posts; not thread safe.
+class InputQueue {
+ public:
+  void post(InputJob job);
+  bool empty() const;
+  /// Removes the next action, closing the record unit whose trailing flush it applies.
+  InputJob take();
+  /// Records queued, one per protocol record.
+  size_t pending() const;
+  /// Drops queued text and moves as not applied, leaving the fences that covered them for the worker to complete.
+  void cancel();
+
+ private:
+  struct Entry {
+    InputJob job;
+    uint64_t unit = 0;
+  };
+  std::deque<Entry> queue;
+  uint64_t next = 0, open = 0;
+  size_t records = 0;
 };
 /// Platform primitives only; protocol rules, coordinate mapping and held input live in InputController.
 class InputBackend {
@@ -42,15 +78,15 @@ class InputBackend {
   virtual void resetLocks() = 0;
   /// Completes mark after every event posted so far, without waiting for it.
   virtual void fence(std::shared_ptr<InputFence> mark) = 0;
-  /// Events posted but not yet applied, so a caller can refuse a batch before it queues behind them.
+  /// Records posted but not yet applied, so a caller can refuse a batch before it queues behind them.
   virtual size_t pending() const = 0;
-  /// Drops queued text and moves as not applied, keeping key and button releases.
+  /// Drops queued text and moves as not applied, keeping key and button releases and counting each dropped record once.
   virtual void cancel() = 0;
   virtual void flush() = 0;
   virtual std::pair<uint16_t, uint16_t> dimensions() const = 0;
   virtual const char* name() const = 0;
 };
-/// Events allowed to wait in a backend queue; a batch that would exceed it is refused before any of it is queued.
+/// Records allowed to wait in a backend queue; a batch that would exceed it is refused before any of it is queued.
 constexpr size_t max_queued_events = 1024;
 /** Validates protocol events, maps pointer coordinates and dedupes held input for one backend. */
 class InputController {
@@ -64,7 +100,7 @@ class InputController {
   void resetLocks();
   /// Completes mark once every event applied so far has reached the backend.
   void fence(std::shared_ptr<InputFence> mark);
-  /// Events posted but not yet applied.
+  /// Records posted but not yet applied.
   size_t pending() const;
   /// Drops queued text and moves, so their fences complete as not applied.
   void cancel();

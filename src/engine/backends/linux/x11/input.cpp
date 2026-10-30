@@ -5,7 +5,6 @@
 #include <X11/extensions/XTest.h>
 #include <chrono>
 #include <condition_variable>
-#include <deque>
 #include <map>
 #include <mutex>
 #include <set>
@@ -64,15 +63,6 @@ class X11Input final : public InputBackend {
     uint64_t used = 0;
     TimePoint tapped{};
   };
-  struct Job {
-    enum class Kind : uint8_t { key, text, button, motion, scroll, locks, flush, fence } kind = Kind::flush;
-    KeyCode code = 0;
-    uint32_t codepoint = 0;
-    unsigned number = 0;
-    int x = 0, y = 0, notches = 0;
-    bool press = false;
-    std::shared_ptr<InputFence> fence = nullptr;
-  };
   Display* display = nullptr;
   uint16_t width = 0, height = 0;
   int columns = 1;
@@ -80,12 +70,11 @@ class X11Input final : public InputBackend {
   std::map<KeySym, KeyCode> layout;
   std::set<KeyCode> modifiers;
   std::vector<Spare> spares;
-  std::set<KeyCode> held;
+  std::set<unsigned> held;
   TimePoint bound{}, lastTap{};
   mutable std::mutex mutex;
   std::condition_variable wake;
-  std::deque<Job> queue;
-  size_t queued = 0;
+  InputQueue queue;
   bool stopping = false;
   std::thread worker;
  public:
@@ -120,74 +109,69 @@ class X11Input final : public InputBackend {
   bool typeText(uint32_t codepoint) override {
     const KeySym symbol = textKeysym(codepoint);
     if (symbol == NoSymbol || (spares.empty() && !layout.count(symbol))) return false;
-    Job job{Job::Kind::text};
+    InputJob job{InputJob::Kind::text};
     job.codepoint = codepoint;
     post(job);
     return true;
   }
   void pressKey(NativeKey key) override {
-    Job job{Job::Kind::key};
-    job.code = KeyCode(key); job.press = true;
+    InputJob job{InputJob::Kind::key};
+    job.code = key; job.press = true;
     post(job);
   }
   void releaseKey(NativeKey key) override {
-    Job job{Job::Kind::key};
-    job.code = KeyCode(key);
+    InputJob job{InputJob::Kind::key};
+    job.code = key;
     post(job);
   }
   void pressButton(unsigned button) override {
-    Job job{Job::Kind::button};
+    InputJob job{InputJob::Kind::button};
     job.number = button; job.press = true;
     post(job);
   }
   void releaseButton(unsigned button) override {
-    Job job{Job::Kind::button};
+    InputJob job{InputJob::Kind::button};
     job.number = button;
     post(job);
   }
   void move(int x, int y) override {
-    Job job{Job::Kind::motion};
+    InputJob job{InputJob::Kind::motion};
     job.x = x; job.y = y;
     post(job);
   }
   void scroll(unsigned axis, int notches) override {
-    Job job{Job::Kind::scroll};
+    InputJob job{InputJob::Kind::scroll};
     job.number = axis; job.notches = notches;
     post(job);
   }
-  void resetLocks() override { post(Job{Job::Kind::locks}); }
+  void resetLocks() override { post(InputJob{InputJob::Kind::locks}); }
   void fence(std::shared_ptr<InputFence> mark) override {
-    Job job{Job::Kind::fence};
+    InputJob job{InputJob::Kind::fence};
     job.fence = std::move(mark);
     post(job);
   }
   void cancel() override {
-    std::lock_guard<std::mutex> lock(mutex);
-    discard();
+    { std::lock_guard<std::mutex> lock(mutex); queue.cancel(); }
+    wake.notify_one();
   }
-  void flush() override { post(Job{Job::Kind::flush}); }
+  void flush() override { post(InputJob{InputJob::Kind::flush}); }
   size_t pending() const override {
     std::lock_guard<std::mutex> lock(mutex);
-    return queued;
+    return queue.pending();
   }
 
  private:
-  static bool counted(Job::Kind kind) {
-    return kind == Job::Kind::key || kind == Job::Kind::text || kind == Job::Kind::button ||
-           kind == Job::Kind::motion || kind == Job::Kind::scroll;
-  }
-  void post(Job job) {
-    { std::lock_guard<std::mutex> lock(mutex); if (counted(job.kind)) ++queued; queue.push_back(std::move(job)); }
+  void post(InputJob job) {
+    { std::lock_guard<std::mutex> lock(mutex); queue.post(std::move(job)); }
     wake.notify_one();
   }
   void run() {
     std::unique_lock<std::mutex> lock(mutex);
     for (;;) {
       wake.wait(lock, [this] { return stopping || !queue.empty(); });
-      if (stopping) discard();
+      if (stopping) queue.cancel();
       if (queue.empty()) break;
-      const Job job = queue.front(); queue.pop_front();
-      if (counted(job.kind)) --queued;
+      const InputJob job = queue.take();
       lock.unlock();
       apply(job);
       lock.lock();
@@ -200,37 +184,19 @@ class X11Input final : public InputBackend {
     restoreSpares();
     XSync(display, False);
   }
-  /// Drops queued text and moves, completing the fences that covered them as not applied. Call with the mutex held.
-  void discard() {
-    size_t dropped = 0;
-    for (auto job = queue.begin(); job != queue.end();) {
-      if (job->kind == Job::Kind::fence) {
-        if (!dropped) { ++job; continue; }
-        const auto mark = job->fence;
-        const size_t lost = dropped; dropped = 0;
-        job = queue.erase(job);
-        mark->complete(false, lost);
-        continue;
-      }
-      if (job->kind == Job::Kind::text || job->kind == Job::Kind::motion || job->kind == Job::Kind::scroll) {
-        --queued; ++dropped; job = queue.erase(job); continue;
-      }
-      ++job;
-    }
-  }
-  void apply(const Job& job) {
+  void apply(const InputJob& job) {
     switch (job.kind) {
-      case Job::Kind::key:
+      case InputJob::Kind::key:
         if (job.press) held.insert(job.code); else held.erase(job.code);
         XTestFakeKeyEvent(display, job.code, job.press, CurrentTime);
         break;
-      case Job::Kind::text: type(job.codepoint); break;
-      case Job::Kind::button: XTestFakeButtonEvent(display, job.number, job.press, CurrentTime); break;
-      case Job::Kind::motion: XTestFakeMotionEvent(display, DefaultScreen(display), job.x, job.y, CurrentTime); break;
-      case Job::Kind::scroll: wheel(job.number, job.notches); break;
-      case Job::Kind::locks: XkbLockModifiers(display, XkbUseCoreKbd, LockMask, 0); break;
-      case Job::Kind::flush: XFlush(display); break;
-      case Job::Kind::fence: XSync(display, False); job.fence->complete(true, 0); break;
+      case InputJob::Kind::text: type(job.codepoint); break;
+      case InputJob::Kind::button: XTestFakeButtonEvent(display, job.number, job.press, CurrentTime); break;
+      case InputJob::Kind::motion: XTestFakeMotionEvent(display, DefaultScreen(display), job.x, job.y, CurrentTime); break;
+      case InputJob::Kind::scroll: wheel(job.number, job.notches); break;
+      case InputJob::Kind::locks: XkbLockModifiers(display, XkbUseCoreKbd, LockMask, 0); break;
+      case InputJob::Kind::flush: XFlush(display); break;
+      case InputJob::Kind::fence: XSync(display, False); job.complete(); break;
     }
   }
   void type(uint32_t codepoint) {

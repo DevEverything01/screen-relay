@@ -8,6 +8,47 @@ constexpr int pixelCoordinate(uint16_t normalized, uint16_t extent) {
 static_assert(pixelCoordinate(0, 1280) == 0 && pixelCoordinate(65535, 1280) == 1279 &&
               pixelCoordinate(10248, 1280) == 200 && pixelCoordinate(40992, 1280) == 800 &&
               pixelCoordinate(65535, 720) == 719 && pixelCoordinate(36459, 720) == 400);
+bool counted(InputJob::Kind kind) {
+  return kind == InputJob::Kind::key || kind == InputJob::Kind::text || kind == InputJob::Kind::button ||
+         kind == InputJob::Kind::motion || kind == InputJob::Kind::scroll;
+}
+bool droppable(InputJob::Kind kind) {
+  return kind == InputJob::Kind::text || kind == InputJob::Kind::motion || kind == InputJob::Kind::scroll;
+}
+}
+void InputQueue::post(InputJob job) {
+  Entry entry{std::move(job)};
+  if (entry.job.kind == InputJob::Kind::flush) {
+    if (open) { entry.unit = open; open = 0; }
+  } else if (counted(entry.job.kind)) {
+    if (!open) { open = ++next; ++records; }
+    entry.unit = open;
+  }
+  queue.push_back(std::move(entry));
+}
+bool InputQueue::empty() const { return queue.empty(); }
+InputJob InputQueue::take() {
+  InputJob job = std::move(queue.front().job);
+  const uint64_t unit = queue.front().unit;
+  queue.pop_front();
+  if (job.kind == InputJob::Kind::flush && unit) --records;
+  return job;
+}
+size_t InputQueue::pending() const { return records; }
+void InputQueue::cancel() {
+  size_t dropped = 0;
+  uint64_t seen = 0;
+  for (auto entry = queue.begin(); entry != queue.end();) {
+    if (entry->job.kind == InputJob::Kind::fence) {
+      entry->job.dropped += dropped;
+      dropped = 0; seen = 0;
+      ++entry;
+      continue;
+    }
+    if (!droppable(entry->job.kind)) { ++entry; continue; }
+    if (entry->unit != seen) { seen = entry->unit; ++dropped; }
+    entry = queue.erase(entry);
+  }
 }
 InputController::InputController(std::unique_ptr<InputBackend> source) : backend(std::move(source)) {}
 InputController::~InputController() { releaseAll(); }
