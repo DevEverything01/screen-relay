@@ -24,7 +24,7 @@ Reading needs PyYAML (`python3-yaml` on Debian/Ubuntu). `./install.sh` installs 
 | `stream.bitrate.start` | `8M` | same range; `min <= start <= max` |
 | `stream.bitrate.max` | `40M` | same range |
 | `server.port` | `8080` | integer 1..65535 |
-| `server.bind` | `127.0.0.1` | listen address |
+| `server.bind` | `127.0.0.1`, or `0.0.0.0` when `server.public` is set | listen address; `--bind` overrides it |
 | `server.public` | unset | HTTPS origin such as `https://desktop.example.com` |
 | `server.tls_cert` | unset | certificate file |
 | `server.tls_key` | unset | private key for the certificate |

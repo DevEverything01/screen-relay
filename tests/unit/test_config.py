@@ -85,5 +85,18 @@ desktop: none
         self.assertEqual(args.desktop, 'none')
 
 
+    def test_bind_only_comes_from_file_when_set(self):
+        args = SimpleNamespace(port=None, bind=None, public='https://desk.example.com', tls_cert=None, tls_key=None, desktop=None)
+        settings, _, present = load(str(self.write("server:\n  port: 9090\n")))
+        apply_to(args, settings, present)
+        self.assertIsNone(args.bind)
+        settings, _, present = load(str(self.write("server:\n  bind: 192.168.1.5\n")))
+        apply_to(args, settings, present)
+        self.assertEqual(args.bind, '192.168.1.5')
+        args = SimpleNamespace(port=None, bind='10.0.0.1', public=None, tls_cert=None, tls_key=None, desktop=None)
+        apply_to(args, settings, present)
+        self.assertEqual(args.bind, '10.0.0.1')
+
+
 if __name__ == '__main__':
     unittest.main()

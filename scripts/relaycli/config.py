@@ -191,7 +191,7 @@ def apply_to(args, settings, present):
     """Put the config values on parsed up arguments, leaving every flag the user set untouched."""
     if args.port is None:
         args.port = settings['server']['port']
-    if args.bind is None:
+    if args.bind is None and 'server.bind' in present:
         args.bind = settings['server']['bind']
     if args.public is None:
         args.public = settings['server']['public']

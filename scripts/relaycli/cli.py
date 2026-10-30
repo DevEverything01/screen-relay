@@ -43,7 +43,7 @@ def parser():
     up.add_argument('--public', metavar='HTTPS_URL', help='serve behind a TLS proxy at this origin (binds 0.0.0.0, adds a token)')
     up.add_argument('--tls-cert', metavar='FILE', help='serve TLS natively with this certificate')
     up.add_argument('--tls-key', metavar='FILE', help='private key for --tls-cert')
-    up.add_argument('--bind', metavar='ADDR', help='listen address (default 127.0.0.1; non-loopback adds a token)')
+    up.add_argument('--bind', metavar='ADDR', help='listen address (default 127.0.0.1, or 0.0.0.0 with --public; non-loopback adds a token)')
     up.add_argument('--timeout', type=float, default=30, help='startup timeout in seconds (default: 30)')
     add('down', cmd_down, 'stop a session (safe to repeat)', [common, named])
     status = add('status', cmd_status, 'show a local session, or a remote engine with --url', [client])
