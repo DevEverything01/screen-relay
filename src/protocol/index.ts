@@ -1,13 +1,6 @@
-export class RelayError extends Error {
-  code: string;
-  hint?: string;
-  constructor(code: string, message: string, hint?: string) {
-    super(message);
-    this.name = 'RelayError';
-    this.code = code;
-    this.hint = hint;
-  }
-}
+import { RelayError } from './errors.js';
+export { RelayError, ERROR_REASONS, responseError } from './errors.js';
+export type { ErrorClass, ErrorReason, ErrorOptions, NextCommand } from './errors.js';
 
 export const MAGIC = 0x4e534c31;
 export const VERSION = 1;

@@ -1,0 +1,89 @@
+export type ErrorClass = 'usage' | 'missing_input' | 'not_found' | 'conflict' | 'network' | 'platform' | 'permission' | 'config' | 'bug' | 'canceled';
+export interface NextCommand { command: string; argv: string[] }
+export interface ErrorOptions {
+  hint?: string;
+  data?: Record<string, unknown>;
+  next?: NextCommand[];
+  status?: 'error' | 'action_required';
+}
+
+export const ERROR_REASONS = {
+  invalid_input: { class: 'usage', code: 'INVALID_ARGUMENT', exitCode: 2 },
+  invalid_option: { class: 'usage', code: 'INVALID_ARGUMENT', exitCode: 2 },
+  unknown_command: { class: 'usage', code: 'INVALID_ARGUMENT', exitCode: 2 },
+  missing_input: { class: 'missing_input', code: 'INVALID_ARGUMENT', exitCode: 2 },
+  missing_command: { class: 'missing_input', code: 'INVALID_ARGUMENT', exitCode: 2 },
+  not_found: { class: 'not_found', code: 'NOT_FOUND', exitCode: 1 },
+  not_running: { class: 'not_found', code: 'NOT_FOUND', exitCode: 1 },
+  already_running: { class: 'conflict', code: 'BUSY', exitCode: 1 },
+  port_in_use: { class: 'conflict', code: 'BUSY', exitCode: 1 },
+  busy: { class: 'conflict', code: 'BUSY', exitCode: 1 },
+  unreachable: { class: 'network', code: 'NETWORK_ERROR', exitCode: 1 },
+  timeout: { class: 'network', code: 'TIMEOUT', exitCode: 1 },
+  disconnected: { class: 'network', code: 'DISCONNECTED', exitCode: 1 },
+  unauthorized: { class: 'permission', code: 'UNAUTHORIZED', exitCode: 1 },
+  forbidden: { class: 'permission', code: 'UNAUTHORIZED', exitCode: 1 },
+  unsupported_input: { class: 'platform', code: 'UNSUPPORTED', exitCode: 1 },
+  unsupported_platform: { class: 'platform', code: 'UNSUPPORTED', exitCode: 1 },
+  missing_dependency: { class: 'platform', code: 'UNSUPPORTED', exitCode: 1 },
+  component_failed: { class: 'platform', code: 'HTTP_ERROR', exitCode: 1 },
+  spawn_failed: { class: 'platform', code: 'IO_ERROR', exitCode: 1 },
+  io_error: { class: 'platform', code: 'IO_ERROR', exitCode: 1 },
+  protocol_error: { class: 'platform', code: 'PROTOCOL_ERROR', exitCode: 1 },
+  invalid_config: { class: 'config', code: 'CONFIG_ERROR', exitCode: 1 },
+  internal: { class: 'bug', code: 'INTERNAL', exitCode: 1 },
+  canceled: { class: 'canceled', code: 'CANCELED', exitCode: 130 },
+} as const satisfies Record<string, { class: ErrorClass; code: string; exitCode: number }>;
+
+export type ErrorReason = keyof typeof ERROR_REASONS;
+
+const LEGACY_REASONS: Record<string, ErrorReason> = {
+  INVALID_ARGUMENT: 'invalid_input', NOT_FOUND: 'not_found', BUSY: 'busy', NETWORK_ERROR: 'unreachable',
+  TIMEOUT: 'timeout', DISCONNECTED: 'disconnected', UNAUTHORIZED: 'unauthorized', UNSUPPORTED: 'unsupported_input',
+  HTTP_ERROR: 'component_failed', IO_ERROR: 'io_error', PROTOCOL_ERROR: 'protocol_error', CONFIG_ERROR: 'invalid_config',
+  INTERNAL: 'internal', CANCELED: 'canceled',
+};
+
+export class RelayError extends Error {
+  readonly code: string;
+  readonly reason: ErrorReason;
+  readonly class: ErrorClass;
+  readonly exitCode: number;
+  readonly hint?: string;
+  readonly data?: Record<string, unknown>;
+  readonly next?: NextCommand[];
+  readonly status: 'error' | 'action_required';
+
+  constructor(reason: string, message: string, options: string | ErrorOptions = {}) {
+    super(message);
+    this.name = 'RelayError';
+    this.reason = Object.hasOwn(ERROR_REASONS, reason) ? reason as ErrorReason
+      : Object.hasOwn(LEGACY_REASONS, reason) ? LEGACY_REASONS[reason] : 'internal';
+    const definition = ERROR_REASONS[this.reason];
+    this.code = definition.code;
+    this.class = definition.class;
+    this.exitCode = definition.exitCode;
+    const details = typeof options === 'string' ? { hint: options } : options;
+    this.hint = details.hint;
+    this.data = details.data;
+    this.next = details.next;
+    this.status = details.status ?? 'error';
+  }
+}
+
+export function responseError(status: number, detail: unknown): RelayError {
+  const body = detail && typeof detail === 'object' ? detail as Record<string, unknown> : {};
+  const reason: ErrorReason = status === 401 ? 'unauthorized' : status === 403 ? 'forbidden'
+    : status === 404 ? 'not_found' : status === 409 || status === 429 || body.error === 'busy' ? 'busy'
+    : status === 422 || body.error === 'unsupported_input' ? 'unsupported_input'
+    : status === 400 || status === 413 || body.error === 'invalid_input' ? 'invalid_input' : 'component_failed';
+  const messages: Partial<Record<ErrorReason, string>> = {
+    unauthorized: 'The engine rejected the token.', forbidden: 'The engine rejected the connection origin.',
+    not_found: 'The engine endpoint was not found.', busy: 'The engine is busy.',
+    unsupported_input: 'The engine does not support this input.', invalid_input: 'The engine rejected the input.',
+  };
+  const index = Number.isInteger(body.index) && Number(body.index) >= 0 ? Number(body.index) : undefined;
+  return new RelayError(reason, messages[reason] ?? 'The engine could not complete the request.', {
+    data: { httpStatus: status, ...(index === undefined ? {} : { index }) },
+  });
+}
