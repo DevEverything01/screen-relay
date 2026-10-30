@@ -35,7 +35,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     }
     if (!command || command === 'help' || args.help) {
       const topic = command === 'help' ? String(args.topic ?? (args.help ? 'help' : '')) : command;
-      if (topic && !Object.hasOwn(commands, topic)) throw unknownToken('command', topic, Object.keys(commands), 'help');
+      if (topic && !Object.hasOwn(commands, topic)) throw unknownToken('command', topic, Object.keys(commands));
       if (args.json) {
         const document = command === 'help' && args.all ? Object.keys(commands).map((name) => helpDocument(name)) : helpDocument(topic);
         emit(args, document, '');

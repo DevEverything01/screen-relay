@@ -11,14 +11,15 @@ docker logs desk
 `docker logs` shows the viewer link with the token (shortened here):
 
 ```text
-relay "default" is ready
-  url:     http://127.0.0.1:8080
-  viewer:  http://127.0.0.1:8080/#token=<64 hex>
-  token:   <64 hex>  (shown once; status --show-token prints it again)
-  display: :0
-  logs:    /home/relay/.local/state/relay/default
-Listening on 0.0.0.0:8080; reach it through a loopback port publish or SSH tunnel.
-Stop with Ctrl-C or `relay down`.
+Started default
+Viewer          http://127.0.0.1:8080/#token=<64 hex>
+Display         :0
+Resolution      1280x720 at 60 fps
+Logs            /home/relay/.local/state/relay/default
+Listening       0.0.0.0:8080; use a loopback port publish or SSH tunnel
+
+  Stop it (or press Ctrl-C):
+    relay down
 ```
 
 Open the viewer link. If you publish a different host port, change the port in the link. To print the token again: `docker exec desk relay status --show-token`.

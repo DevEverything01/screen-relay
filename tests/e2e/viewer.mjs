@@ -71,7 +71,7 @@ try {
     { stdio: ['ignore', 'ignore', 'inherit'] });
 
   const session = await poll(
-    () => JSON.parse(text(execIn(['relay', 'status', '--show-token', '--json']))),
+    () => JSON.parse(text(execIn(['relay', 'status', '--show-token', '--json']))).session,
     (value) => value?.running === true && /^[0-9a-f]{64}$/.test(value?.token ?? ''),
     120000,
     'the session did not become ready with a token',
