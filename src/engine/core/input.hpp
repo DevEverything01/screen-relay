@@ -15,6 +15,13 @@ struct InputEvent {
 };
 /// Platform key identifier returned by a backend, tracked by InputController.
 using NativeKey = uint32_t;
+/// Completion notice for posted input, called by the backend on its own thread.
+class InputFence {
+ public:
+  virtual ~InputFence() = default;
+  /// Runs once after every event posted before the fence was applied, or not applied when queued work was dropped.
+  virtual void complete(bool applied) = 0;
+};
 /// Platform primitives only; protocol rules, coordinate mapping and held input live in InputController.
 class InputBackend {
  public:
@@ -32,6 +39,10 @@ class InputBackend {
   virtual void scroll(unsigned axis, int notches) = 0;
   /// Turns lock keys off, currently Caps Lock.
   virtual void resetLocks() = 0;
+  /// Completes mark after every event posted so far, without waiting for it.
+  virtual void fence(std::shared_ptr<InputFence> mark) = 0;
+  /// Drops queued text and moves as not applied, keeping key and button releases.
+  virtual void cancel() = 0;
   virtual void flush() = 0;
   virtual std::pair<uint16_t, uint16_t> dimensions() const = 0;
   virtual const char* name() const = 0;
@@ -46,6 +57,10 @@ class InputController {
   InputStatus apply(const InputEvent& event);
   void releaseAll();
   void resetLocks();
+  /// Completes mark once every event applied so far has reached the backend.
+  void fence(std::shared_ptr<InputFence> mark);
+  /// Drops queued text and moves, so their fences complete as not applied.
+  void cancel();
   std::pair<uint16_t, uint16_t> dimensions() const;
   const char* name() const;
 

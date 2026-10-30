@@ -7,7 +7,9 @@
 #include "screenshot.hpp"
 #include "wire.hpp"
 #include <libwebsockets.h>
+#include <atomic>
 #include <deque>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -21,10 +23,22 @@ struct HttpResponse {
   size_t length, input_length, input_expected;
   std::vector<uint8_t>* image;
   size_t offset;
-  bool image_headers, screenshot_error, control;
+  bool image_headers, screenshot_error, control, input_reply, input_headers;
+  unsigned reply_status;
 };
 /** One viewer session at a time; the capture thread and the lws service thread share it through mutex. */
 struct Server {
+  struct InputReply {
+    lws* wsi = nullptr;
+    unsigned status = 0;
+    std::string body;
+    std::atomic<bool> ready{false};
+  };
+  struct ControlReply {
+    uint32_t seq = 0;
+    InputStatus status = InputStatus::ok;
+    std::atomic<bool> ready{false};
+  };
   Config config;
   lws_context* context = nullptr;
   lws* viewer = nullptr;
@@ -32,7 +46,9 @@ struct Server {
   Screenshot screenshot;
   lws* screenshot_client = nullptr;
   bool controller = false, control_ready = false;
-  std::deque<std::pair<uint32_t, InputStatus>> replies;
+  std::deque<std::shared_ptr<ControlReply>> replies;
+  std::mutex reply_mutex;
+  std::deque<std::shared_ptr<InputReply>> input_replies;
   std::mutex mutex;
   std::deque<EncodedFrame> pending;
   std::optional<CursorImage> pending_cursor;
@@ -50,6 +66,11 @@ struct Server {
   void updateFlow();
   bool timedOut();
   std::string metrics();
+  /// Holds the HTTP response until the backend applied or dropped the batch.
+  int deferInput(lws* wsi, InputStatus status, size_t applied);
+  std::vector<std::shared_ptr<InputReply>> readyInputs();
+  void forgetInput(lws* wsi);
+  void wake();
   int writeControl(lws* wsi);
   int write(lws* wsi);
 };
