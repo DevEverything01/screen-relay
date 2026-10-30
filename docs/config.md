@@ -31,6 +31,8 @@ A file named by `--config` or `RELAY_CONFIG` that is missing is an error. The de
 
 Unknown keys are an error and name the dotted path. Wrong types and out-of-range values are errors too.
 
+Each key also has a `RELAY_*` variable: `RELAY_RESOLUTION`, `RELAY_FPS`, `RELAY_BITRATE_MIN`, `RELAY_BITRATE_START`, `RELAY_BITRATE_MAX`, `RELAY_PORT`, `RELAY_BIND`, `RELAY_PUBLIC`, `RELAY_TLS_CERT`, `RELAY_TLS_KEY`, `RELAY_KEYBOARD_LAYOUT` and `RELAY_DESKTOP`.
+
 ## Backends
 
 A key says what the user wants. A backend either honors the key or says clearly that it cannot.
@@ -42,7 +44,7 @@ A key says what the user wants. A backend either honors the key or says clearly 
 
 ## Precedence
 
-Command-line flags beat the file, and the file beats the defaults. `relay up --port 9000` uses 9000 even when the file sets another port.
+An option beats its `RELAY_*` variable, which beats the file, which beats the defaults. An explicit invalid value fails instead of falling back. `relay up --port 9000` uses 9000 even when the file sets another port.
 
 `--display :N` attaches to an existing display. Relay uses that display's size, ignores `display.resolution`, and prints one line to stderr when the file sets it. Any backend that attaches to an existing screen does the same.
 
