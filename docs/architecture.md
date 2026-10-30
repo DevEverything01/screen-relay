@@ -26,8 +26,8 @@ browser or agent input -> InputController -> InputBackend (XTest)
 ## Interfaces
 
 - `CaptureSource` (`src/core/capture-source.hpp`): `fd()`, `dimensions()`, `drainDamage()`, `pixelFormat()`, `capture()`. A frame is a non-owning CPU view (BGRA or ARGB), valid until the next capture. Optional `cursorSupported()` and `cursor(force)`.
-- `InputBackend` (`src/core/input.hpp`): platform primitives only: `nativeKey(usage)`, `pressKey`, `releaseKey`, `pressButton`, `releaseButton`, `move`, `scroll`, `flush`, `dimensions`, `name`.
-- `InputController` (`src/core/input.hpp`): owns one `InputBackend`, validates each `InputEvent`, maps normalized pointer coordinates to pixels, dedupes held keys and buttons by native key id, and releases everything on `releaseAll`. It returns `InputStatus`: `invalid` for a rejected event, `unsupported` when the backend has no native key for a usage.
+- `InputBackend` (`src/core/input.hpp`): platform primitives only: `nativeKey(usage)`, `pressKey`, `releaseKey`, `pressButton`, `releaseButton`, `move`, `scroll`, `resetLocks`, `flush`, `dimensions`, `name`.
+- `InputController` (`src/core/input.hpp`): owns one `InputBackend`, validates each `InputEvent`, maps normalized pointer coordinates to pixels, dedupes held keys and buttons by native key id, and releases everything on `releaseAll`. Its `resetLocks` turns Caps Lock off when a new input session starts. It returns `InputStatus`: `invalid` for a rejected event, `unsupported` when the backend has no native key for a usage.
 - `CaptureEncoder` takes a `CaptureSourceFactory`, so tests can inject a source with no X11.
 - The worker requires a valid fd. Core enforces the source size limits once: 320 to 1920 by 240 to 1080, both even, in the capture worker and on the input backend's dimensions at startup. The image stride must be between width x 4 and width x 8 bytes.
 
@@ -74,7 +74,7 @@ Color: little-endian BGRA and big-endian ARGB convert to NV12 with limited-range
 1. Create `src/backends/<os>/<name>/` implementing `initializeNativeBackend`, `makeCaptureSource` and `makeInputBackend`.
 2. Add `BACKEND_DIR_<name>` (folder) and `BACKEND_PKGS_<name>` (pkg-config modules) to the `Makefile`.
 3. Build with `make BACKEND=<name>`. The Makefile builds exactly one backend (default `x11`, folder `linux/x11`).
-4. Implement capture and the input primitives only: map a HID usage to a native key, press and release a native key or button, move, scroll, flush, `dimensions` and `name`. Core owns protocol validation, coordinate mapping, held input and the size limits.
+4. Implement capture and the input primitives only: map a HID usage to a native key, press and release a native key or button, move, scroll, reset locks, flush, `dimensions` and `name`. Core owns protocol validation, coordinate mapping, held input and the size limits.
 5. `src/core/` and `src/server/` must not include backend headers.
 
 A Wayland backend must also handle portal authorization and revocation, negotiated format and dimensions, the notification fd, frame ownership, and separately authorized input. It must turn permission denial and session closure into explicit failures and release held input. The CPU-view interface may need revising. No Wayland code exists.

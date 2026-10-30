@@ -1,5 +1,6 @@
 #include "core/input.hpp"
 #include <X11/Xlib.h>
+#include <X11/XKBlib.h>
 #include <X11/keysym.h>
 #include <X11/extensions/XTest.h>
 #include <stdexcept>
@@ -75,6 +76,7 @@ class X11Input final : public InputBackend {
       XTestFakeButtonEvent(display, button, False, CurrentTime);
     }
   }
+  void resetLocks() override { XkbLockModifiers(display, XkbUseCoreKbd, LockMask, 0); }
   void flush() override { XFlush(display); }
 };
 }  // namespace

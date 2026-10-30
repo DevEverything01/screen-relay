@@ -18,6 +18,7 @@ void InputController::releaseAll() {
   for (const auto button : buttons) backend->releaseButton(button);
   keys.clear(); buttons.clear(); backend->flush();
 }
+void InputController::resetLocks() { backend->resetLocks(); backend->flush(); }
 InputStatus InputController::apply(const InputEvent& input) {
   const unsigned event = input.type, code = input.code;
   const int64_t value = input.value;

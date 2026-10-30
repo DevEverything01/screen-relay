@@ -69,9 +69,7 @@ function syncCaps(event) {
   if (viewOnly) return;
   const local = event.getModifierState("CapsLock");
   if (local === capsLock) return;
-  capsLock = local;
-  sendInput(1, keys.CapsLock);
-  sendInput(2, keys.CapsLock);
+  if (sendInput(1, keys.CapsLock) && sendInput(2, keys.CapsLock)) capsLock = local;
 }
 function clearLatched() {
   for (const button of latched.values()) button.setAttribute("aria-pressed", "false");
@@ -96,7 +94,7 @@ function header(type, gen, seq, size) {
   return b;
 }
 function sendInput(event, code = 0, value = 0) {
-  if (!ready || socket?.readyState !== WebSocket.OPEN || (viewOnly && event !== 7)) return;
+  if (!ready || socket?.readyState !== WebSocket.OPEN || (viewOnly && event !== 7)) return false;
   const b = header(3, generation, 0, 16), v = new DataView(b);
   v.setUint8(20, event);
   v.setUint16(22, code);
@@ -106,6 +104,7 @@ function sendInput(event, code = 0, value = 0) {
   v.setUint16(32, buttons);
   v.setUint16(34, modifiers);
   socket.send(b);
+  return true;
 }
 function release() {
   buttons = modifiers = 0;
@@ -643,6 +642,11 @@ panels.scale.addEventListener("click", (e) => {
   if (button.dataset.scale === "sharp") toggleSharp();
   else setScale(button.dataset.scale);
 });
+function keepCanvasFocus(e) {
+  if (e.target.closest("[data-hold]") || e.target.closest("[data-keys]")) e.preventDefault();
+}
+panels.keys.addEventListener("pointerdown", keepCanvasFocus);
+panels.keys.addEventListener("mousedown", keepCanvasFocus);
 panels.keys.addEventListener("click", (e) => {
   const hold = e.target.closest("[data-hold]");
   if (hold) {

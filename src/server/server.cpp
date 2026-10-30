@@ -324,6 +324,7 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
       { std::lock_guard<std::mutex> lock(s->mutex); s->generation = ++s->nextGeneration; s->pending.clear(); s->pending_cursor.reset(); s->flow.reset(); s->failed=false; }
       s->last_write_cursor = false;
       s->lastSequence=0; s->received.clear();
+      s->input->resetLocks();
       if (s->controller) { s->control_ready = true; lws_callback_on_writable(wsi); }
       else { s->capture.beginSession(s->generation); lws_set_timer_usecs(wsi, 100000); }
       return 0;

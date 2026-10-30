@@ -180,3 +180,50 @@ test('Caps Lock tracking resets with the generation', () => {
   key(app, 'keydown', 'KeyA', true);
   assert.deepEqual(inputBytes(app), [[1, 57], [2, 57], [7, 0], [1, 57], [2, 57], [1, 4]]);
 });
+
+test('a Caps Lock tap dropped while not ready is retried by the next key', () => {
+  const app = viewer();
+  key(app, 'keydown', 'KeyA', true);
+  assert.deepEqual(inputBytes(app), []);
+  assert.equal(runInContext('capsLock', app.context), false);
+  app.frame(1);
+  key(app, 'keydown', 'KeyB', true);
+  assert.deepEqual(inputBytes(app), [[1, 57], [2, 57], [1, 5]]);
+  assert.equal(runInContext('capsLock', app.context), true);
+});
+
+test('keys-panel buttons keep the canvas focus so hold latches survive clicks', () => {
+  const app = viewer();
+  app.frame(1);
+  const panel = app.document.querySelector('#keys-panel');
+  const canvas = app.document.querySelector('#screen');
+  const blocked = (type, button) => {
+    let prevented = false;
+    panel.handlers[type]({ target: button, preventDefault() { prevented = true; } });
+    if (!prevented) canvas.handlers.blur();
+    assert.equal(prevented, true, `${type} on a keys-panel button did not keep the canvas focus`);
+  };
+  const press = (kind, name) => {
+    const button = {
+      dataset: { [kind]: name }, setAttribute(name, value) { this[name] = value; },
+      closest: (selector) => selector === `[data-${kind}]` ? button : null,
+    };
+    blocked('pointerdown', button);
+    blocked('mousedown', button);
+    panel.handlers.click({ target: button });
+    return button;
+  };
+  press('hold', 'ControlLeft');
+  press('hold', 'ShiftLeft');
+  assert.deepEqual(inputBytes(app), [[1, 224], [1, 225]]);
+  key(app, 'keydown', 'KeyA');
+  assert.deepEqual(inputBytes(app), [[1, 224], [1, 225], [1, 4], [2, 224], [2, 225]]);
+  assert.equal(app.sockets[0].inputs[2].modifiers, 3);
+  press('hold', 'ControlLeft');
+  press('hold', 'ControlLeft');
+  assert.deepEqual(inputBytes(app).slice(5), [[1, 224], [2, 224]]);
+  press('hold', 'ControlLeft');
+  press('keys', 'Escape');
+  assert.deepEqual(inputBytes(app).slice(7), [[1, 224], [1, 41], [2, 41], [2, 224]]);
+});
+
