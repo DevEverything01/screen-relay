@@ -3,6 +3,25 @@
 #include "server/wire.hpp"
 #include <libwebsockets.h>
 #include <cassert>
+#include <stdexcept>
+#include <string>
+#include <utility>
+#include <vector>
+
+static bool engineConfig(const std::vector<std::string>& options, relay::Config& config) {
+  relay::Config parsed;
+  std::vector<std::string> values = {"relay-engine", "--viewer-dir", "viewer"};
+  values.insert(values.end(), options.begin(), options.end());
+  std::vector<char*> argv;
+  for (auto& value : values) argv.push_back(value.data());
+  try {
+    if (!relay::parseConfig(int(argv.size()), argv.data(), parsed)) return false;
+  } catch (const std::runtime_error&) {
+    return false;
+  }
+  config = std::move(parsed);
+  return true;
+}
 
 int main() {
   using namespace relay;
@@ -30,5 +49,19 @@ int main() {
   controlReady(out, 2, 7, 1280, 720);
   const uint8_t ready[] = {0, 0, 'N', 'S', 'L', '1', 1, 4, 0, 0, 0, 0, 0, 7, 0, 0, 0, 0, 0, 0, 0, 4, 5, 0, 2, 208};
   assert(out == std::vector<uint8_t>(ready, ready + sizeof(ready)));
+  Config engine;
+  assert(engineConfig({}, engine) && engine.fps == 60 && engine.bitrate_min == 1000000 &&
+         engine.bitrate_start == 8000000 && engine.bitrate_max == 40000000);
+  assert(engineConfig({"--fps", "10"}, engine) && engine.fps == 10);
+  assert(engineConfig({"--fps", "60"}, engine) && engine.fps == 60);
+  assert(!engineConfig({"--fps", "9"}, engine) && !engineConfig({"--fps", "61"}, engine));
+  assert(!engineConfig({"--fps", "-1"}, engine) && !engineConfig({"--fps", "30x"}, engine));
+  assert(engineConfig({"--bitrate-min", "250000", "--bitrate-start", "250000", "--bitrate-max", "100000000"}, engine));
+  assert(engine.bitrate_min == 250000 && engine.bitrate_start == 250000 && engine.bitrate_max == 100000000);
+  assert(engineConfig({"--bitrate-start", "15000000", "--bitrate-max", "20000000"}, engine));
+  assert(!engineConfig({"--bitrate-min", "249999"}, engine));
+  assert(!engineConfig({"--bitrate-max", "100000001"}, engine));
+  assert(!engineConfig({"--bitrate-min", "9000000"}, engine));
+  assert(!engineConfig({"--bitrate-start", "40000001"}, engine));
   return 0;
 }

@@ -23,22 +23,25 @@ void chunk(std::vector<uint8_t>& bytes, const char* type, const uint8_t* data, s
 }
 struct Resources {
   std::unique_ptr<CaptureSource> source;
+  int width = 0, height = 0;
   void init() {
     source = makeCaptureSource();
     require(bool(source), "screenshot source unavailable");
+    const auto dimensions = source->dimensions();
+    width = dimensions.first; height = dimensions.second;
   }
   std::vector<uint8_t> capture() {
-    constexpr size_t row = frame_width * 3 + 1;
+    const size_t row = size_t(width) * 3 + 1;
     source->drainDamage();
     const auto image = source->capture();
-    require(image.data && image.width == frame_width && image.height == frame_height && image.stride >= frame_width * 4 &&
-            image.stride <= frame_width * 8 && (image.format == PixelFormat::BGRA || image.format == PixelFormat::ARGB),
+    require(image.data && image.width == width && image.height == height && image.stride >= width * 4 &&
+            image.stride <= width * 8 && (image.format == PixelFormat::BGRA || image.format == PixelFormat::ARGB),
             "unsupported screenshot frame");
-    std::vector<uint8_t> pixels(frame_height * row);
-    for (int y = 0; y < frame_height; ++y) {
+    std::vector<uint8_t> pixels(size_t(height) * row);
+    for (int y = 0; y < height; ++y) {
       const auto* source = image.data + y * image.stride;
       auto* target = pixels.data() + y * row + 1;
-      for (int x = 0; x < frame_width; ++x) {
+      for (int x = 0; x < width; ++x) {
         target[x * 3] = source[x * 4 + (image.format == PixelFormat::BGRA ? 2 : 1)];
         target[x * 3 + 1] = source[x * 4 + (image.format == PixelFormat::BGRA ? 1 : 2)];
         target[x * 3 + 2] = source[x * 4 + (image.format == PixelFormat::BGRA ? 0 : 3)];
@@ -49,7 +52,7 @@ struct Resources {
     require(compress2(compressed.data(), &compressed_size, pixels.data(), pixels.size(), Z_DEFAULT_COMPRESSION) == Z_OK,
             "PNG encode failed");
     std::vector<uint8_t> header;
-    append32(header, frame_width); append32(header, frame_height);
+    append32(header, uint32_t(width)); append32(header, uint32_t(height));
     header.insert(header.end(), {8, 2, 0, 0, 0});
     std::vector<uint8_t> result{137, 80, 78, 71, 13, 10, 26, 10};
     chunk(result, "IHDR", header.data(), header.size());

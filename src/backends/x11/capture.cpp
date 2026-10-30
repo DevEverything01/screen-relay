@@ -35,6 +35,7 @@ class X11CaptureSource final : public CaptureSource {
   bool attached = false;
   int damage_event = 0;
   int cursor_event = 0;
+  int width = 0, height = 0;
   bool cursor_dirty = true;
  public:
   X11CaptureSource() { shm.shmid = -1; shm.shmaddr = reinterpret_cast<char*>(-1); }
@@ -57,11 +58,11 @@ class X11CaptureSource final : public CaptureSource {
             XFixesQueryVersion(display, &major, &minor) && major >= 1, "XFixes cursor tracking unavailable");
     require(XShmQueryExtension(display), "MIT-SHM unavailable");
     const int screen = DefaultScreen(display);
-    require(DisplayWidth(display, screen) == frame_width && DisplayHeight(display, screen) == frame_height,
-            "capture requires a fixed 1280x720 root");
+    width = DisplayWidth(display, screen); height = DisplayHeight(display, screen);
+    requireSurfaceSize(width, height);
     image = XShmCreateImage(display, DefaultVisual(display, screen), DefaultDepth(display, screen),
-                            ZPixmap, nullptr, &shm, frame_width, frame_height);
-    require(image && image->bytes_per_line >= frame_width * 4 && image->bytes_per_line <= frame_width * 8 &&
+                            ZPixmap, nullptr, &shm, width, height);
+    require(image && image->bytes_per_line >= width * 4 && image->bytes_per_line <= width * 8 &&
             image->bits_per_pixel == 32 && image->red_mask == 0xff0000 &&
             image->green_mask == 0xff00 && image->blue_mask == 0xff,
             "unsupported X image masks, depth, or stride");
@@ -91,6 +92,7 @@ class X11CaptureSource final : public CaptureSource {
     XFlush(display);
   }
   int fd() const override { return ConnectionNumber(display); }
+  std::pair<int, int> dimensions() const override { return {width, height}; }
   bool drainDamage() override {
     bool dirty = false;
     while (XPending(display)) {

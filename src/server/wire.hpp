@@ -19,7 +19,8 @@ unsigned inputLength(const std::string& text, uint64_t& length);
  * The builders below fill out with pre zero bytes of caller padding followed by one NSL1 message.
  * frameMessage and cursorMessage return false when the payload must not be sent.
  */
-bool frameMessage(std::vector<uint8_t>& out, size_t pre, uint32_t generation, uint32_t lastSequence, const EncodedFrame& frame);
+bool frameMessage(std::vector<uint8_t>& out, size_t pre, uint32_t generation, uint32_t lastSequence, const EncodedFrame& frame,
+                  uint16_t width, uint16_t height);
 bool cursorMessage(std::vector<uint8_t>& out, size_t pre, uint32_t generation, const CursorImage& cursor);
 void controlReady(std::vector<uint8_t>& out, size_t pre, uint32_t generation, uint16_t width, uint16_t height);
 void inputReply(std::vector<uint8_t>& out, size_t pre, uint32_t generation, uint32_t sequence, InputStatus status);

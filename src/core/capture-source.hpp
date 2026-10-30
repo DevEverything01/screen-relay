@@ -3,10 +3,23 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <stdexcept>
+#include <string>
+#include <utility>
 #include <vector>
 
 namespace relay {
-constexpr int frame_width = 1280, frame_height = 720;
+constexpr int min_frame_width = 320, max_frame_width = 1920;
+constexpr int min_frame_height = 240, max_frame_height = 1080;
+/** Throws unless width and height are even and inside the supported root size limits. */
+inline void requireSurfaceSize(int width, int height) {
+  if (width < min_frame_width || width > max_frame_width || height < min_frame_height ||
+      height > max_frame_height || (width & 1) || (height & 1))
+    throw std::runtime_error("Unsupported root size " + std::to_string(width) + "x" + std::to_string(height) +
+                             ": width must be even and " + std::to_string(min_frame_width) + " to " +
+                             std::to_string(max_frame_width) + ", height even and " +
+                             std::to_string(min_frame_height) + " to " + std::to_string(max_frame_height));
+}
 enum class PixelFormat { BGRA, ARGB };
 // CPU-accessible pixels remain valid until the next capture or source destruction.
 // GPU zero-copy would require a separate encoder interface.
@@ -27,6 +40,8 @@ class CaptureSource {
  public:
   virtual ~CaptureSource() = default;
   virtual int fd() const = 0;
+  /** Pixel size of every full frame this source captures. */
+  virtual std::pair<int, int> dimensions() const = 0;
   virtual bool drainDamage() = 0;
   virtual PixelFormat pixelFormat() const = 0;
   virtual FrameView capture() = 0;

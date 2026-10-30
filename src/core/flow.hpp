@@ -13,7 +13,7 @@ struct FlowControl {
   static constexpr size_t max_bytes = 8 * 1024 * 1024;
   static constexpr uint64_t pause_age_us = 250000;
   static constexpr uint64_t timeout_us = 3000000;
-  static constexpr uint64_t min_bitrate = 1000000, initial_bitrate = 8000000, max_bitrate = 40000000;
+  uint64_t min_bitrate = 1000000, initial_bitrate = 8000000, max_bitrate = 40000000;
   struct Frame { uint32_t sequence; size_t bytes; uint64_t captured_us; bool sent = false; uint64_t sent_us = 0; };
   std::deque<Frame> frames;
   size_t bytes = 0;
@@ -26,6 +26,16 @@ struct FlowControl {
   uint64_t last_decrease_us = 0, last_increase_us = 0;
   double goodput_bps = 0;
 
+  /** Applies the configured bitrate limits and starts at the configured initial rate. */
+  void configure(uint64_t minimum, uint64_t initial, uint64_t maximum) {
+    min_bitrate = minimum; initial_bitrate = initial; max_bitrate = maximum; target_bitrate = initial;
+  }
+  /** Restores the idle transport state while keeping the configured bitrate limits. */
+  void reset() {
+    const uint64_t minimum = min_bitrate, initial = initial_bitrate, maximum = max_bitrate;
+    *this = FlowControl{};
+    configure(minimum, initial, maximum);
+  }
   uint64_t oldestAge(uint64_t now) const {
     return frames.empty() ? 0 : now - std::min(now, frames.front().captured_us);
   }

@@ -39,17 +39,18 @@ Server::Server(Config settings) : config(std::move(settings)), capture([this](En
   pending.push_back(std::move(frame));
   lws_cancel_service(context);
   return true;
-}, makeCaptureSource, [this](uint32_t gen, CursorImage&& cursor) {
+}, CaptureSettings{config.fps, config.bitrate_min, config.bitrate_start, config.bitrate_max}, makeCaptureSource,
+[this](uint32_t gen, CursorImage&& cursor) {
   std::lock_guard<std::mutex> lock(mutex);
   if (!context || !generation || gen != generation) return;
   pending_cursor = std::move(cursor);
   lws_cancel_service(context);
-}) {}
+}) { flow.configure(config.bitrate_min, config.bitrate_start, config.bitrate_max); }
 void Server::release() { if (input) input->releaseAll(); }
 void Server::end() {
   release();
   uint32_t old;
-  { std::lock_guard<std::mutex> lock(mutex); old = generation; generation = 0; pending.clear(); pending_cursor.reset(); flow = {}; failed = false; }
+  { std::lock_guard<std::mutex> lock(mutex); old = generation; generation = 0; pending.clear(); pending_cursor.reset(); flow.reset(); failed = false; }
   last_write_cursor = false;
   if (old) capture.endSession(old);
   lastSequence = 0; received.clear(); replies.clear(); control_ready = controller = false; viewer = nullptr;
@@ -145,7 +146,7 @@ int Server::write(lws* wsi) {
   }
   auto& f = *frame;
   if (f.generation != generation) return 0;
-  if (!frameMessage(wire, LWS_PRE, generation, lastSequence, f)) return -1;
+  if (!frameMessage(wire, LWS_PRE, generation, lastSequence, f, width, height)) return -1;
   const size_t size = wire.size() - LWS_PRE;
   if (lws_write(wsi, wire.data() + LWS_PRE, size, LWS_WRITE_BINARY) != int(size)) return -1;
   width = f.width; height = f.height; lastSequence = f.sequence;
@@ -319,7 +320,7 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
 #ifdef __linux__
       if (!s->controller) configureStreamSocket(wsi);
 #endif
-      { std::lock_guard<std::mutex> lock(s->mutex); s->generation = ++s->nextGeneration; s->pending.clear(); s->pending_cursor.reset(); s->flow = {}; s->failed=false; }
+      { std::lock_guard<std::mutex> lock(s->mutex); s->generation = ++s->nextGeneration; s->pending.clear(); s->pending_cursor.reset(); s->flow.reset(); s->failed=false; }
       s->last_write_cursor = false;
       s->lastSequence=0; s->received.clear();
       if (s->controller) { s->control_ready = true; lws_callback_on_writable(wsi); }

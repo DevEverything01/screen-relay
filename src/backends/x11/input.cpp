@@ -41,26 +41,33 @@ constexpr KeySym hidSym(uint16_t hid) {
     default: return NoSymbol;
   }
 }
-static_assert(pixelCoordinate(0, frame_width) == 0 && pixelCoordinate(65535, frame_width) == frame_width - 1 &&
-              pixelCoordinate(10248, frame_width) == 200 && pixelCoordinate(40992, frame_width) == 800 &&
-              pixelCoordinate(65535, frame_height) == frame_height - 1 && pixelCoordinate(36459, frame_height) == 400);
+static_assert(pixelCoordinate(0, 1280) == 0 && pixelCoordinate(65535, 1280) == 1279 &&
+              pixelCoordinate(10248, 1280) == 200 && pixelCoordinate(40992, 1280) == 800 &&
+              pixelCoordinate(65535, 720) == 719 && pixelCoordinate(36459, 720) == 400);
 static_assert(hidSym(4) == XK_a && hidSym(225) == XK_Shift_L && hidSym(3) == NoSymbol);
 class X11Input final : public InputBackend {
   Display* display = nullptr;
   std::set<KeyCode> keys;
   std::set<unsigned> buttons;
-  uint16_t width = frame_width, height = frame_height;
+  uint16_t width = 0, height = 0;
  public:
   X11Input() {
     display = XOpenDisplay(nullptr);
     if (!display) throw std::runtime_error("X11 input display unavailable; Wayland is unsupported");
     int event, error, major, minor;
-    if (!XTestQueryExtension(display, &event, &error, &major, &minor) ||
-        DisplayWidth(display, DefaultScreen(display)) != width ||
-        DisplayHeight(display, DefaultScreen(display)) != height) {
+    const int screen = DefaultScreen(display);
+    const int root_width = DisplayWidth(display, screen), root_height = DisplayHeight(display, screen);
+    if (!XTestQueryExtension(display, &event, &error, &major, &minor)) {
       XCloseDisplay(display); display = nullptr;
-      throw std::runtime_error("input requires XTest and fixed 1280x720 X11 root");
+      throw std::runtime_error("input requires the XTest extension");
     }
+    try {
+      requireSurfaceSize(root_width, root_height);
+    } catch (...) {
+      XCloseDisplay(display); display = nullptr;
+      throw;
+    }
+    width = uint16_t(root_width); height = uint16_t(root_height);
   }
   ~X11Input() override { if (display) { releaseAll(); XCloseDisplay(display); } }
   std::pair<uint16_t, uint16_t> dimensions() const override { return {width, height}; }
