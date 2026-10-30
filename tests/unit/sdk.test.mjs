@@ -69,6 +69,50 @@ test('HTTP input reports the records applied before a cancelled batch', async ()
   }
 });
 
+test('HTTP input counts a rejected batch prefix from its failure index', async () => {
+  let batches = 0;
+  const server = createServer(async (request, response) => {
+    response.setHeader('content-type', 'application/json');
+    if (request.url === '/capabilities') return response.end(JSON.stringify({ max_input_batch: 2 }));
+    for await (const chunk of request);
+    if (batches++ === 0) return response.end(JSON.stringify({ applied: 2 }));
+    response.statusCode = 422;
+    response.end(JSON.stringify({ error: 'unsupported_input', index: 1 }));
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  try {
+    const client = createClient({ url: `http://127.0.0.1:${server.address().port}` });
+    await assert.rejects(client.input(Array.from({ length: 4 }, () => ({ type: 'releaseAll' }))),
+      { code: 'UNSUPPORTED', applied: 3, data: { httpStatus: 422, index: 1, applied: 3 } });
+  } finally {
+    server.close();
+    await once(server, 'close');
+  }
+});
+
+test('custom HTTP transport enforces the overall request deadline', async () => {
+  const server = createServer((request, response) => {
+    response.writeHead(200, { 'content-type': 'application/json' });
+    const interval = setInterval(() => response.write(' '), 10);
+    response.on('close', () => clearInterval(interval));
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  try {
+    const client = createClient({ url: `http://127.0.0.1:${server.address().port}`, connect: '127.0.0.1', timeout: 50 });
+    await assert.rejects(client.capabilities(), { code: 'TIMEOUT' });
+  } finally {
+    server.closeAllConnections();
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
+test('control connections reject unsupported transport overrides', async () => {
+  await assert.rejects(connect({ ca: 'ca.pem' }), { code: 'INVALID_ARGUMENT', message: /do not support ca or connect/ });
+  await assert.rejects(connect({ connect: '127.0.0.1' }), { code: 'INVALID_ARGUMENT', message: /do not support ca or connect/ });
+});
+
 function packet(type, generation, sequence, payload) {
   const b = Buffer.alloc(20 + payload.length);
   b.write('NSL1'); b[4] = 1; b[5] = type;

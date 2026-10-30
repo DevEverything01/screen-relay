@@ -379,21 +379,22 @@ export function findEngine(): string | null {
   return which('relay-engine') ?? null;
 }
 
-function splitCommand(value: string): string[] {
+export function splitCommand(value: string): string[] {
   const result: string[] = [];
   let token = '';
+  let started = false;
   let quote = '';
   let escaped = false;
   for (const char of value) {
-    if (escaped) { token += char; escaped = false; }
-    else if (char === '\\' && quote !== "'") escaped = true;
+    if (escaped) { token += char; started = true; escaped = false; }
+    else if (char === '\\' && quote !== "'") { escaped = true; started = true; }
     else if (quote) { if (char === quote) quote = ''; else token += char; }
-    else if (char === '"' || char === "'") quote = char;
-    else if (/\s/.test(char)) { if (token) result.push(token); token = ''; }
-    else token += char;
+    else if (char === '"' || char === "'") { quote = char; started = true; }
+    else if (/\s/.test(char)) { if (started) result.push(token); token = ''; started = false; }
+    else { token += char; started = true; }
   }
   if (escaped) token += '\\';
   if (quote) throw new Failure('invalid_input', 'Invalid desktop command quoting', 'Check --desktop.');
-  if (token) result.push(token);
+  if (started) result.push(token);
   return result;
 }
