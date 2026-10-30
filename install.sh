@@ -57,12 +57,10 @@ if ! node_ok; then
     Darwin:arm64) platform=darwin-arm64 ;;
     *) echo 'relay needs Node 26 or newer; this OS and architecture has no Node download. Install Node 26 from https://nodejs.org/ and run this again.' >&2; exit 1 ;;
   esac
+  if [ "$apt" = 1 ]; then apt_install ca-certificates curl libatomic1; fi
   if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
-    if [ "$apt" = 1 ]; then apt_install ca-certificates curl; fi
-    if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
-      echo 'Downloading Node 26 needs curl or wget.' >&2
-      exit 1
-    fi
+    echo 'Downloading Node 26 needs curl or wget.' >&2
+    exit 1
   fi
   archive="node-v$node_version-$platform.tar.gz"
   scratch=$(mktemp -d)
@@ -83,7 +81,9 @@ if ! node_ok; then
   export PATH
   echo "Installed Node $node_version in $prefix/lib/relay/node"
   if ! node_ok; then
-    echo "Node $node_version in $prefix/lib/relay/node does not run." >&2
+    echo "Node $node_version in $prefix/lib/relay/node does not run:" >&2
+    "$prefix/lib/relay/node/bin/node" --version >&2 || true
+    echo 'Install the missing system libraries (Debian: libatomic1) and run this again.' >&2
     exit 1
   fi
 fi
