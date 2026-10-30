@@ -1,83 +1,60 @@
 ---
 title: Getting started
-description: Install relay on a Linux host, start your first session, and control the desktop from the CLI.
+description: Install relay on a Linux VM, start a session, open the viewer, and control the desktop from the VM and from your laptop.
 ---
 
-This guide takes you from a Linux machine with the repository to a running desktop you can see in a browser and control from the command line.
+This guide takes you from a Linux VM to a desktop you can see in a browser and control from the command line, first on the VM and then from your laptop.
 
 ## Prerequisites
 
-- A Linux machine to run the desktop. The engine installs on Linux only.
-- Debian or Ubuntu for automatic dependency installation. On another distribution, install the packages listed in [install.sh](/docs/cli#installsh) and pass `--no-deps`.
-- Root or passwordless `sudo` when apt installs packages.
-- Node 26 or newer, or network access so `install.sh` can download the version pinned in `.node-version`.
+- A Linux VM to run the desktop. A container or sandbox works too.
+- Debian or Ubuntu for automatic dependency installation. On another distribution, install the dependencies yourself and pass `--no-deps` to the installer.
+- Root or passwordless `sudo`, so the installer can install packages.
+- Node 26 or newer. If it is missing, the installer downloads the pinned version.
 - A browser with H.264 WebCodecs for the viewer: current Chrome, Edge, or Safari.
 
-## Start a session
+## 1. Install relay
 
-### 1. Install relay
-
-From the repository root:
+On the VM, from a clone of the repository:
 
 ```sh
 ./install.sh
-```
-
-The installer adds the build tools, X11 libraries, `libx264`, `libwebsockets`, `xvfb`, and the desktop packages, then runs `npm ci` and `npm run build`. It finishes by running `relay doctor` and exits non-zero if a check fails. It is safe to re-run.
-
-To install only the CLI on a laptop, use `./install.sh --client-only`. That works off Linux and needs Node 26 or newer.
-
-### 2. Add the CLI to your path
-
-The default prefix is `~/.local`, so the launcher is in `~/.local/bin`:
-
-```sh
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-When `<prefix>/bin` is not on `PATH`, the installer prints:
+The installer installs the system packages relay needs, builds relay, puts the `relay` command in `~/.local/bin`, and finishes by running `relay doctor`. It exits with an error if a check fails, and it is safe to run again. Add the `export` line to your shell profile to keep it. If `~/.local/bin` is not on `PATH`, the installer prints `Not on PATH; add it with: export PATH="<prefix>/bin:$PATH"`.
 
-```text
-Not on PATH; add it with: export PATH="<prefix>/bin:$PATH"
-```
+Options: `--prefix DIR` installs somewhere else, `--no-deps` skips apt, `--no-desktop` skips the desktop packages, and `--client-only` installs only the CLI (see [step 6](#6-control-it-from-your-laptop)).
 
-Add the line to your shell profile to keep it across sessions.
-
-### 3. Start the desktop
-
-```sh
-relay up
-```
-
-`up` starts Xvfb at the configured resolution (1280x720 at 60 fps by default), the desktop, and the engine. It waits until the engine answers `GET /screenshot.png` with a PNG and the desktop shows its own window, then prints a viewer link. Without `-d`, the command stays in the foreground and the first Ctrl+C stops the session.
-
-For a background session that returns once it is ready:
+## 2. Start a session
 
 ```sh
 relay up -d
 ```
 
-One session runs per name, and the default name is `default`. Use `--name` with another `--port` to run a second session.
+`up` starts a virtual display (1280x720 at 60 fps by default), the desktop, and the engine. It waits until the desktop is ready, then prints a viewer link. With `-d` the command returns once the session is ready. Without it, `up` stays in the foreground and the first Ctrl+C stops the session.
 
-### 4. Open the viewer
+Each session has a name, `default` unless you pass `--name`. To run a second session, give it another `--name` and `--port`.
 
-The viewer listens on `http://127.0.0.1:8080` by default. On a remote VM, tunnel the port from your laptop:
+## 3. Open the viewer
+
+The engine listens on `http://127.0.0.1:8080` and is reachable only from the VM. From your laptop, forward the port over SSH:
 
 ```sh
 ssh -N -L 8080:127.0.0.1:8080 user@your-vm
 ```
 
-Open the viewer link that `up` printed. The link includes a `#token=` fragment when the session has a token, and you should treat the whole link as a secret. The viewer removes the fragment from the address bar before it connects.
+Open the viewer link that `up` printed. On a loopback listener there is no token. If the link has a `#token=` part, treat the whole link as a secret. The viewer removes the token from the address bar before it connects.
 
 <Callout title="Secure context">
-  The viewer needs a secure context. Use `https://` or `http://127.0.0.1`. A
-  blank page or a WebCodecs error usually means the browser lacks H.264
-  WebCodecs or the page is not in a secure context.
+  The viewer needs a secure context: `https://` or `http://127.0.0.1`. A blank
+  page or a WebCodecs error usually means the browser lacks H.264 WebCodecs or
+  the page is not in a secure context.
 </Callout>
 
-### 5. Control the desktop
+## 4. Control it from the VM
 
-Take a screenshot, click, and type from any machine that reaches the engine:
+On the VM, client commands find the session on their own:
 
 ```sh
 relay screenshot screen.png
@@ -87,42 +64,72 @@ relay key Enter
 relay screenshot after.png
 ```
 
-Coordinates are fractions from 0 to 1 measured from the top-left. `type` sends layout-neutral text. `key` sends physical combinations such as `ctrl+l` or `alt+Tab`. Input success means the engine applied the events, so take another screenshot to confirm the application reacted.
+- Coordinates are fractions from 0 to 1, measured from the top-left.
+- `type` sends text using the desktop's keyboard layout.
+- `key` presses physical combinations such as `ctrl+l` or `alt+Tab`.
+- A successful input command means the engine applied the events. Take another screenshot to confirm the app reacted.
+- While a viewer is open, input commands fail with `busy` because the viewer owns input. Screenshots still work. Close the viewer tab to hand control back.
 
-Check the session or stop it:
+Start an app on the desktop with `relay run`:
+
+```sh
+relay run -- xterm
+```
+
+`run` prints the app's process ID right away, and the window appears a moment later. Read its output with `relay logs apps`. Apps stop with `relay down`.
+
+Check or stop the session:
 
 ```sh
 relay status
 relay down
 ```
 
-`status` exits 0 for any existing session, including a stopped or failed one. `down` stops the session and every process it started, and it is safe to run twice.
+`status` succeeds for any existing session, including a stopped or failed one. `down` stops the session and everything it started, and it is safe to run twice.
 
-## Run an app
+## 5. Make the session reachable
 
-Start an application on the session desktop:
+To control a session from another machine, the engine must listen beyond the VM and require a token. The common setup puts HTTPS in front of it:
 
 ```sh
-relay run -- xterm
+relay up -d --public https://desktop.example.com
 ```
 
-`run` returns the app pid immediately, and the window appears a moment later. The app gets the desktop's display, D-Bus session bus, X authority, and runtime, config, and cache directories. Read its output with `relay logs apps`. Apps stop with `relay down`.
+This generates a token and prints a viewer link that includes it. The [Remote access](/docs/remote-access) page covers TLS proxies, native TLS, and tokens.
+
+## 6. Control it from your laptop
+
+On the laptop, install only the CLI. This works on any OS with Node 26 or newer:
+
+```sh
+./install.sh --client-only
+```
+
+Copy the token from the VM into a file on the laptop:
+
+```sh
+relay status --show-token
+```
+
+Then point the CLI at the session:
+
+```sh
+export RELAY_URL=https://desktop.example.com
+export RELAY_TOKEN_FILE=./token
+relay status
+relay screenshot screen.png
+relay click 0.5 0.5
+```
+
+You can pass `--url` and `--token-file` on each command instead. Remote plain HTTP is refused, so use HTTPS or an SSH tunnel to `http://127.0.0.1`.
 
 ## Use Docker instead
 
-The repository includes a `Dockerfile` for hosts without a Debian or Ubuntu desktop setup:
-
-```sh
-docker build -t relay .
-docker run -d --name desk -p 127.0.0.1:8080:8080 relay
-docker logs desk
-```
-
-The viewer link and token are in `docker logs`. See [Docker](/docs/docker) for bind addresses, arguments passed to `up`, and control from the host.
+If you would rather not install on the host, run relay in a container. See [Docker](/docs/docker).
 
 ## Next steps
 
-- Read the [CLI reference](/docs/cli) for every command, option, output shape, and error code.
-- Set the resolution, frame rate, bitrate, port, or desktop in [Configuration](/docs/configuration).
-- Expose the session through an SSH tunnel, a TLS proxy, or native TLS in [Remote access](/docs/remote-access).
-- Load the agent workflow with `relay skills get core` and read [Agent skills](/docs/agent-skills).
+- [CLI reference](/docs/cli): every command, option, output, and error.
+- [Configuration](/docs/configuration): resolution, frame rate, bitrate, port, and desktop.
+- [Agent skills](/docs/agent-skills): the workflow for agents.
+- [Troubleshooting](/docs/troubleshooting): what to do when something fails.

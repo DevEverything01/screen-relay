@@ -1,10 +1,10 @@
 # relay
 
-Stream a Linux X11 desktop to a browser, and control it from the command line.
+Relay streams a Linux desktop to a browser and lets people and agents control it from the `relay` command line, a Node SDK, or an HTTP and WebSocket API.
 
 ## Quickstart
 
-On a Debian/Ubuntu VM or sandbox, from this directory:
+On a Debian or Ubuntu VM, from a clone of this repository:
 
 ```sh
 ./install.sh
@@ -12,23 +12,29 @@ export PATH="$HOME/.local/bin:$PATH"
 relay up
 ```
 
-`install.sh` installs `relay` in `~/.local/bin`, which a fresh shell often does not have on `PATH`. `up` prints a viewer link. Open it in a browser with H.264 WebCodecs (Chrome, Edge, Safari). From your laptop, tunnel first:
+`relay up` prints a viewer link. Open it in a browser with H.264 WebCodecs (Chrome, Edge, or Safari). From your laptop, forward the port first:
 
 ```sh
 ssh -N -L 8080:127.0.0.1:8080 user@your-vm
 ```
 
-Docker:
+Control the desktop from the VM:
+
+```sh
+relay screenshot screen.png
+relay click 0.5 0.5
+relay type "hello"
+```
+
+To use Docker instead:
 
 ```sh
 docker build -t relay .
 docker run --rm -p 127.0.0.1:8080:8080 relay
 ```
 
-The viewer link with its token is in the container output.
+The container prints the viewer link with its token.
 
-## Docs
+## Documentation
 
-Read the [documentation](https://relay.labs.vercel.dev/docs) for installation, the CLI reference, configuration, remote access, Docker, agent skills, the Node SDK, the protocol, architecture, and troubleshooting.
-
-The test layers are described in [tests/README.md](tests/README.md).
+Installation, the CLI reference, configuration, remote access, Docker, agent skills, the Node SDK, and troubleshooting are at https://relay.labs.vercel.dev.
