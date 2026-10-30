@@ -17,7 +17,9 @@ function viewer({ devicePixelRatio = 1, storage } = {}) {
     static CLOSING = 2;
     constructor() { this.readyState = Socket.OPEN; this.events = []; this.inputs = []; sockets.push(this); }
     send(data) {
-      const view = new DataView(data), type = view.getUint8(5);
+      const offset = data instanceof ArrayBuffer ? 0 : data.byteOffset;
+      const length = data instanceof ArrayBuffer ? data.byteLength : data.byteLength;
+      const view = new DataView(data instanceof ArrayBuffer ? data : data.buffer, offset, length), type = view.getUint8(5);
       this.events.push([type, view.getUint32(12)]);
       if (type === 3) this.inputs.push({ event: view.getUint8(20), code: view.getUint16(22), modifiers: view.getUint16(34) });
     }
@@ -44,14 +46,14 @@ function viewer({ devicePixelRatio = 1, storage } = {}) {
     setTimeout: () => 1, clearTimeout() {}, requestAnimationFrame: () => 1, cancelAnimationFrame() {},
     fetch: async () => ({ ok: false, status: 401 }), localStorage: storage,
   });
-  runInContext(readFileSync('viewer/viewer.js', 'utf8'), context);
+  runInContext(readFileSync('dist/viewer/viewer.js', 'utf8'), context);
   const frame = (seq, width = 1280, height = 720) => runInContext(`(() => {
     const data = new ArrayBuffer(40), view = new DataView(data);
     view.setUint32(0, 0x4e534c31); view.setUint8(4, 1); view.setUint8(5, 1);
     view.setUint16(6, ${seq === 1 ? 1 : 0}); view.setUint32(8, 1); view.setUint32(12, ${seq});
     view.setUint32(16, 20); view.setUint16(20, ${width}); view.setUint16(22, ${height});
     view.setBigUint64(24, ${seq}n); new Uint8Array(data, 32).set([0, 0, 1, 103, 66, 0, 30, 0]);
-    socket.onmessage({ data });
+    relayViewer.socket.onmessage({ data });
   })()`, context);
   return { context, document, listeners, sockets, frame };
 }
@@ -59,7 +61,7 @@ function viewer({ devicePixelRatio = 1, storage } = {}) {
 test('voluntary reconnect and hiding ACK queued frames on the old socket', () => {
   const app = viewer();
   app.frame(1); app.frame(2); app.frame(3);
-  runInContext('connect()', app.context);
+  runInContext('relayViewer.connect()', app.context);
   assert.deepEqual(app.sockets[0].events.filter((event) => event === 'close' || event[0] === 2),
     [[2, 1], [2, 2], [2, 3], 'close']);
   assert.deepEqual(app.sockets[1].events, []);
@@ -73,7 +75,7 @@ test('broken sockets do not receive or replay queued ACKs', () => {
   const app = viewer();
   app.frame(1); app.frame(2);
   app.sockets[0].onerror();
-  runInContext('connect()', app.context);
+  runInContext('relayViewer.connect()', app.context);
   assert.deepEqual(app.sockets[0].events.filter((event) => event === 'close' || event[0] === 2),
     [[2, 1], 'close']);
   assert.deepEqual(app.sockets[1].events, []);
@@ -91,10 +93,10 @@ test('frames up to 1920x1080 are drawn and size the canvas; wider frames are rej
 test('actual size is one stream pixel per device pixel and follows density changes', () => {
   const app = viewer({ devicePixelRatio: 2 });
   const canvas = app.document.querySelector('#screen');
-  runInContext('setScale("actual")', app.context);
+  runInContext('relayViewer.setScale("actual")', app.context);
   assert.deepEqual([canvas.style.width, canvas.style.height], ['640px', '360px']);
   app.context.window.devicePixelRatio = 1;
-  runInContext('watchDpr()', app.context);
+  runInContext('relayViewer.watchDpr()', app.context);
   assert.deepEqual([canvas.style.width, canvas.style.height], ['1280px', '720px']);
 });
 
@@ -102,14 +104,14 @@ test('scale mode and sharp pixels survive a reload; blocked storage still works'
   const values = new Map();
   const storage = { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) };
   const first = viewer({ devicePixelRatio: 2, storage });
-  runInContext('setScale("actual"); toggleSharp()', first.context);
+  runInContext('relayViewer.setScale("actual"); relayViewer.toggleSharp()', first.context);
   const reloaded = viewer({ devicePixelRatio: 2, storage });
   const canvas = reloaded.document.querySelector('#screen');
   assert.deepEqual([canvas.style.width, canvas.style.height, canvas.style.imageRendering], ['640px', '360px', 'pixelated']);
   assert.equal(reloaded.document.querySelector('[data-scale="actual"]').attributes['aria-pressed'], 'true');
   const blocked = { getItem() { throw new Error('blocked'); }, setItem() { throw new Error('blocked'); } };
   const fallback = viewer({ devicePixelRatio: 2, storage: blocked });
-  runInContext('setScale("actual")', fallback.context);
+  runInContext('relayViewer.setScale("actual")', fallback.context);
   assert.equal(fallback.document.querySelector('#screen').style.width, '640px');
 });
 
@@ -175,7 +177,7 @@ test('Caps Lock tracking resets with the generation', () => {
   const app = viewer();
   app.frame(1);
   key(app, 'keydown', 'CapsLock', true);
-  runInContext('reset()', app.context);
+  runInContext('relayViewer.reset()', app.context);
   app.frame(1);
   key(app, 'keydown', 'KeyA', true);
   assert.deepEqual(inputBytes(app), [[1, 57], [2, 57], [7, 0], [1, 57], [2, 57], [1, 4]]);
@@ -185,11 +187,11 @@ test('a Caps Lock tap dropped while not ready is retried by the next key', () =>
   const app = viewer();
   key(app, 'keydown', 'KeyA', true);
   assert.deepEqual(inputBytes(app), []);
-  assert.equal(runInContext('capsLock', app.context), false);
+  assert.equal(runInContext('relayViewer.capsLock', app.context), false);
   app.frame(1);
   key(app, 'keydown', 'KeyB', true);
   assert.deepEqual(inputBytes(app), [[1, 57], [2, 57], [1, 5]]);
-  assert.equal(runInContext('capsLock', app.context), true);
+  assert.equal(runInContext('relayViewer.capsLock', app.context), true);
 });
 
 test('keys-panel buttons keep the canvas focus so hold latches survive clicks', () => {

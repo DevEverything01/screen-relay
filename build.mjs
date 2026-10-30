@@ -1,5 +1,5 @@
 import { build } from 'esbuild';
-import { chmod } from 'node:fs/promises';
+import { chmod, copyFile, mkdir } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 
 const entries = [
@@ -21,4 +21,15 @@ await Promise.all(entries.map(async ({ entry, outfile }) => {
   });
   await chmod(outfile, 0o755);
 }));
+await build({
+  entryPoints: ['viewer/main.ts'],
+  outfile: 'dist/viewer/viewer.js',
+  bundle: true,
+  platform: 'browser',
+  format: 'iife',
+  globalName: 'relayViewer',
+  target: 'es2020',
+});
+await mkdir('dist/viewer', { recursive: true });
+await copyFile('viewer/index.html', 'dist/viewer/index.html');
 execFileSync(process.execPath, ['node_modules/typescript/bin/tsc', '-p', 'tsconfig.build.json'], { stdio: 'inherit' });
