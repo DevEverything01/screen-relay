@@ -82,6 +82,18 @@ test('invalid URL diagnostics redact credentials and query strings', () => {
   }
 });
 
+test('invalid URL recovery is a sentence in human mode and has no next command in --json', () => {
+  const env = { ...process.env, RELAY_URL: '', RELAY_TOKEN_FILE: '' };
+  const json = spawnSync(process.execPath, [cli, 'status', '--url', 'ftp://example.com', '--json'], { encoding: 'utf8', timeout: 15000, env });
+  assert.ifError(json.error);
+  assert.equal(json.status, 2);
+  assert.equal(JSON.parse(json.stderr).next, undefined);
+  const human = spawnSync(process.execPath, [cli, 'status', '--url', 'ftp://example.com'], { encoding: 'utf8', timeout: 15000, env });
+  assert.ifError(human.error);
+  assert.equal(human.status, 2);
+  assert.match(human.stderr, /\n {2}Use an HTTPS origin or a local address:\n {4}Pass --url https:\/\/desktop\.example\.com or --url http:\/\/127\.0\.0\.1:8080\.\n$/);
+});
+
 test('RELAY_AGENT forces the agent block or the pointer line', () => {
   const help = (value) => spawnSync(process.execPath, [cli, '--help'], {
     encoding: 'utf8',
