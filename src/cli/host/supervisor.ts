@@ -1,9 +1,8 @@
 import { spawnSync, type ChildProcess, type SpawnOptions } from 'node:child_process';
-import { accessSync, closeSync, constants, fchmodSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { accessSync, closeSync, constants, fchmodSync, mkdirSync, openSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { request } from 'node:http';
-import { request as requestTls } from 'node:https';
 import type { Readable } from 'node:stream';
+import { createClient } from '../../sdk/index.js';
 import { Failure } from '../output.js';
 import { HostArgs, LAUNCHER_DIR, spawnCleared, which } from './common.js';
 import { identity, SessionData, tail, writeSession } from './state.js';
@@ -34,6 +33,7 @@ export type SessionArgs = HostArgs & {
 };
 
 type EngineTarget = { url: string; token?: string | null; caFile?: string | null; connect?: string | null };
+const PNG = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -124,69 +124,6 @@ export function displaySize(env: NodeJS.ProcessEnv): string | null {
 export function connectHost(bind?: string | null): string | null {
   if (!bind || ['127.0.0.1', '0.0.0.0', '::'].includes(bind)) return null;
   return bind;
-}
-
-export async function http(where: EngineTarget, path: string, timeout: number, binary = false): Promise<any> {
-  const base = new URL(where.url);
-  const port = Number(base.port || (base.protocol === 'https:' ? 443 : 80));
-  const connect = where.connect?.replace(/^\[|\]$/g, '') ?? base.hostname;
-  const headers: Record<string, string> = {};
-  if (where.token) headers.Authorization = `Bearer ${where.token}`;
-  if (where.connect) headers.Host = base.host;
-  const transport = base.protocol === 'https:' ? requestTls : request;
-  return new Promise((resolve, reject) => {
-    const options: any = {
-      protocol: base.protocol,
-      hostname: connect,
-      port,
-      path: `${base.pathname === '/' ? '' : base.pathname}${path}`,
-      headers,
-      timeout: timeout * 1000,
-    };
-    if (where.caFile) {
-      options.ca = readFileSync(where.caFile);
-      options.checkServerIdentity = () => undefined;
-    }
-    const req = transport(options, (res) => {
-      const chunks: Buffer[] = [];
-      let size = 0;
-      res.on('data', (chunk: Buffer) => {
-        size += chunk.length;
-        if (size > 8 * 1024 * 1024) req.destroy(new Error('oversize'));
-        else chunks.push(chunk);
-      });
-      res.once('end', () => {
-        if ((res.statusCode ?? 0) >= 300 && (res.statusCode ?? 0) < 400) {
-          reject(new Failure('invalid_input', 'Server answered with a redirect; refusing to follow it', 'Use the server origin directly.'));
-          return;
-        }
-        if ((res.statusCode ?? 0) >= 400) {
-          const known: Record<number, [string, string, string]> = {
-            401: ['unauthorized', 'Token missing or wrong', 'Pass --token-file FILE or set RELAY_TOKEN_FILE.'],
-            403: ['unauthorized', 'Rejected by the Host/Origin policy', 'Connect through a loopback address or the configured public URL.'],
-            409: ['busy', 'A viewer or SDK session holds control', 'Close it and run the command again; input is never retried.'],
-            503: ['busy', 'Engine busy or screenshot unavailable', 'Try again in a moment.'],
-          };
-          const [code, message, hint] = known[res.statusCode ?? 0] ?? ['internal', `Engine returned HTTP ${res.statusCode}`, ''];
-          reject(new Failure(code, message, hint));
-          return;
-        }
-        const data = Buffer.concat(chunks);
-        if (binary) resolve(data);
-        else {
-          try { resolve(JSON.parse(data.toString('utf8'))); }
-          catch { reject(new Failure('internal', 'Engine returned invalid JSON')); }
-        }
-      });
-    });
-    req.setTimeout(timeout * 1000, () => req.destroy(Object.assign(new Error('timeout'), { code: 'ETIMEDOUT' })));
-    req.once('error', (error: NodeJS.ErrnoException) => {
-      if (error.message === 'oversize') reject(new Failure('internal', 'Response exceeds 8 MiB'));
-      else if (error.code === 'ETIMEDOUT' || error.message === 'timeout') reject(new Failure('timeout', `No reply from ${where.url} within ${timeout}s`, 'Raise --timeout or check the engine.'));
-      else reject(new Failure('unreachable', `Cannot reach ${where.url}: ${error.message}`, 'Start a session with `relay up` or pass --url.'));
-    });
-    req.end();
-  });
 }
 
 export class Session {
@@ -348,8 +285,10 @@ export class Session {
       try {
         const message = JSON.parse(line);
         if (message.ready === true && message.pid === pid) {
-          const image = await http(where, '/screenshot.png', 3, true);
-          return (image as Buffer).subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+          const image = await createClient({
+            url: where.url, token: where.token ?? undefined, ca: where.caFile ?? undefined, connect: where.connect ?? undefined, timeout: 3000,
+          }).screenshot();
+          return Buffer.from(image).subarray(0, 8).equals(PNG);
         }
       } catch {}
     }

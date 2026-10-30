@@ -1,4 +1,7 @@
+import { readFileSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
+import { request as httpRequest } from 'node:http';
+import { request as httpsRequest, type RequestOptions } from 'node:https';
 import {
   RelayError, baseUrl, integer, encodeInput, encodeInputBatch, comboEvents, textEvents,
   batches, parseHeader, HEADER_SIZE, MESSAGE_TYPES, MAX_INPUT_BATCH, MAX_INPUT_PENDING,
@@ -8,7 +11,7 @@ import {
 export { RelayError };
 export type { InputEvent };
 export type Input = InputEvent;
-export interface ClientOptions { url?: string; token?: string; timeout?: number }
+export interface ClientOptions { url?: string; token?: string; timeout?: number; ca?: string; connect?: string }
 export type Options = ClientOptions;
 export interface InputResult { events: number }
 export type Status = Record<string, unknown>;
@@ -39,13 +42,108 @@ export interface Session {
   close(): void;
 }
 
-function target({ url = 'http://127.0.0.1:8080', timeout = 10000, token }: ClientOptions) {
-  return { base: baseUrl(url, token), timeout: integer(timeout, 1, 2147483647, 'timeout'), token };
+function target({ url = 'http://127.0.0.1:8080', timeout = 10000, token, ca, connect }: ClientOptions) {
+  return { base: baseUrl(url, token), timeout: integer(timeout, 1, 2147483647, 'timeout'), token, ca, connect };
+}
+
+type Server = ReturnType<typeof target>;
+
+const STATUS_MESSAGES: Record<number, [string, string]> = {
+  401: ['Token missing or wrong', 'Pass --token-file FILE or set RELAY_TOKEN_FILE.'],
+  403: ['Rejected by the Host/Origin policy', 'Connect through a loopback address or the configured public URL.'],
+  409: ['A viewer or SDK session holds control', 'Close it and run the command again; input is never retried.'],
+  413: ['Input batch too large', `Send at most ${MAX_INPUT_BATCH} events per batch.`],
+  503: ['Engine busy or screenshot unavailable', 'Try again in a moment.'],
+};
+
+function responseError(status: number, detail: { error?: string; index?: number } | null): RelayError {
+  if (detail?.index !== undefined) {
+    return new RelayError('INVALID_ARGUMENT', `Engine rejected input event ${detail.index} (${detail.error})`, 'Check the event against the SDK input schema.');
+  }
+  const code = status === 401 || status === 403 ? 'UNAUTHORIZED'
+    : detail?.error === 'busy' || status === 429 || status === 409 ? 'BUSY'
+    : detail?.error === 'unsupported_input' || status === 422 ? 'UNSUPPORTED'
+    : detail?.error === 'invalid_input' || status === 413 ? 'INVALID_ARGUMENT' : 'HTTP_ERROR';
+  const known = STATUS_MESSAGES[status];
+  if (known && code !== 'HTTP_ERROR') return new RelayError(code, known[0], known[1]);
+  return new RelayError(code, `Server returned HTTP ${status}`);
+}
+
+function headers(server: Server, body?: Uint8Array): Record<string, string> {
+  const result: Record<string, string> = server.token ? { Authorization: `Bearer ${server.token}` } : {};
+  if (body !== undefined) result['Content-Type'] = 'application/octet-stream';
+  return result;
+}
+
+function decode<Result>(data: Buffer, binary: boolean): Result {
+  if (binary) return data as Result;
+  try { return JSON.parse(data.toString('utf8')) as Result; }
+  catch { throw new RelayError('PROTOCOL_ERROR', 'Invalid JSON response'); }
+}
+
+function nodeRequest<Result>(server: Server, path: string, binary: boolean, body?: Uint8Array): Promise<Result> {
+  const base = server.base;
+  let ca: Buffer | undefined;
+  if (server.ca) {
+    try { ca = readFileSync(server.ca); }
+    catch (error) { return Promise.reject(new RelayError('IO_ERROR', `Cannot read certificate ${server.ca}: ${error instanceof Error ? error.message : String(error)}`)); }
+  }
+  const hostname = server.connect ?? base.hostname.replace(/^\[|\]$/g, '');
+  const requestHeaders = headers(server, body);
+  if (server.connect) requestHeaders.Host = base.host;
+  const options: RequestOptions = {
+    protocol: base.protocol,
+    hostname,
+    port: Number(base.port || (base.protocol === 'https:' ? 443 : 80)),
+    path: `${base.pathname === '/' ? '' : base.pathname}${path}`,
+    method: body === undefined ? 'GET' : 'POST',
+    headers: requestHeaders,
+    timeout: server.timeout,
+  };
+  if (ca) {
+    options.ca = ca;
+    options.checkServerIdentity = () => undefined;
+  }
+  return new Promise((resolve, reject) => {
+    const transport = base.protocol === 'https:' ? httpsRequest : httpRequest;
+    const sent = transport(options, (response) => {
+      const chunks: Buffer[] = [];
+      let size = 0;
+      response.on('data', (chunk: Buffer) => {
+        size += chunk.length;
+        if (size > 8 * 1024 * 1024) sent.destroy(new RelayError('PROTOCOL_ERROR', 'Response exceeds 8 MiB'));
+        else chunks.push(chunk);
+      });
+      response.once('end', () => {
+        const status = response.statusCode ?? 0;
+        const data = Buffer.concat(chunks);
+        if (status >= 400) {
+          let detail: { error?: string; index?: number } | null = null;
+          try { detail = JSON.parse(data.toString('utf8')); } catch {}
+          reject(responseError(status, detail));
+          return;
+        }
+        if (status >= 300) {
+          reject(new RelayError('HTTP_ERROR', 'Server answered with a redirect; refusing to follow it'));
+          return;
+        }
+        try { resolve(decode<Result>(data, binary)); } catch (error) { reject(error); }
+      });
+    });
+    sent.once('timeout', () => sent.destroy(new RelayError('TIMEOUT', 'Request timed out')));
+    sent.once('error', (error) => {
+      if (error instanceof RelayError) reject(error);
+      else reject(new RelayError('NETWORK_ERROR', `Request failed: ${error.message}`));
+    });
+    if (body !== undefined) sent.write(Buffer.from(body));
+    sent.end();
+  });
 }
 
 async function request<Result>(
-  server: ReturnType<typeof target>, path: string, binary = false, body?: Uint8Array,
+  server: Server, path: string, binary = false, body?: Uint8Array,
 ): Promise<Result> {
+  if (server.ca || server.connect) return nodeRequest<Result>(server, path, binary, body);
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const deadline = new Promise<never>((_, reject) => {
@@ -53,20 +151,14 @@ async function request<Result>(
   });
   const operation = (async () => {
     try {
-      const headers: Record<string, string> = server.token ? { Authorization: `Bearer ${server.token}` } : {};
-      if (body !== undefined) headers['Content-Type'] = 'application/octet-stream';
       const response = await fetch(new URL(path, server.base), {
-        signal: controller.signal, redirect: 'error', headers,
+        signal: controller.signal, redirect: 'error', headers: headers(server, body),
         method: body === undefined ? 'GET' : 'POST', body: body === undefined ? undefined : Buffer.from(body),
       });
       if (!response.ok) {
         let detail: { error?: string; index?: number } | null = null;
         try { detail = await response.json(); } catch (error) { if (!(error instanceof SyntaxError)) throw error; }
-        const code = response.status === 401 || response.status === 403 ? 'UNAUTHORIZED'
-          : detail?.error === 'busy' || response.status === 429 || response.status === 409 ? 'BUSY'
-          : detail?.error === 'unsupported_input' || response.status === 422 ? 'UNSUPPORTED'
-          : detail?.error === 'invalid_input' || response.status === 413 ? 'INVALID_ARGUMENT' : 'HTTP_ERROR';
-        throw new RelayError(code, `Server returned HTTP ${response.status}${detail?.index === undefined ? '' : ` at input event ${detail.index}`}`);
+        throw responseError(response.status, detail);
       }
       if (!binary) {
         try { return await response.json() as Result; }
@@ -124,7 +216,12 @@ export function createClient(options: ClientOptions = {}): Client {
     const payloads = batches(groups, limit).map(events => ({ count: events.length, body: encodeInputBatch(events) }));
     let events = 0;
     for (const payload of payloads) {
-      const result = await request<{ applied: number }>(server, '/input', false, payload.body);
+      let result: { applied: number };
+      try { result = await request<{ applied: number }>(server, '/input', false, payload.body); }
+      catch (error) {
+        if (error instanceof RelayError) Object.assign(error, { applied: events });
+        throw error;
+      }
       if (!result || result.applied !== payload.count) throw new RelayError('PROTOCOL_ERROR', 'Invalid input result');
       events += result.applied;
     }

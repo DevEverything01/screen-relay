@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { parseArgs } from 'node:util';
 import { pathToFileURL } from 'node:url';
+import { cmdClick, cmdInput, cmdKey, cmdMove, cmdScreenshot, cmdScroll, cmdType } from './client.js';
 import { cmdDoctor } from './host/doctor.js';
 import { cmdDown, cmdLogs, cmdRun, cmdStatus, cmdUp, COMPONENTS } from './host/session_commands.js';
 import { Failure, formatUsage, printFailure, writeText } from './output.js';
@@ -10,9 +11,6 @@ type Command = { help: string; options?: Record<string, { type: 'boolean' | 'str
 
 class UsageFailure extends Failure {}
 
-const failUnwired = (name: string) => () => {
-  throw new Failure('internal', `${name} is not available in this build`, 'The client commands will be connected to the SDK during integration.');
-};
 const common = { json: { type: 'boolean' as const }, name: { type: 'string' as const } };
 const client = { ...common, url: { type: 'string' as const }, 'token-file': { type: 'string' as const }, timeout: { type: 'string' as const } };
 
@@ -23,13 +21,13 @@ export const commands: Record<string, Command> = {
   logs: { help: 'print component logs', options: { ...common, follow: { type: 'boolean', short: 'f' } }, positionals: ['component'], run: cmdLogs },
   doctor: { help: 'check this machine and print fix commands', options: { json: { type: 'boolean' } }, run: cmdDoctor },
   run: { help: 'start an app on the session desktop (output: logs apps)', options: { ...common, restart: { type: 'boolean' } }, positionals: ['app'], run: cmdRun },
-  screenshot: { help: 'save a PNG of the screen', options: client, positionals: ['file'], run: failUnwired('screenshot') },
-  click: { help: 'click at X Y', options: { ...client, button: { type: 'string' } }, positionals: ['x', 'y'], minimumPositionals: 2, run: failUnwired('click') },
-  move: { help: 'move the pointer to X Y', options: client, positionals: ['x', 'y'], minimumPositionals: 2, run: failUnwired('move') },
-  scroll: { help: 'scroll at X Y by wheel notches', options: { ...client, dx: { type: 'string' }, dy: { type: 'string' } }, positionals: ['x', 'y'], minimumPositionals: 2, run: failUnwired('scroll') },
-  key: { help: 'press key combos such as ctrl+l or Enter', options: client, positionals: ['combos'], minimumPositionals: 1, run: failUnwired('key') },
-  type: { help: 'type text', options: { ...client, stdin: { type: 'boolean' } }, positionals: ['text'], run: failUnwired('type') },
-  input: { help: 'send a JSON array of SDK input events', options: { ...client, stdin: { type: 'boolean' } }, positionals: ['events'], run: failUnwired('input') },
+  screenshot: { help: 'save a PNG of the screen', options: client, positionals: ['file'], run: cmdScreenshot },
+  click: { help: 'click at X Y', options: { ...client, button: { type: 'string' } }, positionals: ['x', 'y'], minimumPositionals: 2, run: cmdClick },
+  move: { help: 'move the pointer to X Y', options: client, positionals: ['x', 'y'], minimumPositionals: 2, run: cmdMove },
+  scroll: { help: 'scroll at X Y by wheel notches', options: { ...client, dx: { type: 'string' }, dy: { type: 'string' } }, positionals: ['x', 'y'], minimumPositionals: 2, run: cmdScroll },
+  key: { help: 'press key combos such as ctrl+l or Enter', options: client, positionals: ['combos'], minimumPositionals: 1, run: cmdKey },
+  type: { help: 'type text', options: { ...client, stdin: { type: 'boolean' } }, positionals: ['text'], run: cmdType },
+  input: { help: 'send a JSON array of SDK input events', options: { ...client, stdin: { type: 'boolean' } }, positionals: ['events'], run: cmdInput },
 };
 
 function invalid(message: string, command?: string): Failure {

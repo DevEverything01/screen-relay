@@ -3,11 +3,13 @@ import { closeSync, existsSync, mkdirSync, openSync, readFileSync, writeFileSync
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { Readable } from 'node:stream';
+import { createClient } from '../../sdk/index.js';
+import { clientFailure, cmdRemoteStatus } from '../client.js';
 import { applyTo, loadConfig } from '../config.js';
 import { emit, Failure, formatReady, formatStarted, formatStatus, formatStopped, printWarning } from '../output.js';
 import { COMPONENTS, HostArgs, requireLinux, spawnCleared, which } from './common.js';
 import { alive, lock, readSession, reap, stateDir, tail, writeSession } from './state.js';
-import { connectHost, desktopEnv, http, Session } from './supervisor.js';
+import { connectHost, desktopEnv, Session } from './supervisor.js';
 import { startWatcher } from './watcher.js';
 
 export { COMPONENTS };
@@ -154,7 +156,7 @@ export async function cmdDown(args: Args): Promise<number> {
 }
 
 export async function cmdStatus(args: Args): Promise<number> {
-  if (args.url || process.env.RELAY_URL) throw new Failure('internal', 'Remote status is not available in this build', 'The client command will be connected to the SDK during integration.');
+  if (args.url || process.env.RELAY_URL) return cmdRemoteStatus(args);
   const session = readSession(args.name);
   if (!session) throw new Failure('not_running', `No session named "${args.name}"`, 'Start one with `relay up -d`.');
   const running = alive(session.supervisor);
@@ -166,9 +168,12 @@ export async function cmdStatus(args: Args): Promise<number> {
     try {
       let token: string | null = null;
       if (session.tokenFile) token = readFileSync(session.tokenFile, 'utf8').trim();
-      session.capabilities = await http({ url: session.localUrl, token, caFile: session.tlsCert, connect: connectHost(session.bind) }, '/capabilities', Number(args.timeout ?? 10));
+      const timeout = Number(args.timeout ?? 10);
+      session.capabilities = await createClient({
+        url: session.localUrl, token: token ?? undefined, ca: session.tlsCert ?? undefined, connect: connectHost(session.bind) ?? undefined, timeout: timeout * 1000,
+      }).capabilities();
     } catch (error) {
-      if (error instanceof Failure) session.health = error.payload();
+      session.health = clientFailure(error, String(session.localUrl), Number(args.timeout ?? 10)).payload();
     }
   }
   emit(args, session, formatStatus(args.name, session));
