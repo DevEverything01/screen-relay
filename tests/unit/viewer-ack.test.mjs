@@ -124,6 +124,48 @@ function key(app, type, code, capsLock = false) {
 
 const inputBytes = (app) => app.sockets[0].inputs.map(({ event, code }) => [event, code]);
 
+test('a latched modifier stays down through a matching shortcut', () => {
+  const app = viewer();
+  app.frame(1);
+  const panel = app.document.querySelector('#keys-panel');
+  const hold = { dataset: { hold: 'AltLeft' }, setAttribute(name, value) { this[name] = value; } };
+  panel.handlers.click({ target: { closest: (selector) => selector === '[data-hold]' ? hold : null } });
+  const shortcut = { dataset: { keys: 'AltLeft+Tab' } };
+  panel.handlers.click({ target: { closest: (selector) => selector === '[data-keys]' ? shortcut : null } });
+  assert.deepEqual(inputBytes(app), [[1, 226], [1, 43], [2, 43], [2, 226]]);
+  assert.equal(app.sockets[0].inputs[1].modifiers, 4);
+  assert.equal(hold['aria-pressed'], 'false');
+});
+
+test('toolbar keys bypass the physical keyboard mapping', () => {
+  const app = viewer();
+  app.frame(1);
+  runInContext('relayViewer.toggleMeta()', app.context);
+  const panel = app.document.querySelector('#keys-panel');
+  const press = (kind, name) => {
+    const button = { dataset: { [kind]: name }, setAttribute() {} };
+    panel.handlers.click({ target: { closest: (selector) => selector === `[data-${kind}]` ? button : null } });
+  };
+  press('hold', 'ControlLeft');
+  press('hold', 'ControlLeft');
+  press('hold', 'AltLeft');
+  press('hold', 'AltLeft');
+  press('hold', 'MetaLeft');
+  press('keys', 'MetaLeft');
+  press('hold', 'MetaLeft');
+  press('keys', 'ControlLeft+KeyC');
+  press('keys', 'ControlLeft+AltLeft+Delete');
+  press('keys', 'MetaLeft+KeyD');
+  key(app, 'keydown', 'MetaLeft');
+  key(app, 'keyup', 'MetaLeft');
+  assert.deepEqual(inputBytes(app), [
+    [7, 0], [1, 224], [2, 224], [1, 226], [2, 226], [1, 227], [2, 227],
+    [1, 224], [1, 6], [2, 6], [2, 224],
+    [1, 224], [1, 226], [1, 76], [2, 76], [2, 226], [2, 224],
+    [1, 227], [1, 7], [2, 7], [2, 227], [1, 224], [2, 224],
+  ]);
+});
+
 test('macOS Caps Lock keydown and keyup each toggle the remote once', () => {
   const app = viewer();
   app.frame(1);
@@ -228,4 +270,3 @@ test('keys-panel buttons keep the canvas focus so hold latches survive clicks', 
   press('keys', 'Escape');
   assert.deepEqual(inputBytes(app).slice(7), [[1, 224], [1, 41], [2, 41], [2, 224]]);
 });
-
