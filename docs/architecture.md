@@ -19,7 +19,7 @@ browser or agent input -> InputController -> InputBackend (XTest)
 | `src/server/` | `main.cpp` (entry point), `config` (arguments, token and origin policy), `wire` (NSL1 encoding), `server` (session, writes, libwebsockets callback, HTTP routes), `metrics` (cgroup parsing), `screenshot` |
 | `src/backends/linux/x11/` | X11 capture (XDamage, MIT-SHM, XFixes cursor) and XTest input primitives |
 | `viewer/` | Browser decoder, renderer, cursor overlay, human input |
-| `sdk/` | Node client library |
+| `src/sdk/` | Node client library |
 | `scripts/` | The `relay` CLI: `relay` is a thin launcher, `relaycli/` holds the commands, session supervision and client |
 | `tests/` | Unit and integration tests |
 

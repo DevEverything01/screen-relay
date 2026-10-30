@@ -4,15 +4,16 @@
   "type": "module",
   "exports": {
     ".": {
-      "types": "./sdk/index.d.ts",
-      "import": "./sdk/index.js"
+      "types": "./dist/sdk/index.d.ts",
+      "import": "./dist/sdk/index.js"
     }
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=20"
   },
   "scripts": {
-    "test": "node --test sdk/index.test.js tests/unit/cli-input.test.mjs tests/unit/viewer-ack.test.mjs",
+    "build": "node build.mjs",
+    "test": "npm run build && node --test tests/unit/*.test.mjs",
     "test:integration": "node tests/integration/integration.mjs",
     "test:framework": "node tests/integration/framework-integration.mjs",
     "test:cursor": "node tests/integration/cursor-integration.mjs",

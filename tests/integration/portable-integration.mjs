@@ -8,7 +8,7 @@ import {connect as connectTCP} from 'node:net';
 import {once} from 'node:events';
 import {chromium} from 'playwright';
 import {PNG} from 'pngjs';
-import {capabilities, connect, screenshot, status} from '../../sdk/index.js';
+import {capabilities, connect, screenshot, status} from '../../dist/sdk/index.js';
 
 // Run only against a disposable, explicitly selected SSH target.
 const target = process.env.TEST_SSH_TARGET;
@@ -215,7 +215,7 @@ print(json.dumps({'cert':str(cert),'key':str(key),'tokenFile':str(token),'spki':
     writeFileSync(certPath,read(tls.cert));
     tls.token=read(tls.tokenFile).trim(); tls.url=remoteURL;
     const code=`import assert from 'node:assert/strict';
-import {capabilities,connect,screenshot} from ${JSON.stringify(new URL('../../sdk/index.js',import.meta.url).href)};
+import {capabilities,connect,screenshot} from ${JSON.stringify(new URL('../../dist/sdk/index.js',import.meta.url).href)};
 let input=''; for await(const chunk of process.stdin) input+=chunk;
 const {url,token}=JSON.parse(input);
 await assert.rejects(capabilities({url}),{code:'UNAUTHORIZED'});

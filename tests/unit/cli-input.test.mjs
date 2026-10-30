@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { connect } from '../../sdk/index.js';
+import { connect } from '../../dist/sdk/index.js';
 
 const scripts = fileURLToPath(new URL('../../scripts', import.meta.url));
 const python = (code, input) => JSON.parse(execFileSync('python3', ['-c', `import json,sys,types
