@@ -129,7 +129,7 @@ relay logs [component] [--name N] [-f|--follow]
 relay logs engine --follow
 ```
 
-`--json` wraps the logs by component, for example `{"logs":{"display":"...","desktop":"...","engine":"..."}}`. The background supervisor's own output is in `supervisor.log` in the [state directory](#state-directory).
+`--json` wraps the logs by component, for example `{"logs":{"display":"...","desktop":"...","engine":"..."}}`. A session started with `-d` also writes its own startup and supervision messages to `supervisor.log` in the [state directory](#state-directory).
 
 ### run
 

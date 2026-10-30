@@ -38,3 +38,5 @@ The container prints the viewer link with its token.
 ## Documentation
 
 Installation, the CLI reference, configuration, remote access, Docker, agent skills, the Node SDK, and troubleshooting are at https://relay.labs.vercel.dev.
+
+To work on relay itself, see [CONTRIBUTING.md](CONTRIBUTING.md).
