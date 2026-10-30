@@ -4,7 +4,7 @@ import {mkdirSync, writeFileSync} from 'node:fs';
 import {request} from 'node:http';
 import {fileURLToPath} from 'node:url';
 import {chromium} from 'playwright';
-import {connect, capabilities, screenshot} from '../../sdk/index.js';
+import {connect, capabilities, screenshot} from '../../dist/sdk/index.js';
 import {session} from './session.mjs';
 
 const container = process.env.TEST_CONTAINER;

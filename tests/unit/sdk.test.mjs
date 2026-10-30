@@ -2,7 +2,50 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
-import { capabilities, connect, screenshot } from './index.js';
+import { capabilities, connect, createClient, screenshot, status } from '../../dist/sdk/index.js';
+
+test('HTTP status paths request engine metrics', async () => {
+  const server = createServer((request, response) => {
+    response.writeHead(request.url === '/metrics' ? 200 : 404, { 'content-type': 'application/json' });
+    response.end(JSON.stringify({ path: request.url }));
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  try {
+    const options = { url: `http://127.0.0.1:${server.address().port}` };
+    assert.deepEqual(await createClient(options).status(), { path: '/metrics' });
+    assert.deepEqual(await status(options), { path: '/metrics' });
+  } finally {
+    server.close();
+    await once(server, 'close');
+  }
+});
+
+test('HTTP input batches events and validates before sending', async () => {
+  const received = [];
+  const server = createServer(async (request, response) => {
+    response.setHeader('content-type', 'application/json');
+    if (request.url === '/capabilities') return response.end(JSON.stringify({ max_input_batch: 2 }));
+    const chunks = [];
+    for await (const chunk of request) chunks.push(chunk);
+    const body = Buffer.concat(chunks);
+    received.push(body);
+    response.end(JSON.stringify({ applied: body.length / 16 }));
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  try {
+    const client = createClient({ url: `http://127.0.0.1:${server.address().port}` });
+    assert.deepEqual(await client.input([{ type: 'releaseAll' }, { type: 'releaseAll' }, { type: 'releaseAll' }]), { events: 3 });
+    assert.deepEqual(received.map(body => body.length), [32, 16]);
+    await assert.rejects(client.key('ctrl+l'), { code: 'INVALID_ARGUMENT' });
+    await assert.rejects(client.input([{ type: 'releaseAll' }, { type: 'keyDown', key: 999 }]), { code: 'INVALID_ARGUMENT' });
+    assert.equal(received.length, 2);
+  } finally {
+    server.close();
+    await once(server, 'close');
+  }
+});
 
 function packet(type, generation, sequence, payload) {
   const b = Buffer.alloc(20 + payload.length);

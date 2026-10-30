@@ -2,6 +2,8 @@
 
 Use disposable desktops. Integration tests send real input and cover the screen. New results go to `tests/results/` (untracked).
 
+Run `npm run build` before the SDK types, framework, or portable tests.
+
 | Layer | Command | Needs |
 | --- | --- | --- |
 | Native unit (color, flow, the input controller with a fake backend, server config/wire/metrics, injected source through the real encoder) | `make test` | Build dependencies, including FFmpeg dev libraries for `test-backend`. No X11. |
