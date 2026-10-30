@@ -59,7 +59,7 @@
 <body>
 <svg viewBox="0 0 720 448" role="img" aria-labelledby="t d">
   <title id="t">Relay architecture</title>
-  <desc id="d">Inside a Linux VM, the X11 display (Xvfb) feeds CaptureSource (XDamage, MIT-SHM), then CaptureEncoder (BGRA or ARGB to NV12, x264), then flow control (ACK credit), then the WebSocket /stream. The browser viewer (VideoDecoder to canvas) receives /stream and sends input over /control. An agent or the relay CLI and SDK sends input over /input. WebSocket input reaches InputController, then InputBackend (XTest), which feeds back into the X11 display.</desc>
+  <desc id="d">Inside a Linux VM, the X11 display (Xvfb) feeds CaptureSource (XDamage, MIT-SHM), then CaptureEncoder (BGRA or ARGB to NV12, x264), then flow control (ACK credit), then the WebSocket /stream. The browser viewer (VideoDecoder to canvas) receives video and sends its input over the same /stream WebSocket. An agent or the relay CLI and SDK sends input over /input (HTTP) or /control (WebSocket). Input from either source reaches InputController, and only one of them owns input at a time. InputController, then InputBackend (XTest), which feeds back into the X11 display.</desc>
   <defs>
     <marker id="arrow" viewBox="0 0 8 8" refX="6" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
       <path d="M1.5 1.5 L5.5 4 L1.5 6.5"/>
@@ -119,12 +119,14 @@
   <path class="wire" d="M374 256H346"/>
   <path class="wire" d="M214 256H114a14 14 0 0 1-14-14V186"/>
 
-  <path class="wire strong" d="M625 294V366"/>
-  <text class="tag" x="633" y="356" style="text-anchor:start">/stream</text>
-  <path class="wire" d="M575 366V294"/>
-  <text class="tag" x="567" y="356" style="text-anchor:end">/control</text>
+  <path class="wire strong" d="M633 294V366"/>
+  <text class="tag" x="641" y="356" style="text-anchor:start">video</text>
+  <path class="wire" d="M567 366V294"/>
+  <text class="tag" x="559" y="356" style="text-anchor:end">input</text>
+  <text class="tag" x="600" y="356">/stream</text>
   <path class="wire strong" d="M198 404H426a14 14 0 0 0 14-14V294"/>
-  <text class="tag" x="312" y="396">/input</text>
+  <text class="tag" x="312" y="396">/input or /control</text>
+  <text class="tag" x="312" y="424">one input owner at a time</text>
 
   <circle class="hl" cx="500" cy="404" r="30"/>
   <g transform="translate(488 392)">

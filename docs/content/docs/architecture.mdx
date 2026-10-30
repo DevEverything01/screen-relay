@@ -15,9 +15,12 @@ X11 display (Xvfb)
   -> WebSocket /stream
   -> browser VideoDecoder -> canvas
 
-browser input over /control, agent or relay CLI/SDK input over /input
+browser input over /stream (same WebSocket as the video)
+agent or relay CLI/SDK input over /input (HTTP) or /control (WebSocket)
   -> InputController -> InputBackend (XTest) -> X11 display
 ```
+
+Only one of the viewer, `/control`, and `/input` owns input at a time.
 
 ## Folders
 
