@@ -10,7 +10,7 @@
     }
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=26"
   },
   "scripts": {
     "build": "node build.mjs",

@@ -1,6 +1,6 @@
 # Node SDK
 
-A library with no runtime dependencies. HTTP functions work on Node 20+; persistent WebSocket sessions require Node 22+. Use [`relay`](cli.md) for command-line control.
+A library with no runtime dependencies, on Node 26 or newer. Use [`relay`](cli.md) for command-line control.
 
 ```sh
 (cd /absolute/path/to/this/repo && npm install && npm run build)

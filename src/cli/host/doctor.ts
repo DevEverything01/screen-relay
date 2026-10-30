@@ -86,7 +86,7 @@ export async function cmdDoctor(args: HostArgs): Promise<number> {
     const sudo = root ? '' : 'sudo ';
     const apt = `${sudo}apt-get install -y --no-install-recommends `;
     check('user', true, root ? 'root' : `uid ${process.getuid?.() ?? -1}`);
-    check('node', Number(process.versions.node.split('.')[0]) >= 20, process.versions.node, `${apt}nodejs npm`);
+    check('node', Number(process.versions.node.split('.')[0]) >= 26, process.versions.node, './install.sh');
     check('setpriv', Boolean(which('setpriv')), which('setpriv') ?? 'not found', `${apt}util-linux`);
     let homeWritable = true;
     try { accessSync(homedir(), constants.W_OK); } catch { homeWritable = false; }

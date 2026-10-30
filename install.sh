@@ -39,12 +39,44 @@ fi
 
 node_ok() {
   command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1 &&
-    node -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 20 ? 0 : 1)' >/dev/null 2>&1
+    node -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 26 ? 0 : 1)' >/dev/null 2>&1
 }
+fetch() {
+  if command -v curl >/dev/null 2>&1; then curl -fsSL "$1"; else wget -qO- "$1"; fi
+}
+checksum() {
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$@"; else shasum -a 256 "$@"; fi
+}
+node_bin=''
 if ! node_ok; then
-  if [ "$apt" = 1 ]; then apt_install nodejs npm; fi
+  node_version=$(cat .node-version)
+  case "$(uname -s):$(uname -m)" in
+    Linux:x86_64|Linux:amd64) platform=linux-x64 ;;
+    Linux:aarch64|Linux:arm64) platform=linux-arm64 ;;
+    Darwin:x86_64) platform=darwin-x64 ;;
+    Darwin:arm64) platform=darwin-arm64 ;;
+    *) echo 'relay needs Node 26 or newer; this OS and architecture has no Node download. Install Node 26 from https://nodejs.org/ and run this again.' >&2; exit 1 ;;
+  esac
+  archive="node-v$node_version-$platform.tar.gz"
+  scratch=$(mktemp -d)
+  trap 'rm -rf "$scratch"' 0
+  echo "Downloading Node $node_version for $platform"
+  fetch "https://nodejs.org/dist/v$node_version/$archive" > "$scratch/$archive"
+  fetch "https://nodejs.org/dist/v$node_version/SHASUMS256.txt" > "$scratch/SHASUMS256.txt"
+  (cd "$scratch" && grep " $archive\$" SHASUMS256.txt | checksum -c -) || {
+    echo "Node $node_version failed checksum verification." >&2
+    exit 1
+  }
+  tar -xzf "$scratch/$archive" -C "$scratch"
+  install -d "$prefix/lib/relay"
+  rm -rf "$prefix/lib/relay/node"
+  mv "$scratch/node-v$node_version-$platform" "$prefix/lib/relay/node"
+  node_bin="$prefix/lib/relay/node/bin"
+  PATH="$node_bin:$PATH"
+  export PATH
+  echo "Installed Node $node_version in $prefix/lib/relay/node"
   if ! node_ok; then
-    echo 'relay needs Node 20 or newer with npm. Install Node 20+ and run this again.' >&2
+    echo "Node $node_version in $prefix/lib/relay/node does not run." >&2
     exit 1
   fi
 fi
@@ -71,7 +103,13 @@ install_cli() {
   install -m 0755 dist/cli/relay.mjs "$prefix/lib/relay/relay.mjs"
   install -d "$prefix/lib/relay/skill-data"
   cp -R skill-data/. "$prefix/lib/relay/skill-data/"
-  ln -sfn ../lib/relay/relay.mjs "$prefix/bin/relay"
+  cat > "$prefix/bin/relay" <<EOF
+#!/bin/sh
+node='$prefix/lib/relay/node/bin/node'
+[ -x "\$node" ] || node=node
+exec "\$node" '$prefix/lib/relay/relay.mjs' "\$@"
+EOF
+  chmod 0755 "$prefix/bin/relay"
 }
 if [ "$client" = 1 ]; then
   install_cli

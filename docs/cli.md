@@ -1,6 +1,6 @@
 # CLI reference
 
-`relay` is one Node command (Node 20 or newer, dependencies bundled). Host commands (`up`, `down`, `logs`, `doctor`, `run`) manage a session on the Linux machine; `up`, `down` and `run` fail with `unsupported_platform` elsewhere. Client commands (`status`, `screenshot`, `click`, `move`, `scroll`, `key`, `type`, `input`) run anywhere.
+`relay` is one Node command (Node 26 or newer, dependencies bundled). Host commands (`up`, `down`, `logs`, `doctor`, `run`) manage a session on the Linux machine; `up`, `down` and `run` fail with `unsupported_platform` elsewhere. Client commands (`status`, `screenshot`, `click`, `move`, `scroll`, `key`, `type`, `input`) run anywhere.
 
 ## Common
 
@@ -90,11 +90,11 @@ URL rules: an origin only (no path, query or credentials). Plain HTTP only for `
 | `--prefix DIR` | Absolute install location. Default `$PREFIX`, else `~/.local`. |
 | `--no-desktop` | Skip XFCE and the other desktop packages. |
 | `--no-deps` | Skip apt. Dependencies must already be present. |
-| `--client-only` | Install only the CLI, for example on a laptop. Needs Node 20 or newer with npm. Works off Linux. |
+| `--client-only` | Install only the CLI, for example on a laptop. Works off Linux. |
 
-Apt needs root or passwordless sudo. On apt systems it installs `nodejs` and `npm` when Node 20 or newer is missing, then the build tools, the X11 libraries, `libx264`, `libwebsockets`, `xvfb`, `xauth`, `x11-utils`, `x11-xkb-utils`, `util-linux` (for `setpriv`), and with the desktop: D-Bus, XFCE (`xfce4-session`, `xfwm4`, `xfce4-panel`, `xfdesktop4`, `xfce4-settings`, `thunar`, `xfce4-terminal`) and `glycin-loaders` when the distro has it. It runs `npm ci` and `npm run build`. Safe to re-run.
+Apt needs root or passwordless sudo. On apt systems it installs the build tools, the X11 libraries, `libx264`, `libwebsockets`, `xvfb`, `xauth`, `x11-utils`, `x11-xkb-utils`, `util-linux` (for `setpriv`), and with the desktop: D-Bus, XFCE (`xfce4-session`, `xfwm4`, `xfce4-panel`, `xfdesktop4`, `xfce4-settings`, `thunar`, `xfce4-terminal`) and `glycin-loaders` when the distro has it. It uses the system `node` when it is 26 or newer; otherwise it downloads the version pinned in `.node-version` from `https://nodejs.org/dist/`, checks it against that release's `SHASUMS256.txt` and unpacks it in `<prefix>/lib/relay/node`. It runs `npm ci` and `npm run build` with that Node. Safe to re-run.
 
-It installs the CLI as `<prefix>/lib/relay/relay.mjs` (linked as `<prefix>/bin/relay`), the engine and the built viewer in `<prefix>/lib/relay/` (the engine is linked as `<prefix>/bin/relay-engine`). When `<prefix>/bin` is not on `PATH` it prints:
+It installs the CLI as `<prefix>/lib/relay/relay.mjs` with a `<prefix>/bin/relay` launcher that prefers `<prefix>/lib/relay/node`, the engine and the built viewer in `<prefix>/lib/relay/` (the engine is linked as `<prefix>/bin/relay-engine`). When `<prefix>/bin` is not on `PATH` it prints:
 
 ```text
 Not on PATH; add it with: export PATH="<prefix>/bin:$PATH"
@@ -264,7 +264,7 @@ Checks this machine and prints the fix command for each problem. Exits 1 if any 
 | --- | --- |
 | `platform` | Linux. Off Linux this is the only check, and it fails. |
 | `user` | Root or the UID (information only). |
-| `node` | Node 20 or newer. |
+| `node` | Node 26 or newer. |
 | `setpriv` | `util-linux`, used to start apps without ambient capabilities. |
 | `home`, `state dir` | `HOME` and the state directory are writable. |
 | `engine` | `relay-engine` is found and runs. |

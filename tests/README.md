@@ -7,7 +7,7 @@ Run `npm test` for the TypeScript unit tests; it builds `dist/` first. `make tes
 | Layer | Command | Needs |
 | --- | --- | --- |
 | Native unit (color, flow, the input controller with a fake backend, server config/wire/metrics, injected source through the real encoder) | `make test` | Build dependencies, including FFmpeg dev libraries for `test-backend`. No X11. |
-| Protocol golden bytes, key combos, config validation, SDK, viewer ACK | `npm ci && npm test` | Node 20 or newer |
+| Protocol golden bytes, key combos, config validation, SDK, viewer ACK | `npm ci && npm test` | Node 26 or newer |
 | SDK types | `tsc --noEmit --strict --module NodeNext --target ES2022 tests/unit/sdk-types.mts` | TypeScript |
 | Smoke | `tests/smoke.sh` | An installed `relay` on Linux. It starts and stops its own session on port 18090 (`SMOKE_PORT`). |
 | Viewer end to end | `npm run test:e2e` | Docker, and Playwright Chromium (`npx playwright install chromium`). It builds `relay-e2e` (or uses `RELAY_E2E_IMAGE`), starts its own container, and removes it afterwards. |

@@ -84,4 +84,4 @@ A Wayland backend must also handle portal authorization and revocation, negotiat
 
 C++17. The engine needs `libx264`, `libwebsockets` with TLS, and `libx11`, `libxext`, `libxdamage`, `libxfixes`, `libxtst`. It does not link FFmpeg. `make test` runs the color, flow, input, server and backend unit tests; `make test-backend` also needs FFmpeg 7 development libraries (`libavcodec` ABI 61, `libavutil`, `libswscale`; no FFmpeg 8-only APIs) to decode the encoder output.
 
-`npm run build` produces `dist/cli/relay.mjs`, `dist/sdk/` and `dist/viewer/`. `make install` puts the engine and built viewer in `<prefix>/lib/relay/` and links `<prefix>/bin/relay-engine`; `./install.sh` also installs the CLI as `<prefix>/lib/relay/relay.mjs` with a `<prefix>/bin/relay` link.
+`npm run build` produces `dist/cli/relay.mjs`, `dist/sdk/` and `dist/viewer/`. `make install` puts the engine and built viewer in `<prefix>/lib/relay/` and links `<prefix>/bin/relay-engine`; `./install.sh` also installs the CLI as `<prefix>/lib/relay/relay.mjs` with a `<prefix>/bin/relay` launcher.
