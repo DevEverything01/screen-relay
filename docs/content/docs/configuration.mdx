@@ -5,29 +5,42 @@ description: Every relay setting, what it does, its default and allowed values, 
 
 You can change how relay starts with an optional YAML file on the VM. Every key is optional. Without a file, relay uses the defaults.
 
-This file lists every key with its default value:
+## Default configuration
 
-```yaml
+Copy this file to `~/.config/relay/config.yaml` on the VM. It sets every key to its default, so relay behaves exactly as it does with no file. Change the values you need and leave the rest.
+
+```yaml title="~/.config/relay/config.yaml"
 display:
   resolution: 1280x720
+
 stream:
   fps: 60
   bitrate:
     min: 1M
     start: 8M
     max: 40M
+
 server:
   port: 8080
-  bind: 127.0.0.1
-  public: https://desktop.example.com
-  tls_cert: /path/fullchain.pem
-  tls_key: /path/key.pem
+  # bind: 127.0.0.1
+  # public: https://desktop.example.com
+  # tls_cert: /etc/relay/fullchain.pem
+  # tls_key: /etc/relay/key.pem
+
 keyboard:
   layout: us
+
 desktop: xfce
 ```
 
-`server.public`, `server.tls_cert`, and `server.tls_key` have no default. They are unset unless you add them, and `server.bind` is `127.0.0.1` unless `server.public` is set. To start, copy only the keys you want to change.
+The commented `server` keys have no fixed default. `server.bind` is `127.0.0.1`, or `0.0.0.0` when `server.public` is set, and `server.public`, `server.tls_cert`, and `server.tls_key` stay unset until you add them. Remove the `#` from a line to set it.
+
+To create the file from the terminal:
+
+```bash title="Terminal"
+mkdir -p ~/.config/relay
+nano ~/.config/relay/config.yaml
+```
 
 ## Display
 

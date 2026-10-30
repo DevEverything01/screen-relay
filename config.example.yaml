@@ -22,5 +22,9 @@ server:
   # tls_cert: /path/fullchain.pem
   # tls_key: /path/key.pem
 
+keyboard:
+  # Layout name such as us, de or fr, or a comma-separated list. Linux only.
+  layout: us
+
 # Linux only. xfce, none, or a command. Default: xfce, or none with --display.
 desktop: xfce
