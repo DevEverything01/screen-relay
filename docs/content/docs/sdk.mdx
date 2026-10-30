@@ -145,7 +145,7 @@ Common reasons from the SDK:
 | `canceled` | The `signal` aborted the call. |
 | `protocol_error`, `io_error` | An invalid engine response, or a failed local file read or write. |
 
-A failure never shows a raw `fetch failed`. When a long `type` or `input` call fails partway, `applied` tells you how many events landed; resend only the rest, never the whole input.
+A failure never shows a raw `fetch failed`. When a long `type` or `input` call fails partway, `error.applied` counts the events the engine confirmed. It is exact when the engine answered with the error (`busy`, or an invalid or unsupported event): resend only the events after `applied`. When the reply was lost (`timeout`, `unreachable`, `disconnected`, or `io_error`), the last batch may or may not have reached the desktop, so take a screenshot and check what was typed before you resend anything.
 
 ```js
 try {

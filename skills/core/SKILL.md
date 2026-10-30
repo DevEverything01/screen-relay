@@ -88,7 +88,7 @@ For a 1920x1080 screenshot, pixel `480,810` is `relay click 0.25 0.75`; the cent
 
 - `relay type <text>` sends layout-neutral text events, one per Unicode scalar value. The remote keyboard layout decides each character, so accented letters, symbols and non-US layouts work. Use it for text and content.
 - `relay key <combo>...` sends physical key combinations: `relay key ctrl+l`, `relay key alt+Tab`, `relay key cmd+shift+t`, `relay key Enter`. Use it for shortcuts, arrows, function keys and Escape. Modifiers are `ctrl`, `shift`, `alt`, `super`; `cmd`, `meta` and `win` are aliases of `super`. Press several combos in one call to send them in order.
-- A long `relay type` is split into batches of at most 256 events. If a later batch fails, the JSON error carries `data.applied`, the number of events already applied; resend only the remaining text.
+- A long `relay type` is split into batches of at most 256 events. If a later batch fails, the JSON error carries `data.applied`, the number of events the engine confirmed. When the engine answered with the error (`busy`, `invalid_input`, `unsupported_input`), resend only the remaining text. When the reply was lost (`timeout`, `unreachable`, `disconnected`), the last batch may already be on screen: take a screenshot before resending anything.
 
 ## JSON
 
