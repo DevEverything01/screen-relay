@@ -20,14 +20,15 @@ uint64_t nowUs() {
 /// Wakes the service thread once one deferred reply can be written.
 class ReplyFence final : public InputFence {
  public:
-  ReplyFence(Server* owner, std::function<void(bool)> mark) : owner(owner), mark(std::move(mark)) {}
-  void complete(bool applied) override {
-    mark(applied);
-    owner->wake();
+  ReplyFence(std::shared_ptr<Server::InputWake> wake, std::function<void(bool, size_t)> mark)
+      : wake(std::move(wake)), mark(std::move(mark)) {}
+  void complete(bool applied, size_t dropped) override {
+    mark(applied, dropped);
+    wake->cancel();
   }
  private:
-  Server* owner;
-  std::function<void(bool)> mark;
+  std::shared_ptr<Server::InputWake> wake;
+  std::function<void(bool, size_t)> mark;
 };
 #ifdef __linux__
 void configureStreamSocket(lws* wsi) {
@@ -78,7 +79,7 @@ bool Server::message() {
     auto reply = std::make_shared<ControlReply>();
     reply->seq = seq; reply->status = input->apply(inputEvent(b.data()+20));
     replies.push_back(reply);
-    input->fence(std::make_shared<ReplyFence>(this, [reply](bool) { reply->ready.store(true, std::memory_order_release); }));
+    input->fence(std::make_shared<ReplyFence>(wake, [reply](bool, size_t) { reply->ready.store(true, std::memory_order_release); }));
     lws_callback_on_writable(viewer); return true;
   }
   if (b[5] == 2) {
@@ -136,11 +137,15 @@ int Server::writeControl(lws* wsi) {
   if (!replies.empty() && replies.front()->ready.load(std::memory_order_acquire)) lws_callback_on_writable(wsi);
   return 0;
 }
-void Server::wake() {
+void Server::InputWake::set(lws_context* next) {
+  std::lock_guard<std::mutex> lock(mutex);
+  context = next;
+}
+void Server::InputWake::cancel() {
   std::lock_guard<std::mutex> lock(mutex);
   if (context) lws_cancel_service(context);
 }
-int Server::deferInput(lws* wsi, InputStatus status, size_t applied) {
+int Server::deferInput(lws* wsi, InputStatus status, size_t applied, size_t posted) {
   auto reply = std::make_shared<InputReply>();
   reply->wsi = wsi;
   if (status == InputStatus::ok) {
@@ -153,8 +158,11 @@ int Server::deferInput(lws* wsi, InputStatus status, size_t applied) {
                   "\",\"index\":" + std::to_string(applied - 1) + "}";
   }
   { std::lock_guard<std::mutex> lock(reply_mutex); input_replies.push_back(reply); }
-  input->fence(std::make_shared<ReplyFence>(this, [reply](bool complete) {
-    if (!complete) { reply->status = HTTP_STATUS_CONFLICT; reply->body = "{\"error\":\"busy\"}"; }
+  input->fence(std::make_shared<ReplyFence>(wake, [reply, posted](bool complete, size_t dropped) {
+    if (!complete) {
+      reply->status = HTTP_STATUS_CONFLICT;
+      reply->body = "{\"error\":\"busy\",\"applied\":" + std::to_string(posted - dropped) + "}";
+    }
     reply->ready.store(true, std::memory_order_release);
   }));
   return 0;
@@ -245,11 +253,12 @@ int inputResponse(lws* wsi, HttpResponse* response, Server* s) {
   if (!complete) return -1;
   if (s->viewer) return errorResponse(wsi, response, HTTP_STATUS_CONFLICT, "busy");
   const size_t count = response->input_length / 16;
+  if (s->input->pending() + count > max_queued_events) return errorResponse(wsi, response, HTTP_STATUS_CONFLICT, "busy");
   size_t index = 0;
   auto status = InputStatus::ok;
   for (; index < count && status == InputStatus::ok; ++index) status = s->input->apply(inputEvent(response->input + index * 16));
   s->release();
-  return s->deferInput(wsi, status, index);
+  return s->deferInput(wsi, status, index, status == InputStatus::ok ? index : index - 1);
 }
 int metricsResponse(lws* wsi, HttpResponse* response, Server* server) {
   if (!response) return -1;

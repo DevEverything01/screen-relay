@@ -138,7 +138,8 @@ export function responseError(status: number, detail: unknown): RelayError {
     unsupported_input: 'The engine does not support this input.', invalid_input: 'The engine rejected the input.',
   };
   const index = Number.isInteger(body.index) && Number(body.index) >= 0 ? Number(body.index) : undefined;
+  const applied = Number.isInteger(body.applied) && Number(body.applied) >= 0 ? Number(body.applied) : undefined;
   return new RelayError(reason, messages[reason] ?? 'The engine could not complete the request.', {
-    data: { httpStatus: status, ...(index === undefined ? {} : { index }) },
+    data: { httpStatus: status, ...(index === undefined ? {} : { index }), ...(applied === undefined ? {} : { applied }) },
   });
 }

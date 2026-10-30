@@ -82,9 +82,10 @@ class X11Input final : public InputBackend {
   std::vector<Spare> spares;
   std::set<KeyCode> held;
   TimePoint bound{}, lastTap{};
-  std::mutex mutex;
+  mutable std::mutex mutex;
   std::condition_variable wake;
   std::deque<Job> queue;
+  size_t queued = 0;
   bool stopping = false;
   std::thread worker;
  public:
@@ -165,10 +166,18 @@ class X11Input final : public InputBackend {
     discard();
   }
   void flush() override { post(Job{Job::Kind::flush}); }
+  size_t pending() const override {
+    std::lock_guard<std::mutex> lock(mutex);
+    return queued;
+  }
 
  private:
+  static bool counted(Job::Kind kind) {
+    return kind == Job::Kind::key || kind == Job::Kind::text || kind == Job::Kind::button ||
+           kind == Job::Kind::motion || kind == Job::Kind::scroll;
+  }
   void post(Job job) {
-    { std::lock_guard<std::mutex> lock(mutex); queue.push_back(std::move(job)); }
+    { std::lock_guard<std::mutex> lock(mutex); if (counted(job.kind)) ++queued; queue.push_back(std::move(job)); }
     wake.notify_one();
   }
   void run() {
@@ -178,6 +187,7 @@ class X11Input final : public InputBackend {
       if (stopping) discard();
       if (queue.empty()) break;
       const Job job = queue.front(); queue.pop_front();
+      if (counted(job.kind)) --queued;
       lock.unlock();
       apply(job);
       lock.lock();
@@ -192,17 +202,18 @@ class X11Input final : public InputBackend {
   }
   /// Drops queued text and moves, completing the fences that covered them as not applied. Call with the mutex held.
   void discard() {
-    bool lost = false;
+    size_t dropped = 0;
     for (auto job = queue.begin(); job != queue.end();) {
       if (job->kind == Job::Kind::fence) {
-        const bool failed = lost; lost = false;
-        if (!failed) { ++job; continue; }
-        const auto mark = job->fence; job = queue.erase(job);
-        mark->complete(false);
+        if (!dropped) { ++job; continue; }
+        const auto mark = job->fence;
+        const size_t lost = dropped; dropped = 0;
+        job = queue.erase(job);
+        mark->complete(false, lost);
         continue;
       }
       if (job->kind == Job::Kind::text || job->kind == Job::Kind::motion || job->kind == Job::Kind::scroll) {
-        lost = true; job = queue.erase(job); continue;
+        --queued; ++dropped; job = queue.erase(job); continue;
       }
       ++job;
     }
@@ -217,9 +228,9 @@ class X11Input final : public InputBackend {
       case Job::Kind::button: XTestFakeButtonEvent(display, job.number, job.press, CurrentTime); break;
       case Job::Kind::motion: XTestFakeMotionEvent(display, DefaultScreen(display), job.x, job.y, CurrentTime); break;
       case Job::Kind::scroll: wheel(job.number, job.notches); break;
-      case Job::Kind::locks: XkbLockModifiers(display, XkbUseCoreKbd, LockMask, 0); restoreIdle(std::chrono::steady_clock::now()); break;
+      case Job::Kind::locks: XkbLockModifiers(display, XkbUseCoreKbd, LockMask, 0); break;
       case Job::Kind::flush: XFlush(display); break;
-      case Job::Kind::fence: job.fence->complete(true); break;
+      case Job::Kind::fence: XSync(display, False); job.fence->complete(true, 0); break;
     }
   }
   void type(uint32_t codepoint) {
@@ -277,15 +288,6 @@ class X11Input final : public InputBackend {
   void restoreSpares() {
     for (auto& spare : spares) unbind(spare);
     bound = std::chrono::steady_clock::now();
-  }
-  /// Unbinds spares that have been idle longer than the reuse window, keeping recent ones readable.
-  void restoreIdle(TimePoint now) {
-    bool changed = false;
-    for (auto& spare : spares) {
-      if (spare.symbol == NoSymbol || now < spare.tapped + spareReuse) continue;
-      unbind(spare); changed = true;
-    }
-    if (changed) bound = now;
   }
   void unbind(Spare& spare) {
     if (spare.symbol == NoSymbol) return;

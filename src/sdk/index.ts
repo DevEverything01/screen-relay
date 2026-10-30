@@ -206,7 +206,9 @@ export function createClient(options: ClientOptions = {}): Client {
       try { result = await request<{ applied: number }>(server, '/input', false, payload.body); }
       catch (error) {
         if (error instanceof RelayError) {
-          Object.assign(error, { applied: events, data: { ...error.data, applied: events } });
+          const partial = typeof error.data?.applied === 'number' ? error.data.applied : 0;
+          const applied = events + partial;
+          Object.assign(error, { applied, data: { ...error.data, applied } });
         }
         throw error;
       }

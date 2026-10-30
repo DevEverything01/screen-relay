@@ -47,6 +47,28 @@ test('HTTP input batches events and validates before sending', async () => {
   }
 });
 
+test('HTTP input reports the records applied before a cancelled batch', async () => {
+  let batches = 0;
+  const server = createServer(async (request, response) => {
+    response.setHeader('content-type', 'application/json');
+    if (request.url === '/capabilities') return response.end(JSON.stringify({ max_input_batch: 2 }));
+    for await (const chunk of request);
+    if (batches++ === 0) return response.end(JSON.stringify({ applied: 2 }));
+    response.statusCode = 409;
+    response.end(JSON.stringify({ error: 'busy', applied: 1 }));
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  try {
+    const client = createClient({ url: `http://127.0.0.1:${server.address().port}` });
+    await assert.rejects(client.input([{ type: 'releaseAll' }, { type: 'releaseAll' }, { type: 'releaseAll' }, { type: 'releaseAll' }]),
+      { code: 'BUSY', applied: 3, data: { httpStatus: 409, applied: 3 } });
+  } finally {
+    server.close();
+    await once(server, 'close');
+  }
+});
+
 function packet(type, generation, sequence, payload) {
   const b = Buffer.alloc(20 + payload.length);
   b.write('NSL1'); b[4] = 1; b[5] = type;

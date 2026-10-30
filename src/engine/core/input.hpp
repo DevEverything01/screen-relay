@@ -1,4 +1,5 @@
 #pragma once
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -19,8 +20,8 @@ using NativeKey = uint32_t;
 class InputFence {
  public:
   virtual ~InputFence() = default;
-  /// Runs once after every event posted before the fence was applied, or not applied when queued work was dropped.
-  virtual void complete(bool applied) = 0;
+  /// Runs once after every event posted before the fence, reporting whether all of them applied and how many were dropped.
+  virtual void complete(bool applied, size_t dropped) = 0;
 };
 /// Platform primitives only; protocol rules, coordinate mapping and held input live in InputController.
 class InputBackend {
@@ -41,12 +42,16 @@ class InputBackend {
   virtual void resetLocks() = 0;
   /// Completes mark after every event posted so far, without waiting for it.
   virtual void fence(std::shared_ptr<InputFence> mark) = 0;
+  /// Events posted but not yet applied, so a caller can refuse a batch before it queues behind them.
+  virtual size_t pending() const = 0;
   /// Drops queued text and moves as not applied, keeping key and button releases.
   virtual void cancel() = 0;
   virtual void flush() = 0;
   virtual std::pair<uint16_t, uint16_t> dimensions() const = 0;
   virtual const char* name() const = 0;
 };
+/// Events allowed to wait in a backend queue; a batch that would exceed it is refused before any of it is queued.
+constexpr size_t max_queued_events = 1024;
 /** Validates protocol events, maps pointer coordinates and dedupes held input for one backend. */
 class InputController {
  public:
@@ -59,6 +64,8 @@ class InputController {
   void resetLocks();
   /// Completes mark once every event applied so far has reached the backend.
   void fence(std::shared_ptr<InputFence> mark);
+  /// Events posted but not yet applied.
+  size_t pending() const;
   /// Drops queued text and moves, so their fences complete as not applied.
   void cancel();
   std::pair<uint16_t, uint16_t> dimensions() const;

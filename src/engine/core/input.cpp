@@ -20,6 +20,7 @@ void InputController::releaseAll() {
 }
 void InputController::resetLocks() { backend->resetLocks(); backend->flush(); }
 void InputController::fence(std::shared_ptr<InputFence> mark) { backend->fence(std::move(mark)); }
+size_t InputController::pending() const { return backend->pending(); }
 void InputController::cancel() { backend->cancel(); }
 InputStatus InputController::apply(const InputEvent& input) {
   const unsigned event = input.type, code = input.code;

@@ -37,6 +37,7 @@ class FakeBackend final : public relay::InputBackend {
   void scroll(unsigned axis, int notches) override { calls.push_back({Call::Kind::scroll, axis, notches}); }
   void resetLocks() override { calls.push_back({Call::Kind::resetLocks}); }
   void fence(std::shared_ptr<relay::InputFence> mark) override { fences.push_back(std::move(mark)); }
+  size_t pending() const override { return 0; }
   void cancel() override { cancelled = true; }
   void flush() override { calls.push_back({Call::Kind::flush}); }
   std::pair<uint16_t, uint16_t> dimensions() const override { return {1280, 720}; }
@@ -233,7 +234,8 @@ void reportsUnsupportedUsage() {
 
 struct Mark final : relay::InputFence {
   bool applied = true, finished = false;
-  void complete(bool value) override { applied = value; finished = true; }
+  size_t dropped = 0;
+  void complete(bool value, size_t lost) override { applied = value; dropped = lost; finished = true; }
 };
 
 void fencesAfterWork() {
