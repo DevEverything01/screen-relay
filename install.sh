@@ -57,6 +57,13 @@ if ! node_ok; then
     Darwin:arm64) platform=darwin-arm64 ;;
     *) echo 'relay needs Node 26 or newer; this OS and architecture has no Node download. Install Node 26 from https://nodejs.org/ and run this again.' >&2; exit 1 ;;
   esac
+  if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
+    if [ "$apt" = 1 ]; then apt_install ca-certificates curl; fi
+    if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
+      echo 'Downloading Node 26 needs curl or wget.' >&2
+      exit 1
+    fi
+  fi
   archive="node-v$node_version-$platform.tar.gz"
   scratch=$(mktemp -d)
   trap 'rm -rf "$scratch"' 0
