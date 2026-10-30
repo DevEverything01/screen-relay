@@ -10,7 +10,10 @@ export function theme(args: OutputOptions = {}, stream: NodeJS.WriteStream = pro
     error: mode.plain ? 'Error:' : paint('✗', 31),
     primary: (value: string) => paint(value, 1),
     strong: (value: string) => paint(value, 1, 22),
+    dim: (value: string) => paint(value, 2, 22),
+    italic: (value: string) => paint(value, 3, 23),
     muted: (value: string) => paint(value, 90, 39),
     command: (value: string) => paint(value, 36),
+    accent: (value: string) => paint(value, 36, 39),
   };
 }

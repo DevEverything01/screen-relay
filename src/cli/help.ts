@@ -1,4 +1,4 @@
-import { commands, globalOptions, type Parameter, type Subcommand } from './commands.js';
+import { commands, globalOptions, type Command, type Parameter, type Subcommand } from './commands.js';
 import { agent, type OutputOptions } from './mode.js';
 import { theme } from './theme.js';
 
@@ -11,6 +11,7 @@ declare const __RELAY_VERSION__: string;
 export const version = typeof __RELAY_VERSION__ === 'string' ? __RELAY_VERSION__ : '0.0.0';
 
 type Style = ReturnType<typeof theme>;
+type Example = { description: string; command: string };
 
 function argumentSyntax(parameter: Parameter): string {
   const value = parameter.valueHint ?? `<${parameter.name.toUpperCase()}>`;
@@ -25,6 +26,15 @@ function optionSyntax(parameter: Parameter): string {
 function description(parameter: Parameter): string {
   const showDefault = parameter.default !== undefined && parameter.default !== false;
   return `${parameter.summary}${showDefault ? ` (default: ${parameter.default})` : ''}${parameter.acceptedValues ? `. Values: ${parameter.acceptedValues.join(', ')}` : ''}${parameter.environment ? `. Environment: ${parameter.environment}` : ''}`;
+}
+
+function details(parameter: Parameter): string {
+  return `${parameter.summary}${parameter.acceptedValues ? `. Values: ${parameter.acceptedValues.join(', ')}` : ''}${parameter.environment ? `. Environment: ${parameter.environment}` : ''}`;
+}
+
+function defaultNote(parameter: Parameter, style: Style): string {
+  const showDefault = parameter.default !== undefined && parameter.default !== false;
+  return showDefault ? style.dim(` [default: ${style.italic(String(parameter.default))}]`) : '';
 }
 
 function wrapWords(text: string, limit: number): string[] {
@@ -64,6 +74,33 @@ function subcommandRows(subcommands: Subcommand[]): string[] {
   return align(subcommands.map((subcommand) => ({ label: subcommand.name, text: subcommand.summary })));
 }
 
+function cellRows(entries: { label: string; args: string; text: string }[], style: Style): string[] {
+  const labelWidth = Math.max(0, ...entries.map((entry) => entry.label.length)) + 2;
+  const argsWidth = Math.max(0, ...entries.map((entry) => entry.args.length)) + 2;
+  return entries.map((entry) => `    ${entry.label.padEnd(labelWidth)}${style.dim(entry.args.padEnd(argsWidth))}${style.dim(entry.text)}`);
+}
+
+function optionRows(parameters: Parameter[], style: Style): string[] {
+  const sorted = [...parameters].sort((left, right) => left.name.localeCompare(right.name));
+  const column = Math.max(0, ...sorted.map((parameter) => optionSyntax(parameter).length)) + 2;
+  return sorted.map((parameter) => `    ${optionSyntax(parameter).padEnd(column)}${style.dim(details(parameter))}${defaultNote(parameter, style)}`);
+}
+
+function exampleLines(examples: Example[], style: Style): string[] {
+  return examples.flatMap((example, index) => [
+    ...(index ? [''] : []),
+    `${style.muted('–')} ${example.description}`,
+    '',
+    style.accent(`  $ ${example.command}`),
+  ]);
+}
+
+function commandArguments(command: Command): string {
+  if (command.subcommands?.length) return '<subcommand>';
+  const tail = command.arguments.map(argumentSyntax).join(' ');
+  return tail ? `${command.separator ? `${command.separator} ` : ''}${tail}` : '';
+}
+
 export function helpDocument(name = ''): Record<string, unknown> {
   const command = commands[name];
   const publicParameter = ({ validate, deferredDefault, missingReason, brackets, ...parameter }: Parameter) => ({ repeat: 'last', ...parameter });
@@ -80,12 +117,20 @@ export function helpDocument(name = ''): Record<string, unknown> {
   };
 }
 
-function usage(name: string, style: Style): string {
+function agentUsage(name: string, style: Style): string {
   const command = commands[name];
   const head = `▲ ${style.strong('relay')}`;
   if (!command) return `${head} <command> [options]`;
   const tail = command.usageTail ?? command.arguments.map(argumentSyntax).join(' ');
   return `${head} ${name}${command.separator ? ` ${command.separator}` : ''}${tail ? ` ${tail}` : ''} [options]`;
+}
+
+function humanUsage(name: string, style: Style): string {
+  const command = commands[name];
+  const head = `▲ ${style.strong(name ? `relay ${name}` : 'relay')}`;
+  if (!command) return `${head} [options] <command>`;
+  const tail = command.usageTail ?? command.arguments.map(argumentSyntax).join(' ');
+  return `${head}${command.separator ? ` ${command.separator}` : ''}${tail ? ` ${tail}` : ''} [options]`;
 }
 
 const startHere = [
@@ -102,15 +147,19 @@ const startHere = [
   '  relay skills path [name]',
 ];
 
-const agentPointer = 'For AI agents: relay skills get core';
+const rootExamples: Example[] = [
+  { description: 'Start a session in the background', command: 'relay up --detach' },
+  { description: 'Take a screenshot', command: 'relay screenshot screen.png' },
+  { description: 'Click the center of the screen', command: 'relay click 0.5 0.5' },
+  { description: 'Load the core agent skill', command: 'relay skills get core' },
+];
 
-export function formatHelp(name = '', args: OutputOptions = {}): string {
-  const style = theme(args, process.stdout);
+function agentHelp(name: string, args: OutputOptions): string {
+  const style = theme({ ...args, color: false }, process.stdout);
   const command = commands[name];
-  const lines = [style.muted(`relay ${version}`), '', usage(name, style), ''];
+  const lines = [style.muted(`relay ${version}`), '', agentUsage(name, style), ''];
   if (command) lines.push(command.summary);
-  else if (agent) lines.push(summary, '', ...startHere);
-  else lines.push(agentPointer, '', summary);
+  else lines.push(summary, '', ...startHere);
   if (command?.arguments.length) lines.push('', 'Arguments:', ...parameterRows(command.arguments, false));
   if (command?.options.length) lines.push('', 'Options:', ...parameterRows(command.options, true));
   if (!command) for (const group of ['Session', 'Control', 'Machine']) {
@@ -124,4 +173,30 @@ export function formatHelp(name = '', args: OutputOptions = {}): string {
   if (command?.notes.length) lines.push('', 'Notes:', ...command.notes.flatMap((note) => wrapWords(note, width - 2).map((line) => `  ${line}`)));
   lines.push('', 'Learn more:', `  ${docs}`);
   return `${lines.join('\n')}\n`;
+}
+
+function humanHelp(name: string, args: OutputOptions): string {
+  const style = theme(args, process.stdout);
+  const command = commands[name];
+  const lines = [style.muted(command ? name : `relay ${version}`), '', humanUsage(name, style), ''];
+  if (!command) {
+    lines.push(style.dim('For command help, run `relay <command> --help`'), '', style.dim('Commands:'), '');
+    lines.push(...cellRows(Object.entries(commands).map(([key, entry]) => ({ label: key, args: commandArguments(entry), text: entry.summary })), style));
+    lines.push('', style.dim('Examples:'), '', ...exampleLines(rootExamples, style));
+  } else {
+    lines.push(style.dim(command.summary));
+    if (command.options.length) lines.push('', style.dim('Options:'), '', ...optionRows(command.options, style));
+    if (command.subcommands?.length) {
+      lines.push('', style.dim('Commands:'), '');
+      lines.push(...cellRows(command.subcommands.map((subcommand) => ({ label: subcommand.name, args: '', text: subcommand.summary })), style));
+    }
+    if (command.examples.length) lines.push('', style.dim('Examples:'), '', ...exampleLines(command.examples, style));
+  }
+  lines.push('');
+  return `${lines.join('\n')}\n`;
+}
+
+/** Formats root or command help in the human layout, or the descriptive agent layout when an agent is detected. */
+export function formatHelp(name = '', args: OutputOptions = {}): string {
+  return agent ? agentHelp(name, args) : humanHelp(name, args);
 }

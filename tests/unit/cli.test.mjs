@@ -94,25 +94,52 @@ test('invalid URL recovery is a sentence in human mode and has no next command i
   assert.match(human.stderr, /\n {2}Use an HTTPS origin or a local address:\n {4}Pass --url https:\/\/desktop\.example\.com or --url http:\/\/127\.0\.0\.1:8080\.\n$/);
 });
 
-test('RELAY_AGENT forces the agent block or the pointer line', () => {
-  const help = (value) => spawnSync(process.execPath, [cli, '--help'], {
-    encoding: 'utf8',
-    timeout: 15000,
-    env: { ...process.env, RELAY_AGENT: value },
-  });
-  const agent = help('1');
-  assert.ifError(agent.error);
-  assert.equal(agent.status, 0);
-  assert.match(agent.stdout, /Start here \(for AI agents\):/);
-  assert.doesNotMatch(agent.stdout, /For AI agents: relay skills get core/);
-  const human = help('0');
-  assert.ifError(human.error);
-  assert.equal(human.status, 0);
-  assert.match(human.stdout, /For AI agents: relay skills get core/);
-  assert.doesNotMatch(human.stdout, /Start here \(for AI agents\):/);
+const help = (value, argv = ['--help']) => spawnSync(process.execPath, [cli, ...argv], {
+  encoding: 'utf8',
+  timeout: 15000,
+  env: { ...process.env, RELAY_AGENT: value },
 });
 
-test('plain output contains no ANSI escape codes', () => {
+test('human help is piped plain text with the command hint', () => {
+  for (const argv of [['--help'], ['click', '--help'], ['skills', '--help']]) {
+    const result = help('0', argv);
+    assert.ifError(result.error);
+    assert.equal(result.status, 0);
+    assert.doesNotMatch(result.stdout, /\u001b\[/);
+    assert.doesNotMatch(result.stdout, /Start here \(for AI agents\):/);
+  }
+  const root = help('0');
+  assert.match(root.stdout, /^relay \d+\.\d+\.\d+\n\n▲ relay \[options\] <command>\n\nFor command help, run `relay <command> --help`\n\nCommands:\n\n {4}up /);
+  const click = help('0', ['click', '--help']);
+  assert.match(click.stdout, /^click\n\n▲ relay click <x> <y> \[options\]\n\nClick at screen coordinates\n\nOptions:\n\n {4}--button <BUTTON> +Select the mouse button\. Values: left, middle, right \[default: left\]\n/);
+  assert.match(click.stdout, /– Click the center\n\n {2}\$ relay click 0\.5 0\.5\n\n$/);
+});
+
+test('RELAY_AGENT=1 help keeps the agent block as plain text', () => {
+  const result = help('1');
+  assert.ifError(result.error);
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /Start here \(for AI agents\):/);
+  assert.doesNotMatch(result.stdout, /For command help, run/);
+  assert.doesNotMatch(result.stdout, /\u001b\[/);
+});
+
+test('agent detection changes help only', () => {
+  const run = (value) => spawnSync(process.execPath, [cli, 'status', '--url', 'ftp://example.com'], {
+    encoding: 'utf8',
+    timeout: 15000,
+    env: { ...process.env, RELAY_AGENT: value, RELAY_URL: '', RELAY_TOKEN_FILE: '' },
+  });
+  const off = run('0');
+  const on = run('1');
+  assert.ifError(off.error);
+  assert.ifError(on.error);
+  assert.equal(on.status, off.status);
+  assert.equal(on.stdout, off.stdout);
+  assert.equal(on.stderr, off.stderr);
+});
+
+test('piped help and errors contain no ANSI escape codes', () => {
   for (const argv of [['--help'], ['click', '--help'], ['status', '--url', 'https://user:x y@[']]) {
     const result = spawnSync(process.execPath, [cli, ...argv], {
       encoding: 'utf8',
