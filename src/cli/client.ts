@@ -40,13 +40,13 @@ function checkUrl(url: string, token?: string): string {
 
 /** Resolves the engine a client command talks to from flags, the environment, or the local session. */
 export function resolveTarget(args: Args): Target {
-  let url = typeof args.url === 'string' ? args.url : process.env.RELAY_URL;
+  let url: string | undefined = typeof args.url === 'string' ? args.url : process.env.RELAY_URL;
   let tokenFile = typeof args['token-file'] === 'string' ? args['token-file'] : process.env.RELAY_TOKEN_FILE;
   let ca: string | undefined, connect: string | undefined;
   if (!url) {
     const session = readSession(String(args.name));
     if (session?.state === 'ready') {
-      url = session.localUrl;
+      url = String(session.localUrl);
       ca = session.tlsCert ?? undefined;
       connect = connectHost(session.bind) ?? undefined;
       tokenFile = tokenFile || session.tokenFile;
@@ -59,7 +59,7 @@ export function resolveTarget(args: Args): Target {
     try { token = readFileSync(tokenFile, 'utf8').trim(); }
     catch (error) { throw new Failure('invalid_input', `Cannot read token file: ${detail(error)}`, 'Check --token-file.'); }
   }
-  return { url: checkUrl(String(url), token), token, ca, connect, timeout: Number(args.timeout ?? 10) };
+  return { url: checkUrl(url, token), token, ca, connect, timeout: Number(args.timeout ?? 10) };
 }
 
 /** Turns an SDK error into the CLI failure shape the documented commands and exit codes use. */
