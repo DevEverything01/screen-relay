@@ -1,6 +1,6 @@
 # CLI reference
 
-`relay` is one Python 3 command (stdlib only). Host commands (`up`, `down`, `logs`, `doctor`, `run`) manage a session on the Linux machine; `up`, `down` and `run` fail with `unsupported_platform` elsewhere. Client commands (`status`, `screenshot`, `click`, `move`, `scroll`, `key`, `type`, `input`) run anywhere.
+`relay` is one Python 3 command (stdlib only, plus PyYAML when a config file is loaded). Host commands (`up`, `down`, `logs`, `doctor`, `run`) manage a session on the Linux machine; `up`, `down` and `run` fail with `unsupported_platform` elsewhere. Client commands (`status`, `screenshot`, `click`, `move`, `scroll`, `key`, `type`, `input`) run anywhere.
 
 ## Common
 
@@ -45,9 +45,9 @@ URL rules: an origin only (no path, query or credentials). Plain HTTP only for `
 | `--prefix DIR` | Absolute install location. Default `$PREFIX`, else `~/.local`. |
 | `--no-desktop` | Skip XFCE and the other desktop packages. |
 | `--no-deps` | Skip apt. Dependencies must already be present. |
-| `--client-only` | Install only the CLI, for example on a laptop. Installs `python3` only. Works off Linux. |
+| `--client-only` | Install only the CLI, for example on a laptop. Installs `python3` only. A config file also needs `python3-yaml`. Works off Linux. |
 
-Apt needs root or passwordless sudo. The full install adds build tools, the X11 libraries, `libx264`, `libwebsockets`, `xvfb`, `xauth`, `x11-utils`, and with the desktop: D-Bus, XFCE (`xfce4-session`, `xfwm4`, `xfce4-panel`, `xfdesktop4`, `xfce4-settings`, `thunar`, `xfce4-terminal`) and `glycin-loaders` when the distro has it. Safe to re-run.
+Apt needs root or passwordless sudo. The full install adds build tools, the X11 libraries, `libx264`, `libwebsockets`, `xvfb`, `xauth`, `x11-utils`, `python3-yaml`, and with the desktop: D-Bus, XFCE (`xfce4-session`, `xfwm4`, `xfce4-panel`, `xfdesktop4`, `xfce4-settings`, `thunar`, `xfce4-terminal`) and `glycin-loaders` when the distro has it. Safe to re-run.
 
 It installs `<prefix>/bin/relay` and the engine in `<prefix>/lib/relay/` (linked as `<prefix>/bin/relay-engine`). When `<prefix>/bin` is not on `PATH` it prints:
 
@@ -60,16 +60,17 @@ A full install ends by running `relay doctor` and exits non-zero if doctor finds
 ## up
 
 ```sh
-relay up [-d] [--name N] [--port N] [--desktop xfce|none|CMD] [--display :N]
+relay up [-d] [--name N] [--config FILE] [--port N] [--desktop xfce|none|CMD] [--display :N]
                  [--public HTTPS_URL] [--tls-cert F --tls-key F] [--bind ADDR] [--timeout S]
 ```
 
-Starts Xvfb (1280x720), the desktop and the engine, then supervises them. Without `-d` it runs in the foreground; Ctrl-C stops it.
+Starts Xvfb at the configured resolution (default 1280x720), the desktop and the engine, then supervises them. Without `-d` it runs in the foreground; Ctrl-C stops it.
 
 | Flag | Default | Meaning |
 | --- | --- | --- |
 | `-d`, `--detach` | off | Run in the background. Returns once ready, or with the startup error. |
 | `--name N` | `default` | Session name. One running session per name. |
+| `--config F` | `$RELAY_CONFIG`, else `~/.config/relay/config.yaml` when it exists | Config file. Flags beat the file. See [Config](config.md). |
 | `--port N` | `8080` | Listen port. |
 | `--desktop` | `xfce`; `none` with `--display` | `xfce`, `none` (no desktop), or a command such as `openbox`. Runs under `dbus-run-session` when it is installed. |
 | `--display :N` | new Xvfb | Attach to an existing display. Uses your `XAUTHORITY`. The CLI never stops or changes a display it did not start. |
@@ -157,15 +158,17 @@ Without `--url` (or `RELAY_URL`), shows the local session and asks its engine fo
 ```console
 $ relay status
 default: ready
-  url:     http://127.0.0.1:8080
-  display: :0
-  logs:    /home/relay/.local/state/relay/default
+  url:        http://127.0.0.1:8080
+  display:    :0
+  resolution: 1280x720
+  fps:        60
+  logs:       /home/relay/.local/state/relay/default
 ```
 
 `status --json` for a running session (capabilities trimmed):
 
 ```json
-{"name": "demo", "state": "ready", "supervisor": {"pid": 494, "start": "87687"}, "logs": "/home/relay/.local/state/relay/demo", "port": 8084, "display": ":1", "xauthority": "/home/relay/.local/state/relay/demo/Xauthority", "ownsDisplay": true, "desktop": "xfce", "bind": "127.0.0.1", "localUrl": "http://127.0.0.1:8084", "url": "http://127.0.0.1:8084", "tlsCert": null, "ready": 1793146225.0122316, "running": true, "capabilities": {"version": 1, "backend": "x11", "width": 1280, "height": 720, "...": "..."}}
+{"name": "demo", "state": "ready", "supervisor": {"pid": 494, "start": "87687"}, "logs": "/home/relay/.local/state/relay/demo", "port": 8084, "display": ":1", "xauthority": "/home/relay/.local/state/relay/demo/Xauthority", "ownsDisplay": true, "desktop": "xfce", "resolution": "1280x720", "fps": 60, "bind": "127.0.0.1", "localUrl": "http://127.0.0.1:8084", "url": "http://127.0.0.1:8084", "tlsCert": null, "ready": 1793146225.0122316, "running": true, "capabilities": {"version": 1, "backend": "x11", "width": 1280, "height": 720, "...": "..."}}
 ```
 
 | Field | Meaning |
@@ -174,6 +177,7 @@ default: ready
 | `running` | `true` only when `state` is `ready` and the supervisor is alive. |
 | `url`, `localUrl` | Public or local URL, and the URL local clients use. |
 | `display`, `xauthority`, `ownsDisplay`, `desktop` | X display, cookie file, whether `up` started the display, desktop setting. |
+| `resolution`, `fps` | Display size and stream frame rate. With `--display`, the size comes from the existing display. |
 | `bind`, `port`, `tlsCert` | Listen address, port, TLS certificate path or `null`. |
 | `tokenFile` | Token path, present only when there is a token. |
 | `token` | Present only with `--show-token` while running. |

@@ -5,7 +5,7 @@ description: Start a streamed Linux X11 desktop and control it with the relay CL
 
 # relay
 
-Streams a Linux X11 desktop (1280x720) to a browser and lets you control it from the CLI.
+Streams a Linux X11 desktop to a browser and lets you control it from the CLI.
 
 ## Setup
 
@@ -75,4 +75,4 @@ With `--json`, errors are `{"error":{"code","message","hint"}}` on stderr, plus 
 
 Fixes: `busy`, ask the user to close the viewer, then retry. `unauthorized`, pass `--token-file` or set `RELAY_TOKEN_FILE`. `unreachable`, check `relay status` and the URL. `component_failed` or `timeout` from `up`, read `relay logs <component>` and run `relay doctor`.
 
-Limits: X11 only, fixed 1280x720, one controller, no audio or clipboard.
+Limits: X11 only, resolution set in the config up to 1920x1080, one controller, no audio or clipboard.
