@@ -74,10 +74,15 @@ function subcommandRows(subcommands: Subcommand[]): string[] {
   return align(subcommands.map((subcommand) => ({ label: subcommand.name, text: subcommand.summary })));
 }
 
-function cellRows(entries: { label: string; args: string; text: string }[], style: Style): string[] {
-  const labelWidth = Math.max(0, ...entries.map((entry) => entry.label.length)) + 2;
-  const argsWidth = Math.max(0, ...entries.map((entry) => entry.args.length)) + 2;
-  return entries.map((entry) => `    ${entry.label.padEnd(labelWidth)}${style.dim(entry.args.padEnd(argsWidth))}${style.dim(entry.text)}`);
+function cellWidths(entries: { label: string; args: string }[]): { labelWidth: number; argsWidth: number } {
+  return {
+    labelWidth: Math.max(0, ...entries.map((entry) => entry.label.length)) + 2,
+    argsWidth: Math.max(0, ...entries.map((entry) => entry.args.length)) + 2,
+  };
+}
+
+function cellRows(entries: { label: string; args: string; text: string }[], style: Style, widths = cellWidths(entries)): string[] {
+  return entries.map((entry) => `    ${entry.label.padEnd(widths.labelWidth)}${style.dim(entry.args.padEnd(widths.argsWidth))}${style.dim(entry.text)}`);
 }
 
 function optionRows(parameters: Parameter[], style: Style): string[] {
@@ -198,11 +203,16 @@ function humanHelp(name: string, args: OutputOptions): string {
   const lines = [style.muted(command ? name : `relay ${version}`), '', humanUsage(name, style), ''];
   if (!command) {
     lines.push(style.dim('For command help, run `relay <command> --help`'));
-    for (const section of sections) {
-      lines.push('', style.dim(section.label), '');
-      lines.push(...cellRows(Object.entries(commands)
+    const groups = sections.map((section) => ({
+      section,
+      entries: Object.entries(commands)
         .filter(([, entry]) => entry.runsOn === section.runsOn)
-        .map(([key, entry]) => ({ label: key, args: commandArguments(entry), text: entry.summary })), style));
+        .map(([key, entry]) => ({ label: key, args: commandArguments(entry), text: entry.summary })),
+    }));
+    const widths = cellWidths(groups.flatMap((group) => group.entries));
+    for (const { section, entries } of groups) {
+      lines.push('', style.dim(section.label), '');
+      lines.push(...cellRows(entries, style, widths));
     }
     lines.push('', style.dim('Examples:'), '', ...exampleLines(rootExamples, style));
   } else {
