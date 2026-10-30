@@ -29,7 +29,11 @@ An existing session's `status` exits 0 for `ready`, `starting`, `stopped` and `f
 
 `relay --help`, `relay -h` and `relay help` show root help. Use `relay help <COMMAND>` or `relay <COMMAND> --help` for a command. Help works offline, writes stdout and exits 0 without starting anything.
 
-Root help groups commands under Session, Control and Machine. Command help lists arguments, alphabetical options, global options, examples, notes and a documentation link. Empty sections are omitted. `relay <COMMAND> --help --json` returns metadata with `path`, `summary`, `arguments`, `options`, `examples` and the result schema. `relay help --all --json` returns every command.
+`relay <COMMAND> --help --json` returns metadata with `path`, `summary`, `runsOn` (`vm`, `client` or `anywhere`), `arguments`, `options`, `examples` and the result schema. `relay help --all --json` returns every command.
+
+Help has two layouts. Without an agent, root help shows `relay <VERSION>`, `▲ relay [options] <command>`, a dim `` For command help, run `relay <command> --help` `` line, three dim sections named `VM commands`, `Client commands` and `Other commands` with each command's arguments and summary, then examples. Command help shows the command name, its usage, the summary, a line saying where the command runs, alphabetical options with their defaults and examples. Color is used only when stdout is a TTY and color is allowed, so a pipe, `NO_COLOR`, `--no-color` or `TERM=dumb` prints the same text without ANSI codes.
+
+When an AI agent is detected, help uses the descriptive layout instead: version and usage, the full `Start here (for AI agents)` block on root help, a line saying where the command runs, commands grouped as VM commands, client commands and other commands, arguments, alphabetical options, global options, examples, notes and a documentation link, all as plain text without ANSI codes and with empty sections omitted. Detection affects help only; every other command behaves the same either way. `RELAY_AGENT=1` or `RELAY_AGENT=0` forces either layout.
 
 Global options work before or after the command: `-h`/`--help`, `-v`/`--version`, `--json`, `--no-color` and `--name <NAME>`. Version output contains only the version, `0.1.0`; `--version --json` returns `{"version":"0.1.0"}`. Options accept `--name <NAME>` and `--name=NAME`. `--` ends option parsing. Boolean options accept `--no-<OPTION>`. Unknown options, commands and extra positionals fail before work, with at most one close suggestion and a help command. Options do not accept prefix matching.
 
@@ -66,6 +70,7 @@ Precedence is an explicit option, its `RELAY_*` environment variable, the config
 | `RELAY_RESOLUTION`, `RELAY_FPS`, `RELAY_BITRATE_MIN`, `RELAY_BITRATE_START`, `RELAY_BITRATE_MAX`, `RELAY_KEYBOARD_LAYOUT` | The matching config keys |
 | `RELAY_URL` | Client `--url` |
 | `RELAY_TOKEN_FILE` | Client `--token-file` |
+| `RELAY_AGENT` | Help layout: `1` uses the agent layout, `0` uses the human layout. It does not change any other output. |
 
 ### Client target
 

@@ -8,6 +8,15 @@ allowed-tools: Bash(relay:*)
 
 Relay runs a Linux X11 desktop and gives you a browser viewer plus CLI control. This skill ships with the CLI, so every command below matches the installed version.
 
+## Where commands run
+
+- VM commands (`up`, `down`, `logs`, `run`, `doctor`) manage the session on the Linux machine that shows the desktop. `up`, `down` and `run` fail with `unsupported_platform` on other systems.
+- Client commands (`status`, `screenshot`, `click`, `move`, `scroll`, `key`, `type`, `input`) reach the engine on that machine, either through the local session or with `--url` and a token.
+
+`skills` and `help` work anywhere and never contact an engine.
+
+On the VM, run every command directly. From another machine, only client commands work, and each needs `--url` plus a token file (`--token-file` or `RELAY_TOKEN_FILE`). See [Client target](references/cli.md#client-target).
+
 ## Start a session
 
 ```sh

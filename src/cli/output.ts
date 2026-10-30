@@ -1,9 +1,9 @@
 import { outputMode, type OutputOptions } from './mode.js';
-import { nextCommand, nextStep, receipt, row, sessionCommand, tokens } from './format.js';
+import { nextCommand, nextStep, hintStep, receipt, row, sessionCommand, tokens } from './format.js';
 import { theme } from './theme.js';
 import { ERROR_REASONS, RelayError, type ErrorOptions, type ErrorReason, type NextCommand } from '../protocol/errors.js';
 
-export { count, duration, nextCommand, nextFor, nextStep, quote, receipt, row, sessionCommand, size } from './format.js';
+export { count, duration, hintStep, nextCommand, nextFor, nextStep, quote, receipt, row, sessionCommand, size } from './format.js';
 
 export class Failure extends RelayError {
   constructor(code: string, message: string, hint = '', extra: Record<string, unknown> = {}, options: ErrorOptions = {}) {
@@ -122,6 +122,6 @@ export function printFailure(failure: RelayError, jsonMode: boolean, args: Outpu
   }
   const recovery = next?.[0];
   if (recovery) lines.push(nextStep(failure.label ?? recoveryLabel(recovery.command), recovery.command, args));
-  else if (failure.hint) lines.push(row('Recovery', failure.hint.replace(/[\r\n]+/g, ' '), args));
+  else if (failure.hint) lines.push(hintStep(failure.label ?? 'Next step', failure.hint.replace(/[\r\n]+/g, ' ')));
   process.stderr.write(`${lines.slice(0, 8).join('\n')}\n`);
 }

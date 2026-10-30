@@ -19,6 +19,7 @@ const bundle = buildSync({
   external: ['yaml'],
   platform: 'node',
   format: 'esm',
+  banner: { js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" },
   write: false,
 });
 const bundlePath = join(directory, 'parser.mjs');
@@ -78,5 +79,86 @@ test('invalid URL diagnostics redact credentials and query strings', () => {
     assert.equal(result.status, 2);
     assert.doesNotMatch(result.stderr, /user|abc|def|secret/);
     assert.ok(result.stderr.includes(`Invalid server URL: ${safe}`));
+  }
+});
+
+test('invalid URL recovery is a sentence in human mode and has no next command in --json', () => {
+  const env = { ...process.env, RELAY_URL: '', RELAY_TOKEN_FILE: '' };
+  const json = spawnSync(process.execPath, [cli, 'status', '--url', 'ftp://example.com', '--json'], { encoding: 'utf8', timeout: 15000, env });
+  assert.ifError(json.error);
+  assert.equal(json.status, 2);
+  assert.equal(JSON.parse(json.stderr).next, undefined);
+  const human = spawnSync(process.execPath, [cli, 'status', '--url', 'ftp://example.com'], { encoding: 'utf8', timeout: 15000, env });
+  assert.ifError(human.error);
+  assert.equal(human.status, 2);
+  assert.match(human.stderr, /\n {2}Use an HTTPS origin or a local address:\n {4}Pass --url https:\/\/desktop\.example\.com or --url http:\/\/127\.0\.0\.1:8080\.\n$/);
+});
+
+const help = (value, argv = ['--help']) => spawnSync(process.execPath, [cli, ...argv], {
+  encoding: 'utf8',
+  timeout: 15000,
+  env: { ...process.env, RELAY_AGENT: value },
+});
+
+test('human help is piped plain text with the command hint', () => {
+  for (const argv of [['--help'], ['click', '--help'], ['skills', '--help']]) {
+    const result = help('0', argv);
+    assert.ifError(result.error);
+    assert.equal(result.status, 0);
+    assert.doesNotMatch(result.stdout, /\u001b\[/);
+    assert.doesNotMatch(result.stdout, /Start here \(for AI agents\):/);
+  }
+  const root = help('0');
+  assert.match(root.stdout, /^relay \d+\.\d+\.\d+\n\n▲ relay \[options\] <command>\n\nFor command help, run `relay <command> --help`\n\nVM commands \(run on the Linux machine that shows the desktop\):\n\n {4}up /);
+  const click = help('0', ['click', '--help']);
+  assert.match(click.stdout, /^click\n\n▲ relay click <x> <y> \[options\]\n\nClick at screen coordinates\nRuns on the VM, or on another machine with --url and a token file\.\n\nOptions:\n\n {4}--button <BUTTON> +Select the mouse button\. Values: left, middle, right \[default: left\]\n/);
+  assert.match(click.stdout, /– Click the center\n\n {2}\$ relay click 0\.5 0\.5\n\n$/);
+});
+
+test('human help lists up under the VM section and click under the client section', () => {
+  const result = help('0');
+  assert.ifError(result.error);
+  assert.equal(result.status, 0);
+  const vm = result.stdout.slice(result.stdout.indexOf('VM commands'), result.stdout.indexOf('Client commands'));
+  assert.match(vm, /^ {4}up /m);
+  assert.doesNotMatch(vm, /^ {4}click /m);
+  const client = result.stdout.slice(result.stdout.indexOf('Client commands'), result.stdout.indexOf('Other commands'));
+  assert.match(client, /^ {4}click /m);
+  assert.doesNotMatch(client, /^ {4}up /m);
+});
+
+test('RELAY_AGENT=1 help keeps the agent block as plain text', () => {
+  const result = help('1');
+  assert.ifError(result.error);
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /Start here \(for AI agents\):/);
+  assert.doesNotMatch(result.stdout, /For command help, run/);
+  assert.doesNotMatch(result.stdout, /\u001b\[/);
+});
+
+test('agent detection changes help only', () => {
+  const run = (value) => spawnSync(process.execPath, [cli, 'status', '--url', 'ftp://example.com'], {
+    encoding: 'utf8',
+    timeout: 15000,
+    env: { ...process.env, RELAY_AGENT: value, RELAY_URL: '', RELAY_TOKEN_FILE: '' },
+  });
+  const off = run('0');
+  const on = run('1');
+  assert.ifError(off.error);
+  assert.ifError(on.error);
+  assert.equal(on.status, off.status);
+  assert.equal(on.stdout, off.stdout);
+  assert.equal(on.stderr, off.stderr);
+});
+
+test('piped help and errors contain no ANSI escape codes', () => {
+  for (const argv of [['--help'], ['click', '--help'], ['status', '--url', 'https://user:x y@[']]) {
+    const result = spawnSync(process.execPath, [cli, ...argv], {
+      encoding: 'utf8',
+      timeout: 15000,
+      env: { ...process.env, RELAY_AGENT: '0' },
+    });
+    assert.ifError(result.error);
+    assert.doesNotMatch(result.stdout + result.stderr, /\u001b\[/);
   }
 });

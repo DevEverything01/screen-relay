@@ -29,7 +29,8 @@ function invalidUrl(url: string): Failure {
   } catch {
     safe = url.match(/^[A-Za-z][A-Za-z\d+.-]*:/)?.[0] ?? '';
   }
-  return new Failure('invalid_input', `Invalid server URL: ${safe}`, 'Use an HTTPS origin or http://127.0.0.1:PORT.');
+  return new Failure('invalid_input', `Invalid server URL: ${safe}`, 'Pass --url https://desktop.example.com or --url http://127.0.0.1:8080.',
+    {}, { label: 'Use an HTTPS origin or a local address' });
 }
 
 function checkUrl(url: string, token?: string): string {

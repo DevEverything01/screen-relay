@@ -21,9 +21,11 @@ export type Parameter = {
   validate?: (value: unknown) => boolean;
 };
 export type Subcommand = { name: string; summary: string; examples: { description: string; command: string }[] };
+export type RunsOn = 'vm' | 'client' | 'anywhere';
 export type Command = {
   summary: string;
   group: 'Session' | 'Control' | 'Machine';
+  runsOn: RunsOn;
   arguments: Parameter[];
   options: Parameter[];
   examples: { description: string; command: string }[];
@@ -58,7 +60,7 @@ const coordinateNotes = ['Coordinates are fractions of the screen from 0 to 1.']
 
 export const commands: Record<string, Command> = {
   up: {
-    summary: 'Start a display, desktop and engine', group: 'Session', arguments: [],
+    summary: 'Start a display, desktop and engine', group: 'Session', runsOn: 'vm', arguments: [],
     options: [
       { name: 'detach', short: 'd', type: 'boolean', summary: 'Run in the background', default: false },
       { name: 'config', type: 'string', valueHint: '<FILE>', summary: 'Load the YAML config', environment: 'RELAY_CONFIG' },
@@ -76,11 +78,11 @@ export const commands: Record<string, Command> = {
     resultSchema: { session: 'object', outcome: 'started' },
     run: cmdUp,
   },
-  down: { summary: 'Stop a session', group: 'Session', arguments: [], options: [], examples: example('Stop the default session', 'relay down'), notes: ['Safe to repeat.'], resultSchema: { session: 'object', outcome: ['stopped', 'unchanged'] }, run: cmdDown },
-  status: { summary: 'Show the session or remote engine state', group: 'Session', arguments: [], options: [...client, { name: 'show-token', type: 'boolean', summary: 'Include the session token' }], examples: example('Inspect the default session', 'relay status'), notes: [], resultSchema: { session: 'object' }, run: cmdStatus },
-  logs: { summary: 'Print component logs', group: 'Session', arguments: [{ name: 'component', type: 'string', valueHint: 'component', summary: 'Select a component log', acceptedValues: COMPONENTS }], options: [{ name: 'follow', short: 'f', type: 'boolean', summary: 'Keep printing new lines' }], examples: example('Follow engine logs', 'relay logs engine --follow'), notes: ['Prints the last 200 lines. --follow cannot be combined with --json.', 'Keys inside logs are the names of the available component logs.'], resultSchema: { logs: { '[component]': 'string' } }, validate: (args) => args.follow && args.json ? '--follow cannot be combined with --json' : undefined, run: cmdLogs },
+  down: { summary: 'Stop a session', group: 'Session', runsOn: 'vm', arguments: [], options: [], examples: example('Stop the default session', 'relay down'), notes: ['Safe to repeat.'], resultSchema: { session: 'object', outcome: ['stopped', 'unchanged'] }, run: cmdDown },
+  status: { summary: 'Show the session or remote engine state', group: 'Session', runsOn: 'client', arguments: [], options: [...client, { name: 'show-token', type: 'boolean', summary: 'Include the session token' }], examples: example('Inspect the default session', 'relay status'), notes: [], resultSchema: { session: 'object' }, run: cmdStatus },
+  logs: { summary: 'Print component logs', group: 'Session', runsOn: 'vm', arguments: [{ name: 'component', type: 'string', valueHint: 'component', summary: 'Select a component log', acceptedValues: COMPONENTS }], options: [{ name: 'follow', short: 'f', type: 'boolean', summary: 'Keep printing new lines' }], examples: example('Follow engine logs', 'relay logs engine --follow'), notes: ['Prints the last 200 lines. --follow cannot be combined with --json.', 'Keys inside logs are the names of the available component logs.'], resultSchema: { logs: { '[component]': 'string' } }, validate: (args) => args.follow && args.json ? '--follow cannot be combined with --json' : undefined, run: cmdLogs },
   run: {
-    summary: 'Start an app on the session desktop', group: 'Session', separator: '--',
+    summary: 'Start an app on the session desktop', group: 'Session', runsOn: 'vm', separator: '--',
     arguments: [
       { name: 'app', type: 'string', valueHint: '<app>', summary: 'App to start', required: true, missingReason: 'missing_command' },
       { name: 'args', type: 'string', valueHint: '[args]', brackets: false, repeat: 'collect', summary: 'Arguments passed to the app' },
@@ -91,16 +93,16 @@ export const commands: Record<string, Command> = {
     resultSchema: { app: { pid: 'number', command: 'string[]' }, outcome: 'started' },
     run: cmdRun,
   },
-  doctor: { summary: 'Check this machine and show fixes', group: 'Machine', arguments: [], options: [], examples: example('Check host dependencies', 'relay doctor'), notes: [], resultSchema: { checks: 'array', summary: 'object' }, run: cmdDoctor },
-  screenshot: { summary: 'Save a PNG of the screen', group: 'Control', arguments: [{ name: 'file', type: 'string', valueHint: 'file', summary: 'Destination path, or - for PNG stdout', default: 'screen.png' }], options: client, examples: example('Save the current screen', 'relay screenshot screen.png'), notes: ['Use - to write PNG bytes to stdout. This cannot be combined with --json.'], resultSchema: { screenshot: { path: 'string', width: 'number', height: 'number', bytes: 'number' }, outcome: 'saved' }, validate: (args) => args.file === '-' && args.json ? 'PNG stdout cannot be combined with --json' : undefined, run: cmdScreenshot },
-  click: { summary: 'Click at screen coordinates', group: 'Control', arguments: coordinates, options: [...client, { name: 'button', type: 'string', valueHint: '<BUTTON>', summary: 'Select the mouse button', default: 'left', acceptedValues: ['left', 'middle', 'right'] }], examples: example('Click the center', 'relay click 0.5 0.5'), notes: coordinateNotes, resultSchema: inputResult, run: cmdClick },
-  move: { summary: 'Move the pointer to screen coordinates', group: 'Control', arguments: coordinates, options: client, examples: example('Move to the center', 'relay move 0.5 0.5'), notes: coordinateNotes, resultSchema: inputResult, run: cmdMove },
-  scroll: { summary: 'Scroll at screen coordinates', group: 'Control', arguments: coordinates, options: [...client, ...['dx', 'dy'].map((name): Parameter => ({ name, type: 'number', valueHint: '<NUMBER>', summary: `${name === 'dx' ? 'Horizontal' : 'Vertical'} wheel notches`, default: 0, validate: (value) => Number.isInteger(value) }))], examples: example('Scroll down at the center', 'relay scroll 0.5 0.5 --dy 3'), notes: [...coordinateNotes, 'Positive dy scrolls down; positive dx scrolls right.'], resultSchema: inputResult, validate: (args) => !args.dx && !args.dy ? 'Give a nonzero --dx or --dy' : undefined, run: cmdScroll },
-  key: { summary: 'Press key combinations', group: 'Control', arguments: [{ name: 'combos', type: 'string', valueHint: '<combo>', summary: 'Key combinations to press in order', required: true, repeat: 'collect' }], options: client, examples: example('Focus the address bar', 'relay key ctrl+l'), notes: ['Keys are physical. cmd and meta are aliases of super.'], resultSchema: inputResult, run: cmdKey },
-  type: { summary: 'Type text using the remote keyboard layout', group: 'Control', arguments: [{ name: 'text', type: 'string', valueHint: '<text>', brackets: false, summary: 'Text to type' }], options: [...client, stdin], examples: example('Type a greeting', 'relay type "Hello"'), notes: [], resultSchema: inputResult, validate: textSource('text'), run: cmdType },
-  input: { summary: 'Send a JSON array of input events', group: 'Control', arguments: [{ name: 'events', type: 'string', valueHint: '<json>', brackets: false, summary: 'SDK input events' }], options: [...client, stdin], examples: example('Send raw key events', 'relay input \'[{"type":"keyDown","key":4},{"type":"keyUp","key":4}]\''), notes: ['Accepts 1 to 256 events.'], resultSchema: inputResult, validate: textSource('events'), run: cmdInput },
+  doctor: { summary: 'Check this machine and show fixes', group: 'Machine', runsOn: 'vm', arguments: [], options: [], examples: example('Check host dependencies', 'relay doctor'), notes: [], resultSchema: { checks: 'array', summary: 'object' }, run: cmdDoctor },
+  screenshot: { summary: 'Save a PNG of the screen', group: 'Control', runsOn: 'client', arguments: [{ name: 'file', type: 'string', valueHint: 'file', summary: 'Destination path, or - for PNG stdout', default: 'screen.png' }], options: client, examples: example('Save the current screen', 'relay screenshot screen.png'), notes: ['Use - to write PNG bytes to stdout. This cannot be combined with --json.'], resultSchema: { screenshot: { path: 'string', width: 'number', height: 'number', bytes: 'number' }, outcome: 'saved' }, validate: (args) => args.file === '-' && args.json ? 'PNG stdout cannot be combined with --json' : undefined, run: cmdScreenshot },
+  click: { summary: 'Click at screen coordinates', group: 'Control', runsOn: 'client', arguments: coordinates, options: [...client, { name: 'button', type: 'string', valueHint: '<BUTTON>', summary: 'Select the mouse button', default: 'left', acceptedValues: ['left', 'middle', 'right'] }], examples: example('Click the center', 'relay click 0.5 0.5'), notes: coordinateNotes, resultSchema: inputResult, run: cmdClick },
+  move: { summary: 'Move the pointer to screen coordinates', group: 'Control', runsOn: 'client', arguments: coordinates, options: client, examples: example('Move to the center', 'relay move 0.5 0.5'), notes: coordinateNotes, resultSchema: inputResult, run: cmdMove },
+  scroll: { summary: 'Scroll at screen coordinates', group: 'Control', runsOn: 'client', arguments: coordinates, options: [...client, ...['dx', 'dy'].map((name): Parameter => ({ name, type: 'number', valueHint: '<NUMBER>', summary: `${name === 'dx' ? 'Horizontal' : 'Vertical'} wheel notches`, default: 0, validate: (value) => Number.isInteger(value) }))], examples: example('Scroll down at the center', 'relay scroll 0.5 0.5 --dy 3'), notes: [...coordinateNotes, 'Positive dy scrolls down; positive dx scrolls right.'], resultSchema: inputResult, validate: (args) => !args.dx && !args.dy ? 'Give a nonzero --dx or --dy' : undefined, run: cmdScroll },
+  key: { summary: 'Press key combinations', group: 'Control', runsOn: 'client', arguments: [{ name: 'combos', type: 'string', valueHint: '<combo>', summary: 'Key combinations to press in order', required: true, repeat: 'collect' }], options: client, examples: example('Focus the address bar', 'relay key ctrl+l'), notes: ['Keys are physical. cmd and meta are aliases of super.'], resultSchema: inputResult, run: cmdKey },
+  type: { summary: 'Type text using the remote keyboard layout', group: 'Control', runsOn: 'client', arguments: [{ name: 'text', type: 'string', valueHint: '<text>', brackets: false, summary: 'Text to type' }], options: [...client, stdin], examples: example('Type a greeting', 'relay type "Hello"'), notes: [], resultSchema: inputResult, validate: textSource('text'), run: cmdType },
+  input: { summary: 'Send a JSON array of input events', group: 'Control', runsOn: 'client', arguments: [{ name: 'events', type: 'string', valueHint: '<json>', brackets: false, summary: 'SDK input events' }], options: [...client, stdin], examples: example('Send raw key events', 'relay input \'[{"type":"keyDown","key":4},{"type":"keyUp","key":4}]\''), notes: ['Accepts 1 to 256 events.'], resultSchema: inputResult, validate: textSource('events'), run: cmdInput },
   skills: {
-    summary: 'Read the agent skills shipped with this CLI', group: 'Machine', usageTail: '<command> [name]',
+    summary: 'Read the agent skills shipped with this CLI', group: 'Machine', runsOn: 'anywhere', usageTail: '<command> [name]',
     arguments: [
       { name: 'action', type: 'string', valueHint: '<command>', summary: 'List, get or path', default: 'list', acceptedValues: ['list', 'get', 'path'] },
       { name: 'skill', type: 'string', valueHint: '<name>', summary: 'Skill name' },
@@ -123,5 +125,5 @@ export const commands: Record<string, Command> = {
       : args.full && args.action !== 'get' ? '--full only applies to relay skills get' : undefined,
     run: cmdSkills,
   },
-  help: { summary: 'Show command help', group: 'Machine', arguments: [{ name: 'topic', type: 'string', valueHint: '<COMMAND>', summary: 'Command to describe' }], options: [{ name: 'all', type: 'boolean', summary: 'Describe every command' }], examples: example('Read click help', 'relay help click'), notes: [], resultSchema: { path: 'string', summary: 'string', arguments: 'array', options: 'array', examples: 'array', resultSchema: 'object' } },
+  help: { summary: 'Show command help', group: 'Machine', runsOn: 'anywhere', arguments: [{ name: 'topic', type: 'string', valueHint: 'command', summary: 'Command to describe' }], options: [{ name: 'all', type: 'boolean', summary: 'Describe every command' }], examples: example('Read click help', 'relay help click'), notes: [], resultSchema: { path: 'string', summary: 'string', arguments: 'array', options: 'array', examples: 'array', resultSchema: 'object' } },
 };
