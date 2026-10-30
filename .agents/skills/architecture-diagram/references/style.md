@@ -18,6 +18,10 @@ The style follows Vercel architecture diagrams: dashed containers, thin gray con
 | `--hl-ring` | `#1e5fd6` | `#2563eb` | Highlighted node ring |
 | `--hl-icon` | `#cfe0ff` | `#1d4ed8` | Highlighted node icon |
 
+## Background
+
+The `html` and `body` background and the outer container fill are transparent, so an embedded diagram takes the docs page color in either site theme. `:root` also sets `color-scheme` (dark by default, light for the light theme) to match the parent page; a mismatch makes the browser paint an opaque canvas behind the iframe. Only when the file is opened directly (`window.self === window.top`) the script sets `data-top` on `:root` and the page uses `--bg`. Nested panels keep their `--panel` fill.
+
 ## Borders and shapes
 
 - Stroke width 1 with `vector-effect: non-scaling-stroke`, so lines stay 1px at any scale.

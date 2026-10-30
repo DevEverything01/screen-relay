@@ -7,26 +7,31 @@
 <script>
   var t = new URLSearchParams(location.search).get("theme");
   if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+  if (window.self === window.top) document.documentElement.setAttribute("data-top", "");
 </script>
 <style>
   :root {
+    color-scheme: dark;
     --bg: #000; --panel: #0a0a0a; --node: #111; --border: #5c5c5c;
     --fg: #ededed; --muted: #8f8f8f; --line: #8f8f8f; --line-strong: #ededed;
     --hl-fill: #0a2a5e; --hl-ring: #1e5fd6; --hl-icon: #cfe0ff;
   }
   @media (prefers-color-scheme: light) {
     :root:not([data-theme]) {
+      color-scheme: light;
       --bg: #fff; --panel: #fafafa; --node: #fff; --border: #b8b8b8;
       --fg: #171717; --muted: #666; --line: #7a7a7a; --line-strong: #171717;
       --hl-fill: #dbe8ff; --hl-ring: #2563eb; --hl-icon: #1d4ed8;
     }
   }
   :root[data-theme="light"] {
+    color-scheme: light;
     --bg: #fff; --panel: #fafafa; --node: #fff; --border: #b8b8b8;
     --fg: #171717; --muted: #666; --line: #7a7a7a; --line-strong: #171717;
     --hl-fill: #dbe8ff; --hl-ring: #2563eb; --hl-icon: #1d4ed8;
   }
-  html, body { margin: 0; background: var(--bg); }
+  html, body { margin: 0; background: transparent; }
+  :root[data-top], :root[data-top] body { background: var(--bg); }
   svg { display: block; width: 100%; height: auto; font-family: Geist, "Geist Sans", system-ui, -apple-system, "Segoe UI", sans-serif; }
   .box { fill: var(--panel); stroke: var(--border); stroke-width: 1; stroke-dasharray: 4 4; vector-effect: non-scaling-stroke; }
   .node { fill: var(--node); }
@@ -53,7 +58,7 @@
     </marker>
   </defs>
 
-  <rect class="box" x="8" y="8" width="704" height="224" rx="8" style="fill:var(--bg)"/>
+  <rect class="box" x="8" y="8" width="704" height="224" rx="8" style="fill:none"/>
   <text class="head" x="28" y="40">Container</text>
 
   <rect class="box node" x="40" y="80" width="120" height="64" rx="6"/>
