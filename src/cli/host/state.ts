@@ -1,6 +1,7 @@
 import { closeSync, fstatSync, openSync, readFileSync, readdirSync, readSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import { Failure } from '../output.js';
 
 export type ProcessIdentity = { pid: number; start: string | null };
@@ -63,9 +64,10 @@ export function identity(pid: number): ProcessIdentity {
   return { pid, start: startTime(pid) };
 }
 
-export async function sweep(directory: string): Promise<void> {
+export async function sweep(directory: string, signal?: AbortSignal): Promise<void> {
   const marker = Buffer.from(`RELAY_SESSION=${directory}`);
-  for (const signal of ['SIGTERM', 'SIGKILL'] as const) {
+  for (const killSignal of ['SIGTERM', 'SIGKILL'] as const) {
+    signal?.throwIfAborted();
     const found: number[] = [];
     let entries: string[];
     try {
@@ -79,17 +81,18 @@ export async function sweep(directory: string): Promise<void> {
       try {
         const environment = readFileSync(`/proc/${entry}/environ`);
         if (environment.includes(marker)) {
-          process.kill(pid, signal);
+          process.kill(pid, killSignal);
           found.push(pid);
         }
       } catch {}
     }
     if (!found.length) return;
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await delay(500, undefined, { signal });
   }
 }
 
-export async function reap(directory: string, session: SessionData | null): Promise<void> {
+export async function reap(directory: string, session: SessionData | null, signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted();
   for (const record of Object.values(session?.components ?? {}) as unknown[]) {
     if (alive(record)) {
       try {
@@ -97,7 +100,7 @@ export async function reap(directory: string, session: SessionData | null): Prom
       } catch {}
     }
   }
-  await sweep(directory);
+  await sweep(directory, signal);
 }
 
 /** Holds the session lock file until close; a lock whose owner is gone is replaced. */

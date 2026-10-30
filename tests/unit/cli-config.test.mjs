@@ -57,7 +57,7 @@ desktop: none
 
 test('rejects unknown keys with their path and valid keys', () => {
   assert.throws(() => config.loadConfig(write('stream:\n  fsp: 30\n')), (error) => {
-    assert.equal(error.code, 'invalid_input');
+    assert.equal(error.reason, 'invalid_config');
     assert.match(error.message, /stream\.fsp/);
     assert.match(error.hint, /fps/);
     assert.match(error.hint, /bitrate/);
@@ -81,7 +81,7 @@ test('rejects invalid UTF-8 as invalid input', () => {
   const path = join(directory, 'invalid.yaml');
   writeFileSync(path, Buffer.from([0x64, 0x65, 0x73, 0x6b, 0x74, 0x6f, 0x70, 0x3a, 0x20, 0xff, 0xfe, 0x0a]));
   assert.throws(() => config.loadConfig(path), (error) => {
-    assert.equal(error.code, 'invalid_input');
+    assert.equal(error.reason, 'invalid_config');
     assert.match(error.message, /Cannot read config file/);
     return true;
   });

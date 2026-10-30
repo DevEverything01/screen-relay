@@ -78,6 +78,7 @@ export async function startXvfb(
   start: (command: string[], options: SpawnOptions) => ChildProcess,
   auth: string,
   resolution = '1280x720',
+  signal?: AbortSignal,
 ): Promise<string> {
   const cookie = (await import('node:crypto')).randomBytes(16).toString('hex');
   const authorize = (display: string) => {
@@ -93,6 +94,7 @@ export async function startXvfb(
   try {
     await waitSpawn(child);
     text = await readLine(pipe, 15000, () => {
+      signal?.throwIfAborted();
       if (child.exitCode !== null || child.signalCode !== null) throw new Failure('component_failed', `display exited with code ${child.exitCode ?? child.signalCode}`, HINTS.display, { component: 'display' });
     });
   } catch (error) {
@@ -154,6 +156,7 @@ export class Session {
       child = spawnCleared(command, {
         env: this.env,
         detached: true,
+        signal: this.args.signal,
         ...options,
         stdio: ['ignore', log, log, ...((options.stdio as any[] | undefined) ?? []).slice(3)],
       });
@@ -175,6 +178,7 @@ export class Session {
   }
 
   checkChildren(): void {
+    this.args.signal?.throwIfAborted();
     for (const [name, child] of this.children) {
       const error = this.errors.get(name);
       if (error) throw this.failure(name, 'component_failed', `Cannot start ${name}: ${error.message}`);
@@ -200,6 +204,7 @@ export class Session {
   }
 
   async start(): Promise<Record<string, unknown>> {
+    this.args.signal?.throwIfAborted();
     const runtime = join(this.dir, 'runtime');
     rmSync(runtime, { recursive: true, force: true });
     mkdirSync(runtime, { mode: 0o700 });
@@ -229,10 +234,10 @@ export class Session {
       closeSync(fd);
       this.env.XAUTHORITY = auth;
       try {
-        this.env.DISPLAY = await startXvfb((command, options) => this.spawn('display', command, options), auth, this.args.resolution);
+        this.env.DISPLAY = await startXvfb((command, options) => this.spawn('display', command, options), auth, this.args.resolution, this.args.signal);
       } catch (error) {
         const failure = error instanceof Failure ? error : this.failure('display', 'component_failed', String(error));
-        throw this.failure('display', failure.code, failure.message);
+        throw this.failure('display', failure.reason, failure.message);
       }
       if (layout !== 'us') {
         const result = spawnSync('setxkbmap', ['-layout', layout], { env: this.env, stdio: 'ignore' });
@@ -276,6 +281,7 @@ export class Session {
       ready: true, name: this.args.name, url, viewer: token ? `${url}/#token=${token}` : url,
       token, display: this.env.DISPLAY, xauthority: this.env.XAUTHORITY ?? null, logs: this.dir,
       pid: process.pid, enginePid: engineChild.pid, bind, port: this.args.port, public: Boolean(this.args.public),
+      resolution: this.data.resolution, fps: this.args.fps,
     };
   }
 
@@ -286,7 +292,7 @@ export class Session {
         const message = JSON.parse(line);
         if (message.ready === true && message.pid === pid) {
           const image = await createClient({
-            url: where.url, token: where.token ?? undefined, ca: where.caFile ?? undefined, connect: where.connect ?? undefined, timeout: 3000,
+            url: where.url, token: where.token ?? undefined, ca: where.caFile ?? undefined, connect: where.connect ?? undefined, timeout: 3000, signal: this.args.signal,
           }).screenshot();
           return Buffer.from(image).subarray(0, 8).equals(PNG);
         }
@@ -305,6 +311,7 @@ export class Session {
     const deadline = Date.now() + (this.args.timeout ?? 30) * 1000;
     const pending = ['engine', ...(desktop !== 'none' ? ['desktop'] : [])];
     while (pending.length) {
+      this.args.signal?.throwIfAborted();
       this.checkChildren();
       const ready = pending[0] === 'engine' ? await this.engineReady(pid, where) : this.desktopReady(desktop);
       if (ready) pending.shift();

@@ -79,7 +79,7 @@ async function main() {
 main().then(code => { process.exitCode = code; });
 `;
 
-export async function startWatcher(command: string[], env: NodeJS.ProcessEnv, logFd: number): Promise<number> {
+export async function startWatcher(command: string[], env: NodeJS.ProcessEnv, logFd: number, signal?: AbortSignal): Promise<number> {
   const watcher = spawnCleared([
     process.execPath,
     '--input-type=module',
@@ -91,6 +91,7 @@ export async function startWatcher(command: string[], env: NodeJS.ProcessEnv, lo
     cwd: LAUNCHER_DIR,
     env,
     detached: true,
+    signal,
     stdio: ['ignore', logFd, logFd, 'pipe'],
   });
   const stream = watcher.stdio[3] as Readable;
