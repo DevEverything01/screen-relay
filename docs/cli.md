@@ -31,9 +31,9 @@ An existing session's `status` exits 0 for `ready`, `starting`, `stopped` and `f
 
 Root help groups commands under Session, Control and Machine. Command help lists arguments, alphabetical options, global options, examples, notes and a documentation link. Empty sections are omitted. `relay <COMMAND> --help --json` returns metadata with `path`, `summary`, `arguments`, `options`, `examples` and the result schema. `relay help --all --json` returns every command.
 
-Global options work before or after the command: `-h`/`--help`, `-v`/`--version`, `--json`, `--no-color` and `--name <NAME>`. Version output contains only the version; `--version --json` returns `{"version":"<VERSION>"}`. Options accept `--name <NAME>`, `--name=<NAME>` and their documented short forms. `--` ends option parsing. Boolean options accept `--no-<OPTION>`. Unknown options, commands and extra positionals fail before work, with at most one close suggestion and a help command. Options do not accept prefix matching.
+Global options work before or after the command: `-h`/`--help`, `-v`/`--version`, `--json`, `--no-color` and `--name <NAME>`. Version output contains only the version, `0.1.0`; `--version --json` returns `{"version":"0.1.0"}`. Options accept `--name <NAME>` and `--name=NAME`. `--` ends option parsing. Boolean options accept `--no-<OPTION>`. Unknown options, commands and extra positionals fail before work, with at most one close suggestion and a help command. Options do not accept prefix matching.
 
-`-f` means follow; `-n` and `-o` retain only their documented meanings. The exception is `up -d`, which keeps meaning `--detach`.
+The only short options are `-h`, `-v`, `-f` (`logs --follow`), and `-d` (`up --detach`, the compose convention). `--name` has no short form.
 
 ### Output
 
@@ -51,7 +51,7 @@ TTY receipts use `✓`, `!` and `✗` in column 0, text from column 2, and label
 | `screenshot` | `{"screenshot":{"path":"<PATH>","width":1280,"height":720,"bytes":12345},"outcome":"saved"}` |
 | `click`, `move`, `scroll`, `key`, `type`, `input` | `{"input":{"events":1},"outcome":"sent"}` |
 | `doctor` | `{"checks":[...],"summary":{...}}` |
-| `run` | `{"app":{"pid":4412,"command":"<APP>"},"outcome":"started"}` |
+| `run` | `{"app":{"pid":4412,"command":["<APP>","<ARG>"]},"outcome":"started"}` |
 
 These envelopes replace the former flat objects, input `applied` count and nested `error` object. Scripts must read the named object and `reason` instead of `error.code`.
 
@@ -62,6 +62,8 @@ Precedence is an explicit option, its `RELAY_*` environment variable, the config
 | Variable | Applies to |
 | --- | --- |
 | `RELAY_CONFIG` | `up --config`; otherwise `~/.config/relay/config.yaml` when present |
+| `RELAY_PORT`, `RELAY_BIND`, `RELAY_PUBLIC`, `RELAY_TLS_CERT`, `RELAY_TLS_KEY`, `RELAY_DESKTOP` | The matching `up` options |
+| `RELAY_RESOLUTION`, `RELAY_FPS`, `RELAY_BITRATE_MIN`, `RELAY_BITRATE_START`, `RELAY_BITRATE_MAX`, `RELAY_KEYBOARD_LAYOUT` | The matching config keys |
 | `RELAY_URL` | Client `--url` |
 | `RELAY_TOKEN_FILE` | Client `--token-file` |
 
@@ -181,7 +183,7 @@ A failed start, for example a desktop command that exits:
 
 ```console
 $ relay up -d --name bad --port 8085 --desktop false --json
-{"status":"error","reason":"component_failed","message":"Failed to start the desktop. It exited with code 1.","next":[{"command":"relay","argv":["logs","desktop","--name","bad"]}],"data":{"component":"desktop","logs":"/home/relay/.local/state/relay/bad"}}
+{"status":"error","reason":"component_failed","message":"Failed to start the desktop. It exited with code 1.","next":[{"command":"relay logs desktop --name bad","argv":["relay","logs","desktop","--name","bad"]}],"data":{"component":"desktop","logs":"/home/relay/.local/state/relay/bad"}}
 ```
 
 ## down
@@ -245,7 +247,7 @@ $ relay status --url http://127.0.0.1:18200 --token-file ./token
 ## logs
 
 ```sh
-relay logs [--name N] [display|dbus|desktop|engine|apps] [-f|--follow]
+relay logs [component] [--name N] [-f|--follow]
 ```
 
 Prints the last 200 lines of one component's log, or of every log that exists. `--follow` keeps printing new lines. `--json` wraps the component logs in `logs`, for example `{"logs":{"display":"...","desktop":"...","engine":"..."}}`, and cannot be combined with `--follow`. The `-d` supervisor's own output is in `supervisor.log` in the state directory.
@@ -278,7 +280,7 @@ Checks this machine and prints the fix command for each problem. Exits 1 if any 
 ## run
 
 ```sh
-relay run [--name N] [--restart] -- APP [ARGS...]
+relay run -- <app> [args]... [--name N] [--restart]
 ```
 
 Starts an app on the session's desktop and returns its pid. The app gets the desktop's D-Bus session bus, display, X authority, runtime, config and cache directories, and ICE authority. Sharing the bus lets accessibility clients find the app. With `up --display :N`, apps inherit the caller's session environment instead. Apps run with ambient capabilities cleared and stop with `relay down`. Output goes to `relay logs apps`.
@@ -296,7 +298,7 @@ $ relay run -- mousepad notes.txt
 ## screenshot
 
 ```sh
-relay screenshot [FILE|-]
+relay screenshot [file] [--url URL] [--token-file FILE] [--timeout S]
 ```
 
 Saves a PNG of the screen. Default file `screen.png`. `-` writes the PNG to stdout. Works while a viewer is connected. `--json` wraps `path`, `bytes`, `width` and `height` in `screenshot`, with outcome `saved`.
@@ -304,7 +306,7 @@ Saves a PNG of the screen. Default file `screen.png`. `-` writes the PNG to stdo
 ## click
 
 ```sh
-relay click X Y [--button left|middle|right]
+relay click <x> <y> [--button left|middle|right]
 ```
 
 Clicks at X Y. Default button `left`.
@@ -312,13 +314,13 @@ Clicks at X Y. Default button `left`.
 ## move
 
 ```sh
-relay move X Y
+relay move <x> <y>
 ```
 
 ## scroll
 
 ```sh
-relay scroll X Y [--dx N] [--dy N]
+relay scroll <x> <y> [--dx N] [--dy N]
 ```
 
 Moves to X Y, then scrolls. `--dx` and `--dy` are wheel notches. Positive `--dy` scrolls down, positive `--dx` right. At least one must be nonzero.
@@ -326,7 +328,7 @@ Moves to X Y, then scrolls. `--dx` and `--dy` are wheel notches. Positive `--dy`
 ## key
 
 ```sh
-relay key COMBO...
+relay key <combo>...
 ```
 
 Presses each combo in order. Combos are `+`-joined: `ctrl+l`, `Enter`, `alt+Tab`, `ctrl++`. Modifiers: `ctrl`, `shift`, `alt`, `super` (also `control`, `meta`, `cmd`, `win`). Keys: a US-layout character or a name such as `Enter`, `Tab`, `Escape`, `Backspace`, `Delete`, `Home`, `End`, `PageUp`, `PageDown`, `Up`, `Down`, `Left`, `Right`, `F1` to `F24`.
@@ -334,7 +336,7 @@ Presses each combo in order. Combos are `+`-joined: `ctrl+l`, `Enter`, `alt+Tab`
 ## type
 
 ```sh
-relay type TEXT
+relay type <text>
 relay type --stdin
 ```
 
@@ -343,7 +345,7 @@ Types text as text events, one per Unicode scalar value. The engine produces the
 ## input
 
 ```sh
-relay input JSON
+relay input <json>
 relay input --stdin
 ```
 
@@ -372,7 +374,7 @@ relay input '[{"type":"keyDown","key":4},{"type":"keyUp","key":4}]'
 | `forbidden` | Host or Origin rejected (HTTP 403). |
 | `unsupported_input` | The backend cannot produce a character or apply the requested input (HTTP 422). |
 | `busy` | A viewer or SDK session holds control (HTTP 409), or a screenshot is already running (HTTP 503). Never retried. |
-| `unreachable` | Cannot connect to the URL. |
+| `unreachable` | Cannot connect to the URL. The message names the cause: `Connection refused.`, `The host name did not resolve.`, `The TLS certificate was rejected.` |
 | `timeout` | No reply within `--timeout`, or `up` did not become ready in time (`component` and `log` set). |
 | `not_running` | No session or logs with that name. |
 | `not_found` | `run` found no running session with that name. |
@@ -398,4 +400,12 @@ relay skills get <name> [--full] [--json]
 relay skills path [name]
 ```
 
-`list` shows available skills. `get` prints a skill's workflow; `--full` appends its `references/` and `templates/` files. `path` prints the skill-data directory, or a named skill directory.
+`list` shows available skills; it is the default when no command is given. `get` prints a skill's workflow; `--full` appends its `references/` and `templates/` files. `path` prints the skill-data directory, or a named skill directory. An unknown skill is a Not found error (`not_found`, exit 1) whose recovery is `relay skills list`.
+
+```json
+{"skills":[{"name":"core","description":"Control a relay desktop from an agent using screenshots and input commands."}]}
+{"skill":{"name":"core","content":"---\nname: core\n..."}}
+{"path":"/usr/local/lib/relay/skill-data"}
+```
+
+Skills ship with the CLI, so their instructions match the installed version. `relay skills get core` is the documented first step for agents.
