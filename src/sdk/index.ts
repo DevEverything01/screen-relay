@@ -90,6 +90,7 @@ function nodeRequest<Result>(server: Server, path: string, binary: boolean, body
   }
   const hostname = server.connect ?? base.hostname.replace(/^\[|\]$/g, '');
   const requestHeaders = headers(server, body);
+  if (body !== undefined) requestHeaders['Content-Length'] = String(body.length);
   if (server.connect) requestHeaders.Host = base.host;
   const options: RequestOptions = {
     protocol: base.protocol,
