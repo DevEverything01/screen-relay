@@ -7,7 +7,7 @@ export type Input =
   | { type: 'releaseAll' };
 export class RelayError extends Error { constructor(code: string, message: string); code: string }
 export interface Capabilities {
-  version: number; backend: string; width: number; height: number;
+  version: number; backend: string; width: number; height: number; fps: number;
   input: { keyboard: boolean; pointer: boolean; buttons: boolean; wheel: boolean };
   screenshot: string; control: string; wayland: boolean; max_input_pending: number;
   cursor: boolean; audio: boolean; clipboard: boolean; resize: boolean; ime: boolean;

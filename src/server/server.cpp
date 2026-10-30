@@ -252,6 +252,7 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
         }
         const std::string json = "{\"version\":1,\"backend\":\"" + std::string(s->input->name()) +
             "\",\"width\":" + std::to_string(s->width) + ",\"height\":" + std::to_string(s->height) +
+            ",\"fps\":" + std::to_string(s->config.fps) +
             ",\"input\":{\"keyboard\":true,\"pointer\":true,\"buttons\":true,\"wheel\":true}," +
             "\"screenshot\":\"/screenshot.png\",\"control\":\"/control\",\"wayland\":false," +
             "\"max_input_pending\":32,\"cursor\":" + (s->capture.stats().cursor_supported ? "true" : "false") +
@@ -323,6 +324,7 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
       { std::lock_guard<std::mutex> lock(s->mutex); s->generation = ++s->nextGeneration; s->pending.clear(); s->pending_cursor.reset(); s->flow.reset(); s->failed=false; }
       s->last_write_cursor = false;
       s->lastSequence=0; s->received.clear();
+      s->input->resetLocks();
       if (s->controller) { s->control_ready = true; lws_callback_on_writable(wsi); }
       else { s->capture.beginSession(s->generation); lws_set_timer_usecs(wsi, 100000); }
       return 0;

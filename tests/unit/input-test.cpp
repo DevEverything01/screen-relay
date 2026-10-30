@@ -11,7 +11,7 @@ namespace {
 void require(bool ok, const char* message) { if (!ok) throw std::runtime_error(message); }
 
 struct Call {
-  enum class Kind { pressKey, releaseKey, pressButton, releaseButton, move, scroll, flush } kind;
+  enum class Kind { pressKey, releaseKey, pressButton, releaseButton, move, scroll, resetLocks, flush } kind;
   uint32_t id = 0;
   int x = 0, y = 0;
 };
@@ -30,6 +30,7 @@ class FakeBackend final : public relay::InputBackend {
   void releaseButton(unsigned button) override { calls.push_back({Call::Kind::releaseButton, button}); }
   void move(int x, int y) override { calls.push_back({Call::Kind::move, 0, x, y}); }
   void scroll(unsigned axis, int notches) override { calls.push_back({Call::Kind::scroll, axis, notches}); }
+  void resetLocks() override { calls.push_back({Call::Kind::resetLocks}); }
   void flush() override { calls.push_back({Call::Kind::flush}); }
   std::pair<uint16_t, uint16_t> dimensions() const override { return {1280, 720}; }
   const char* name() const override { return "fake"; }
@@ -177,6 +178,13 @@ void releasesAllHeldInput() {
   require(times(f.backend, Call::Kind::pressKey) == 1, "press after release-all was dropped as a repeat");
 }
 
+void resetsLocks() {
+  Fixture f;
+  f.input.resetLocks();
+  require(times(f.backend, Call::Kind::resetLocks) == 1, "the controller did not forward the lock reset");
+  require(times(f.backend, Call::Kind::flush) == 1, "the lock reset was not flushed");
+}
+
 void reportsUnsupportedUsage() {
   Fixture f;
   require(f.input.apply(event(1, 20)) == relay::InputStatus::unsupported, "a usage without a native key was not unsupported");
@@ -188,8 +196,8 @@ void reportsUnsupportedUsage() {
 int main() {
   try {
     rejectsInvalidEvents(); acceptsBoundaryValues(); mapsCoordinates(); pointerEventsMoveFirst();
-    dedupesHeldInput(); sharesNativeKey(); releasesAllHeldInput(); reportsUnsupportedUsage();
-    std::puts("input: validation, coordinates, dedupe, release-all and unsupported usages passed");
+    dedupesHeldInput(); sharesNativeKey(); releasesAllHeldInput(); resetsLocks(); reportsUnsupportedUsage();
+    std::puts("input: validation, coordinates, dedupe, release-all, locks and unsupported usages passed");
     return 0;
   } catch (const std::exception& error) {
     std::fprintf(stderr, "input: %s\n", error.what());

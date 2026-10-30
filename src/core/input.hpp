@@ -28,6 +28,8 @@ class InputBackend {
   virtual void move(int x, int y) = 0;
   /// Scrolls notches on axis 0 (vertical) or 1 (horizontal); positive means down or right.
   virtual void scroll(unsigned axis, int notches) = 0;
+  /// Turns lock keys off, currently Caps Lock.
+  virtual void resetLocks() = 0;
   virtual void flush() = 0;
   virtual std::pair<uint16_t, uint16_t> dimensions() const = 0;
   virtual const char* name() const = 0;
@@ -41,6 +43,7 @@ class InputController {
   InputController& operator=(const InputController&) = delete;
   InputStatus apply(const InputEvent& event);
   void releaseAll();
+  void resetLocks();
   std::pair<uint16_t, uint16_t> dimensions() const;
   const char* name() const;
 

@@ -48,8 +48,8 @@ const stats = window.nativeStats = {
 };
 let socket, decoder, retryTimer, deadline, frameHandle, drawnThisFrame = false, transportBroken = false;
 let generation = 0, sequence = 0, lastTimestamp = -1, ready = false, retry = 0, epoch = 0;
-let buttons = 0, modifiers = 0, x = 0, y = 0, viewOnly = false;
-const pending = new Map(), decoded = [], held = new Set();
+let buttons = 0, modifiers = 0, x = 0, y = 0, viewOnly = false, capsLock = false;
+const pending = new Map(), decoded = [], held = new Set(), latched = new Map();
 const keys = {};
 const assignKeys = (first, names) => names.split(" ").forEach((name, i) => keys[name] = first + i);
 assignKeys(4, Array.from({ length: 26 }, (_, i) => `Key${String.fromCharCode(65 + i)}`).join(" "));
@@ -65,6 +65,23 @@ function setModifier(code, down) {
   if (code < 224 || code > 231) return;
   modifiers = down ? modifiers | 1 << (code - 224) : modifiers & ~(1 << (code - 224));
 }
+function syncCaps(event) {
+  if (viewOnly) return;
+  const local = event.getModifierState("CapsLock");
+  if (local === capsLock) return;
+  if (sendInput(1, keys.CapsLock) && sendInput(2, keys.CapsLock)) capsLock = local;
+}
+function clearLatched() {
+  for (const button of latched.values()) button.setAttribute("aria-pressed", "false");
+  latched.clear();
+}
+function releaseLatched() {
+  for (const code of latched.keys()) {
+    setModifier(code, false);
+    sendInput(2, code);
+  }
+  clearLatched();
+}
 const authHeaders = () => accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
 function header(type, gen, seq, size) {
   const b = new ArrayBuffer(20 + size), v = new DataView(b);
@@ -77,7 +94,7 @@ function header(type, gen, seq, size) {
   return b;
 }
 function sendInput(event, code = 0, value = 0) {
-  if (!ready || socket?.readyState !== WebSocket.OPEN || (viewOnly && event !== 7)) return;
+  if (!ready || socket?.readyState !== WebSocket.OPEN || (viewOnly && event !== 7)) return false;
   const b = header(3, generation, 0, 16), v = new DataView(b);
   v.setUint8(20, event);
   v.setUint16(22, code);
@@ -87,11 +104,13 @@ function sendInput(event, code = 0, value = 0) {
   v.setUint16(32, buttons);
   v.setUint16(34, modifiers);
   socket.send(b);
+  return true;
 }
 function release() {
   buttons = modifiers = 0;
   if (ready) sendInput(7);
   held.clear();
+  clearLatched();
 }
 function reset() {
   release();
@@ -109,6 +128,7 @@ function reset() {
   stats.outstanding = 0;
   stats.pendingBytes = 0;
   generation = 0;
+  capsLock = false;
   sequence = 0;
   lastTimestamp = -1;
   if (decoder && decoder.state !== "closed") decoder.close();
@@ -219,6 +239,7 @@ function connect() {
     accessToken ? ['nsl1', `bearer.${accessToken}`] : 'nsl1',
   );
   transportBroken = false;
+  loadCapabilities();
   const ws = socket;
   ws.binaryType = "arraybuffer";
   ws.onopen = () => {
@@ -274,6 +295,7 @@ function connect() {
         if (canvas.width !== width || canvas.height !== height) {
           canvas.width = width; canvas.height = height;
           canvas.style.setProperty("--w", width); canvas.style.setProperty("--h", height);
+          syncSize();
         }
         const config = { codec: codecFromSps(data), codedWidth: width, codedHeight: height, optimizeForLatency: true };
         const instance = new VideoDecoder({
@@ -345,15 +367,20 @@ canvas.addEventListener("keydown", (e) => {
   const code = keys[e.code];
   if (!code) return;
   e.preventDefault();
+  syncCaps(e);
+  if (e.code === "CapsLock") return;
   if (e.repeat || held.has(code)) return;
   held.add(code);
   setModifier(code, true);
   sendInput(1, code);
+  if (code < 224) releaseLatched();
 });
 canvas.addEventListener("keyup", (e) => {
   const code = keys[e.code];
   if (!code) return;
   e.preventDefault();
+  syncCaps(e);
+  if (e.code === "CapsLock") return;
   if (!held.delete(code)) return;
   setModifier(code, false);
   sendInput(2, code);
@@ -405,7 +432,19 @@ canvas.addEventListener("wheel", (e) => {
 canvas.addEventListener("blur", release);
 window.addEventListener("blur", () => { release(); pointerPosition = null; renderCursor(); });
 const METRICS_UNAVAILABLE = "Cgroup CPU (one core): unavailable · Cgroup RAM: unavailable";
-let hudTimer, metricsRequest;
+let hudTimer, metricsRequest, configuredFps = 0;
+function hudText(fps, mbps, metrics) {
+  const stream = `Stream ${canvas.width}x${canvas.height}${configuredFps ? ` @ ${configuredFps} fps` : ""}`;
+  return `${stream} · Drawn FPS: ${fps.toFixed(1)} · Stream Mbps: ${mbps.toFixed(2)} · ${metrics}`;
+}
+function loadCapabilities() {
+  fetch("/capabilities", { cache: "no-store", redirect: "error", headers: authHeaders() })
+    .then((response) => (response.ok ? response.json() : null))
+    .then((data) => {
+      if (Number.isFinite(data?.fps) && data.fps > 0) configuredFps = data.fps;
+    })
+    .catch(() => {});
+}
 function startHud() {
   let previousTime = performance.now(),
     previousDrawn = stats.drawn,
@@ -417,7 +456,7 @@ function startHud() {
     const now = performance.now(), seconds = (now - previousTime) / 1000;
     const fps = (stats.drawn - previousDrawn) / seconds;
     const mbps = (stats.bytes - previousBytes) * 8 / seconds / 1_000_000;
-    document.querySelector("#hud").textContent = `Drawn FPS: ${fps.toFixed(1)} · Stream Mbps: ${mbps.toFixed(2)} · ${metrics}`;
+    document.querySelector("#hud").textContent = hudText(fps, mbps, metrics);
     previousTime = now;
     previousDrawn = stats.drawn;
     previousBytes = stats.bytes;
@@ -458,8 +497,7 @@ document.addEventListener("visibilitychange", () => {
     clearInterval(hudTimer);
     metricsRequest?.abort();
     metricsRequest = null;
-    document.querySelector("#hud").textContent =
-      `Drawn FPS: 0.0 · Stream Mbps: 0.00 · ${METRICS_UNAVAILABLE}`;
+    document.querySelector("#hud").textContent = hudText(0, 0, METRICS_UNAVAILABLE);
     release();
     epoch++;
     retireDecoded();
@@ -485,11 +523,65 @@ function checkAccess(current) {
     })
     .catch(() => {});
 }
+function stored(key) {
+  try {
+    return localStorage.getItem(key);
+  } catch (error) {
+    return null;
+  }
+}
+function store(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch (error) {}
+}
+const scaleButtons = {
+  fit: document.querySelector('[data-scale="fit"]'),
+  actual: document.querySelector('[data-scale="actual"]'),
+  sharp: document.querySelector('[data-scale="sharp"]'),
+};
+let scaleMode = stored("relay.scale") === "actual" ? "actual" : "fit", sharpPixels = stored("relay.sharp") === "1", dprQuery;
+function syncSize() {
+  if (scaleMode !== "actual") {
+    canvas.style.width = canvas.style.height = "";
+    return;
+  }
+  const ratio = window.devicePixelRatio || 1;
+  canvas.style.width = `${canvas.width / ratio}px`;
+  canvas.style.height = `${canvas.height / ratio}px`;
+}
+function applyScale() {
+  document.body.classList.toggle("actual", scaleMode === "actual");
+  canvas.style.imageRendering = sharpPixels ? "pixelated" : "";
+  scaleButtons.fit.setAttribute("aria-pressed", String(scaleMode === "fit"));
+  scaleButtons.actual.setAttribute("aria-pressed", String(scaleMode === "actual"));
+  scaleButtons.sharp.setAttribute("aria-pressed", String(sharpPixels));
+  syncSize();
+  renderCursor();
+}
+function setScale(mode) {
+  scaleMode = mode === "actual" ? "actual" : "fit";
+  store("relay.scale", scaleMode);
+  applyScale();
+}
+function toggleSharp() {
+  sharpPixels = !sharpPixels;
+  store("relay.sharp", sharpPixels ? "1" : "0");
+  applyScale();
+}
+function watchDpr() {
+  syncSize();
+  dprQuery?.removeEventListener?.("change", watchDpr);
+  dprQuery = window.matchMedia?.(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
+  dprQuery?.addEventListener?.("change", watchDpr);
+}
+window.addEventListener("resize", watchDpr);
 const toolbar = document.querySelector("#toolbar"),
   toggle = document.querySelector("#toolbar-toggle"),
   actions = document.querySelector("#toolbar-actions"),
   dot = document.querySelector("#dot"),
   panels = { keys: document.querySelector("#keys-panel"), connection: document.querySelector("#connection-panel") };
+panels.scale = document.querySelector("#scale-panel");
 function showPanel(name, open = panels[name]?.hidden) {
   for (const [key, panel] of Object.entries(panels)) {
     panel.hidden = !(key === name && open);
@@ -515,10 +607,7 @@ canvas.addEventListener("pointerdown", () => showPanel(null));
 const toolbarActions = {
   fullscreen: () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen())
     .catch(() => {}),
-  scale: (button) => {
-    button.setAttribute("aria-pressed", String(document.body.classList.toggle("actual")));
-    renderCursor();
-  },
+  scale: () => showPanel("scale"),
   keys: () => showPanel("keys"),
   connection: () => showPanel("connection"),
   screenshot: () => canvas.toBlob((blob) => {
@@ -547,10 +636,39 @@ actions.addEventListener("click", (e) => {
 document.addEventListener("fullscreenchange", () => {
   toolbar.querySelector('[data-action="fullscreen"]').setAttribute("aria-pressed", String(Boolean(document.fullscreenElement)));
 });
+panels.scale.addEventListener("click", (e) => {
+  const button = e.target.closest("[data-scale]");
+  if (!button) return;
+  if (button.dataset.scale === "sharp") toggleSharp();
+  else setScale(button.dataset.scale);
+});
+function keepCanvasFocus(e) {
+  if (e.target.closest("[data-hold]") || e.target.closest("[data-keys]")) e.preventDefault();
+}
+panels.keys.addEventListener("pointerdown", keepCanvasFocus);
+panels.keys.addEventListener("mousedown", keepCanvasFocus);
 panels.keys.addEventListener("click", (e) => {
+  const hold = e.target.closest("[data-hold]");
+  if (hold) {
+    const code = keys[hold.dataset.hold];
+    if (latched.has(code)) {
+      latched.delete(code);
+      setModifier(code, false);
+      sendInput(2, code);
+      hold.setAttribute("aria-pressed", "false");
+    } else {
+      latched.set(code, hold);
+      setModifier(code, true);
+      sendInput(1, code);
+      hold.setAttribute("aria-pressed", "true");
+    }
+    canvas.focus();
+    return;
+  }
   const button = e.target.closest("[data-keys]");
   if (!button) return;
   const codes = button.dataset.keys.split("+").map((name) => keys[name]);
+  const releasesLatched = codes.some((code) => code < 224);
   for (const code of codes) {
     setModifier(code, true);
     sendInput(1, code);
@@ -559,6 +677,7 @@ panels.keys.addEventListener("click", (e) => {
     setModifier(code, false);
     sendInput(2, code);
   }
+  if (releasesLatched) releaseLatched();
   showPanel(null);
   canvas.focus();
 });
@@ -574,4 +693,6 @@ panels.connection.addEventListener("submit", (e) => {
   connect();
 });
 if (!document.hidden) startHud();
+applyScale();
+watchDpr();
 connect();
