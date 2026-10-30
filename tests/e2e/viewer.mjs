@@ -1,18 +1,20 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { connect } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
-import { chromium } from 'playwright';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
+const browserBin = join(root, 'node_modules/.bin/agent-browser');
 const image = process.env.RELAY_E2E_IMAGE ?? 'relay-e2e';
 const container = `relay-e2e-${process.pid}`;
 const work = mkdtempSync(join(tmpdir(), 'relay-e2e-'));
-let browser = null;
-let context = null;
+let browserSession = null;
+let browserOpened = false;
+let cdpPort = null;
 
 function run(file, args, options = {}) {
   return execFileSync(file, args, { cwd: root, maxBuffer: 64 * 1024 * 1024, ...options });
@@ -28,6 +30,19 @@ function execIn(args, options = {}) {
 }
 function execInRoot(args, options = {}) {
   return run('docker', ['exec', '-u', 'root', container, ...args], options);
+}
+function browser(args) {
+  return text(run(browserBin, args, { env: { ...process.env, AGENT_BROWSER_SESSION: browserSession } }));
+}
+function evalJs(script) {
+  return JSON.parse(browser(['eval', '-b', Buffer.from(script).toString('base64')]).trim());
+}
+function portOpen(port) {
+  return new Promise((resolve) => {
+    const socket = connect({ host: '127.0.0.1', port });
+    socket.on('error', () => { socket.destroy(); resolve(false); });
+    socket.on('connect', () => { socket.destroy(); resolve(true); });
+  });
 }
 async function poll(read, accept, timeout, message) {
   const deadline = Date.now() + timeout;
@@ -52,6 +67,13 @@ function appsLog() {
 }
 
 try {
+  browserSession = text(run(browserBin, ['session', 'id', '--scope', 'worktree', '--prefix', 'relay-e2e'])).trim();
+  assert.ok(browserSession, 'agent-browser did not return a session id');
+  try {
+    browser(['close']);
+  } catch {}
+  console.log(`browser session ${browserSession}`);
+
   if (!process.env.RELAY_E2E_IMAGE) {
     console.log(`building ${image}`);
     docker(['build', '-t', image, '.'], { stdio: 'inherit' });
@@ -70,43 +92,60 @@ try {
   execInRoot(['sh', '-c', 'apt-get update -qq && env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends xdotool'],
     { stdio: ['ignore', 'ignore', 'inherit'] });
 
-  const session = await poll(
+  const relay = await poll(
     () => JSON.parse(text(execIn(['relay', 'status', '--show-token', '--json']))).session,
     (value) => value?.running === true && /^[0-9a-f]{64}$/.test(value?.token ?? ''),
     120000,
     'the session did not become ready with a token',
   );
-  assert.equal(session.resolution, '1920x1080', `the session resolution is ${session.resolution}, expected 1920x1080`);
-  assert.ok(session.display && session.xauthority, `status has no display or X authority: ${JSON.stringify(session)}`);
-  console.log(`session ready on ${session.display}, ${session.resolution}`);
-  const xdotool = (args) => text(run('docker', ['exec', '-e', `DISPLAY=${session.display}`, '-e', `XAUTHORITY=${session.xauthority}`,
+  assert.equal(relay.resolution, '1920x1080', `the session resolution is ${relay.resolution}, expected 1920x1080`);
+  assert.ok(relay.display && relay.xauthority, `status has no display or X authority: ${JSON.stringify(relay)}`);
+  console.log(`session ready on ${relay.display}, ${relay.resolution}`);
+  const xdotool = (args) => text(run('docker', ['exec', '-e', `DISPLAY=${relay.display}`, '-e', `XAUTHORITY=${relay.xauthority}`,
     container, 'xdotool', ...args]));
 
-  browser = await chromium.launch({ headless: true });
-  context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
-  const page = await context.newPage();
-  await page.goto(`http://127.0.0.1:${port}/#token=${session.token}`, { waitUntil: 'domcontentloaded' });
-  try {
-    await page.waitForFunction(() => window.nativeStats?.drawn > 0, null, { timeout: 30000 });
-  } catch {
-    const statusText = await page.locator('#status').textContent().catch(() => null);
-    assert.fail(`the viewer drew no frames: ${statusText ?? 'no status text'}`);
+  browser(['set', 'viewport', '1280', '720']);
+  browser(['open', `http://127.0.0.1:${port}/#token=${relay.token}`]);
+  browserOpened = true;
+  const cdpUrl = browser(['get', 'cdp-url']).trim();
+  cdpPort = Number(new URL(cdpUrl).port);
+  assert.ok(Number.isInteger(cdpPort) && cdpPort > 0, `could not read a CDP port from "${cdpUrl}"`);
+
+  function viewer() {
+    return evalJs(`({
+      drawn: window.nativeStats?.drawn ?? 0,
+      decodeerrors: window.nativeStats?.decodeerrors ?? -1,
+      width: document.querySelector('#screen')?.width ?? 0,
+      height: document.querySelector('#screen')?.height ?? 0,
+    })`);
   }
-  const view = await page.evaluate(() => ({
-    drawn: window.nativeStats.drawn,
-    decodeerrors: window.nativeStats.decodeerrors,
-    width: document.querySelector('#screen').width,
-    height: document.querySelector('#screen').height,
-  }));
+  try {
+    await poll(() => viewer(), (view) => view.drawn > 0, 30000, 'the viewer drew no frames');
+  } catch {
+    let statusText = null;
+    try {
+      statusText = browser(['get', 'text', '#status']).trim();
+    } catch {}
+    assert.fail(`the viewer drew no frames: ${statusText || 'no status text'}`);
+  }
+  const view = viewer();
   assert.ok(view.drawn > 0, `the viewer drew ${view.drawn} frames`);
   assert.equal(view.decodeerrors, 0, `the viewer reported ${view.decodeerrors} decode errors`);
   assert.equal(view.width, 1920, `the canvas is ${view.width} pixels wide, expected 1920`);
   assert.equal(view.height, 1080, `the canvas is ${view.height} pixels high, expected 1080`);
   console.log(`viewer live: ${view.drawn} frames drawn, ${view.width}x${view.height}`);
 
-  const box = await page.locator('#screen').boundingBox();
+  const box = evalJs(`(() => {
+    const rect = document.querySelector('#screen').getBoundingClientRect();
+    return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+  })()`);
   assert.ok(box && box.width > 0 && box.height > 0, 'the viewer canvas has no layout box');
-  await page.mouse.click(box.x + box.width * 0.25, box.y + box.height * 0.75);
+  async function clickAt(x, y) {
+    browser(['mouse', 'move', String(Math.round(x)), String(Math.round(y))]);
+    browser(['mouse', 'down', 'left']);
+    browser(['mouse', 'up', 'left']);
+  }
+  await clickAt(box.x + box.width * 0.25, box.y + box.height * 0.75);
   await poll(
     () => {
       const out = xdotool(['getmouselocation']);
@@ -140,7 +179,7 @@ try {
     return id;
   }
   async function clickCenter() {
-    await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5);
+    await clickAt(box.x + box.width * 0.5, box.y + box.height * 0.5);
     await sleep(300);
   }
   async function waitForFile(path) {
@@ -150,8 +189,8 @@ try {
   const typedWindow = await openTerminal('cat > /tmp/out');
   await waitForFile('/tmp/out');
   await clickCenter();
-  await page.keyboard.type('hello');
-  await page.keyboard.press('Enter');
+  for (const key of 'hello') browser(['press', key]);
+  browser(['press', 'Enter']);
   await poll(
     () => text(execIn(['cat', '/tmp/out'])),
     (value) => value.includes('hello'),
@@ -160,15 +199,23 @@ try {
   );
   console.log('viewer typed hello');
 
-  await page.locator('#toolbar-toggle').click();
-  await page.locator('[data-action="keys"]').click();
-  if (await page.locator('#meta-ctrl').getAttribute('aria-pressed') !== 'true') await page.locator('#meta-ctrl').click();
-  assert.equal(await page.locator('#meta-ctrl').getAttribute('aria-pressed'), 'true', 'the "Use ⌘ as Ctrl" setting is off');
+  browser(['click', '#toolbar-toggle']);
+  browser(['click', '[data-action="keys"]']);
+  if (browser(['get', 'attr', '#meta-ctrl', 'aria-pressed']).trim() !== 'true') browser(['click', '#meta-ctrl']);
+  assert.equal(browser(['get', 'attr', '#meta-ctrl', 'aria-pressed']).trim(), 'true', 'the "Use ⌘ as Ctrl" setting is off');
 
   const ctrlWindow = await openTerminal('stty -icanon -echo; cat -v > /tmp/ctrl');
   await waitForFile('/tmp/ctrl');
   await clickCenter();
-  await page.keyboard.press('Meta+a');
+  evalJs(`(() => {
+    const canvas = document.querySelector('#screen');
+    const fire = (type, init) => canvas.dispatchEvent(new KeyboardEvent(type, { bubbles: true, cancelable: true, ...init }));
+    fire('keydown', { key: 'Meta', code: 'MetaLeft', metaKey: true });
+    fire('keydown', { key: 'a', code: 'KeyA', metaKey: true });
+    fire('keyup', { key: 'a', code: 'KeyA', metaKey: true });
+    fire('keyup', { key: 'Meta', code: 'MetaLeft' });
+    return true;
+  })()`);
   await poll(
     () => text(execIn(['cat', '/tmp/ctrl'])),
     (value) => value.includes('^A'),
@@ -179,7 +226,7 @@ try {
 
   xdotool(['windowclose', ctrlWindow]);
   xdotool(['windowactivate', '--sync', typedWindow]);
-  await page.goto('about:blank');
+  browser(['open', 'about:blank']);
   await sleep(1000);
 
   text(execIn(['relay', 'type', 'héllo €']));
@@ -193,10 +240,30 @@ try {
   console.log('CLI typed héllo €');
   console.log('PASS');
 } finally {
-  if (context) await context.close().catch(() => {});
-  if (browser) await browser.close().catch(() => {});
+  const problems = [];
+  if (browserSession) {
+    try {
+      browser(['close']);
+    } catch (error) {
+      if (browserOpened) problems.push(`agent-browser close failed: ${error.message}`);
+    }
+    if (cdpPort) {
+      try {
+        await poll(() => portOpen(cdpPort), (open) => !open, 15000,
+          `a Chrome process from session ${browserSession} still listens on CDP port ${cdpPort}`);
+      } catch (error) {
+        problems.push(error.message);
+      }
+    }
+  }
   try {
     docker(['rm', '-f', container], { stdio: 'ignore' });
-  } catch {}
+  } catch (error) {
+    problems.push(`could not remove container ${container}: ${error.message}`);
+  }
   rmSync(work, { recursive: true, force: true });
+  if (problems.length) {
+    console.error(problems.join('\n'));
+    process.exitCode = 1;
+  }
 }
