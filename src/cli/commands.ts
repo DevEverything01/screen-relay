@@ -105,7 +105,7 @@ export const commands: Record<string, Command> = {
   skills: {
     summary: 'Read the agent skills shipped with this CLI', group: 'Machine', runsOn: 'anywhere', usageTail: '<command> [name]',
     arguments: [
-      { name: 'action', type: 'string', valueHint: '<command>', summary: 'List, get or path', default: 'list' },
+      { name: 'action', type: 'string', valueHint: '<command>', summary: 'List, get or path', default: 'list', acceptedValues: ['list', 'get', 'path'] },
       { name: 'skill', type: 'string', valueHint: '<name>', summary: 'Skill name' },
     ],
     options: [{ name: 'full', type: 'boolean', summary: 'Append the skill references' }],
@@ -121,7 +121,7 @@ export const commands: Record<string, Command> = {
     ],
     notes: ['Skills ship with the CLI, so their instructions match the installed version.', 'get --full appends the references and templates.'],
     resultSchema: { skills: 'array', skill: { name: 'string', content: 'string' }, path: 'string' },
-    validate: (args) => !['list', 'get', 'path'].includes(String(args.action)) ? unknownAction(String(args.action))
+    validate: (args) => args.action !== undefined && !['list', 'get', 'path'].includes(String(args.action)) ? unknownAction(String(args.action))
       : args.action === 'get' && args.skill === undefined ? 'Name the skill to get'
       : args.action === 'list' && args.skill !== undefined ? 'relay skills list takes no skill name'
       : args.full && args.action !== 'get' ? '--full only applies to relay skills get' : undefined,
