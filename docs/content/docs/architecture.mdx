@@ -3,15 +3,20 @@ title: Architecture
 description: The capture, encoding, and input pipeline, its threads, flow control, and how to add a backend.
 ---
 
+<Diagram name="architecture" title="Relay architecture: the capture and encode pipeline in a Linux VM, the browser viewer, and the input path" aspectRatio="1124 / 452" />
+
+The pipeline in text:
+
 ```text
-X11 display
+X11 display (Xvfb)
   -> CaptureSource (XDamage, MIT-SHM)
   -> CaptureEncoder (BGRA/ARGB to NV12, x264)
   -> flow control (ACK credit)
   -> WebSocket /stream
   -> browser VideoDecoder -> canvas
 
-browser or agent input -> InputController -> InputBackend (XTest)
+browser input over /control, agent or relay CLI/SDK input over /input
+  -> InputController -> InputBackend (XTest) -> X11 display
 ```
 
 ## Folders

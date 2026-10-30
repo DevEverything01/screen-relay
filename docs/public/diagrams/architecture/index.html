@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Relay architecture</title>
+<script>
+  var t = new URLSearchParams(location.search).get("theme");
+  if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+</script>
+<style>
+  :root {
+    --bg: #000;
+    --panel: #0a0a0a;
+    --node: #111;
+    --border: #5c5c5c;
+    --fg: #ededed;
+    --muted: #8f8f8f;
+    --line: #8f8f8f;
+    --line-strong: #ededed;
+    --hl-fill: #0a2a5e;
+    --hl-ring: #1e5fd6;
+    --hl-icon: #cfe0ff;
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme]) {
+      --bg: #fff; --panel: #fafafa; --node: #fff; --border: #b8b8b8;
+      --fg: #171717; --muted: #666; --line: #7a7a7a; --line-strong: #171717;
+      --hl-fill: #dbe8ff; --hl-ring: #2563eb; --hl-icon: #1d4ed8;
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #fff; --panel: #fafafa; --node: #fff; --border: #b8b8b8;
+    --fg: #171717; --muted: #666; --line: #7a7a7a; --line-strong: #171717;
+    --hl-fill: #dbe8ff; --hl-ring: #2563eb; --hl-icon: #1d4ed8;
+  }
+  html, body { margin: 0; background: var(--bg); }
+  svg { display: block; width: 100%; height: auto; font-family: Geist, "Geist Sans", system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .box { fill: var(--panel); stroke: var(--border); stroke-width: 1; stroke-dasharray: 4 4; vector-effect: non-scaling-stroke; }
+  .node { fill: var(--node); }
+  .label { fill: var(--fg); font-size: 15px; text-anchor: middle; }
+  .sub { fill: var(--muted); font-size: 11.5px; text-anchor: middle; }
+  .head { fill: var(--fg); font-size: 16px; font-weight: 500; }
+  .tag { fill: var(--muted); font-size: 12.5px; text-anchor: middle; }
+  .wire { fill: none; stroke: var(--line); stroke-width: 1; vector-effect: non-scaling-stroke; marker-end: url(#arrow); }
+  .wire.strong { stroke: var(--line-strong); }
+  .icon { fill: none; stroke: var(--muted); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+  .icon.fg { stroke: var(--fg); }
+  .hl { fill: var(--hl-fill); stroke: var(--hl-ring); stroke-width: 1; vector-effect: non-scaling-stroke; }
+  .hl-icon { fill: none; stroke: var(--hl-icon); stroke-width: 1.2; vector-effect: non-scaling-stroke; }
+  #arrow path { fill: none; stroke: var(--line); stroke-width: 1; stroke-linecap: round; stroke-linejoin: round; }
+</style>
+</head>
+<body>
+<svg viewBox="0 0 1124 452" role="img" aria-labelledby="t d">
+  <title id="t">Relay architecture</title>
+  <desc id="d">Inside a Linux VM, the X11 display (Xvfb) feeds CaptureSource (XDamage, MIT-SHM), then CaptureEncoder (BGRA or ARGB to NV12, x264), then flow control (ACK credit), then the WebSocket /stream. The browser viewer (VideoDecoder to canvas) receives /stream and sends input over /control. An agent or the relay CLI and SDK sends input over /input. WebSocket input reaches InputController, then InputBackend (XTest), which feeds back into the X11 display.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 8 8" refX="6" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
+      <path d="M1.5 1.5 L5.5 4 L1.5 6.5"/>
+    </marker>
+  </defs>
+
+  <rect class="box" x="12" y="12" width="812" height="428" rx="8" style="fill:var(--bg)"/>
+  <g transform="translate(32 32)">
+    <rect class="icon fg" x="1" y="1" width="16" height="6" rx="1.5"/>
+    <rect class="icon fg" x="1" y="11" width="16" height="6" rx="1.5"/>
+    <circle cx="5" cy="4" r=".6" class="icon fg"/>
+    <circle cx="5" cy="14" r=".6" class="icon fg"/>
+  </g>
+  <text class="head" x="60" y="46">Linux VM</text>
+
+  <rect class="box" x="180" y="72" width="616" height="284" rx="8"/>
+  <g transform="translate(200 86)">
+    <rect class="icon" x="3" y="3" width="12" height="12" rx="2"/>
+    <rect class="icon" x="6.5" y="6.5" width="5" height="5" rx="1"/>
+    <path class="icon" d="M6 0v3M12 0v3M6 15v3M12 15v3M0 6h3M0 12h3M15 6h3M15 12h3"/>
+  </g>
+  <text class="head" x="226" y="100">relay-engine</text>
+
+  <rect class="box node" x="32" y="128" width="120" height="64" rx="6"/>
+  <text class="label" x="92" y="158">X11 display</text>
+  <text class="sub" x="92" y="175">Xvfb</text>
+
+  <rect class="box node" x="200" y="128" width="120" height="64" rx="6"/>
+  <text class="label" x="260" y="158">CaptureSource</text>
+  <text class="sub" x="260" y="175">XDamage, MIT-SHM</text>
+
+  <rect class="box node" x="352" y="128" width="120" height="64" rx="6"/>
+  <text class="label" x="412" y="158">CaptureEncoder</text>
+  <text class="sub" x="412" y="175">NV12, x264</text>
+
+  <rect class="box node" x="504" y="128" width="120" height="64" rx="6"/>
+  <text class="label" x="564" y="158">Flow control</text>
+  <text class="sub" x="564" y="175">ACK credit</text>
+
+  <rect class="box node" x="656" y="128" width="120" height="64" rx="6"/>
+  <text class="label" x="716" y="158">WebSocket</text>
+  <text class="sub" x="716" y="175">service thread</text>
+
+  <rect class="box node" x="656" y="244" width="120" height="64" rx="6"/>
+  <text class="label" x="716" y="274">InputController</text>
+  <text class="sub" x="716" y="291">validates events</text>
+
+  <rect class="box node" x="504" y="244" width="120" height="64" rx="6"/>
+  <text class="label" x="564" y="274">InputBackend</text>
+  <text class="sub" x="564" y="291">XTest</text>
+
+  <path class="wire" d="M158 160H194"/>
+  <path class="wire" d="M326 160H346"/>
+  <path class="wire" d="M478 160H498"/>
+  <path class="wire" d="M630 160H650"/>
+  <path class="wire" d="M692 198V238"/>
+  <path class="wire" d="M650 276H630"/>
+  <path class="wire" d="M564 314V384a14 14 0 0 1-14 14H106a14 14 0 0 1-14-14V198"/>
+
+  <path class="wire strong" d="M782 160H878"/>
+  <text class="tag" x="854" y="152">/stream</text>
+  <path class="wire" d="M914 190V208a14 14 0 0 1-14 14H754a14 14 0 0 1-14-14V198"/>
+  <text class="tag" x="854" y="214">/control</text>
+  <path class="wire strong" d="M950 276H782"/>
+  <text class="tag" x="890" y="268">/input</text>
+
+  <circle class="hl" cx="914" cy="160" r="30"/>
+  <g transform="translate(902 148)">
+    <circle class="hl-icon" cx="12" cy="12" r="9"/>
+    <ellipse class="hl-icon" cx="12" cy="12" rx="4" ry="9"/>
+    <path class="hl-icon" d="M3 12h18"/>
+  </g>
+
+  <rect class="box node" x="956" y="128" width="152" height="64" rx="6"/>
+  <text class="label" x="1032" y="158">Browser viewer</text>
+  <text class="sub" x="1032" y="175">VideoDecoder → canvas</text>
+
+  <rect class="box node" x="956" y="244" width="152" height="64" rx="6"/>
+  <g transform="translate(970 262)">
+    <circle class="icon" cx="14" cy="14" r="13"/>
+    <circle class="icon" cx="14" cy="11" r="3.5"/>
+    <path class="icon" d="M7.5 22.5c.8-3.6 3.4-5 6.5-5s5.7 1.4 6.5 5"/>
+  </g>
+  <text class="label" x="1020" y="274" style="text-anchor:start">Agent</text>
+  <text class="sub" x="1020" y="291" style="text-anchor:start">relay CLI/SDK</text>
+</svg>
+</body>
+</html>
