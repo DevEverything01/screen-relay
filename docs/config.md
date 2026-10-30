@@ -1,6 +1,6 @@
 # Config
 
-`relay up` reads an optional YAML file. Every key is optional, and no file means the defaults.
+`relay up` reads an optional YAML file on the machine that runs the desktop. Viewers and the client-only CLI do not read it. Every key is optional, and no file means the defaults.
 
 ## Location
 
@@ -16,27 +16,35 @@ Reading needs PyYAML (`python3-yaml` on Debian/Ubuntu). `./install.sh` installs 
 
 ## Keys
 
-| Key | Default | Allowed |
-| --- | --- | --- |
-| `display.resolution` | `1280x720` | `WIDTHxHEIGHT`; width even 320..1920, height even 240..1080 |
-| `stream.fps` | `60` | integer 10..60 |
-| `stream.bitrate.min` | `1M` | bits per second 250000..100000000; integer or a `k` or `M` suffix (1000-based) |
-| `stream.bitrate.start` | `8M` | same range; `min <= start <= max` |
-| `stream.bitrate.max` | `40M` | same range |
-| `server.port` | `8080` | integer 1..65535 |
-| `server.bind` | `127.0.0.1`, or `0.0.0.0` when `server.public` is set | listen address; `--bind` overrides it |
-| `server.public` | unset | HTTPS origin such as `https://desktop.example.com` |
-| `server.tls_cert` | unset | certificate file |
-| `server.tls_key` | unset | private key for the certificate |
-| `desktop` | `xfce`; `none` with `--display` | `xfce`, `none`, or a command |
+| Key | Default | Allowed | Applies to |
+| --- | --- | --- | --- |
+| `display.resolution` | `1280x720` | `WIDTHxHEIGHT`; width even 320..1920, height even 240..1080 | Every backend; ignored on an attached display |
+| `stream.fps` | `60` | integer 10..60 | Every backend |
+| `stream.bitrate.min` | `1M` | bits per second 250000..100000000; integer or a `k` or `M` suffix (1000-based) | Every backend |
+| `stream.bitrate.start` | `8M` | same range; `min <= start <= max` | Every backend |
+| `stream.bitrate.max` | `40M` | same range | Every backend |
+| `server.port` | `8080` | integer 1..65535 | Every backend |
+| `server.bind` | `127.0.0.1`, or `0.0.0.0` when `server.public` is set | listen address; `--bind` overrides it | Every backend |
+| `server.public` | unset | HTTPS origin such as `https://desktop.example.com` | Every backend |
+| `server.tls_cert` | unset | certificate file | Every backend |
+| `server.tls_key` | unset | private key for the certificate | Every backend |
+| `desktop` | `xfce`; `none` with `--display` | `xfce`, `none`, or a command | Linux only |
 
 Unknown keys are an error and name the dotted path. Wrong types and out-of-range values are errors too.
+
+## Backends
+
+A key says what the user wants. A backend either honors the key or says clearly that it cannot.
+
+- `stream.*` and `server.*` are handled by the engine core and server, so every backend honors them.
+- `display.resolution` is the size of the display relay creates. A backend that attaches to an existing screen uses that screen's size instead and prints a note that the setting is ignored.
+- `desktop` is Linux only. It picks the desktop session relay starts.
 
 ## Precedence
 
 Command-line flags beat the file, and the file beats the defaults. `relay up --port 9000` uses 9000 even when the file sets another port.
 
-`--display :N` attaches to an existing display. The CLI uses that display's size and ignores `display.resolution`; it prints one line to stderr when the file sets it.
+`--display :N` attaches to an existing display. Relay uses that display's size, ignores `display.resolution`, and prints one line to stderr when the file sets it. Any backend that attaches to an existing screen does the same.
 
 ## Example
 

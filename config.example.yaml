@@ -22,5 +22,5 @@ server:
   # tls_cert: /path/fullchain.pem
   # tls_key: /path/key.pem
 
-# xfce, none, or a command. Default: xfce, or none with --display.
+# Linux only. xfce, none, or a command. Default: xfce, or none with --display.
 desktop: xfce
