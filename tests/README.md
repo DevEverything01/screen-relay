@@ -4,7 +4,7 @@ Use disposable desktops. Integration tests send real input and cover the screen.
 
 | Layer | Command | Needs |
 | --- | --- | --- |
-| Native unit (color, flow, server config/wire/metrics, injected source through the real encoder) | `make test` | Build dependencies, including FFmpeg dev libraries for `test-backend`. No X11. |
+| Native unit (color, flow, the input controller with a fake backend, server config/wire/metrics, injected source through the real encoder) | `make test` | Build dependencies, including FFmpeg dev libraries for `test-backend`. No X11. |
 | Config loader | `python3 -m unittest discover -s tests/unit -p 'test_*.py'` | Python 3 with PyYAML (`python3-yaml`). |
 | SDK | `npm ci --ignore-scripts && npm test` | Node 22+ |
 | SDK types | `tsc --noEmit --strict --module NodeNext --target ES2022 tests/unit/sdk-types.mts` | TypeScript |

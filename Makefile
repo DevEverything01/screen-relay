@@ -1,6 +1,7 @@
 CXX ?= g++
 BACKEND ?= x11
 BACKEND_PKGS_x11 = x11 xext xdamage xfixes xtst
+BACKEND_DIR_x11 = linux/x11
 ifeq ($(BACKEND_PKGS_$(BACKEND)),)
 $(error Unknown BACKEND '$(BACKEND)'; available: x11)
 endif
@@ -12,11 +13,11 @@ CXXFLAGS += -std=c++17 -Wall -Wextra -Wpedantic -pthread
 LDLIBS += $(shell pkg-config --libs $(PKGS)) -pthread
 
 CORE_SRCS = $(wildcard src/core/*.cpp)
-ENGINE_SRCS = $(CORE_SRCS) $(wildcard src/server/*.cpp src/backends/$(BACKEND)/*.cpp)
-HEADERS = $(wildcard src/*/*.hpp src/backends/$(BACKEND)/*.hpp)
+ENGINE_SRCS = $(CORE_SRCS) $(wildcard src/server/*.cpp src/backends/$(BACKEND_DIR_$(BACKEND))/*.cpp)
+HEADERS = $(wildcard src/*/*.hpp src/backends/$(BACKEND_DIR_$(BACKEND))/*.hpp)
 
 PREFIX ?= /usr/local
-.PHONY: all install test test-color test-flow test-backend test-server clean
+.PHONY: all install test test-color test-flow test-input test-backend test-server clean
 all: relay-engine
 
 install: relay-engine
@@ -45,6 +46,13 @@ build/flow-test: tests/unit/flow-test.cpp src/core/flow.hpp
 test-flow: build/flow-test
 	./build/flow-test
 
+build/input-test: tests/unit/input-test.cpp src/core/input.cpp src/core/input.hpp
+	mkdir -p build
+	$(CXX) -Isrc $(CXXFLAGS) tests/unit/input-test.cpp src/core/input.cpp -o $@
+
+test-input: build/input-test
+	./build/input-test
+
 build/backend-source-test: tests/unit/backend-source-test.cpp $(CORE_SRCS) $(wildcard src/core/*.hpp)
 	mkdir -p build
 	$(CXX) -Isrc $(CXXFLAGS) tests/unit/backend-source-test.cpp $(CORE_SRCS) -o $@ $(shell pkg-config --cflags --libs $(CODEC_PKGS) libavcodec libavutil libswscale)
@@ -61,7 +69,7 @@ build/server-test: tests/unit/server-test.cpp $(SERVER_TEST_SRCS) $(wildcard src
 test-server: build/server-test
 	./build/server-test
 
-test: test-color test-flow test-backend test-server
+test: test-color test-flow test-input test-backend test-server
 
 clean:
 	rm -rf build relay-engine

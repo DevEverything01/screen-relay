@@ -189,7 +189,7 @@ struct CaptureEncoder::Impl {
       require(format == PixelFormat::BGRA || format == PixelFormat::ARGB, "unsupported capture pixel format");
       const auto dimensions = source->dimensions();
       const int width = dimensions.first, height = dimensions.second;
-      require(width > 0 && height > 0 && !(width & 1) && !(height & 1), "invalid capture dimensions");
+      requireSurfaceSize(width, height);
       Resources r(format, width, height, settings);
       r.init();
       { std::lock_guard<std::mutex> lock(mutex);

@@ -8,16 +8,16 @@ X11 display
   -> WebSocket /stream
   -> browser VideoDecoder -> canvas
 
-browser or agent input -> InputBackend (XTest)
+browser or agent input -> InputController -> InputBackend (XTest)
 ```
 
 ## Folders
 
 | Path | Contents |
 | --- | --- |
-| `src/core/` | Backend-neutral pipeline: `CaptureSource`, `InputBackend`, encoder, color conversion, flow control |
+| `src/core/` | Backend-neutral pipeline: `CaptureSource`, the input controller and input backend interface, encoder, color conversion, flow control |
 | `src/server/` | `main.cpp` (entry point), `config` (arguments, token and origin policy), `wire` (NSL1 encoding), `server` (session, writes, libwebsockets callback, HTTP routes), `metrics` (cgroup parsing), `screenshot` |
-| `src/backends/x11/` | X11 capture (XDamage, MIT-SHM, XFixes cursor) and XTest input |
+| `src/backends/linux/x11/` | X11 capture (XDamage, MIT-SHM, XFixes cursor) and XTest input primitives |
 | `viewer/` | Browser decoder, renderer, cursor overlay, human input |
 | `sdk/` | Node client library |
 | `scripts/` | The `relay` CLI: `relay` is a thin launcher, `relaycli/` holds the commands, session supervision and client |
@@ -26,13 +26,14 @@ browser or agent input -> InputBackend (XTest)
 ## Interfaces
 
 - `CaptureSource` (`src/core/capture-source.hpp`): `fd()`, `dimensions()`, `drainDamage()`, `pixelFormat()`, `capture()`. A frame is a non-owning CPU view (BGRA or ARGB), valid until the next capture. Optional `cursorSupported()` and `cursor(force)`.
-- `InputBackend` (`src/core/input.hpp`): `apply`, `releaseAll`, `dimensions`, `name`.
+- `InputBackend` (`src/core/input.hpp`): platform primitives only: `nativeKey(usage)`, `pressKey`, `releaseKey`, `pressButton`, `releaseButton`, `move`, `scroll`, `flush`, `dimensions`, `name`.
+- `InputController` (`src/core/input.hpp`): owns one `InputBackend`, validates each `InputEvent`, maps normalized pointer coordinates to pixels, dedupes held keys and buttons by native key id, and releases everything on `releaseAll`. It returns `InputStatus`: `invalid` for a rejected event, `unsupported` when the backend has no native key for a usage.
 - `CaptureEncoder` takes a `CaptureSourceFactory`, so tests can inject a source with no X11.
-- The worker requires a valid fd and a source size of 320 to 1920 by 240 to 1080, both even. The engine reads the X11 root size at startup, and the image stride must be between width x 4 and width x 8 bytes.
+- The worker requires a valid fd. Core enforces the source size limits once: 320 to 1920 by 240 to 1080, both even, in the capture worker and on the input backend's dimensions at startup. The image stride must be between width x 4 and width x 8 bytes.
 
 ## Threads and ownership
 
-- The service thread owns libwebsockets, the `InputBackend`, flow-control state and all socket writes.
+- The service thread owns libwebsockets, the `InputController`, flow-control state and all socket writes.
 - On Linux, the service thread sets `TCP_NODELAY` and `TCP_NOTSENT_LOWAT` on the stream socket.
 - The capture worker owns its `CaptureSource`, a reusable YUV frame and the x264 encoder. It publishes owning `EncodedFrame` vectors to a bounded queue and wakes the service thread with `lws_cancel_service`.
 - A separate screenshot worker owns its own `CaptureSource`.
@@ -70,15 +71,16 @@ Color: little-endian BGRA and big-endian ARGB convert to NV12 with limited-range
 
 ## Adding a backend
 
-1. Create `src/backends/<name>/` implementing `initializeNativeBackend`, `makeCaptureSource` and `makeInputBackend`.
-2. Add `BACKEND_PKGS_<name>` (pkg-config modules) to the `Makefile`.
-3. Build with `make BACKEND=<name>`. The Makefile builds exactly one backend (default `x11`).
-4. `src/core/` and `src/server/` must not include backend headers.
+1. Create `src/backends/<os>/<name>/` implementing `initializeNativeBackend`, `makeCaptureSource` and `makeInputBackend`.
+2. Add `BACKEND_DIR_<name>` (folder) and `BACKEND_PKGS_<name>` (pkg-config modules) to the `Makefile`.
+3. Build with `make BACKEND=<name>`. The Makefile builds exactly one backend (default `x11`, folder `linux/x11`).
+4. Implement capture and the input primitives only: map a HID usage to a native key, press and release a native key or button, move, scroll, flush, `dimensions` and `name`. Core owns protocol validation, coordinate mapping, held input and the size limits.
+5. `src/core/` and `src/server/` must not include backend headers.
 
 A Wayland backend must also handle portal authorization and revocation, negotiated format and dimensions, the notification fd, frame ownership, and separately authorized input. It must turn permission denial and session closure into explicit failures and release held input. The CPU-view interface may need revising. No Wayland code exists.
 
 ## Build
 
-C++17. The engine needs `libx264`, `libwebsockets` with TLS, and `libx11`, `libxext`, `libxdamage`, `libxfixes`, `libxtst`. It does not link FFmpeg. `make test` runs the color, flow, server and backend unit tests; `make test-backend` also needs FFmpeg 7 development libraries (`libavcodec` ABI 61, `libavutil`, `libswscale`; no FFmpeg 8-only APIs) to decode the encoder output.
+C++17. The engine needs `libx264`, `libwebsockets` with TLS, and `libx11`, `libxext`, `libxdamage`, `libxfixes`, `libxtst`. It does not link FFmpeg. `make test` runs the color, flow, input, server and backend unit tests; `make test-backend` also needs FFmpeg 7 development libraries (`libavcodec` ABI 61, `libavutil`, `libswscale`; no FFmpeg 8-only APIs) to decode the encoder output.
 
 `make install` puts the engine, viewer and CLI in `<prefix>/lib/relay/` and links `<prefix>/bin/relay` and `<prefix>/bin/relay-engine`.

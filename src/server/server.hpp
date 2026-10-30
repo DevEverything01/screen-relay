@@ -28,7 +28,7 @@ struct Server {
   Config config;
   lws_context* context = nullptr;
   lws* viewer = nullptr;
-  std::unique_ptr<InputBackend> input;
+  std::unique_ptr<InputController> input;
   Screenshot screenshot;
   lws* screenshot_client = nullptr;
   bool controller = false, control_ready = false;

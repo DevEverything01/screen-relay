@@ -32,9 +32,12 @@ int main(int argc, char** argv) {
     std::cerr << "Capture startup failed: " << captureError << '\n';
     s.capture.stop(); return 1;
   }
-  try { s.input = relay::makeInputBackend(); }
-  catch (const std::exception& error) { std::cerr << error.what() << '\n'; s.capture.stop(); return 1; }
-  const auto dimensions = s.input->dimensions(); s.width = dimensions.first; s.height = dimensions.second;
+  try {
+    s.input = std::make_unique<relay::InputController>(relay::makeInputBackend());
+    const auto dimensions = s.input->dimensions();
+    relay::requireSurfaceSize(dimensions.first, dimensions.second);
+    s.width = dimensions.first; s.height = dimensions.second;
+  } catch (const std::exception& error) { std::cerr << error.what() << '\n'; s.capture.stop(); return 1; }
   lws_protocols protocols[] = {{"http", relay::callback, sizeof(relay::HttpResponse), 4096, 0, nullptr, 0}, {"nsl1", relay::callback, sizeof(relay::HttpResponse), 4096, 0, nullptr, 0}, {nullptr, nullptr, 0, 0, 0, nullptr, 0}};
   lws_context_creation_info info{};
   info.port=int(config.port); info.iface=config.bind.c_str(); info.protocols=protocols; info.user=&s;
