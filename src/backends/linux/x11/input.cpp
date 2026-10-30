@@ -1,16 +1,11 @@
-#include "core/capture-source.hpp"
 #include "core/input.hpp"
 #include <X11/Xlib.h>
 #include <X11/keysym.h>
 #include <X11/extensions/XTest.h>
-#include <set>
 #include <stdexcept>
 
 namespace relay {
 namespace {
-constexpr int pixelCoordinate(uint16_t normalized, uint16_t extent) {
-  return int((uint64_t(normalized) * (extent - 1) + 32767) / 65535);
-}
 constexpr KeySym hidSym(uint16_t hid) {
   if (hid >= 4 && hid <= 29) return XK_a + hid - 4;
   if (hid >= 30 && hid <= 38) return XK_1 + hid - 30;
@@ -41,14 +36,9 @@ constexpr KeySym hidSym(uint16_t hid) {
     default: return NoSymbol;
   }
 }
-static_assert(pixelCoordinate(0, 1280) == 0 && pixelCoordinate(65535, 1280) == 1279 &&
-              pixelCoordinate(10248, 1280) == 200 && pixelCoordinate(40992, 1280) == 800 &&
-              pixelCoordinate(65535, 720) == 719 && pixelCoordinate(36459, 720) == 400);
 static_assert(hidSym(4) == XK_a && hidSym(225) == XK_Shift_L && hidSym(3) == NoSymbol);
 class X11Input final : public InputBackend {
   Display* display = nullptr;
-  std::set<KeyCode> keys;
-  std::set<unsigned> buttons;
   uint16_t width = 0, height = 0;
  public:
   X11Input() {
@@ -61,58 +51,31 @@ class X11Input final : public InputBackend {
       XCloseDisplay(display); display = nullptr;
       throw std::runtime_error("input requires the XTest extension");
     }
-    try {
-      requireSurfaceSize(root_width, root_height);
-    } catch (...) {
-      XCloseDisplay(display); display = nullptr;
-      throw;
-    }
     width = uint16_t(root_width); height = uint16_t(root_height);
   }
-  ~X11Input() override { if (display) { releaseAll(); XCloseDisplay(display); } }
+  ~X11Input() override { if (display) XCloseDisplay(display); }
   std::pair<uint16_t, uint16_t> dimensions() const override { return {width, height}; }
   const char* name() const override { return "x11"; }
-  void releaseAll() override {
-    for (auto key : keys) XTestFakeKeyEvent(display, key, False, CurrentTime);
-    for (auto button : buttons) XTestFakeButtonEvent(display, button, False, CurrentTime);
-    keys.clear(); buttons.clear(); XFlush(display);
+  std::optional<NativeKey> nativeKey(uint16_t usage) const override {
+    const KeySym symbol = hidSym(usage);
+    if (symbol == NoSymbol) return std::nullopt;
+    const KeyCode key = XKeysymToKeycode(display, symbol);
+    if (!key) return std::nullopt;
+    return key;
   }
-  InputStatus apply(const InputEvent& input) override {
-    const unsigned event = input.type, code = input.code;
-    const int64_t value = input.value;
-    if (input.reserved || (input.buttons & ~31u) || (input.modifiers & ~255u)) return InputStatus::invalid;
-    if (event == 7) {
-      if (code || value || input.modifiers || input.buttons) return InputStatus::invalid;
-      releaseAll(); return InputStatus::ok;
+  void pressKey(NativeKey key) override { XTestFakeKeyEvent(display, key, True, CurrentTime); }
+  void releaseKey(NativeKey key) override { XTestFakeKeyEvent(display, key, False, CurrentTime); }
+  void pressButton(unsigned button) override { XTestFakeButtonEvent(display, button, True, CurrentTime); }
+  void releaseButton(unsigned button) override { XTestFakeButtonEvent(display, button, False, CurrentTime); }
+  void move(int x, int y) override { XTestFakeMotionEvent(display, DefaultScreen(display), x, y, CurrentTime); }
+  void scroll(unsigned axis, int notches) override {
+    const unsigned button = axis == 0 ? (notches > 0 ? 5 : 4) : (notches > 0 ? 7 : 6);
+    for (int n = 0; n < (notches < 0 ? -notches : notches); ++n) {
+      XTestFakeButtonEvent(display, button, True, CurrentTime);
+      XTestFakeButtonEvent(display, button, False, CurrentTime);
     }
-    if (event < 1 || event > 6 || (event != 6 && value)) return InputStatus::invalid;
-    if (event <= 2) {
-      if (code > 231) return InputStatus::invalid;
-      const KeySym symbol = hidSym(code);
-      if (symbol == NoSymbol) return InputStatus::unsupported;
-      KeyCode key = XKeysymToKeycode(display, symbol);
-      if (!key) return InputStatus::unsupported;
-      // Held keys are authoritative; browser modifier masks can describe either side of a transition.
-      if (event == 1) { if (keys.insert(key).second) XTestFakeKeyEvent(display, key, True, CurrentTime); }
-      else if (keys.erase(key)) XTestFakeKeyEvent(display, key, False, CurrentTime);
-    } else {
-      if ((event == 3 && code) || ((event == 4 || event == 5) && (code < 1 || code > 3)) ||
-          (event == 6 && (code > 1 || value < -1200 || value > 1200 || value % 120))) return InputStatus::invalid;
-      int x = pixelCoordinate(input.x, width);
-      int y = pixelCoordinate(input.y, height);
-      XTestFakeMotionEvent(display, DefaultScreen(display), x, y, CurrentTime);
-      if (event == 4) { if (buttons.insert(code).second) XTestFakeButtonEvent(display, code, True, CurrentTime); }
-      if (event == 5 && buttons.erase(code)) XTestFakeButtonEvent(display, code, False, CurrentTime);
-      if (event == 6) {
-        unsigned button = code == 0 ? (value > 0 ? 5 : 4) : (value > 0 ? 7 : 6);
-        for (int64_t n = 0; n < (value < 0 ? -value : value) / 120; ++n) {
-          XTestFakeButtonEvent(display, button, True, CurrentTime);
-          XTestFakeButtonEvent(display, button, False, CurrentTime);
-        }
-      }
-    }
-    XFlush(display); return InputStatus::ok;
   }
+  void flush() override { XFlush(display); }
 };
 }  // namespace
 std::unique_ptr<InputBackend> makeInputBackend() {

@@ -59,7 +59,6 @@ class X11CaptureSource final : public CaptureSource {
     require(XShmQueryExtension(display), "MIT-SHM unavailable");
     const int screen = DefaultScreen(display);
     width = DisplayWidth(display, screen); height = DisplayHeight(display, screen);
-    requireSurfaceSize(width, height);
     image = XShmCreateImage(display, DefaultVisual(display, screen), DefaultDepth(display, screen),
                             ZPixmap, nullptr, &shm, width, height);
     require(image && image->bytes_per_line >= width * 4 && image->bytes_per_line <= width * 8 &&
