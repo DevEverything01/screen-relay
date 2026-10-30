@@ -58,7 +58,7 @@ With `--json`, errors are `{"error":{"code","message","hint"}}` on stderr, plus 
 
 | Code | Meaning |
 | --- | --- |
-| `invalid_input` | Bad argument or usage, JSON, input event, key combo, unmappable character, port, session name, URL, `--public` origin, TLS or token file; also an event or batch the engine rejected (HTTP 400/413/422). |
+| `invalid_input` | Bad argument or usage, JSON, input event, key combo, character the remote layout cannot produce, port, session name, URL, `--public` origin, TLS or token file; also an event or batch the engine rejected (HTTP 400/413/422). |
 | `unauthorized` | Token missing or wrong (HTTP 401), or Host/Origin rejected (HTTP 403). |
 | `busy` | A viewer or SDK session holds control (HTTP 409), or a screenshot is already running (HTTP 503). Never retried. |
 | `unreachable` | Cannot connect to the URL. |
