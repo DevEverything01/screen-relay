@@ -2,27 +2,32 @@
 
 Run `relay help` for root help, `relay help <command>` for one command, and `relay help --all --json` for every command's metadata. Help works offline.
 
-## Session commands
+## VM commands
+
+Run these on the Linux machine that shows the desktop. `up`, `down` and `run` fail with `unsupported_platform` elsewhere.
 
 ```sh
 relay up [-d] [--name NAME] [--config FILE] [--port PORT] [--desktop xfce|none|COMMAND]
          [--display :N] [--public HTTPS_URL] [--tls-cert FILE --tls-key FILE]
          [--bind ADDRESS] [--timeout SECONDS]
 relay down [--name NAME]
-relay status [--name NAME] [--url URL] [--token-file FILE] [--timeout SECONDS] [--show-token]
 relay logs [component] [--name NAME] [-f|--follow]
 relay run -- <app> [args]... [--name NAME] [--restart]
+relay doctor
 ```
 
 - `up` starts Xvfb, the desktop and the engine, waits until ready, then supervises. Without `-d` it runs in the foreground and the first Ctrl+C stops the session (exit 130). Piped, it prints only the viewer URL. `--public` advertises an HTTPS origin and expects a TLS proxy unless `--tls-cert` is set. `--display` attaches to an existing display and keeps the caller's environment.
 - `down` stops the session and everything it started; safe to repeat. Its JSON outcome is `stopped` or `unchanged`.
-- `status` with no URL reads the local session and exits 0 for any existing session. With `--url` (or `RELAY_URL`) it queries a remote engine. A missing session is `not_running`, exit 1.
 - `logs` prints the last 200 lines of one component (`display`, `dbus`, `desktop`, `engine`, `apps`) or of every component log. `-f` follows; it cannot be combined with `--json`.
 - `run` starts an app on the session desktop and returns its pid. It shares the desktop's display, D-Bus session bus, runtime, config and cache directories, and X authority, and clears ambient capabilities. `--restart` restarts the app until the session stops. App output goes to `relay logs apps`.
+- `doctor` checks the machine it runs on and prints a fix command for each problem. Off Linux it reports the platform check as failed.
 
-## Control commands
+## Client commands
+
+Run these on the VM, or on another machine with `--url` and a token file. Each one reaches the engine over HTTP.
 
 ```sh
+relay status [--name NAME] [--url URL] [--token-file FILE] [--timeout SECONDS] [--show-token]
 relay screenshot [file] [--url URL] [--token-file FILE] [--timeout SECONDS]
 relay click <x> <y> [--button left|middle|right]
 relay move <x> <y>
@@ -34,6 +39,7 @@ relay input <json>
 relay input --stdin
 ```
 
+- `status` with no URL reads the local session and exits 0 for any existing session. With `--url` (or `RELAY_URL`) it queries a remote engine. A missing session is `not_running`, exit 1.
 - Coordinates are fractions of the screen from `0` to `1`, from the top-left.
 - `screenshot` writes `screen.png` by default; `-` writes PNG bytes to stdout (not with `--json`).
 - `click` defaults to the left button. `move` only moves the pointer.

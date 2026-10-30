@@ -109,10 +109,22 @@ test('human help is piped plain text with the command hint', () => {
     assert.doesNotMatch(result.stdout, /Start here \(for AI agents\):/);
   }
   const root = help('0');
-  assert.match(root.stdout, /^relay \d+\.\d+\.\d+\n\n▲ relay \[options\] <command>\n\nFor command help, run `relay <command> --help`\n\nCommands:\n\n {4}up /);
+  assert.match(root.stdout, /^relay \d+\.\d+\.\d+\n\n▲ relay \[options\] <command>\n\nFor command help, run `relay <command> --help`\n\nVM commands \(run on the Linux machine that shows the desktop\):\n\n {4}up /);
   const click = help('0', ['click', '--help']);
-  assert.match(click.stdout, /^click\n\n▲ relay click <x> <y> \[options\]\n\nClick at screen coordinates\n\nOptions:\n\n {4}--button <BUTTON> +Select the mouse button\. Values: left, middle, right \[default: left\]\n/);
+  assert.match(click.stdout, /^click\n\n▲ relay click <x> <y> \[options\]\n\nClick at screen coordinates\nRuns on the VM, or on another machine with --url and a token file\.\n\nOptions:\n\n {4}--button <BUTTON> +Select the mouse button\. Values: left, middle, right \[default: left\]\n/);
   assert.match(click.stdout, /– Click the center\n\n {2}\$ relay click 0\.5 0\.5\n\n$/);
+});
+
+test('human help lists up under the VM section and click under the client section', () => {
+  const result = help('0');
+  assert.ifError(result.error);
+  assert.equal(result.status, 0);
+  const vm = result.stdout.slice(result.stdout.indexOf('VM commands'), result.stdout.indexOf('Client commands'));
+  assert.match(vm, /^ {4}up /m);
+  assert.doesNotMatch(vm, /^ {4}click /m);
+  const client = result.stdout.slice(result.stdout.indexOf('Client commands'), result.stdout.indexOf('Other commands'));
+  assert.match(client, /^ {4}click /m);
+  assert.doesNotMatch(client, /^ {4}up /m);
 });
 
 test('RELAY_AGENT=1 help keeps the agent block as plain text', () => {

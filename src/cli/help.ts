@@ -1,4 +1,4 @@
-import { commands, globalOptions, type Command, type Parameter, type Subcommand } from './commands.js';
+import { commands, globalOptions, type Command, type Parameter, type RunsOn, type Subcommand } from './commands.js';
 import { agent, type OutputOptions } from './mode.js';
 import { theme } from './theme.js';
 
@@ -112,8 +112,9 @@ export function helpDocument(name = ''): Record<string, unknown> {
     examples: command?.examples ?? [],
     notes: command?.notes ?? [],
     resultSchema: command?.resultSchema ?? {},
+    ...(command ? { runsOn: command.runsOn } : {}),
     ...(command?.subcommands ? { subcommands: command.subcommands.map((subcommand) => ({ name: subcommand.name, summary: subcommand.summary, examples: subcommand.examples })) } : {}),
-    ...(!name ? { commands: Object.entries(commands).map(([key, entry]) => ({ name: key, summary: entry.summary, group: entry.group })) } : {}),
+    ...(!name ? { commands: Object.entries(commands).map(([key, entry]) => ({ name: key, summary: entry.summary, group: entry.group, runsOn: entry.runsOn })) } : {}),
   };
 }
 
@@ -133,12 +134,28 @@ function humanUsage(name: string, style: Style): string {
   return `${head}${command.separator ? ` ${command.separator}` : ''}${tail ? ` ${tail}` : ''} [options]`;
 }
 
+const sections: { runsOn: RunsOn; label: string }[] = [
+  { runsOn: 'vm', label: 'VM commands (run on the Linux machine that shows the desktop):' },
+  { runsOn: 'client', label: 'Client commands (run on the VM, or anywhere with --url and a token):' },
+  { runsOn: 'anywhere', label: 'Other commands:' },
+];
+
+const location: Record<RunsOn, string> = {
+  vm: 'VM only. Run it on the Linux machine that shows the desktop.',
+  client: 'Runs on the VM, or on another machine with --url and a token file.',
+  anywhere: 'Runs on any machine. It does not reach an engine.',
+};
+
 const startHere = [
   'Start here (for AI agents):',
   '  relay skills get core',
   '',
   '  Skills ship with the CLI, so their instructions always match the',
   '  installed version. Load one to control the desktop or a sandbox.',
+  '',
+  '  VM commands must run on the machine with the desktop and client',
+  '  commands can run there or on another machine with --url and a',
+  '  token file.',
   '',
   '  relay skills list',
   '  relay skills get core',
@@ -158,13 +175,13 @@ function agentHelp(name: string, args: OutputOptions): string {
   const style = theme({ ...args, color: false }, process.stdout);
   const command = commands[name];
   const lines = [style.muted(`relay ${version}`), '', agentUsage(name, style), ''];
-  if (command) lines.push(command.summary);
+  if (command) lines.push(command.summary, location[command.runsOn]);
   else lines.push(summary, '', ...startHere);
   if (command?.arguments.length) lines.push('', 'Arguments:', ...parameterRows(command.arguments, false));
   if (command?.options.length) lines.push('', 'Options:', ...parameterRows(command.options, true));
-  if (!command) for (const group of ['Session', 'Control', 'Machine']) {
-    lines.push('', `${group}:`, ...align(Object.entries(commands)
-      .filter(([, entry]) => entry.group === group)
+  if (!command) for (const section of sections) {
+    lines.push('', section.label, ...align(Object.entries(commands)
+      .filter(([, entry]) => entry.runsOn === section.runsOn)
       .map(([key, entry]) => ({ label: key, text: entry.summary }))));
   }
   if (command?.subcommands?.length) lines.push('', 'Commands:', ...subcommandRows(command.subcommands));
@@ -180,11 +197,16 @@ function humanHelp(name: string, args: OutputOptions): string {
   const command = commands[name];
   const lines = [style.muted(command ? name : `relay ${version}`), '', humanUsage(name, style), ''];
   if (!command) {
-    lines.push(style.dim('For command help, run `relay <command> --help`'), '', style.dim('Commands:'), '');
-    lines.push(...cellRows(Object.entries(commands).map(([key, entry]) => ({ label: key, args: commandArguments(entry), text: entry.summary })), style));
+    lines.push(style.dim('For command help, run `relay <command> --help`'));
+    for (const section of sections) {
+      lines.push('', style.dim(section.label), '');
+      lines.push(...cellRows(Object.entries(commands)
+        .filter(([, entry]) => entry.runsOn === section.runsOn)
+        .map(([key, entry]) => ({ label: key, args: commandArguments(entry), text: entry.summary })), style));
+    }
     lines.push('', style.dim('Examples:'), '', ...exampleLines(rootExamples, style));
   } else {
-    lines.push(style.dim(command.summary));
+    lines.push(style.dim(command.summary), style.dim(location[command.runsOn]));
     if (command.options.length) lines.push('', style.dim('Options:'), '', ...optionRows(command.options, style));
     if (command.subcommands?.length) {
       lines.push('', style.dim('Commands:'), '');
