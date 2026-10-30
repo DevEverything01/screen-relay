@@ -17,6 +17,18 @@ using Clock = std::chrono::steady_clock;
 uint64_t nowUs() {
   return std::chrono::duration_cast<std::chrono::microseconds>(Clock::now().time_since_epoch()).count();
 }
+/// Wakes the service thread once one deferred reply can be written.
+class ReplyFence final : public InputFence {
+ public:
+  ReplyFence(Server* owner, std::function<void(bool)> mark) : owner(owner), mark(std::move(mark)) {}
+  void complete(bool applied) override {
+    mark(applied);
+    owner->wake();
+  }
+ private:
+  Server* owner;
+  std::function<void(bool)> mark;
+};
 #ifdef __linux__
 void configureStreamSocket(lws* wsi) {
   const int fd = lws_get_socket_fd(wsi);
@@ -49,6 +61,7 @@ Server::Server(Config settings) : config(std::move(settings)), capture([this](En
 void Server::release() { if (input) input->releaseAll(); }
 void Server::end() {
   release();
+  input->cancel();
   uint32_t old;
   { std::lock_guard<std::mutex> lock(mutex); old = generation; generation = 0; pending.clear(); pending_cursor.reset(); flow.reset(); failed = false; }
   last_write_cursor = false;
@@ -62,7 +75,10 @@ bool Server::message() {
   if (!gen) return false;
   if (controller) {
     if (b[5] != 3 || b.size() != 36 || !seq || gen != generation || replies.size() >= 32) return false;
-    replies.emplace_back(seq, input->apply(inputEvent(b.data()+20)));
+    auto reply = std::make_shared<ControlReply>();
+    reply->seq = seq; reply->status = input->apply(inputEvent(b.data()+20));
+    replies.push_back(reply);
+    input->fence(std::make_shared<ReplyFence>(this, [reply](bool) { reply->ready.store(true, std::memory_order_release); }));
     lws_callback_on_writable(viewer); return true;
   }
   if (b[5] == 2) {
@@ -110,15 +126,52 @@ std::string Server::metrics() {
       ",\"max_frame_age_ms\":" + std::to_string(FlowControl::timeout_us / 1000);
 }
 int Server::writeControl(lws* wsi) {
-  if (!control_ready && replies.empty()) return 0;
+  if (!control_ready && (replies.empty() || !replies.front()->ready.load(std::memory_order_acquire))) return 0;
   std::vector<uint8_t> wire;
   if (control_ready) controlReady(wire, LWS_PRE, generation, width, height);
-  else inputReply(wire, LWS_PRE, generation, replies.front().first, replies.front().second);
+  else inputReply(wire, LWS_PRE, generation, replies.front()->seq, replies.front()->status);
   const size_t size = wire.size() - LWS_PRE;
   if (lws_write(wsi, wire.data() + LWS_PRE, size, LWS_WRITE_BINARY) != int(size)) return -1;
   if (control_ready) control_ready = false; else replies.pop_front();
-  if (!replies.empty()) lws_callback_on_writable(wsi);
+  if (!replies.empty() && replies.front()->ready.load(std::memory_order_acquire)) lws_callback_on_writable(wsi);
   return 0;
+}
+void Server::wake() {
+  std::lock_guard<std::mutex> lock(mutex);
+  if (context) lws_cancel_service(context);
+}
+int Server::deferInput(lws* wsi, InputStatus status, size_t applied) {
+  auto reply = std::make_shared<InputReply>();
+  reply->wsi = wsi;
+  if (status == InputStatus::ok) {
+    reply->status = HTTP_STATUS_OK;
+    reply->body = "{\"applied\":" + std::to_string(applied) + "}";
+  } else {
+    const bool invalid = status == InputStatus::invalid;
+    reply->status = invalid ? HTTP_STATUS_BAD_REQUEST : 422;
+    reply->body = std::string("{\"error\":\"") + (invalid ? "invalid_input" : "unsupported_input") +
+                  "\",\"index\":" + std::to_string(applied - 1) + "}";
+  }
+  { std::lock_guard<std::mutex> lock(reply_mutex); input_replies.push_back(reply); }
+  input->fence(std::make_shared<ReplyFence>(this, [reply](bool complete) {
+    if (!complete) { reply->status = HTTP_STATUS_CONFLICT; reply->body = "{\"error\":\"busy\"}"; }
+    reply->ready.store(true, std::memory_order_release);
+  }));
+  return 0;
+}
+std::vector<std::shared_ptr<Server::InputReply>> Server::readyInputs() {
+  std::vector<std::shared_ptr<InputReply>> ready;
+  std::lock_guard<std::mutex> lock(reply_mutex);
+  for (auto reply = input_replies.begin(); reply != input_replies.end();) {
+    if (!(*reply)->ready.load(std::memory_order_acquire)) { ++reply; continue; }
+    ready.push_back(*reply); reply = input_replies.erase(reply);
+  }
+  return ready;
+}
+void Server::forgetInput(lws* wsi) {
+  std::lock_guard<std::mutex> lock(reply_mutex);
+  input_replies.erase(std::remove_if(input_replies.begin(), input_replies.end(),
+      [wsi](const std::shared_ptr<InputReply>& reply) { return reply->wsi == wsi; }), input_replies.end());
 }
 int Server::write(lws* wsi) {
   std::optional<EncodedFrame> frame;
@@ -196,10 +249,7 @@ int inputResponse(lws* wsi, HttpResponse* response, Server* s) {
   auto status = InputStatus::ok;
   for (; index < count && status == InputStatus::ok; ++index) status = s->input->apply(inputEvent(response->input + index * 16));
   s->release();
-  if (status == InputStatus::ok) return jsonResponse(wsi, response, HTTP_STATUS_OK, "{\"applied\":" + std::to_string(count) + "}");
-  const bool invalid = status == InputStatus::invalid;
-  return jsonResponse(wsi, response, invalid ? HTTP_STATUS_BAD_REQUEST : 422, std::string("{\"error\":\"") +
-                      (invalid ? "invalid_input" : "unsupported_input") + "\",\"index\":" + std::to_string(index - 1) + "}");
+  return s->deferInput(wsi, status, index);
 }
 int metricsResponse(lws* wsi, HttpResponse* response, Server* server) {
   if (!response) return -1;
@@ -221,6 +271,7 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
     case LWS_CALLBACK_HTTP: {
       const std::string path(static_cast<const char*>(in), len);
       auto* response = static_cast<HttpResponse*>(user);
+      if (response) { response->input_reply = false; response->input_headers = false; response->reply_status = 0; }
       if (path == "/input") {
         if (!response) return -1;
         if (lws_hdr_total_length(wsi, WSI_TOKEN_POST_URI) <= 0) {
@@ -269,6 +320,13 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
     case LWS_CALLBACK_HTTP_WRITEABLE: {
       auto* response = static_cast<HttpResponse*>(user);
       if (!response) return -1;
+      if (response->input_reply) {
+        if (!response->input_headers) {
+          response->input_headers = true;
+          return responseHeaders(wsi, response->reply_status, "application/json", response->length);
+        }
+        response->input_reply = false;
+      }
       if (response->image) {
         if (!response->image_headers) {
           response->image_headers = true;
@@ -303,7 +361,7 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
       auto* response = static_cast<HttpResponse*>(user);
       return response && response->input_expected ? inputResponse(wsi, response, s) : 0;
     }
-    case LWS_CALLBACK_CLOSED_HTTP: closeScreenshot(s, wsi, static_cast<HttpResponse*>(user)); return 0;
+    case LWS_CALLBACK_CLOSED_HTTP: closeScreenshot(s, wsi, static_cast<HttpResponse*>(user)); s->forgetInput(wsi); return 0;
     case LWS_CALLBACK_HTTP_FILE_COMPLETION: return lws_http_transaction_completed(wsi);
     case LWS_CALLBACK_FILTER_PROTOCOL_CONNECTION: {
       char uri[256] = {};
@@ -341,6 +399,15 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
     case LWS_CALLBACK_SERVER_WRITEABLE: return s->viewer == wsi ? (s->controller ? s->writeControl(wsi) : s->write(wsi)) : -1;
     case LWS_CALLBACK_EVENT_WAIT_CANCELLED: {
       if (s->viewer) lws_callback_on_writable(s->viewer);
+      for (const auto& reply : s->readyInputs()) {
+        auto* response = reply->wsi ? static_cast<HttpResponse*>(lws_wsi_user(reply->wsi)) : nullptr;
+        if (!response) continue;
+        std::memcpy(response->body, reply->body.data(), reply->body.size());
+        response->length = reply->body.size();
+        response->reply_status = reply->status;
+        response->input_reply = true; response->input_headers = false;
+        lws_callback_on_writable(reply->wsi);
+      }
       std::vector<uint8_t> image; std::string error;
       if (s->screenshot.take(image, error)) {
         if (!s->screenshot_client) { s->screenshot.finish(); return 0; }

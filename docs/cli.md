@@ -360,7 +360,7 @@ relay input '[{"type":"keyDown","key":4},{"type":"keyUp","key":4}]'
 - X and Y are fractions of the screen from 0 to 1, from the top-left.
 - Input goes to the engine as `POST /input` batches limited by capabilities `max_input_batch` (currently 256 events; [protocol](protocol.md#post-input)).
 - `type` sends one text event per character and `key` one group per combo. Events are packed into as many batches as needed and never split.
-- If a viewer or SDK session holds control, the batch fails with `busy` (HTTP 409). It is never retried. Another controller can take control between batches, so a long `type` or `key` can stop partway. The JSON error then carries `data.applied`, the number of events already applied.
+- If a viewer or SDK session holds control, the batch fails with `busy` (HTTP 409). It is never retried. Another controller can take control between batches, so a long `type` or `key` can stop partway, and a batch still queued when the session ends fails as `busy` without being applied. The JSON error then carries `data.applied`, the number of events already applied.
 - Held keys and buttons are released at the end of each batch, and when it fails.
 - `--json` prints `{"input":{"events":1},"outcome":"sent"}` with the applied event count. Success means the engine applied the events, not that the application reacted. Take a screenshot to confirm.
 

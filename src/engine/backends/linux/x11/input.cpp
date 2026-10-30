@@ -65,18 +65,20 @@ class X11Input final : public InputBackend {
     TimePoint tapped{};
   };
   struct Job {
-    enum class Kind : uint8_t { key, text, button, motion, scroll, locks, flush } kind = Kind::flush;
+    enum class Kind : uint8_t { key, text, button, motion, scroll, locks, flush, fence } kind = Kind::flush;
     KeyCode code = 0;
     uint32_t codepoint = 0;
     unsigned number = 0;
     int x = 0, y = 0, notches = 0;
     bool press = false;
+    std::shared_ptr<InputFence> fence = nullptr;
   };
   Display* display = nullptr;
   uint16_t width = 0, height = 0;
   int columns = 1;
   uint64_t typed = 0;
   std::map<KeySym, KeyCode> layout;
+  std::set<KeyCode> modifiers;
   std::vector<Spare> spares;
   std::set<KeyCode> held;
   TimePoint bound{}, lastTap{};
@@ -98,6 +100,7 @@ class X11Input final : public InputBackend {
     }
     width = uint16_t(root_width); height = uint16_t(root_height);
     findSpares();
+    findModifiers();
     worker = std::thread([this] { run(); });
   }
   ~X11Input() override {
@@ -152,17 +155,27 @@ class X11Input final : public InputBackend {
     post(job);
   }
   void resetLocks() override { post(Job{Job::Kind::locks}); }
+  void fence(std::shared_ptr<InputFence> mark) override {
+    Job job{Job::Kind::fence};
+    job.fence = std::move(mark);
+    post(job);
+  }
+  void cancel() override {
+    std::lock_guard<std::mutex> lock(mutex);
+    discard();
+  }
   void flush() override { post(Job{Job::Kind::flush}); }
 
  private:
   void post(Job job) {
-    { std::lock_guard<std::mutex> lock(mutex); queue.push_back(job); }
+    { std::lock_guard<std::mutex> lock(mutex); queue.push_back(std::move(job)); }
     wake.notify_one();
   }
   void run() {
     std::unique_lock<std::mutex> lock(mutex);
     for (;;) {
       wake.wait(lock, [this] { return stopping || !queue.empty(); });
+      if (stopping) discard();
       if (queue.empty()) break;
       const Job job = queue.front(); queue.pop_front();
       lock.unlock();
@@ -177,6 +190,23 @@ class X11Input final : public InputBackend {
     restoreSpares();
     XSync(display, False);
   }
+  /// Drops queued text and moves, completing the fences that covered them as not applied. Call with the mutex held.
+  void discard() {
+    bool lost = false;
+    for (auto job = queue.begin(); job != queue.end();) {
+      if (job->kind == Job::Kind::fence) {
+        const bool failed = lost; lost = false;
+        if (!failed) { ++job; continue; }
+        const auto mark = job->fence; job = queue.erase(job);
+        mark->complete(false);
+        continue;
+      }
+      if (job->kind == Job::Kind::text || job->kind == Job::Kind::motion || job->kind == Job::Kind::scroll) {
+        lost = true; job = queue.erase(job); continue;
+      }
+      ++job;
+    }
+  }
   void apply(const Job& job) {
     switch (job.kind) {
       case Job::Kind::key:
@@ -187,8 +217,9 @@ class X11Input final : public InputBackend {
       case Job::Kind::button: XTestFakeButtonEvent(display, job.number, job.press, CurrentTime); break;
       case Job::Kind::motion: XTestFakeMotionEvent(display, DefaultScreen(display), job.x, job.y, CurrentTime); break;
       case Job::Kind::scroll: wheel(job.number, job.notches); break;
-      case Job::Kind::locks: XkbLockModifiers(display, XkbUseCoreKbd, LockMask, 0); restoreSpares(); break;
+      case Job::Kind::locks: XkbLockModifiers(display, XkbUseCoreKbd, LockMask, 0); restoreIdle(std::chrono::steady_clock::now()); break;
       case Job::Kind::flush: XFlush(display); break;
+      case Job::Kind::fence: job.fence->complete(true); break;
     }
   }
   void type(uint32_t codepoint) {
@@ -200,8 +231,7 @@ class X11Input final : public InputBackend {
     }
     const KeyCode found = XKeysymToKeycode(display, symbol);
     if (found && !held.count(found) && XkbKeycodeToKeysym(display, found, 0, 0) == symbol) {
-      XTestFakeKeyEvent(display, found, True, CurrentTime);
-      XTestFakeKeyEvent(display, found, False, CurrentTime);
+      tapKey(found);
       return;
     }
     Spare* spare = nullptr;
@@ -212,10 +242,19 @@ class X11Input final : public InputBackend {
     tap(*spare);
   }
   void tap(Spare& spare) {
-    XTestFakeKeyEvent(display, spare.code, True, CurrentTime);
-    XTestFakeKeyEvent(display, spare.code, False, CurrentTime);
+    tapKey(spare.code);
     spare.used = ++typed;
     spare.tapped = lastTap = std::chrono::steady_clock::now();
+  }
+  /// Taps code with held modifiers lifted for the tap and pressed again right after.
+  void tapKey(KeyCode code) {
+    std::vector<KeyCode> lifted;
+    for (const auto modifier : held)
+      if (modifier != code && modifiers.count(modifier)) lifted.push_back(modifier);
+    for (const auto modifier : lifted) XTestFakeKeyEvent(display, modifier, False, CurrentTime);
+    XTestFakeKeyEvent(display, code, True, CurrentTime);
+    XTestFakeKeyEvent(display, code, False, CurrentTime);
+    for (auto it = lifted.rbegin(); it != lifted.rend(); ++it) XTestFakeKeyEvent(display, *it, True, CurrentTime);
   }
   void pace(TimePoint ready) {
     const auto now = std::chrono::steady_clock::now();
@@ -236,13 +275,30 @@ class X11Input final : public InputBackend {
     bound = std::chrono::steady_clock::now();
   }
   void restoreSpares() {
-    for (auto& spare : spares) {
-      if (spare.symbol == NoSymbol) continue;
-      std::vector<KeySym> symbols(size_t(columns), NoSymbol);
-      XChangeKeyboardMapping(display, spare.code, columns, symbols.data(), 1);
-      spare.symbol = NoSymbol;
-    }
+    for (auto& spare : spares) unbind(spare);
     bound = std::chrono::steady_clock::now();
+  }
+  /// Unbinds spares that have been idle longer than the reuse window, keeping recent ones readable.
+  void restoreIdle(TimePoint now) {
+    bool changed = false;
+    for (auto& spare : spares) {
+      if (spare.symbol == NoSymbol || now < spare.tapped + spareReuse) continue;
+      unbind(spare); changed = true;
+    }
+    if (changed) bound = now;
+  }
+  void unbind(Spare& spare) {
+    if (spare.symbol == NoSymbol) return;
+    std::vector<KeySym> symbols(size_t(columns), NoSymbol);
+    XChangeKeyboardMapping(display, spare.code, columns, symbols.data(), 1);
+    spare.symbol = NoSymbol;
+  }
+  void findModifiers() {
+    XModifierKeymap* map = XGetModifierMapping(display);
+    if (!map) return;
+    for (int index = 0; index < 8 * map->max_keypermod; ++index)
+      if (const KeyCode code = map->modifiermap[index]) modifiers.insert(code);
+    XFreeModifiermap(map);
   }
   void findSpares() {
     int min = 0, max = 0, count = 0;

@@ -36,9 +36,13 @@ class FakeBackend final : public relay::InputBackend {
   void move(int x, int y) override { calls.push_back({Call::Kind::move, 0, x, y}); }
   void scroll(unsigned axis, int notches) override { calls.push_back({Call::Kind::scroll, axis, notches}); }
   void resetLocks() override { calls.push_back({Call::Kind::resetLocks}); }
+  void fence(std::shared_ptr<relay::InputFence> mark) override { fences.push_back(std::move(mark)); }
+  void cancel() override { cancelled = true; }
   void flush() override { calls.push_back({Call::Kind::flush}); }
   std::pair<uint16_t, uint16_t> dimensions() const override { return {1280, 720}; }
   const char* name() const override { return "fake"; }
+  std::vector<std::shared_ptr<relay::InputFence>> fences;
+  bool cancelled = false;
 };
 
 struct Fixture {
@@ -226,13 +230,35 @@ void reportsUnsupportedUsage() {
   require(f.input.apply(event(2, 20)) == relay::InputStatus::unsupported, "release of an unmapped usage was not unsupported");
   require(f.backend.calls.empty(), "an unmapped usage reached the backend");
 }
+
+struct Mark final : relay::InputFence {
+  bool applied = true, finished = false;
+  void complete(bool value) override { applied = value; finished = true; }
+};
+
+void fencesAfterWork() {
+  Fixture f;
+  const auto mark = std::make_shared<Mark>();
+  require(f.input.apply(event(8, 0, 'a')) == relay::InputStatus::ok, "text event was rejected");
+  f.input.fence(mark);
+  require(f.backend.fences.size() == 1 && f.backend.fences.front() == mark, "the fence did not reach the backend");
+  require(times(f.backend, Call::Kind::typeText) == 1, "the fence was posted before the batch text");
+  require(!mark->finished, "the backend completed the fence before it applied the work");
+}
+
+void cancelsQueuedWork() {
+  Fixture f;
+  f.input.cancel();
+  require(f.backend.cancelled, "the controller did not forward the cancel");
+}
 }
 
 int main() {
   try {
     rejectsInvalidEvents(); acceptsBoundaryValues(); mapsCoordinates(); pointerEventsMoveFirst();
     dedupesHeldInput(); sharesNativeKey(); releasesAllHeldInput(); resetsLocks(); typesText(); reportsUnsupportedUsage();
-    std::puts("input: validation, coordinates, dedupe, release-all, locks, text and unsupported usages passed");
+    fencesAfterWork(); cancelsQueuedWork();
+    std::puts("input: validation, coordinates, dedupe, release-all, locks, text, fences and unsupported usages passed");
     return 0;
   } catch (const std::exception& error) {
     std::fprintf(stderr, "input: %s\n", error.what());
