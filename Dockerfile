@@ -4,11 +4,10 @@ FROM ${BASE_IMAGE}
 COPY . /opt/relay-src
 RUN apt-get update \
     && apt-get install -y --no-install-recommends tini \
+    && /opt/relay-src/install.sh --prefix /usr/local \
     && cd /opt/relay-src \
-    && npm ci \
     && npm run typecheck \
     && npm test \
-    && /opt/relay-src/install.sh --prefix /usr/local \
     && apt-get install -y --no-install-recommends libavcodec-dev libavutil-dev libswscale-dev \
     && make -C /opt/relay-src test clean \
     && rm -rf /opt/relay-src /var/lib/apt/lists/* \
