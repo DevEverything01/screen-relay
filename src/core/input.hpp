@@ -23,6 +23,8 @@ class InputBackend {
   virtual std::optional<NativeKey> nativeKey(uint16_t usage) const = 0;
   virtual void pressKey(NativeKey key) = 0;
   virtual void releaseKey(NativeKey key) = 0;
+  /// Types one Unicode scalar value without changing held keys; false when the platform cannot produce it.
+  virtual bool typeText(uint32_t codepoint) = 0;
   virtual void pressButton(unsigned button) = 0;
   virtual void releaseButton(unsigned button) = 0;
   virtual void move(int x, int y) = 0;

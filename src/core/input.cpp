@@ -27,6 +27,12 @@ InputStatus InputController::apply(const InputEvent& input) {
     if (code || value || input.modifiers || input.buttons) return InputStatus::invalid;
     releaseAll(); return InputStatus::ok;
   }
+  if (event == 8) {
+    if (code || input.modifiers || input.buttons || value < 1 || value > 0x10FFFF ||
+        (value >= 0xD800 && value <= 0xDFFF)) return InputStatus::invalid;
+    if (!backend->typeText(uint32_t(value))) return InputStatus::unsupported;
+    backend->flush(); return InputStatus::ok;
+  }
   if (event < 1 || event > 6 || (event != 6 && value)) return InputStatus::invalid;
   if (event <= 2) {
     if (code > 231) return InputStatus::invalid;
