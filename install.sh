@@ -54,9 +54,9 @@ if [ "$apt" = 1 ] && [ "$client" = 0 ]; then
     libxtst-dev libx264-dev libwebsockets-dev xvfb xauth x11-utils x11-xkb-utils
   if [ "$desktop" = 1 ]; then
     apt_install dbus dbus-x11 at-spi2-core xfce4-session xfwm4 xfce4-panel xfdesktop4 xfce4-settings \
-      thunar xfce4-terminal fonts-dejavu-core
+      thunar xfce4-terminal fonts-dejavu-core librsvg2-common
     if apt-cache show glycin-loaders >/dev/null 2>&1; then apt_install glycin-loaders; fi
-    if apt-cache show libgdk-pixbuf-2.0-bin >/dev/null 2>&1; then apt_install libgdk-pixbuf-2.0-bin; fi
+    if apt-cache show libgdk-pixbuf2.0-bin >/dev/null 2>&1; then apt_install libgdk-pixbuf2.0-bin; fi
   fi
 fi
 
