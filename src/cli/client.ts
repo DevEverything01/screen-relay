@@ -27,7 +27,7 @@ function invalidUrl(url: string): Failure {
     parsed.hash = '';
     safe = parsed.toString();
   } catch {
-    safe = url.replace(/\/\/[^/@\s]*@/, '//[redacted]@').split(/[?#]/, 1)[0];
+    safe = url.replace(/\/\/[^/?#\s]*@/, '//[redacted]@').split(/[?#]/, 1)[0];
   }
   return new Failure('invalid_input', `Invalid server URL: ${safe}`, 'Use an HTTPS origin or http://127.0.0.1:PORT.');
 }

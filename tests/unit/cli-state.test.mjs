@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { after, test } from 'node:test';
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -30,11 +30,18 @@ test('session sweep does not match a longer RELAY_SESSION value', { skip: !exist
   }
 });
 
-test('an empty lock file remains busy rather than being reclaimed', () => {
+test('the regular lock file serializes concurrent acquisitions', { skip: spawnSync('flock', ['--version'], { stdio: 'ignore' }).status !== 0 }, async () => {
   const lockDir = join(directory, 'lock-race');
   mkdirSync(lockDir);
   const lockFile = join(lockDir, 'lock');
   writeFileSync(lockFile, '');
-  assert.throws(() => state.lock('desk', lockDir), (error) => error.reason === 'already_running');
+  const acquisitions = await Promise.allSettled([state.lock('desk', lockDir), state.lock('desk', lockDir)]);
+  const acquired = acquisitions.filter((result) => result.status === 'fulfilled');
+  const rejected = acquisitions.filter((result) => result.status === 'rejected');
+  assert.equal(acquired.length, 1);
+  assert.equal(rejected.length, 1);
+  assert.equal(rejected[0].reason.reason, 'already_running');
   assert.equal(readFileSync(lockFile, 'utf8'), '');
+  await acquired[0].value.close();
+  await (await state.lock('desk', lockDir)).close();
 });

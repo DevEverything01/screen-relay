@@ -20,6 +20,20 @@ function write(text) {
   return path;
 }
 
+test('empty RELAY_CONFIG selects the optional default config', () => {
+  const previous = { relayConfig: process.env.RELAY_CONFIG, configHome: process.env.XDG_CONFIG_HOME };
+  process.env.RELAY_CONFIG = '';
+  process.env.XDG_CONFIG_HOME = directory;
+  try {
+    assert.deepEqual(config.locate(), [null, false]);
+  } finally {
+    if (previous.relayConfig === undefined) delete process.env.RELAY_CONFIG;
+    else process.env.RELAY_CONFIG = previous.relayConfig;
+    if (previous.configHome === undefined) delete process.env.XDG_CONFIG_HOME;
+    else process.env.XDG_CONFIG_HOME = previous.configHome;
+  }
+});
+
 test('loads validated values and keyboard layout', () => {
   const path = write(`
 display:

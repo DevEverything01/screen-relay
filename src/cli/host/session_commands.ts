@@ -19,7 +19,7 @@ type Args = HostArgs & Record<string, any>;
 
 export async function cmdUp(args: Args): Promise<number> {
   requireLinux();
-  const [settings, , present] = loadConfig(typeof args.config === 'string' ? args.config : undefined);
+  const [settings, , present] = loadConfig(typeof args.config === 'string' && args.config ? args.config : undefined);
   const warnings = args.display && present.has('display.resolution')
     ? [{ reason: 'display_resolution_ignored', message: 'display.resolution is ignored with --display; the existing display size is used' }] : [];
   for (const warning of warnings) printWarning(warning.message, args);

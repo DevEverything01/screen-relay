@@ -37,6 +37,10 @@ test('every metadata example parses through the command parser', () => {
   }
 });
 
+test('an empty RELAY_CONFIG is treated as unset', () => {
+  assert.equal(parseCommand(['up'], { RELAY_CONFIG: '' }).config, undefined);
+});
+
 test('--json failures write one JSON line to stderr and nothing to stdout', () => {
   for (const [argv, exit] of [
     [['frob'], 2],
@@ -58,4 +62,15 @@ test('--json failures write one JSON line to stderr and nothing to stdout', () =
     assert.equal(typeof error.message, 'string');
     assert.ok(error.message.length > 0);
   }
+});
+
+test('invalid URL diagnostics redact credentials and query strings', () => {
+  const result = spawnSync(process.execPath, [cli, 'status', '--url', 'https://user:abc@def@[?token=secret'], {
+    encoding: 'utf8',
+    timeout: 15000,
+  });
+  assert.ifError(result.error);
+  assert.equal(result.status, 2);
+  assert.doesNotMatch(result.stderr, /user|abc|def|secret/);
+  assert.match(result.stderr, /\[redacted\]/);
 });

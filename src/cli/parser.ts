@@ -74,7 +74,8 @@ export function parseCommand(argv: string[], environment: NodeJS.ProcessEnv = pr
   if (offset < positionals.length) throw usageFailure(`Unexpected argument '${positionals[offset]}'.`, name);
   if (args.help || args.version) return args;
   for (const parameter of [...globalOptions, ...command.options, ...command.arguments]) {
-    const raw = args[parameter.name] ?? (parameter.environment ? environment[parameter.environment] : undefined) ?? (parameter.deferredDefault ? undefined : parameter.default);
+    const environmentValue = parameter.environment === 'RELAY_CONFIG' ? environment.RELAY_CONFIG || undefined : parameter.environment ? environment[parameter.environment] : undefined;
+    const raw = args[parameter.name] ?? environmentValue ?? (parameter.deferredDefault ? undefined : parameter.default);
     if (raw === undefined) {
       if (parameter.required) throw usageFailure(`Missing argument ${parameter.valueHint ?? parameter.name}.`, name, parameter.missingReason ?? 'missing_input');
       continue;

@@ -1,4 +1,5 @@
-import { closeSync, fstatSync, mkdirSync, openSync, readFileSync, readdirSync, readSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { closeSync, fstatSync, openSync, readFileSync, readdirSync, readSync, renameSync, writeFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -103,40 +104,31 @@ export async function reap(directory: string, session: SessionData | null, signa
   await sweep(directory, signal);
 }
 
-/** Holds the session lock directory until close. */
-export function lock(name: string, directory: string): { close(): void } {
+/** Holds the kernel session lock until close. */
+export async function lock(name: string, directory: string): Promise<{ close(): Promise<void> }> {
   const file = join(directory, 'lock');
-  const ownerFile = join(file, 'owner');
-  const temporary = join(file, `owner-${process.pid}.tmp`);
-  const owner = identity(process.pid);
   const busy = () => new Failure('already_running', `Session "${name}" is already running`,
     'Stop it with `relay down --name ' + name + '` or pick another --name.');
-  for (let attempt = 0; attempt < 2; attempt++) {
-    let created = false;
-    try {
-      mkdirSync(file, { mode: 0o700 });
-      created = true;
-      writeFileSync(temporary, JSON.stringify(owner), { mode: 0o600 });
-      renameSync(temporary, ownerFile);
-      return {
-        close() {
-          try {
-            const held = JSON.parse(readFileSync(ownerFile, 'utf8')) as ProcessIdentity;
-            if (held.pid === owner.pid && held.start === owner.start) rmSync(file, { recursive: true, force: true });
-          } catch {}
-        },
-      };
-    } catch (error) {
-      if (created) {
-        rmSync(file, { recursive: true, force: true });
-        throw new Failure('internal', `Cannot lock ${file}: ${String(error)}`, 'Check the state directory permissions with `relay doctor`.');
-      }
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw new Failure('internal', `Cannot lock ${file}: ${String(error)}`, 'Check the state directory permissions with `relay doctor`.');
-      let existing: unknown = null;
-      try { existing = JSON.parse(readFileSync(ownerFile, 'utf8')); } catch { throw busy(); }
-      if (alive(existing)) throw busy();
-      rmSync(file, { recursive: true, force: true });
-    }
+  const child = spawn('flock', ['--exclusive', '--nonblock', '--conflict-exit-code', '75', file, 'sh', '-c', 'printf .; cat'], { stdio: ['pipe', 'pipe', 'ignore'] });
+  const acquired = new Promise<void>((resolve, reject) => {
+    let ready = false;
+    child.stdout.on('data', () => {
+      if (!ready) { ready = true; resolve(); }
+    });
+    child.once('error', reject);
+    child.once('exit', (code) => reject(code === 75 ? busy() : new Failure('internal', `Cannot lock ${file}`, 'Check the state directory permissions with `relay doctor`.')));
+  });
+  try {
+    await acquired;
+  } catch (error) {
+    child.stdin.destroy();
+    if (error instanceof Failure) throw error;
+    throw new Failure('internal', `Cannot lock ${file}: ${String(error)}`, 'Check the state directory permissions with `relay doctor`.');
   }
-  throw busy();
+  return {
+    close() {
+      child.stdin.end();
+      return new Promise((resolve) => child.once('exit', () => resolve()));
+    },
+  };
 }
