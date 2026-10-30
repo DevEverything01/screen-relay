@@ -39,10 +39,16 @@ struct Server {
     InputStatus status = InputStatus::ok;
     std::atomic<bool> ready{false};
   };
+  /// Context the input thread may wake; it is set and cleared under this mutex so a fence never wakes a destroyed context.
+  struct InputWake {
+    void set(lws_context* next);
+    void cancel();
+    std::mutex mutex;
+    lws_context* context = nullptr;
+  };
   Config config;
   lws_context* context = nullptr;
   lws* viewer = nullptr;
-  std::unique_ptr<InputController> input;
   Screenshot screenshot;
   lws* screenshot_client = nullptr;
   bool controller = false, control_ready = false;
@@ -50,6 +56,8 @@ struct Server {
   std::mutex reply_mutex;
   std::deque<std::shared_ptr<InputReply>> input_replies;
   std::mutex mutex;
+  std::shared_ptr<InputWake> wake = std::make_shared<InputWake>();
+  std::unique_ptr<InputController> input;
   std::deque<EncodedFrame> pending;
   std::optional<CursorImage> pending_cursor;
   bool last_write_cursor = false;
@@ -66,11 +74,10 @@ struct Server {
   void updateFlow();
   bool timedOut();
   std::string metrics();
-  /// Holds the HTTP response until the backend applied or dropped the batch.
-  int deferInput(lws* wsi, InputStatus status, size_t applied);
+  /// Holds the HTTP response until the backend applied or dropped the batch; posted counts records that reached it.
+  int deferInput(lws* wsi, InputStatus status, size_t applied, size_t posted);
   std::vector<std::shared_ptr<InputReply>> readyInputs();
   void forgetInput(lws* wsi);
-  void wake();
   int writeControl(lws* wsi);
   int write(lws* wsi);
 };

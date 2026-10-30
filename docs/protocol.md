@@ -91,7 +91,7 @@ Payload is exactly 16 bytes. On `/stream` the header sequence is zero. On `/cont
 
 A character the layout has is typed with its own key, so no mapping changes. A character the layout lacks, such as CJK on `us`, is typed by binding one of the empty spare keycodes to its keysym, tapping it, and leaving the binding in place so an application that reads the mapping late still gets the right character. With no empty keycode at all, the character is unsupported.
 
-The guarantee and its limit: a binding stays valid for at least 50 ms and until 16 newer characters needed spares. An application that stays frozen longer than that can miss characters typed during the freeze, because by then its keycode reads a different keysym. This is a limit of X11 itself, not of relay: a client resolves keysyms when it gets round to the event, using whatever mapping the server has at that moment.
+The guarantee and its limit: a binding stays valid for at least 50 ms and until 16 newer characters needed spares. A binding is replaced only when a newer character needs a spare and takes the least recently used one, or when the engine exits; reconnecting does not unbind spares. An application that stays frozen longer than that can miss characters typed during the freeze, because by then its keycode reads a different keysym. This is a limit of X11 itself, not of relay: a client resolves keysyms when it gets round to the event, using whatever mapping the server has at that moment.
 
 Held modifiers are lifted for the tap and pressed again right after, so held Shift or Ctrl never changes the typed character. The held key set does not change, and a repeated release still reaches the backend once.
 
@@ -113,10 +113,11 @@ Body: 1 to 256 type-3 records, 16 bytes each, same encoding as the `/control` pa
 | 422 | `{"error":"unsupported_input","index":I}` | Record `I` is valid but unsupported, such as an unmapped key or a codepoint the backend cannot type. Records before it were applied. |
 | 401 | `{"error":"unauthorized"}` | Missing or wrong token. |
 | 403 | `{"error":"forbidden"}` | `Host` or `Origin` rejected. |
-| 409 | `{"error":"busy"}` | A viewer or `/control` session owns input, or the session ended before the batch was applied. Nothing is applied. |
+| 409 | `{"error":"busy"}` | A viewer or `/control` session owns input, or the input queue already holds 1024 events. Nothing is applied. |
+| 409 | `{"error":"busy","applied":N}` | The session ended after the batch started. `N` records were applied and the rest were dropped, so `N` can be zero or part of the batch. |
 | 411, 413 | `length_required`, `too_large` | No `Content-Length`, or more than 256 records. |
 
-Records are applied in order and stop at the first failure. The response is written only after the backend applied the records, so a client that awaits it knows the desktop received them, and a long batch of slow characters returns when its last character is typed. Held keys and buttons are released when the batch ends or fails. If the session ends before a queued batch is applied, its queued text and moves are dropped and the request fails as `busy`; key and button releases still run. The server never retries.
+Records are applied in order and stop at the first failure. The response is written only after the backend applied the records, so a client that awaits it knows the desktop received them, and a long batch of slow characters returns when its last character is typed. Held keys and buttons are released when the batch ends or fails. At most 1024 events may wait in the input queue; a batch that would take it past that limit is refused as `busy` before any of it is queued. If the session ends before a queued batch is applied, its queued text and moves are dropped, the request fails as `busy` with `applied` counting the records that did run, and key and button releases still run. The server never retries.
 
 ## GET /screenshot.png
 
@@ -159,6 +160,7 @@ CPU is cumulative microseconds. Memory is bytes, from the mounted cgroup v2. If 
 | Control replies queued | 32 |
 | Input record | 16 bytes |
 | `POST /input` batch | 256 records |
+| Input queue | 1024 events |
 | Cursor image | 256x256 |
 
 The server and viewer ship together. Older viewers that only know type 1 do not support the cursor extension.

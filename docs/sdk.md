@@ -72,9 +72,9 @@ Redirects are not followed. Token handling: [Remote access](remote-access.md#tok
 
 Coordinates are fractions from 0 to 1. Input methods return `{ events: number }`. The client reads `max_input_batch` from capabilities and validates every batch before sending any input. Key combinations stay together within a batch. The engine releases held input at each batch boundary, so raw events that hold a key across batches will not keep it held. A group larger than the server limit is rejected.
 
-Input batches run in order and are never retried. If a later batch or event fails, earlier events may already have taken effect. A viewer or persistent control session causes HTTP input to fail with `BUSY`; status, capabilities and screenshots remain available.
+Input batches run in order and are never retried. If a later batch or event fails, earlier events may already have taken effect. A viewer or persistent control session, or a full input queue, causes HTTP input to fail with `BUSY`; status, capabilities and screenshots remain available.
 
-A failed batch after earlier batches carries `applied`, the number of events already sent.
+A failed batch after earlier batches carries `applied`, the number of events already applied, including the prefix the engine typed before it dropped a cancelled batch.
 
 ## Input events
 
