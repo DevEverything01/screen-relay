@@ -579,6 +579,7 @@ function applyMeta() {
   metaButton.setAttribute('aria-pressed', String(metaAsCtrl));
 }
 function toggleMeta() {
+  release();
   metaAsCtrl = !metaAsCtrl;
   store('relay.metaCtrl', metaAsCtrl ? '1' : '0');
   applyMeta();
@@ -662,7 +663,7 @@ panels.keys.addEventListener('click', (e) => {
   }
   const hold = (e.target as Element).closest('[data-hold]');
   if (hold) {
-    const code = mapKey(keys[(hold as HTMLElement).dataset.hold!]);
+    const code = keys[(hold as HTMLElement).dataset.hold!];
     if (!dropLatch(code) && holdKey(code)) {
       latched.set(code, hold);
       hold.setAttribute('aria-pressed', 'true');
@@ -672,9 +673,9 @@ panels.keys.addEventListener('click', (e) => {
   }
   const button = (e.target as Element).closest('[data-keys]');
   if (!button) return;
-  const codes = (button as HTMLElement).dataset.keys!.split('+').map((name) => mapKey(keys[name]));
+  const codes = (button as HTMLElement).dataset.keys!.split('+').map((name) => keys[name]);
   const pressed: number[] = [];
-  for (const code of codes) if (!dropLatch(code) && holdKey(code)) pressed.push(code);
+  for (const code of codes) if (!latched.has(code) && holdKey(code)) pressed.push(code);
   for (const code of pressed.reverse()) releaseKey(code);
   if (codes.some((code) => code < 224)) releaseLatched();
   showPanel(null);
