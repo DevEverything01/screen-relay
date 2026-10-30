@@ -30,6 +30,14 @@ test('session sweep does not match a longer RELAY_SESSION value', { skip: !exist
   }
 });
 
+test('closing an exited lock holder resolves', { skip: spawnSync('flock', ['--version'], { stdio: 'ignore' }).status !== 0 }, async () => {
+  const sessionDirectory = join(directory, 'exited-holder');
+  mkdirSync(sessionDirectory);
+  const held = await state.lock('exited-holder', sessionDirectory);
+  await held.close();
+  await held.close();
+});
+
 test('the regular lock file serializes concurrent acquisitions', { skip: spawnSync('flock', ['--version'], { stdio: 'ignore' }).status !== 0 }, async () => {
   const lockDir = join(directory, 'lock-race');
   mkdirSync(lockDir);

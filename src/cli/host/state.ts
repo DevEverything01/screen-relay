@@ -109,7 +109,7 @@ export async function lock(name: string, directory: string): Promise<{ close(): 
   const file = join(directory, 'lock');
   const busy = () => new Failure('already_running', `Session "${name}" is already running`,
     'Stop it with `relay down --name ' + name + '` or pick another --name.');
-  const child = spawn('flock', ['--exclusive', '--nonblock', '--conflict-exit-code', '75', file, 'sh', '-c', 'printf .; cat'], { stdio: ['pipe', 'pipe', 'ignore'] });
+  const child = spawn('flock', ['--exclusive', '--nonblock', '--conflict-exit-code', '75', file, 'sh', '-c', 'printf .; cat'], { detached: true, stdio: ['pipe', 'pipe', 'ignore'] });
   const acquired = new Promise<void>((resolve, reject) => {
     let ready = false;
     child.stdout.on('data', () => {
@@ -128,6 +128,7 @@ export async function lock(name: string, directory: string): Promise<{ close(): 
   return {
     close() {
       child.stdin.end();
+      if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
       return new Promise((resolve) => child.once('exit', () => resolve()));
     },
   };

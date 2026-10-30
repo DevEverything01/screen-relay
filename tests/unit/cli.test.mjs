@@ -65,12 +65,18 @@ test('--json failures write one JSON line to stderr and nothing to stdout', () =
 });
 
 test('invalid URL diagnostics redact credentials and query strings', () => {
-  const result = spawnSync(process.execPath, [cli, 'status', '--url', 'https://user:abc@def@[?token=secret'], {
-    encoding: 'utf8',
-    timeout: 15000,
-  });
-  assert.ifError(result.error);
-  assert.equal(result.status, 2);
-  assert.doesNotMatch(result.stderr, /user|abc|def|secret/);
-  assert.match(result.stderr, /\[redacted\]/);
+  for (const [url, safe] of [
+    ['https://user:abc@def@[?token=secret', 'https:'],
+    ['https://user:abc def@[', 'https:'],
+    ['https://user:abc@example.com/path?token=secret', 'https://example.com/path'],
+  ]) {
+    const result = spawnSync(process.execPath, [cli, 'status', '--url', url], {
+      encoding: 'utf8',
+      timeout: 15000,
+    });
+    assert.ifError(result.error);
+    assert.equal(result.status, 2);
+    assert.doesNotMatch(result.stderr, /user|abc|def|secret/);
+    assert.ok(result.stderr.includes(`Invalid server URL: ${safe}`));
+  }
 });
