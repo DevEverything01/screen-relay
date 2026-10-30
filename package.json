@@ -14,11 +14,13 @@
   "scripts": {
     "build": "node build.mjs",
     "test": "npm run build && node --test tests/unit/*.test.mjs",
+    "test:e2e": "node tests/e2e/viewer.mjs",
     "typecheck": "tsc -p ."
   },
   "devDependencies": {
     "@types/node": "26.6.5",
     "esbuild": "0.28.2",
+    "playwright": "^1.64.1",
     "typescript": "7.0.2"
   },
   "dependencies": {
