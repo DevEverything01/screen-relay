@@ -1,13 +1,16 @@
-# Protocol
+---
+title: Protocol
+description: The NSL1 wire format and HTTP API that the engine and clients use.
+---
 
-Wire format and HTTP API of the engine. All integers are unsigned big-endian unless marked signed. One binary WebSocket message is one protocol message. Reject text messages, unknown types or versions, bad lengths and malformed records. Never cast incoming bytes to native structs.
+This page describes the wire format and HTTP API of the engine. All integers are unsigned big-endian unless marked signed. One binary WebSocket message is one protocol message. Reject text messages, unknown types or versions, bad lengths, and malformed records. Never cast incoming bytes to native structs.
 
 ## Endpoints
 
 | Route | Purpose |
 | --- | --- |
 | `GET /`, `GET /index.html`, `GET /viewer.js` | Viewer |
-| `WS /stream` | Video, cursor and human input. Subprotocol `nsl1`. |
+| `WS /stream` | Video, cursor, and human input. Subprotocol `nsl1`. |
 | `WS /control` | Agent input. Subprotocol `nsl1`. Exclusive with `/stream`. |
 | `POST /input` | Batch of input records over HTTP |
 | `GET /screenshot.png` | Fresh native PNG |
@@ -83,7 +86,7 @@ Payload is exactly 16 bytes. On `/stream` the header sequence is zero. On `/cont
 - Key usages are 0x00 to 0xE7 (231). Larger values are rejected. Unmapped usages within range return status 2.
 - Key codes name physical keys, so the remote layout decides the character. A text event has code 0 and a value that is one Unicode scalar value, 1 to 0x10FFFF and not 0xD800 to 0xDFFF; its masks are zero and coordinates are ignored. Text returns status 2 when the backend cannot type the character. Text 0x0A is the Return key and 0x09 is the Tab key, so applications see the named keys rather than those control characters.
 - Wheel delta is in steps of 120, magnitude at most 1200. Vertical wheel maps to X buttons 4/5, horizontal to 6/7.
-- Release all needs code, value and masks zero. Coordinates are ignored.
+- Release all needs code, value, and masks zero. Coordinates are ignored.
 - Held key and button sets are authoritative. Repeated transitions are deduplicated. A text event never changes held keys.
 - Fragmented control messages are accumulated up to 36 bytes.
 
@@ -91,7 +94,7 @@ Payload is exactly 16 bytes. On `/stream` the header sequence is zero. On `/cont
 
 A character the layout has is typed with its own key, so no mapping changes. A character the layout lacks, such as CJK on `us`, is typed by binding one of the empty spare keycodes to its keysym, tapping it, and leaving the binding in place so an application that reads the mapping late still gets the right character. With no empty keycode at all, the character is unsupported.
 
-The guarantee and its limit: a binding stays valid for at least 50 ms and until 16 newer characters needed spares. A binding is replaced only when a newer character needs a spare and takes the least recently used one, or when the engine exits; reconnecting does not unbind spares. An application that stays frozen longer than that can miss characters typed during the freeze, because by then its keycode reads a different keysym. This is a limit of X11 itself, not of relay: a client resolves keysyms when it gets round to the event, using whatever mapping the server has at that moment.
+The guarantee and its limit: a binding stays valid for at least 50 ms and until 16 newer characters need spares. A binding is replaced only when a newer character needs a spare and takes the least recently used one, or when the engine exits; reconnecting does not unbind spares. An application that stays frozen longer than that can miss characters typed during the freeze, because by then its keycode reads a different keysym. This is a limit of X11 itself, not of relay: a client resolves keysyms when it gets around to the event, using whatever mapping the server has at that moment.
 
 Held modifiers are lifted for the tap and pressed again right after, so held Shift or Ctrl never changes the typed character. The held key set does not change, and a repeated release still reaches the backend once.
 
@@ -153,7 +156,7 @@ CPU is cumulative microseconds. Memory is bytes, from the mounted cgroup v2. If 
 | --- | --- |
 | Surface | Even width 320 to 1920, even height 240 to 1080 |
 | Frame message | 8,388,640 bytes |
-| Flow control | See [Architecture](architecture.md#flow-control) |
+| Flow control | See [Architecture](/docs/architecture#flow-control) |
 | Viewer first-frame and decoder deadline | 5 s |
 | Viewer reconnect | 1, 2, 4, 8, 8 s, then stop after five attempts unless a draw succeeds |
 | Hidden tab | Pauses. On return it reconnects with a new generation and an IDR. |

@@ -1,0 +1,128 @@
+---
+title: Getting started
+description: Install relay on a Linux host, start your first session, and control the desktop from the CLI.
+---
+
+This guide takes you from a Linux machine with the repository to a running desktop you can see in a browser and control from the command line.
+
+## Prerequisites
+
+- A Linux machine to run the desktop. The engine installs on Linux only.
+- Debian or Ubuntu for automatic dependency installation. On another distribution, install the packages listed in [install.sh](/docs/cli#installsh) and pass `--no-deps`.
+- Root or passwordless `sudo` when apt installs packages.
+- Node 26 or newer, or network access so `install.sh` can download the version pinned in `.node-version`.
+- A browser with H.264 WebCodecs for the viewer: current Chrome, Edge, or Safari.
+
+## Start a session
+
+### 1. Install relay
+
+From the repository root:
+
+```sh
+./install.sh
+```
+
+The installer adds the build tools, X11 libraries, `libx264`, `libwebsockets`, `xvfb`, and the desktop packages, then runs `npm ci` and `npm run build`. It finishes by running `relay doctor` and exits non-zero if a check fails. It is safe to re-run.
+
+To install only the CLI on a laptop, use `./install.sh --client-only`. That works off Linux and needs Node 26 or newer.
+
+### 2. Add the CLI to your path
+
+The default prefix is `~/.local`, so the launcher is in `~/.local/bin`:
+
+```sh
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+When `<prefix>/bin` is not on `PATH`, the installer prints:
+
+```text
+Not on PATH; add it with: export PATH="<prefix>/bin:$PATH"
+```
+
+Add the line to your shell profile to keep it across sessions.
+
+### 3. Start the desktop
+
+```sh
+relay up
+```
+
+`up` starts Xvfb at the configured resolution (1280x720 at 60 fps by default), the desktop, and the engine. It waits until the engine answers `GET /screenshot.png` with a PNG and the desktop shows its own window, then prints a viewer link. Without `-d`, the command stays in the foreground and the first Ctrl+C stops the session.
+
+For a background session that returns once it is ready:
+
+```sh
+relay up -d
+```
+
+One session runs per name, and the default name is `default`. Use `--name` with another `--port` to run a second session.
+
+### 4. Open the viewer
+
+The viewer listens on `http://127.0.0.1:8080` by default. On a remote VM, tunnel the port from your laptop:
+
+```sh
+ssh -N -L 8080:127.0.0.1:8080 user@your-vm
+```
+
+Open the viewer link that `up` printed. The link includes a `#token=` fragment when the session has a token, and you should treat the whole link as a secret. The viewer removes the fragment from the address bar before it connects.
+
+<Callout title="Secure context">
+  The viewer needs a secure context. Use `https://` or `http://127.0.0.1`. A
+  blank page or a WebCodecs error usually means the browser lacks H.264
+  WebCodecs or the page is not in a secure context.
+</Callout>
+
+### 5. Control the desktop
+
+Take a screenshot, click, and type from any machine that reaches the engine:
+
+```sh
+relay screenshot screen.png
+relay click 0.5 0.5
+relay type "echo hello"
+relay key Enter
+relay screenshot after.png
+```
+
+Coordinates are fractions from 0 to 1 measured from the top-left. `type` sends layout-neutral text. `key` sends physical combinations such as `ctrl+l` or `alt+Tab`. Input success means the engine applied the events, so take another screenshot to confirm the application reacted.
+
+Check the session or stop it:
+
+```sh
+relay status
+relay down
+```
+
+`status` exits 0 for any existing session, including a stopped or failed one. `down` stops the session and every process it started, and it is safe to run twice.
+
+## Run an app
+
+Start an application on the session desktop:
+
+```sh
+relay run -- xterm
+```
+
+`run` returns the app pid immediately, and the window appears a moment later. The app gets the desktop's display, D-Bus session bus, X authority, and runtime, config, and cache directories. Read its output with `relay logs apps`. Apps stop with `relay down`.
+
+## Use Docker instead
+
+The repository includes a `Dockerfile` for hosts without a Debian or Ubuntu desktop setup:
+
+```sh
+docker build -t relay .
+docker run -d --name desk -p 127.0.0.1:8080:8080 relay
+docker logs desk
+```
+
+The viewer link and token are in `docker logs`. See [Docker](/docs/docker) for bind addresses, arguments passed to `up`, and control from the host.
+
+## Next steps
+
+- Read the [CLI reference](/docs/cli) for every command, option, output shape, and error code.
+- Set the resolution, frame rate, bitrate, port, or desktop in [Configuration](/docs/configuration).
+- Expose the session through an SSH tunnel, a TLS proxy, or native TLS in [Remote access](/docs/remote-access).
+- Load the agent workflow with `relay skills get core` and read [Agent skills](/docs/agent-skills).

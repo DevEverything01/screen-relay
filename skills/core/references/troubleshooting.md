@@ -1,5 +1,7 @@
 # Troubleshooting
 
+The published guide is at https://relay.labs.vercel.dev/docs/troubleshooting.
+
 Start with `relay doctor`; it prints a fix command for every failing check. Read logs with `relay logs [component]` (`display`, `dbus`, `desktop`, `engine`, `apps`; `-f` follows). Add `--json` for `{"logs": {...}}`.
 
 | Symptom | Cause | Fix |

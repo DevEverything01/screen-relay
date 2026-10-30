@@ -1,0 +1,70 @@
+---
+title: Overview
+description: Stream a Linux X11 desktop to a browser and control it from a CLI or a Node SDK.
+---
+
+Relay streams a Linux X11 desktop to a browser and exposes that desktop to a CLI and a Node SDK. A browser viewer shows the screen and sends human input. An agent takes screenshots and sends pointer, keyboard, and text input through the same engine.
+
+## Quickstart
+
+On a Debian or Ubuntu VM or sandbox, run the installer from the repository root:
+
+```sh
+./install.sh
+export PATH="$HOME/.local/bin:$PATH"
+relay up
+```
+
+`install.sh` installs `relay` in `~/.local/bin`, which a fresh shell often does not have on `PATH`. `up` prints a viewer link. Open it in a browser with H.264 WebCodecs (Chrome, Edge, or Safari). From your laptop, tunnel first:
+
+```sh
+ssh -N -L 8080:127.0.0.1:8080 user@your-vm
+```
+
+### Docker
+
+```sh
+docker build -t relay .
+docker run --rm -p 127.0.0.1:8080:8080 relay
+```
+
+The viewer link with its token is in the container output. See [Docker](/docs/docker) for the image layout, port publishing, and control from the host.
+
+## Control a desktop
+
+```sh
+relay screenshot screen.png
+relay click 0.5 0.5
+relay type "hello"
+relay key ctrl+l
+relay status --json
+relay down
+```
+
+Coordinates are 0 to 1. Load the current agent workflow with `relay skills get core`. The [CLI reference](/docs/cli) covers every command, flag, output shape, and error code.
+
+## Limits
+
+| Area | Limit |
+| --- | --- |
+| Display server | X11 only. Wayland is planned behind the same interfaces. |
+| Resolution | Up to 1920x1080, set in the config ([Configuration](/docs/configuration)). No live resize. |
+| Control | One controller at a time: a browser viewer or one agent. Screenshots work at any time. |
+| Not supported | Audio, clipboard, IME, relative pointer, hardware encoding. |
+| Auth | One shared token per session. No multi-user identity. |
+| Install | The engine installs on Linux only, and automatic dependencies need apt (Debian or Ubuntu). `--client-only` installs the CLI on any OS with Node 26 or newer. |
+
+## Status
+
+<Callout title="Experimental">
+  The v1 CLI was verified in two places. On a fresh Vercel Sandbox (Ubuntu 26.04
+  x86_64): install, `up -d --public`, the viewer link, remote screenshot, click,
+  type and key, `busy` while a viewer is open, `tests/smoke.sh` passing, and a
+  clean `down`. In Docker (Debian trixie arm64), as non-root and as root.
+  Earlier Ubuntu 24.04 ARM64 results came from the previous launcher. It was
+  not tested on other distributions, WAN links, or long runs.
+</Callout>
+
+## Next steps
+
+Start with [Getting started](/docs/getting-started) for installation and a first session. Read [Remote access](/docs/remote-access) before exposing a session beyond loopback, [Agent skills](/docs/agent-skills) to run the desktop from an agent, and [Troubleshooting](/docs/troubleshooting) when a session fails.

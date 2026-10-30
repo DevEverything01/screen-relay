@@ -1,4 +1,7 @@
-# Remote access
+---
+title: Remote access
+description: Reach a session through an SSH tunnel, a TLS proxy, or native TLS, and manage its token.
+---
 
 The default listener is `127.0.0.1` with no token. Anyone who holds the token can see and control the desktop. One token per session, no user identity.
 
@@ -10,24 +13,24 @@ Run on your laptop:
 ssh -N -L 8080:127.0.0.1:8080 user@your-vm
 ```
 
-Open `http://127.0.0.1:8080`. No token needed.
+Open `http://127.0.0.1:8080`. No token is needed.
 
 ## Behind a TLS proxy
 
-Use this for any gateway that terminates HTTPS and forwards to the VM (a cloud sandbox port, nginx, Caddy, a tunnel).
+Use this for any gateway that terminates HTTPS and forwards to the VM, such as a cloud sandbox port, nginx, Caddy, or a tunnel.
 
 ```sh
 relay up -d --public https://desktop.example.com
 ```
 
-`--public` binds `0.0.0.0` (unless `--bind` says otherwise), generates a token, and accepts only that origin. Without `--tls-cert` the engine serves plain HTTP and expects the proxy to terminate TLS; `up` prints a `TLS proxy` row with the forwarding target as a reminder. Run it only where the port is reachable just by the proxy. `up` prints the viewer link with the token in the URL fragment.
+`--public` binds `0.0.0.0` unless `--bind` says otherwise, generates a token, and accepts only that origin. Without `--tls-cert` the engine serves plain HTTP and expects the proxy to terminate TLS; `up` prints a `TLS proxy` row with the forwarding target as a reminder. Run it only where the port is reachable only by the proxy. `up` prints the viewer link with the token in the URL fragment.
 
 The proxy must:
 
-- forward `/` (and `/index.html`), `/viewer.js`, `/stream`, `/control`, `/input`, `/screenshot.png`, `/capabilities`, `/metrics` with no path prefix
+- forward `/` (and `/index.html`), `/viewer.js`, `/stream`, `/control`, `/input`, `/screenshot.png`, `/capabilities`, and `/metrics` with no path prefix
 - forward WebSocket upgrades over HTTP/1.1
-- keep the `Host`, `Origin` and `Authorization` headers and the WebSocket subprotocol header unchanged
-- not log `Authorization` or the subprotocol header (the token travels in both)
+- keep the `Host`, `Origin`, and `Authorization` headers and the WebSocket subprotocol header unchanged
+- not log `Authorization` or the subprotocol header, because the token travels in both
 
 The engine reads no `X-Forwarded-*` headers.
 
@@ -41,13 +44,13 @@ The engine serves HTTPS itself, so `up` prints no TLS proxy line. Use a certific
 
 ## Tokens
 
-- 256 random bits, 64 lowercase hex characters, from `secrets.token_hex(32)`. A token is generated when the bind address is not `127.0.0.1` or `--public` is set.
-- Stored in `<state dir>/token`, mode 0600 (the path is `tokenFile` in `status --json`). The engine refuses a token file that is not owned by its user or that others can read.
+- A token is 256 random bits, written as 64 lowercase hex characters. A token is generated when the bind address is not `127.0.0.1` or `--public` is set.
+- The token is stored in `<state dir>/token`, mode 0600 (the path is `tokenFile` in `status --json`). The engine refuses a token file that is not owned by its user or that others can read.
 - `up` prints the token once. `status` hides it unless `--show-token`.
 - The viewer reads `#token=...` from the link, removes it from the address bar with `history.replaceState`, then connects. It uses the token only on `https://` or loopback pages. Fragments are not sent to servers.
 - HTTP clients send `Authorization: Bearer TOKEN`. WebSocket clients offer the subprotocols `nsl1` and `bearer.TOKEN`. The token is never put in a request URL.
 
-Each `up` generates a new token. Rotate by running `relay down` then `up` again; existing connections end.
+Each `up` generates a new token. Rotate it by running `relay down` and then `up` again; existing connections end.
 
 ## Client from your laptop
 
@@ -60,7 +63,7 @@ relay status
 relay screenshot screen.png
 ```
 
-Remote plain HTTP is refused. Redirects are not followed. Rules and flags: [CLI reference](cli.md#client-target).
+Remote plain HTTP is refused. Redirects are not followed. Rules and flags: [CLI reference](/docs/cli#client-target).
 
 ## Checks
 

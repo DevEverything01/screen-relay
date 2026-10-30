@@ -1,5 +1,7 @@
 # Configuration
 
+The published reference is at https://relay.labs.vercel.dev/docs/configuration.
+
 `relay up` reads `--config FILE`, then `RELAY_CONFIG`, then `${XDG_CONFIG_HOME:-~/.config}/relay/config.yaml` when it exists. A flag beats its `RELAY_*` variable, which beats the file, which beats the default. A missing explicitly selected file, an unknown key, an invalid type or an out-of-range value stops startup before any process starts, and every problem is reported at once.
 
 | Key | Default | Range or meaning | Environment |

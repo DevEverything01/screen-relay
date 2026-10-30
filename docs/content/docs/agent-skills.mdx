@@ -1,0 +1,124 @@
+---
+title: Agent skills
+description: Serve the agent workflows that ship with the relay CLI and load the core desktop workflow.
+---
+
+Relay ships agent skills with the CLI. The skills describe how an agent should start a session, take screenshots, send input, and recover from errors. Because they ship with the CLI, their instructions match the installed version.
+
+## Commands
+
+```sh
+relay skills list
+relay skills get <name> [--full] [--json]
+relay skills path [name]
+```
+
+`list` shows available skills and leaves out hidden skills. It is the default when no command is given. `get` prints a skill's workflow, including a hidden skill asked for by name; `--full` appends its `references/` and `templates/` files. `path` prints the skills directory, or a named skill directory.
+
+An unknown skill is a Not found error (`not_found`, exit 1) whose recovery is `relay skills list`.
+
+```json
+{"skills":[{"name":"core","description":"Control a relay desktop from an agent using screenshots and input commands."}]}
+{"skill":{"name":"core","content":"---\nname: core\n..."}}
+{"path":"/usr/local/lib/relay/skills"}
+```
+
+`relay skills get core` is the documented first step for agents. It works offline and never contacts an engine.
+
+## Shipped skills
+
+| Skill | Description | Hidden |
+| --- | --- | --- |
+| `core` | Control a relay desktop from an agent using screenshots and input commands. | No |
+| `vercel-sandbox` | Run and control relay inside a Vercel Sandbox. | No |
+| `relay` | A stub that points agents to `relay skills get core` and the specialized skills. | Yes |
+
+## Core workflow
+
+The `core` skill starts with where each command runs. Host commands (`up`, `down`, `logs`, `run`, `doctor`) manage the session on the Linux machine. Client commands (`status`, `screenshot`, `click`, `move`, `scroll`, `key`, `type`, `input`) reach the engine on that machine. From another machine, only client commands work, and each needs `--url` plus a token file.
+
+Start a session and inspect it:
+
+```sh
+relay up -d
+relay status --json
+```
+
+`up -d` returns once the display, desktop, and engine are ready. Piped, it prints the viewer URL, including the `#token=` fragment when the session has a token; treat that URL as a secret. `status --json` prints `{"session": {...}}`. Read `session.state` (`starting`, `ready`, `stopped`, or `failed`), `session.running`, `session.url`, and `session.display`. An existing session exits 0 in any state; a missing session exits 1 with reason `not_running`.
+
+Work in a loop: take a screenshot, decide from the image, act, then take another screenshot to verify.
+
+```sh
+relay screenshot /tmp/relay.png
+relay click 0.5 0.5
+relay type "echo hello"
+relay key Enter
+relay screenshot /tmp/relay-after.png
+```
+
+- `relay run -- APP [ARGS...]` starts an app on the session desktop and returns its pid at once. The window appears a moment later, so poll `relay screenshot` until you can see it. App output goes to `relay logs apps`.
+- `relay screenshot [file]` writes a PNG, default `screen.png`. Pass `-` to write PNG bytes to stdout. Success means the engine saved the frame, not that an app responded.
+- Click to focus a window before typing into it. A click also moves the pointer.
+- Input success means the engine applied the events, not that the application reacted. Always take another screenshot.
+
+Coordinates are fractions of the screen from `0` to `1`, measured from the top-left:
+
+```text
+x = pixel_x / image_width
+y = pixel_y / image_height
+```
+
+For a 1920x1080 screenshot, pixel `480,810` is `relay click 0.25 0.75`; the center is `relay click 0.5 0.5`. Read `width` and `height` from `relay screenshot file.png --json`, or use the image size directly.
+
+Use `type` for text and content, and `key` for shortcuts, arrows, function keys, and Escape. A long `relay type` is split into batches. If a later batch fails, the JSON error carries `data.applied`, the number of events already applied; resend only the remaining text.
+
+## JSON and recovery
+
+Add `--json` to any command. Success writes exactly one document with a trailing newline to stdout and leaves stderr empty. On failure, stdout is empty and stderr has one compact document:
+
+```json
+{"status":"error","reason":"busy","message":"Another controller holds control of the desktop.","data":{"httpStatus":409}}
+{"status":"action_required","reason":"invalid_input","message":"Invalid x: '2'.","next":[{"command":"relay help click","argv":["relay","help","click"]}]}
+```
+
+`reason` is the stable snake_case code, so match it instead of the message. `next` is optional; `command` is the full command line and `argv` is the same command split, starting with `relay`. `data` carries context such as `component` and `logs` after a component failure, `applied` after a partial input batch, or `httpStatus` from the engine.
+
+| Reason | Meaning | Recovery |
+| --- | --- | --- |
+| `busy` | Another controller holds input, or a screenshot is already running. | Close the other viewer or client, then retry. Screenshots still work. |
+| `unauthorized` | Missing or wrong token. | Pass `--token-file FILE` or set `RELAY_TOKEN_FILE`; open the `#token=` viewer link. |
+| `forbidden` | The engine rejected `Host` or `Origin`. | Use the `--public` URL or loopback. |
+| `unreachable` | Cannot connect to the address, one of `Connection refused.`, `The host name did not resolve.`, or `The TLS certificate was rejected.` | Check the address, then `relay status --url <URL>`. |
+| `timeout` | No reply within `--timeout`, or `up` was not ready in time. | Raise `--timeout`; for `up`, read the component log. |
+| `not_running` | No session or logs with that name. | `relay up -d`. |
+| `not_found` | No running session for `run` or a skill, or an unknown engine endpoint. | Start the session, or `relay skills list`. |
+| `already_running` | A session with that name is already running. | `relay down --name N`, or pick another name and port. |
+| `component_failed` | display, desktop, engine, supervisor, or an app exited. `data.component` and `data.logs` are set. | `relay logs <component>`. |
+| `missing_dependency` | A host program or the engine binary is missing. | `./install.sh` or `relay doctor`. |
+| `spawn_failed` | `run` could not start the app. | Check the app name and `relay logs apps`. |
+| `unsupported_input` | The backend cannot produce a character or apply the input. | Use `relay type` for layout-neutral text. |
+| `unsupported_platform` | `up`, `down`, or `run` off Linux. | Run host commands on the Linux machine. |
+| `invalid_config` | A config key or value is invalid; the message names the file and key. | Fix the file and start again. |
+| `invalid_input`, `invalid_option`, `unknown_command`, `missing_input` | Usage error (exit 2). | Read the `next` command, usually `relay help <command>`. |
+| `internal` | A bug in relay. | Report it with the command you ran. |
+
+Only one controller sends input at a time: a browser viewer, an SDK control session, or the CLI. A second controller gets `reason: "busy"` with the message `Another controller holds control of the desktop.`; nothing is applied. Screenshots, `status`, and `capabilities` keep working. Do not retry in a loop; wait for the other controller to close, then retry once.
+
+## Sandbox workflow
+
+`relay skills get vercel-sandbox` covers running relay in a Vercel Sandbox. Create a sandbox and publish its port:
+
+```sh
+sandbox config ports <name> -p 8080
+```
+
+The command prints an HTTPS URL such as `https://<id>.vercel.run`. In the sandbox, install relay and start it behind that URL:
+
+```sh
+relay up -d --public https://<id>.vercel.run
+relay status --json
+```
+
+`/` must resolve to `https://<id>.vercel.run`, and the engine accepts only that origin. Use the session token with `--token-file` or `RELAY_TOKEN_FILE`. Stop the desktop with `relay down` before stopping the sandbox.
+
+The full command list, output shapes, and error codes are in the [CLI reference](/docs/cli).

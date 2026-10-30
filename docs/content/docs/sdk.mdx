@@ -1,6 +1,11 @@
-# Node SDK
+---
+title: SDK
+description: Use the relay Node client library for HTTP control and persistent WebSocket sessions.
+---
 
-A library with no runtime dependencies, on Node 26 or newer. Use [`relay`](cli.md) for command-line control.
+The SDK is a library with no runtime dependencies, on Node 26 or newer. Use the [CLI](/docs/cli) for command-line control.
+
+Build the package from the repository and install it from the local path:
 
 ```sh
 (cd /absolute/path/to/this/repo && npm install && npm run build)
@@ -33,17 +38,18 @@ try {
 
 ## Options
 
-`createClient`, `connect` and the standalone HTTP functions take `{ url, timeout, token, ca, connect }`.
+`createClient` and the standalone HTTP functions take `{ url, timeout, token, ca, connect, signal }`. `connect` takes the same options except `ca` and `connect`, which it rejects with `invalid_option`.
 
 | Option | Rule |
 | --- | --- |
-| `url` | Default `http://127.0.0.1:8080`. Origin only: no path, credentials, query or fragment. Plain HTTP only for `localhost` and `127.0.0.1`. Other hosts need HTTPS. |
+| `url` | Default `http://127.0.0.1:8080`. Origin only: no path, credentials, query, or fragment. Plain HTTP only for `localhost` and `127.0.0.1`. Other hosts need HTTPS. |
 | `token` | 64 lowercase hex characters. Required for remote hosts. |
 | `timeout` | Milliseconds per request. Default 10000. |
 | `ca` | Certificate file trusted for HTTPS requests, without a hostname check. Used for a local session's own certificate. |
 | `connect` | Address to dial instead of the URL host, with the URL host kept as the `Host` header. Used for a session bound to one interface. |
+| `signal` | `AbortSignal` that cancels requests and control sessions. |
 
-Redirects are not followed. Token handling: [Remote access](remote-access.md#tokens).
+Redirects are not followed. Token handling: [Remote access](/docs/remote-access#tokens).
 
 ## Functions
 
@@ -63,16 +69,16 @@ Redirects are not followed. Token handling: [Remote access](remote-access.md#tok
 
 | Method | Behavior |
 | --- | --- |
-| `click(x, y, { button }?)` | Presses and releases `left` (default), `middle` or `right`. |
+| `click(x, y, { button }?)` | Presses and releases `left` (default), `middle`, or `right`. |
 | `move(x, y)` | Moves the pointer. |
 | `scroll(x, y, { dx, dy }?)` | Moves, then scrolls by integer wheel notches. Positive `dy` scrolls down; positive `dx` scrolls right. At least one must be nonzero. |
-| `key(...combos)` | Presses physical key combinations, such as `ctrl+l`, `enter` or `cmd+shift+t`. `cmd` and `meta` alias `super`. |
+| `key(...combos)` | Presses physical key combinations, such as `ctrl+l`, `enter`, or `cmd+shift+t`. `cmd` and `meta` alias `super`. |
 | `type(text)` | Sends one text event per Unicode scalar value using the remote keyboard layout. Empty text sends nothing. |
 | `input(events)` | Sends a nonempty array of raw input events. |
 
 Coordinates are fractions from 0 to 1. Input methods return `{ events: number }`. The client reads `max_input_batch` from capabilities and validates every batch before sending any input. Key combinations stay together within a batch. The engine releases held input at each batch boundary, so raw events that hold a key across batches will not keep it held. A group larger than the server limit is rejected.
 
-Input batches run in order and are never retried. If a later batch or event fails, earlier events may already have taken effect. A viewer or persistent control session, or a full input queue, causes HTTP input to fail with `BUSY`; status, capabilities and screenshots remain available.
+Input batches run in order and are never retried. If a later batch or event fails, earlier events may already have taken effect. A viewer or persistent control session, or a full input queue, causes HTTP input to fail with `BUSY`; status, capabilities, and screenshots remain available.
 
 A failed batch after earlier batches carries `applied`, the number of events already applied, including the prefix the engine typed before it dropped a cancelled batch.
 
@@ -91,12 +97,12 @@ A failed batch after earlier batches carries `applied`, the number of events alr
 
 ## Errors
 
-Errors are instances of the exported `RelayError` with a `code`, a shared snake_case `reason`, `class`, `exitCode`, `status` and optional `hint`, `data` and `next`. Codes include `INVALID_ARGUMENT`, `NOT_FOUND`, `UNSUPPORTED`, `NETWORK_ERROR`, `DISCONNECTED`, `PROTOCOL_ERROR`, `TIMEOUT`, `BUSY`, `UNAUTHORIZED`, `HTTP_ERROR`, `IO_ERROR`, `CONFIG_ERROR`, `INTERNAL` and `CANCELED`. A rejected WebSocket handshake is `NETWORK_ERROR`. Network failures carry a human message mapped from the Node error code: `Connection refused.`, `The host name did not resolve.`, `The request timed out.` or `The TLS certificate was rejected.`; the message is never a raw `fetch failed`.
+Errors are instances of the exported `RelayError` with a `code`, a shared snake_case `reason`, `class`, `exitCode`, `status`, and optional `hint`, `data`, and `next`. Codes include `INVALID_ARGUMENT`, `NOT_FOUND`, `UNSUPPORTED`, `NETWORK_ERROR`, `DISCONNECTED`, `PROTOCOL_ERROR`, `TIMEOUT`, `BUSY`, `UNAUTHORIZED`, `HTTP_ERROR`, `IO_ERROR`, `CONFIG_ERROR`, `INTERNAL`, and `CANCELED`. A rejected WebSocket handshake is `NETWORK_ERROR`. Network failures carry a human message mapped from the Node error code: `Connection refused.`, `The host name did not resolve.`, `The request timed out.`, or `The TLS certificate was rejected.` The message is never a raw `fetch failed`.
 
-The SDK and CLI use the same reason registry in `src/protocol`. Match `error.reason` against the [CLI reasons](cli.md#error-codes) when handling failures across both interfaces. CLI JSON errors expose `reason` directly, with `message`, `status` and optional `data` and `next`; they no longer wrap an `error.code`. SDK HTTP input methods still return `{ events: number }`; the CLI wraps that count as `{"input":{"events":1},"outcome":"sent"}`. A partially applied input failure carries `applied` on the SDK error and `data.applied` in CLI JSON. Never retry the whole input blindly.
+The SDK and CLI use the same reason registry in `src/protocol`. Match `error.reason` against the [CLI reasons](/docs/cli#error-codes) when handling failures across both interfaces. CLI JSON errors expose `reason` directly, with `message`, `status`, and optional `data` and `next`; they no longer wrap an `error.code`. SDK HTTP input methods still return `{ events: number }`; the CLI wraps that count as `{"input":{"events":1},"outcome":"sent"}`. A partially applied input failure carries `applied` on the SDK error and `data.applied` in CLI JSON. Never retry the whole input blindly.
 
 ## Notes
 
 - One owner at a time: a viewer or one SDK session.
 - Screenshots capture the X11 surface. They do not include the viewer's cursor overlay.
-- Wire details: [Protocol](protocol.md).
+- Wire details are in the [Protocol](/docs/protocol) page.

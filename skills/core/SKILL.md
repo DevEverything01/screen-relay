@@ -183,3 +183,4 @@ There is no live reload or resize: `relay down`, edit the file, then `relay up -
 - `references/config.md`: configuration keys and precedence.
 - `references/troubleshooting.md`: symptoms and fixes.
 - `relay skills get vercel-sandbox`: run relay inside a Vercel Sandbox.
+- https://relay.labs.vercel.dev/docs: the published documentation.
