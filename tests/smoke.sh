@@ -11,7 +11,7 @@ step() { printf '== %s\n' "$*"; }
 field() {
   file=$1
   shift
-  node -e 'const d=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); console.log(process.argv.slice(2).map(k=>d[k]).join(" "))' "$file" "$@"
+  node -e 'const data=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); console.log(process.argv.slice(2).map(key=>key.split(".").reduce((value,part)=>value[part],data)).join(" "))' "$file" "$@"
 }
 fail() {
   printf 'FAIL: %s\n' "$*" >&2
@@ -20,6 +20,32 @@ fail() {
   [ -z "$xterm_pid" ] || kill "$xterm_pid" 2>/dev/null || true
   exit 1
 }
+
+step 'offline help and usage errors'
+"$relay" --help > "$work/help" 2> "$work/stderr" || fail 'root help'
+[ -s "$work/help" ] && [ ! -s "$work/stderr" ] || fail 'help streams'
+"$relay" help status > "$work/help-command" 2> "$work/stderr" || fail 'help status'
+"$relay" status --help > "$work/help-option" 2> "$work/stderr" || fail 'status --help'
+cmp -s "$work/help-command" "$work/help-option" || fail 'help forms differ'
+"$relay" status --help --json > "$work/help.json" 2> "$work/stderr" || fail 'JSON help'
+node - "$work/help.json" <<'NODE' || fail 'JSON help metadata'
+const assert = require('node:assert/strict');
+const help = JSON.parse(require('node:fs').readFileSync(process.argv[2], 'utf8'));
+for (const key of ['path', 'summary', 'arguments', 'options', 'examples']) assert.ok(Object.hasOwn(help, key), key);
+NODE
+[ ! -s "$work/stderr" ] || fail 'JSON help wrote stderr'
+code=0
+"$relay" status --unknown-smoke-option --json > "$work/stdout" 2> "$work/error.json" || code=$?
+[ "$code" = 2 ] && [ ! -s "$work/stdout" ] || fail 'unknown option exit or stdout'
+node - "$work/error.json" <<'NODE' || fail 'JSON error contract'
+const assert = require('node:assert/strict');
+const text = require('node:fs').readFileSync(process.argv[2], 'utf8');
+assert.equal(text.trim().split('\n').length, 1);
+const error = JSON.parse(text);
+assert.ok(['error', 'action_required'].includes(error.status));
+assert.match(error.reason, /^[a-z][a-z0-9_]*$/);
+assert.ok(error.message.includes('--unknown-smoke-option'));
+NODE
 
 step doctor
 "$relay" doctor || fail 'doctor reported failures'
@@ -33,17 +59,21 @@ if ! command -v xterm >/dev/null 2>&1; then
 fi
 
 step "up -d (session $name, port $port)"
-"$relay" up -d --name "$name" --port "$port" --json > "$work/up.json" || fail 'up -d'
+"$relay" up -d --name "$name" --port "$port" --json > "$work/up.json" 2> "$work/stderr" || fail "up -d: $(cat "$work/stderr")"
+[ ! -s "$work/stderr" ] || fail 'up JSON wrote stderr'
+[ "$(field "$work/up.json" outcome session.name)" = "started $name" ] || fail 'up envelope'
 
 step 'status --json'
-"$relay" status --name "$name" --json > "$work/status.json" || fail 'status reports the session is not running'
-[ "$(field "$work/status.json" running state)" = 'true ready' ] || fail "unexpected status: $(cat "$work/status.json")"
-set -- $(field "$work/status.json" display xauthority logs)
+"$relay" status --name "$name" --json > "$work/status.json" 2> "$work/stderr" || fail 'status reports the session is not running'
+[ ! -s "$work/stderr" ] || fail 'status JSON wrote stderr'
+[ "$(field "$work/status.json" session.running session.state)" = 'true ready' ] || fail "unexpected status: $(cat "$work/status.json")"
+set -- $(field "$work/status.json" session.display session.xauthority session.logs)
 display=$1 xauthority=$2 logs=$3
 
 step screenshot
-"$relay" screenshot --name "$name" --json "$work/screen.png" > "$work/screenshot.json" || fail screenshot
-[ "$(field "$work/screenshot.json" width height)" = '1280 720' ] || fail "screenshot is not 1280x720: $(cat "$work/screenshot.json")"
+"$relay" screenshot --name "$name" --json "$work/screen.png" > "$work/screenshot.json" 2> "$work/stderr" || fail screenshot
+[ ! -s "$work/stderr" ] || fail 'screenshot JSON wrote stderr'
+[ "$(field "$work/screenshot.json" outcome screenshot.width screenshot.height)" = 'saved 1280 720' ] || fail "screenshot is not 1280x720: $(cat "$work/screenshot.json")"
 
 step 'start xterm with mouse reporting'
 DISPLAY=$display XAUTHORITY=$xauthority xterm -T relay-smoke -geometry 60x8+200+150 \
@@ -59,13 +89,17 @@ set -- $(printf '%s\n' "$geometry" | awk '/Absolute upper-left X/{x=$NF} /Absolu
   END{printf "%.4f %.4f", (x+w/2)/1280, (y+h/2)/720}')
 step "click $1 $2, type, key Enter"
 sleep 1
-"$relay" click --name "$name" "$1" "$2" || fail click
-"$relay" type --name "$name" 'hello smoke' || fail type
+"$relay" click --name "$name" "$1" "$2" > "$work/stdout" || fail click
+[ ! -s "$work/stdout" ] || fail 'click wrote piped stdout'
+"$relay" type --name "$name" 'hello smoke' --json > "$work/input.json" 2> "$work/stderr" || fail type
+[ ! -s "$work/stderr" ] || fail 'input JSON wrote stderr'
+[ "$(field "$work/input.json" outcome input.events)" = 'sent 11' ] || fail 'input envelope'
 "$relay" key --name "$name" Enter || fail key
 check='const d=require("fs").readFileSync(process.argv[1]); process.exit(d.includes(Buffer.from("\x1b[M")) && d.includes(Buffer.from("hello smoke\n")) ? 0 : 1);'
 for _ in $(seq 25); do node -e "$check" "$work/typed" && break; sleep 0.2; done
 node -e "$check" "$work/typed" || fail "xterm did not receive the click and text: $(od -c "$work/typed" | head -5)"
-"$relay" screenshot --name "$name" "$work/after.png" >/dev/null || fail 'screenshot after input'
+"$relay" screenshot --name "$name" "$work/after.png" > "$work/stdout" || fail 'screenshot after input'
+[ "$(cat "$work/stdout")" = "$work/after.png" ] || fail 'screenshot did not print only its path'
 
 step 'run shares the desktop bus and restarts apps'
 node - "$relay" "$name" "$logs/session.json" <<'NODE' || fail 'run environment or restart'
@@ -85,7 +119,9 @@ const environment = (pid) => {
 const pause = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 const desktop = environment(session.components.desktop.pid);
 for (const options of [[], ['--restart']]) {
-  const app = JSON.parse(execFileSync(relay, ['run', '--name', name, '--json', ...options, '--', 'xterm', '-T', `${name}-restart`], { encoding: 'utf8' }));
+  const result = JSON.parse(execFileSync(relay, ['run', '--name', name, '--json', ...options, '--', 'xterm', '-T', `${name}-restart`], { encoding: 'utf8' }));
+  if (result.outcome !== 'started' || !Number.isInteger(result.app?.pid)) throw new Error('invalid run envelope');
+  const app = result.app;
   const actual = environment(app.pid);
   for (const key of ['DBUS_SESSION_BUS_ADDRESS', 'XDG_RUNTIME_DIR', 'XDG_CONFIG_HOME', 'XDG_CACHE_HOME', 'ICEAUTHORITY']) {
     if (actual[key] !== desktop[key]) throw new Error(`${key} differs: ${actual[key]} != ${desktop[key]}`);
@@ -111,11 +147,17 @@ for (const options of [[], ['--restart']]) {
 NODE
 
 step 'down (twice: must be idempotent)'
-"$relay" down --name "$name" || fail down
-"$relay" down --name "$name" || fail 'second down'
+"$relay" down --name "$name" --json > "$work/down.json" 2> "$work/stderr" || fail down
+[ ! -s "$work/stderr" ] || fail 'down JSON wrote stderr'
+[ "$(field "$work/down.json" outcome session.name)" = "stopped $name" ] || fail 'down envelope'
+"$relay" down --name "$name" --json > "$work/down.json" 2> "$work/stderr" || fail 'second down'
+[ ! -s "$work/stderr" ] || fail 'second down JSON wrote stderr'
+[ "$(field "$work/down.json" outcome)" = unchanged ] || fail 'second down changed the session'
 
 step 'nothing left running'
-if "$relay" status --name "$name" > /dev/null; then fail 'status still reports running'; fi
+"$relay" status --name "$name" --json > "$work/status.json" 2> "$work/stderr" || fail 'stopped session status must exit 0'
+[ ! -s "$work/stderr" ] || fail 'stopped status JSON wrote stderr'
+[ "$(field "$work/status.json" session.running session.state)" = 'false stopped' ] || fail 'status did not report stopped'
 left=$(grep -ls "RELAY_SESSION=$logs" /proc/[0-9]*/environ 2>/dev/null || true)
 [ -z "$left" ] || fail "processes left: $left"
 for _ in $(seq 25); do running "$xterm_pid" || break; sleep 0.2; done
