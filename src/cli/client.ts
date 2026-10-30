@@ -64,6 +64,14 @@ export function resolveTarget(args: Args): Target {
   return { url: checkUrl(url, token), token, ca, connect, timeout: Number(args.timeout ?? 10), signal: args.signal, explicit };
 }
 
+const RECOVERY: Partial<Record<string, string>> = {
+  busy: 'Close the other viewer or client, then retry.',
+  unauthorized: 'Pass the token with --token-file FILE or set RELAY_TOKEN_FILE.',
+  forbidden: 'Use the --public origin, or connect through loopback.',
+  unsupported_input: 'Use relay type for layout-neutral text.',
+  disconnected: 'Retry the command.',
+};
+
 /** Turns an SDK error into the CLI failure shape the documented commands and exit codes use. */
 export function clientFailure(error: unknown, target: Target): Failure {
   if (error instanceof Failure) return error;
@@ -76,7 +84,7 @@ export function clientFailure(error: unknown, target: Target): Failure {
       return new Failure('unreachable', `Couldn't reach ${host}. ${error.message}`, 'Check the address.', {}, remoteRecovery(target));
     }
     const applied = (error as RelayError & { applied?: number }).applied;
-    return new Failure(error.reason, error.message, error.hint ?? '', { ...error.data, ...(applied === undefined ? {} : { applied }) }, { next: error.next, status: error.status, label: error.label });
+    return new Failure(error.reason, error.message, error.hint ?? RECOVERY[error.reason] ?? '', { ...error.data, ...(applied === undefined ? {} : { applied }) }, { next: error.next, status: error.status, label: error.label });
   }
   return new Failure('internal', detail(error));
 }
@@ -117,7 +125,7 @@ function finish(args: Args, events: number, what: string): number {
 export async function cmdScreenshot(args: Args): Promise<number> {
   if (args.json && args.file === '-') throw new Failure('invalid_input', '--json cannot be combined with PNG output on stdout', 'Run `relay screenshot --help`.');
   const data = await withClient(args, (client) => client.screenshot());
-  if (data.length < 24 || !Buffer.from(data).subarray(0, 8).equals(PNG)) throw new Failure('internal', 'Engine did not return a PNG');
+  if (data.length < 24 || !Buffer.from(data).subarray(0, 8).equals(PNG)) throw new Failure('internal', 'Engine did not return a PNG', 'Run `relay doctor`.');
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
   const width = view.getUint32(16), height = view.getUint32(20);
   if (args.file === '-') {

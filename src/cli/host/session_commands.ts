@@ -243,7 +243,7 @@ export async function cmdRun(args: Args): Promise<number> {
     }
   } catch (error) {
     if (error instanceof Failure) throw error;
-    throw new Failure('spawn_failed', `Cannot start ${command[0]}: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Failure('spawn_failed', `Cannot start ${command[0]}: ${error instanceof Error ? error.message : String(error)}`, 'Read `relay logs apps`.');
   } finally {
     closeSync(log);
   }
