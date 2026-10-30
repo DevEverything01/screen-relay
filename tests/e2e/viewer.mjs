@@ -143,8 +143,12 @@ try {
     await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5);
     await sleep(300);
   }
+  async function waitForFile(path) {
+    await poll(() => { execIn(['test', '-e', path]); return true; }, Boolean, 10000, `${path} did not appear`);
+  }
 
   const typedWindow = await openTerminal('cat > /tmp/out');
+  await waitForFile('/tmp/out');
   await clickCenter();
   await page.keyboard.type('hello');
   await page.keyboard.press('Enter');
@@ -162,6 +166,7 @@ try {
   assert.equal(await page.locator('#meta-ctrl').getAttribute('aria-pressed'), 'true', 'the "Use ⌘ as Ctrl" setting is off');
 
   const ctrlWindow = await openTerminal('stty -icanon -echo; cat -v > /tmp/ctrl');
+  await waitForFile('/tmp/ctrl');
   await clickCenter();
   await page.keyboard.press('Meta+a');
   await poll(
