@@ -168,6 +168,12 @@ export async function cmdDoctor(args: HostArgs): Promise<number> {
     }
   }
   const failed = checks.some((item) => item.status === 'fail');
-  emit(args, { ok: !failed, checks }, formatDoctor(checks));
+  const summary = {
+    ok: !failed,
+    passed: checks.filter((item) => item.status === 'ok').length,
+    warnings: checks.filter((item) => item.status === 'warn').length,
+    failed: checks.filter((item) => item.status === 'fail').length,
+  };
+  emit(args, { checks, summary }, formatDoctor(checks));
   return failed ? 1 : 0;
 }

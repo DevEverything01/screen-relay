@@ -1,3 +1,10 @@
+import { outputMode, type OutputOptions } from './mode.js';
+import { nextStep, receipt, row, sessionCommand } from './format.js';
+import { theme } from './theme.js';
+import { ERROR_REASONS, RelayError, type ErrorOptions, type ErrorReason } from '../protocol/errors.js';
+
+export { count, duration, nextStep, receipt, row, sessionCommand, size } from './format.js';
+
 export type FailurePayload = {
   code: string;
   message: string;
@@ -5,95 +12,102 @@ export type FailurePayload = {
   [key: string]: unknown;
 };
 
-export class Failure extends Error {
-  readonly code: string;
+export class Failure extends RelayError {
   readonly hint: string;
   readonly extra: Record<string, unknown>;
 
-  constructor(code: string, message: string, hint = '', extra: Record<string, unknown> = {}) {
-    super(message);
+  constructor(code: string, message: string, hint = '', extra: Record<string, unknown> = {}, options: ErrorOptions = {}) {
+    const errorClass = ERROR_REASONS[code as ErrorReason]?.class;
+    super(code, message, {
+      status: errorClass === 'usage' || errorClass === 'missing_input' ? 'action_required' : 'error',
+      ...options, hint, data: extra,
+    });
     this.name = 'Failure';
-    this.code = code;
     this.hint = hint;
     this.extra = extra;
   }
 
   payload(): FailurePayload {
-    return { code: this.code, message: this.message, hint: this.hint, ...this.extra };
+    return { code: this.reason, message: this.message, hint: this.hint, ...this.extra };
   }
 }
 
-export function emit(args: { json?: boolean }, data: unknown, text: string): void {
-  process.stdout.write(`${args.json ? JSON.stringify(data) : text}\n`);
+export function emit(args: OutputOptions, data: unknown, text: string, mutation?: { identifier?: string }): void {
+  if (args.json) {
+    process.stdout.write(`${JSON.stringify(data, null, outputMode(args).pretty ? 2 : undefined)}\n`);
+    return;
+  }
+  const stream = mutation ? process.stderr : process.stdout;
+  if (text) stream.write(`${text}\n`);
+  if (mutation?.identifier !== undefined && !outputMode(args, process.stdout).tty) process.stdout.write(`${mutation.identifier}\n`);
 }
 
 export function writeText(text: string): void {
   process.stdout.write(text);
 }
 
-export function printWarning(text: string): void {
-  process.stderr.write(`${text}\n`);
+export function printWarning(text: string, args: OutputOptions = {}): void {
+  if (!args.json) process.stderr.write(`${theme(args).warning} ${text}\n`);
 }
 
-export function formatUsage(commands: Record<string, { help: string; options?: Record<string, unknown> }>, command?: string): string {
-  if (command && commands[command]) {
-    const entry = commands[command];
-    const common = ['json', ...(entry.options?.name ? ['name'] : [])];
-    return `usage: relay ${command} [options]\n\n${entry.help}\n\nOptions: ${common.map((key) => `--${key}${key === 'name' ? ' NAME' : ''}`).join(' ')}${Object.keys(entry.options ?? {}).filter((key) => !common.includes(key)).map((key) => ` --${key}`).join('')}\n`;
-  }
-  return `usage: relay COMMAND [options]\n\nStart a streamed Linux desktop and drive it from anywhere.\n\nCommands:\n${Object.entries(commands).map(([name, entry]) => `  ${name.padEnd(12)} ${entry.help}`).join('\n')}\n\nCoordinates are fractions of the screen from 0 to 1. Run relay COMMAND --help for details.\n`;
+export function printNext(args: OutputOptions, benefit: string, command: string): void {
+  if (!args.json) process.stderr.write(`${nextStep(benefit, command, args)}\n`);
 }
 
 export function formatReady(info: Record<string, any>, args: Record<string, any>, background = false): string {
-  const lines = [`relay "${info.name}" is ready`, `  url:     ${info.url}`, `  viewer:  ${info.viewer}`];
-  if (info.token) lines.push(`  token:   ${info.token}  (shown once; status --show-token prints it again)`);
-  lines.push(`  display: ${info.display}`, `  logs:    ${info.logs}`);
+  const lines = [receipt('Started', info.name, args), row('Viewer', info.viewer), row('Display', info.display)];
+  if (info.resolution) lines.push(row('Resolution', `${info.resolution}${info.fps ? ` at ${info.fps} fps` : ''}`));
+  lines.push(row('Logs', info.logs));
   if (info.public) {
-    if (!args['tls-cert']) lines.push(`Expects a TLS proxy in front: forward ${info.url} to http://<this host>:${info.port}.`);
+    if (!args['tls-cert']) lines.push(row('TLS proxy', `Forward ${info.url} to http://<HOST>:${info.port}`));
   } else if (info.bind !== '127.0.0.1') {
-    lines.push(`Listening on ${info.bind}:${info.port}; reach it through a loopback port publish or SSH tunnel.`);
+    lines.push(row('Listening', `${info.bind}:${info.port}; use a loopback port publish or SSH tunnel`));
   }
-  lines.push(background ? `Running in the background; stop with relay down --name ${info.name}.` : 'Stop with Ctrl-C or relay down.');
+  lines.push(nextStep(background ? 'Stop it' : 'Stop it (or press Ctrl-C)', sessionCommand('down', String(info.name)), args));
   return lines.join('\n');
 }
 
 export function formatStatus(name: string, session: Record<string, any>): string {
-  const lines = [`${name}: ${session.state}`];
+  const lines = [row('Session', name), row('State', session.state)];
   for (const key of ['url', 'display', 'resolution', 'fps', 'logs', 'token']) {
-    if (session[key]) lines.push(`  ${`${key}:`.padEnd(12)}${session[key]}`);
+    if (session[key] !== undefined) lines.push(row(key[0].toUpperCase() + key.slice(1), session[key]));
   }
   if (session.error) {
-    lines.push(`  error:   ${session.error.message}`, `  hint:    ${session.error.hint ?? ''}`);
-    if (session.error.log) lines.push(`  last log lines:\n${String(session.error.log).split(/\r?\n/).map((line: string) => `    ${line}`).join('\n')}`);
+    lines.push(row('Error', session.error.message));
   }
+  if (session.health) lines.push(row('Health', session.health.message));
   return lines.join('\n');
 }
 
-export function formatStopped(name: string, stopped: boolean): string {
-  return stopped ? `Stopped "${name}"` : `"${name}" was not running`;
+export function formatStopped(name: string, stopped: boolean, args: OutputOptions = {}): string {
+  return receipt(stopped ? 'Stopped' : 'Unchanged', name, args);
 }
 
-export function formatStarted(command: string, pid: number, display: string, log: string): string {
-  return `Started ${command} (pid ${pid}) on ${display}; output in ${log}`;
+export function formatStarted(command: string, pid: number, display: string, log: string, args: OutputOptions = {}): string {
+  return [receipt('Started', command, args), row('PID', pid), row('Display', display), row('Logs', log)].join('\n');
 }
 
 export function formatDoctor(checks: Array<{ status: string; name: string; detail: string; fix: string }>): string {
   const lines: string[] = [];
   for (const item of checks) {
-    lines.push(`${item.status.padEnd(5)} ${item.name.padEnd(17)} ${item.detail}`);
-    if (item.fix) lines.push(`${''.padEnd(23)}fix: ${item.fix}`);
+    lines.push(row('Check', `${item.name}: ${item.status}; ${item.detail}`));
+    if (item.fix) lines.push(row('Fix', item.fix));
   }
   return lines.join('\n');
 }
 
-export function printFailure(failure: Failure, jsonMode: boolean): void {
+export function printFailure(failure: RelayError, jsonMode: boolean, args: OutputOptions = {}): void {
+  const data = failure.data ?? {};
+  const command = failure.hint?.match(/`([^`]+)`/)?.[1];
+  const next = failure.next ?? (command ? [{ command: command.split(' ')[0], argv: command.split(' ').slice(1) }] : undefined);
   if (jsonMode) {
-    process.stderr.write(`${JSON.stringify({ error: failure.payload() })}\n`);
+    process.stderr.write(`${JSON.stringify({ status: failure.status, reason: failure.reason, message: failure.message, ...(next ? { next } : {}), ...(Object.keys(data).length ? { data } : {}) })}\n`);
     return;
   }
-  process.stderr.write(`error: ${failure.message}\n`);
-  if (failure.hint) process.stderr.write(`hint: ${failure.hint}\n`);
-  if (failure.extra.log) {
-    process.stderr.write(`last lines of the ${String(failure.extra.component ?? '')} log:\n${String(failure.extra.log)}\n`);
-  }
+  const lines = [`${theme(args).error} ${failure.message.replace(/[\r\n]+/g, ' ')}`];
+  for (const key of ['component', 'logs', 'applied']) if (data[key] !== undefined) lines.push(row(key[0].toUpperCase() + key.slice(1), data[key]));
+  const recovery = next?.[0];
+  if (recovery) lines.push(nextStep('Try this', [recovery.command, ...recovery.argv.map((value) => /^[A-Za-z0-9_./:=-]+$/.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`)].join(' '), args));
+  else if (failure.hint) lines.push(row('Recovery', failure.hint.replace(/[\r\n]+/g, ' ')));
+  process.stderr.write(`${lines.slice(0, 6).join('\n')}\n`);
 }

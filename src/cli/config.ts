@@ -2,7 +2,7 @@ import { readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { inspect, TextDecoder } from 'node:util';
-import { parse } from 'yaml';
+import { parseDocument } from 'yaml';
 import { Failure } from './output.js';
 
 export type ConfigSettings = {
@@ -41,9 +41,9 @@ function isFile(path: string): boolean {
 }
 
 export function locate(path?: string): [string | null, boolean] {
-  if (path) return [expandUser(path), true];
+  if (path !== undefined) return [expandUser(path), true];
   const environment = process.env.RELAY_CONFIG;
-  if (environment) return [expandUser(environment), true];
+  if (environment !== undefined) return [expandUser(environment), true];
   const configHome = process.env.XDG_CONFIG_HOME || join(homedir(), '.config');
   const defaultPath = join(configHome, 'relay', 'config.yaml');
   return [isFile(defaultPath) ? defaultPath : null, false];
@@ -74,8 +74,13 @@ function readConfig(source: string): Mapping {
   }
   let data: unknown;
   try {
-    data = parse(text, { intAsBigInt: true });
+    const document = parseDocument(text, { intAsBigInt: true });
+    if (document.errors.length) {
+      throw new Failure('invalid_input', document.errors.map((error) => error.message).join('\n'), 'Fix the YAML syntax.');
+    }
+    data = document.toJS();
   } catch (error) {
+    if (error instanceof Failure) throw error;
     const detail = error instanceof Error ? error.message : String(error);
     throw new Failure('invalid_input', `Cannot parse config file ${source}: ${detail}`, 'Fix the YAML syntax.');
   }
@@ -84,11 +89,11 @@ function readConfig(source: string): Mapping {
   return data;
 }
 
-function checkKeys(data: Mapping, allowed: readonly string[], prefix: string): void {
+function checkKeys(data: Mapping, allowed: readonly string[], prefix: string, errors: Failure[]): void {
   const base = prefix ? `${prefix}.` : '';
   for (const key of Object.keys(data)) {
     if (!allowed.includes(key)) {
-      throw new Failure('invalid_input', `Unknown config key "${base}${key}"`, `Valid keys at ${prefix || 'the top level'}: ${allowed.join(', ')}.`);
+      errors.push(new Failure('invalid_input', `Unknown config key "${base}${key}"`, `Valid keys at ${prefix || 'the top level'}: ${allowed.join(', ')}.`));
     }
   }
 }
@@ -109,6 +114,7 @@ function integer(value: unknown, path: string, low: number, high: number): numbe
 
 function textValue(value: unknown, path: string): string {
   if (typeof value !== 'string') wrong(path, value, 'a string');
+  if (!value.trim()) wrong(path, value, 'a non-empty string');
   return value;
 }
 
@@ -139,12 +145,32 @@ function bitrate(value: unknown, path: string): number {
   return Number(amount);
 }
 
-function bitrates(settings: ConfigSettings, block: unknown): void {
-  if (!isMapping(block)) wrong('stream.bitrate', block, 'a mapping with min, start and max');
-  checkKeys(block, BITRATE_KEYS, 'stream.bitrate');
-  for (const key of BITRATE_KEYS) {
-    if (Object.hasOwn(block, key)) settings.stream.bitrate[key as keyof ConfigSettings['stream']['bitrate']] = bitrate(block[key], `stream.bitrate.${key}`);
+function collect(errors: Failure[], validate: () => void): void {
+  try {
+    validate();
+  } catch (error) {
+    if (!(error instanceof Failure)) throw error;
+    errors.push(error);
   }
+}
+
+function report(errors: Failure[], source: string, reason = 'invalid_config'): void {
+  if (!errors.length) return;
+  throw new Failure(reason, errors.map((error) => `${source}: ${error.message}.`).join(' '),
+    [...new Set(errors.map((error) => error.hint).filter(Boolean))].join(' '),
+    { errors: errors.map((error) => ({ source, ...error.payload() })) });
+}
+
+function bitrates(settings: ConfigSettings, block: unknown, errors: Failure[]): void {
+  if (!isMapping(block)) wrong('stream.bitrate', block, 'a mapping with min, start and max');
+  checkKeys(block, BITRATE_KEYS, 'stream.bitrate', errors);
+  const previousErrors = errors.length;
+  for (const key of BITRATE_KEYS) {
+    if (Object.hasOwn(block, key)) collect(errors, () => {
+      settings.stream.bitrate[key as keyof ConfigSettings['stream']['bitrate']] = bitrate(block[key], `stream.bitrate.${key}`);
+    });
+  }
+  if (errors.length === previousErrors) collect(errors, () => checkBitrateOrder(settings));
 }
 
 function checkBitrateOrder(settings: ConfigSettings): void {
@@ -159,7 +185,11 @@ const validators: Record<string, (value: unknown, path: string) => unknown> = {
   'stream.fps': (value, path) => integer(value, path, 10, 60),
   'server.port': (value, path) => integer(value, path, 1, 65535),
   'server.bind': textValue,
-  'server.public': textValue,
+  'server.public': (value, path) => {
+    const origin = textValue(value, path);
+    if (!/^https:\/\/[^/?#@\\\s]+$/.test(origin)) wrong(path, value, 'an HTTPS origin without a path, query or credentials');
+    return origin;
+  },
   'server.tls_cert': textValue,
   'server.tls_key': textValue,
   'keyboard.layout': (value, path) => {
@@ -182,50 +212,89 @@ export function loadConfig(path?: string): [ConfigSettings, string | null, Set<s
     desktop: 'xfce',
   };
   const present = new Set<string>();
-  if (source) {
+  if (source !== null) {
     if (!isFile(source)) {
-      if (required) throw new Failure('invalid_input', `Config file not found: ${source}`, 'Check --config or RELAY_CONFIG.');
+      if (required) throw new Failure('invalid_config', `${source}: Config file not found.`, 'Check --config or RELAY_CONFIG.');
       loadedSource = null;
     } else {
-      applyConfig(settings, readConfig(source), present);
+      const errors: Failure[] = [];
+      collect(errors, () => applyConfig(settings, readConfig(source), present, errors));
+      report(errors, source);
     }
   }
   return [settings, loadedSource, present];
 }
 
-function applyConfig(settings: ConfigSettings, data: Mapping, present: Set<string>): void {
-  checkKeys(data, ROOT_KEYS, '');
+function applyConfig(settings: ConfigSettings, data: Mapping, present: Set<string>, errors: Failure[]): void {
+  checkKeys(data, ROOT_KEYS, '', errors);
   for (const [section, allowed] of Object.entries(SECTIONS) as [ConfigSection, readonly string[]][]) {
     if (!Object.hasOwn(data, section)) continue;
     const block = data[section];
-    if (!isMapping(block)) wrong(section, block, 'a mapping');
-    checkKeys(block, allowed, section);
+    if (!isMapping(block)) {
+      collect(errors, () => wrong(section, block, 'a mapping'));
+      continue;
+    }
+    checkKeys(block, allowed, section, errors);
     for (const key of allowed) {
       if (!Object.hasOwn(block, key)) continue;
       const path = `${section}.${key}`;
-      if (key === 'bitrate') bitrates(settings, block[key]);
-      else (settings[section] as unknown as Mapping)[key] = validators[path](block[key], path);
+      collect(errors, () => {
+        if (key === 'bitrate') bitrates(settings, block[key], errors);
+        else (settings[section] as unknown as Mapping)[key] = validators[path](block[key], path);
+      });
       present.add(path);
     }
   }
   if (Object.hasOwn(data, 'desktop')) {
-    settings.desktop = textValue(data.desktop, 'desktop');
+    collect(errors, () => { settings.desktop = textValue(data.desktop, 'desktop'); });
     present.add('desktop');
   }
-  checkBitrateOrder(settings);
 }
 
 export function applyTo(args: Record<string, unknown>, settings: ConfigSettings, present: Set<string>): void {
-  if (args.port == null) args.port = settings.server.port;
-  if (args.bind == null && present.has('server.bind')) args.bind = settings.server.bind;
-  if (args.public == null) args.public = settings.server.public;
-  if (args['tls-cert'] == null) args['tls-cert'] = settings.server.tls_cert;
-  if (args['tls-key'] == null) args['tls-key'] = settings.server.tls_key;
-  if (args.desktop == null && present.has('desktop')) args.desktop = settings.desktop;
-  args.resolution = settings.display.resolution;
-  args.fps = settings.stream.fps;
-  args.bitrateMin = settings.stream.bitrate.min;
-  args.bitrateStart = settings.stream.bitrate.start;
-  args.bitrateMax = settings.stream.bitrate.max;
-  args.keyboardLayout = settings.keyboard.layout;
+  const fields: [string, string, string, unknown][] = [
+    ['port', 'RELAY_PORT', 'server.port', settings.server.port],
+    ['bind', 'RELAY_BIND', 'server.bind', present.has('server.bind') ? settings.server.bind : undefined],
+    ['public', 'RELAY_PUBLIC', 'server.public', settings.server.public],
+    ['tls-cert', 'RELAY_TLS_CERT', 'server.tls_cert', settings.server.tls_cert],
+    ['tls-key', 'RELAY_TLS_KEY', 'server.tls_key', settings.server.tls_key],
+    ['desktop', 'RELAY_DESKTOP', 'desktop', present.has('desktop') ? settings.desktop : undefined],
+    ['resolution', 'RELAY_RESOLUTION', 'display.resolution', settings.display.resolution],
+    ['fps', 'RELAY_FPS', 'stream.fps', settings.stream.fps],
+    ['bitrateMin', 'RELAY_BITRATE_MIN', 'stream.bitrate.min', settings.stream.bitrate.min],
+    ['bitrateStart', 'RELAY_BITRATE_START', 'stream.bitrate.start', settings.stream.bitrate.start],
+    ['bitrateMax', 'RELAY_BITRATE_MAX', 'stream.bitrate.max', settings.stream.bitrate.max],
+    ['keyboardLayout', 'RELAY_KEYBOARD_LAYOUT', 'keyboard.layout', settings.keyboard.layout],
+  ];
+  const resolved: Mapping = {};
+  const errors: Failure[] = [];
+  for (const [key, environment, path, fallback] of fields) {
+    const explicit = args[key] !== undefined;
+    const fromEnvironment = !explicit && process.env[environment] !== undefined;
+    const value = explicit ? args[key] : fromEnvironment ? process.env[environment] : fallback;
+    if (!explicit && !fromEnvironment) {
+      resolved[key] = value;
+      continue;
+    }
+    collect(errors, () => {
+      const label = fromEnvironment ? environment : `--${key}`;
+      let input = value;
+      if (path === 'server.port' || path === 'stream.fps') {
+        if (typeof input === 'number' && Number.isSafeInteger(input)) input = BigInt(input);
+        else if (typeof input === 'string' && /^[0-9]+$/.test(input)) input = BigInt(input);
+      } else if (path.startsWith('stream.bitrate.') && typeof input === 'number' && Number.isSafeInteger(input)) input = BigInt(input);
+      const validate = path.startsWith('stream.bitrate.') ? bitrate : path === 'desktop' ? textValue : validators[path];
+      resolved[key] = validate(input, label);
+    });
+  }
+  if (!errors.some((error) => /bitrate|BITRATE/.test(error.message))) collect(errors, () => {
+    checkBitrateOrder({ ...settings, stream: { ...settings.stream, bitrate: {
+      min: resolved.bitrateMin as number, start: resolved.bitrateStart as number, max: resolved.bitrateMax as number,
+    } } });
+  });
+  if (Boolean(resolved['tls-cert']) !== Boolean(resolved['tls-key'])) {
+    errors.push(new Failure('invalid_input', 'server.tls_cert and server.tls_key must be set together'));
+  }
+  report(errors, 'Settings', 'invalid_input');
+  Object.assign(args, resolved);
 }

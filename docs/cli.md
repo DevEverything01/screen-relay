@@ -7,8 +7,8 @@
 | Item | Detail |
 | --- | --- |
 | `--json` | Every command. Success object on stdout. On failure, an error object on stderr. |
-| Error shape | `{"error":{"code","message","hint","component"?,"log"?,"logs"?,"applied"?}}`. Codes are listed under [Error codes](#error-codes). |
-| Human errors | `error: ...` and `hint: ...` on stderr, plus the log tail when a component failed. |
+| Error shape | `{"status":"error","reason":"<snake_case>","message":"<headline>"}` on stderr, with optional `next` and `data`. `status` is `action_required` when input can unblock a command before any effect. See [Error codes](#error-codes). |
+| Human errors | A headline, context and one recovery command on stderr; no stack trace or raw engine payload. |
 | `--name N` | Session name, default `default`. Letters, digits, `.`, `_`, `-`, up to 64 characters. |
 | State directory | `${XDG_STATE_HOME:-~/.local/state}/relay/<name>/` (mode 0700): `session.json`, `token` (0600), `display.log`, `desktop.log`, `engine.log`, `apps.log` (after `run`), `supervisor.log` (`-d` only). |
 
@@ -17,10 +17,52 @@
 | Code | Meaning |
 | --- | --- |
 | 0 | Success. |
-| 1 | Failure. The error carries a code. |
-| 2 | Usage error from argument parsing. The code is `invalid_input`, and it is JSON with `--json`. |
-| 3 | `status` found the session but it is not running. |
-| 130 | Interrupted with Ctrl-C. A foreground `up` stops cleanly and exits 0. |
+| 1 | Runtime, network, permission, configuration or missing-session failure. |
+| 2 | Usage error, invalid value or missing input. |
+| 130 | Interrupted with Ctrl+C. A foreground `up` stops its session on the first interrupt; a second interrupt exits immediately. |
+| 128+n | Terminated by signal n. |
+
+An existing session's `status` exits 0 for `ready`, `starting`, `stopped` and `failed`. A missing session exits 1. Exit code 3 is no longer used.
+
+### Help and options
+
+`relay --help`, `relay -h` and `relay help` show root help. Use `relay help <COMMAND>` or `relay <COMMAND> --help` for a command. Help works offline, writes stdout and exits 0 without starting anything.
+
+Root help groups commands under Session, Control and Machine. Command help lists arguments, alphabetical options, global options, examples, notes and a documentation link. Empty sections are omitted. `relay <COMMAND> --help --json` returns metadata with `path`, `summary`, `arguments`, `options`, `examples` and the result schema. `relay help --all --json` returns every command.
+
+Global options work before or after the command: `-h`/`--help`, `-v`/`--version`, `--json`, `--no-color` and `--name <NAME>`. Version output contains only the version; `--version --json` returns `{"version":"<VERSION>"}`. Options accept `--name <NAME>`, `--name=<NAME>` and their documented short forms. `--` ends option parsing. Boolean options accept `--no-<OPTION>`. Unknown options, commands and extra positionals fail before work, with at most one close suggestion and a help command. Options do not accept prefix matching.
+
+`-f` means follow; `-n` and `-o` retain only their documented meanings. The exception is `up -d`, which keeps meaning `--detach`.
+
+### Output
+
+Queries write data to stdout. Mutations write receipts and next steps to stderr. When stdout is piped, `up` writes only the viewer URL (including `#token=` when needed), `screenshot` writes only the saved path, and input commands write nothing. Treat the viewer URL as a secret when it includes a token.
+
+TTY receipts use `✓`, `!` and `✗` in column 0, text from column 2, and label values from column 18. Non-TTY stderr or `TERM=dumb` uses plain words and no color. Color precedence is `--no-color`, nonempty `NO_COLOR`, `FORCE_COLOR` (`0` disables it), then detection for each stream.
+
+`--json` writes exactly one JSON document followed by a newline to stdout, pretty-printed with two spaces on a TTY and compact otherwise. Successful JSON commands leave stderr empty. Failures leave stdout empty and write one compact error document to stderr. Keys use camelCase. Success may include `warnings: [{reason, message}]` and `next: [{command, argv}]`.
+
+| Command | JSON success shape |
+| --- | --- |
+| `up` | `{"session":{...},"outcome":"started"}` |
+| `down` | `{"session":{...},"outcome":"stopped"}` or `"unchanged"` |
+| `status` | `{"session":{...}}` |
+| `screenshot` | `{"screenshot":{"path":"<PATH>","width":1280,"height":720,"bytes":12345},"outcome":"saved"}` |
+| `click`, `move`, `scroll`, `key`, `type`, `input` | `{"input":{"events":1},"outcome":"sent"}` |
+| `doctor` | `{"checks":[...],"summary":{...}}` |
+| `run` | `{"app":{"pid":4412,"command":"<APP>"},"outcome":"started"}` |
+
+These envelopes replace the former flat objects, input `applied` count and nested `error` object. Scripts must read the named object and `reason` instead of `error.code`.
+
+### Settings
+
+Precedence is an explicit option, its `RELAY_*` environment variable, the config file, then the default. An explicit invalid value fails instead of falling back. Config validation reports all problems before starting processes.
+
+| Variable | Applies to |
+| --- | --- |
+| `RELAY_CONFIG` | `up --config`; otherwise `~/.config/relay/config.yaml` when present |
+| `RELAY_URL` | Client `--url` |
+| `RELAY_TOKEN_FILE` | Client `--token-file` |
 
 ### Client target
 
@@ -28,7 +70,7 @@ Client commands take `--url`, `--token-file` and `--timeout` (seconds, default 1
 
 1. `--url`, else `RELAY_URL`.
 2. The local session named by `--name`, if it is ready: its URL, token file and TLS certificate. The session certificate is trusted without a hostname check, as a local session needs.
-3. `http://127.0.0.1:8080`.
+3. `http://127.0.0.1:8080` only when no session was explicitly selected and the default session does not exist. An explicitly selected missing session, a stopped session, or one whose supervisor is gone fails with `not_running`. Pass `--url` to target an engine without a local session.
 
 The token comes from `--token-file`, else `RELAY_TOKEN_FILE`, else the local session. The file holds the 64-character token; the client only reads it, so its mode does not matter.
 
@@ -88,41 +130,43 @@ If that does not happen within `--timeout`, `up` fails with `timeout`. If a comp
 
 `up` prints the token once, when there is one ([Tokens](remote-access.md#tokens)).
 
-Real output, loopback (no token):
+TTY receipt, loopback (no token), on stderr:
 
 ```console
 $ relay up -d --name demo --port 8084
-relay "demo" is ready
-  url:     http://127.0.0.1:8084
-  viewer:  http://127.0.0.1:8084
-  display: :1
-  logs:    /home/relay/.local/state/relay/demo
-Running in the background; stop with `relay down --name demo`.
+✓ Started         demo
+  Viewer          http://127.0.0.1:8084
+  Display         :1
+  Resolution      1280x720 at 60 fps
+  Logs            /home/relay/.local/state/relay/demo
+
+  Stop it:
+    relay down --name demo
 ```
 
 With `--public` (token shortened here):
 
 ```console
 $ relay up -d --name pub --port 8082 --public https://desk.example.com --desktop none
-relay "pub" is ready
-  url:     https://desk.example.com
-  viewer:  https://desk.example.com/#token=<64 hex>
-  token:   <64 hex>  (shown once; status --show-token prints it again)
-  display: :1
-  logs:    /home/relay/.local/state/relay/pub
-Expects a TLS proxy in front: forward https://desk.example.com to http://<this host>:8082.
-Running in the background; stop with `relay down --name pub`.
+✓ Started         pub
+  Viewer          https://desk.example.com/#token=<TOKEN>
+  Display         :1
+  Resolution      1280x720 at 60 fps
+  Logs            /home/relay/.local/state/relay/pub
+
+  Stop it:
+    relay down --name pub
 ```
 
 The TLS proxy line is left out with `--tls-cert`. With a non-loopback `--bind` and no `--public`, `up` instead prints `Listening on ADDR:PORT; reach it through a loopback port publish or SSH tunnel.`
 
-`up --json` prints one object:
+`up -d --json` prints one object when ready. Foreground `up --json` defers its result until supervision ends, so a later engine failure leaves stdout empty. Interrupting it stops the session without printing a success document.
 
 ```json
-{"ready": true, "name": "two", "url": "http://127.0.0.1:8081", "viewer": "http://127.0.0.1:8081", "token": null, "display": ":1", "xauthority": "/home/relay/.local/state/relay/two/Xauthority", "logs": "/home/relay/.local/state/relay/two", "pid": 266, "enginePid": 272, "bind": "127.0.0.1", "port": 8081, "public": false}
+{"session":{"ready":true,"name":"two","url":"http://127.0.0.1:8081","viewer":"http://127.0.0.1:8081","token":null,"display":":1","xauthority":"/home/relay/.local/state/relay/two/Xauthority","logs":"/home/relay/.local/state/relay/two","pid":266,"enginePid":272,"bind":"127.0.0.1","port":8081,"public":false},"outcome":"started"}
 ```
 
-| Field | Meaning |
+| Session field | Meaning |
 | --- | --- |
 | `url` | The `--public` origin, else the local URL. |
 | `viewer` | `url/#token=TOKEN` when there is a token, else `url`. |
@@ -136,7 +180,7 @@ A failed start, for example a desktop command that exits:
 
 ```console
 $ relay up -d --name bad --port 8085 --desktop false --json
-{"error": {"code": "component_failed", "message": "desktop exited with code 1", "hint": "Run `relay doctor` (icon decoding, D-Bus) and read `relay logs desktop`.", "component": "desktop", "log": "", "logs": "/home/relay/.local/state/relay/bad"}}
+{"status":"error","reason":"component_failed","message":"Failed to start the desktop. It exited with code 1.","next":[{"command":"relay","argv":["logs","desktop","--name","bad"]}],"data":{"component":"desktop","logs":"/home/relay/.local/state/relay/bad"}}
 ```
 
 ## down
@@ -145,7 +189,7 @@ $ relay up -d --name bad --port 8085 --desktop false --json
 relay down [--name N]
 ```
 
-Stops the session and the processes it started. Safe to run twice. `--json` prints `{"name": "default", "stopped": true}`; `stopped` is `false` when nothing was running.
+Stops the session and the processes it started. Safe to run twice. `--json` prints `{"session":{"name":"default"},"outcome":"stopped"}`; the outcome is `unchanged` when nothing was running.
 
 ## status
 
@@ -153,27 +197,28 @@ Stops the session and the processes it started. Safe to run twice. `--json` prin
 relay status [--name N] [--url URL] [--token-file F] [--timeout S] [--show-token]
 ```
 
-Without `--url` (or `RELAY_URL`), shows the local session and asks its engine for capabilities. Exits 3 when the session exists but is not running, and fails with `not_running` when there is no session with that name. The token is hidden unless `--show-token`.
+Without `--url` (or `RELAY_URL`), shows the local session and asks its engine for capabilities. Exits 0 for an existing session, including a stopped or failed one. A missing session exits 1. The token is hidden unless `--show-token`.
 
 ```console
 $ relay status
-default: ready
-  url:        http://127.0.0.1:8080
-  display:    :0
-  resolution: 1280x720
-  fps:        60
-  logs:       /home/relay/.local/state/relay/default
+  Session         default
+  State           ready
+  URL             http://127.0.0.1:8080
+  Display         :0
+  Resolution      1280x720
+  Fps             60
+  Logs            /home/relay/.local/state/relay/default
 ```
 
 `status --json` for a running session (capabilities trimmed):
 
 ```json
-{"name": "demo", "state": "ready", "supervisor": {"pid": 494, "start": "87687"}, "logs": "/home/relay/.local/state/relay/demo", "port": 8084, "display": ":1", "xauthority": "/home/relay/.local/state/relay/demo/Xauthority", "ownsDisplay": true, "desktop": "xfce", "resolution": "1280x720", "fps": 60, "bind": "127.0.0.1", "localUrl": "http://127.0.0.1:8084", "url": "http://127.0.0.1:8084", "tlsCert": null, "ready": 1793146225.0122316, "running": true, "capabilities": {"version": 1, "backend": "x11", "width": 1280, "height": 720, "...": "..."}}
+{"session":{"name":"demo","state":"ready","logs":"/home/relay/.local/state/relay/demo","display":":1","xauthority":"/home/relay/.local/state/relay/demo/Xauthority","running":true,"capabilities":{"version":1,"backend":"x11","width":1280,"height":720,"fps":60}}}
 ```
 
 | Field | Meaning |
 | --- | --- |
-| `state` | `starting`, `ready`, `stopped`, `failed`, or `dead` (the supervisor is gone without cleaning up). |
+| `state` | `starting`, `ready`, `stopped` or `failed`. |
 | `running` | `true` only when `state` is `ready` and the supervisor is alive. |
 | `url`, `localUrl` | Public or local URL, and the URL local clients use. |
 | `display`, `xauthority`, `ownsDisplay`, `desktop` | X display, cookie file, whether `up` started the display, desktop setting. |
@@ -187,11 +232,13 @@ default: ready
 | `health` | Error object when running but the engine did not answer. |
 | `error` | Error object after a failure, with `component` and `log`. |
 
-With `--url`, shows a remote engine instead. `--json` gives `{"url", "capabilities", "metrics"}`; the text form is one line:
+With `--url`, shows a remote engine instead. `--json` wraps `url`, `capabilities` and `metrics` in `session`:
 
 ```console
 $ relay status --url http://127.0.0.1:18200 --token-file ./token
-http://127.0.0.1:18200: up (x11 1280x720, 0 frames encoded)
+  URL             http://127.0.0.1:18200
+  Backend         x11
+  Resolution      1280x720
 ```
 
 ## logs
@@ -200,7 +247,7 @@ http://127.0.0.1:18200: up (x11 1280x720, 0 frames encoded)
 relay logs [--name N] [display|dbus|desktop|engine|apps] [-f|--follow]
 ```
 
-Prints the last 200 lines of one component's log, or of every log that exists. `--follow` keeps printing new lines. `--json` gives one key per log, for example `{"display": "...", "desktop": "...", "engine": "..."}` and cannot be combined with `--follow`. The `-d` supervisor's own output is in `supervisor.log` in the state directory.
+Prints the last 200 lines of one component's log, or of every log that exists. `--follow` keeps printing new lines. `--json` wraps the component logs in `logs`, for example `{"logs":{"display":"...","desktop":"...","engine":"..."}}`, and cannot be combined with `--follow`. The `-d` supervisor's own output is in `supervisor.log` in the state directory.
 
 ## doctor
 
@@ -208,7 +255,7 @@ Prints the last 200 lines of one component's log, or of every log that exists. `
 relay doctor
 ```
 
-Checks this machine and prints the fix command for each problem. Exits 1 if any check fails; `warn` does not fail. `--json` gives `{"ok", "checks": [{"name", "status", "detail", "fix"}]}` with `status` `ok`, `warn` or `fail`.
+Checks this machine and prints the fix command for each problem. Exits 1 if any check fails; `warn` does not fail. `--json` gives `checks` and `summary`; each check includes `name`, `status`, `detail` and `fix`, with status `ok`, `warn` or `fail`.
 
 | Check | What it looks at |
 | --- | --- |
@@ -239,7 +286,10 @@ Starts an app on the session's desktop and returns its pid. The app gets the des
 
 ```console
 $ relay run -- mousepad notes.txt
-Started mousepad (pid 4412) on :0; output in ~/.local/state/relay/default/apps.log
+✓ Started         mousepad
+  PID             4412
+  Display         :0
+  Logs            ~/.local/state/relay/default/apps.log
 ```
 
 ## screenshot
@@ -248,7 +298,7 @@ Started mousepad (pid 4412) on :0; output in ~/.local/state/relay/default/apps.l
 relay screenshot [FILE|-]
 ```
 
-Saves a PNG of the screen. Default file `screen.png`. `-` writes the PNG to stdout. Works while a viewer is connected. `--json` prints `{"path", "bytes", "width", "height"}`.
+Saves a PNG of the screen. Default file `screen.png`. `-` writes the PNG to stdout. Works while a viewer is connected. `--json` wraps `path`, `bytes`, `width` and `height` in `screenshot`, with outcome `saved`.
 
 ## click
 
@@ -287,7 +337,7 @@ relay type TEXT
 relay type --stdin
 ```
 
-Types text as text events, one per Unicode character, so the remote keyboard layout decides each character. The engine produces the character by pressing a key of the current layout, or reports `invalid_input` when it cannot.
+Types text as text events, one per Unicode scalar value. The engine produces the requested character using the current remote layout, or reports `unsupported_input` when it cannot. Unlike `key`, text input does not assume a US keyboard layout.
 
 ## input
 
@@ -296,7 +346,7 @@ relay input JSON
 relay input --stdin
 ```
 
-Sends a JSON array of 1 to 256 raw events with the same schema as the [SDK](sdk.md#input-events), as one batch.
+Sends a nonempty JSON array of raw events with the same schema as the [SDK](sdk.md#input-events). The SDK splits input according to the engine's advertised `max_input_batch`.
 
 ```sh
 relay input '[{"type":"keyDown","key":4},{"type":"keyUp","key":4}]'
@@ -305,29 +355,36 @@ relay input '[{"type":"keyDown","key":4},{"type":"keyUp","key":4}]'
 ## Input behavior
 
 - X and Y are fractions of the screen from 0 to 1, from the top-left.
-- Input goes to the engine as `POST /input` batches of at most 256 events ([protocol](protocol.md#post-input)). `click`, `move`, `scroll` and `input` send one batch.
+- Input goes to the engine as `POST /input` batches limited by capabilities `max_input_batch` (currently 256 events; [protocol](protocol.md#post-input)).
 - `type` sends one text event per character and `key` one group per combo. Events are packed into as many batches as needed and never split.
-- If a viewer or SDK session holds control, the batch fails with `busy` (HTTP 409). It is never retried. Another controller can take control between batches, so a long `type` or `key` can stop partway. The error then carries `applied`, the number of events already applied.
+- If a viewer or SDK session holds control, the batch fails with `busy` (HTTP 409). It is never retried. Another controller can take control between batches, so a long `type` or `key` can stop partway. The JSON error then carries `data.applied`, the number of events already applied.
 - Held keys and buttons are released at the end of each batch, and when it fails.
-- `--json` prints `{"applied": N}`. Success means the engine applied the events, not that the application reacted. Take a screenshot to confirm.
+- `--json` prints `{"input":{"events":1},"outcome":"sent"}` with the applied event count. Success means the engine applied the events, not that the application reacted. Take a screenshot to confirm.
 
 ## Error codes
 
-| Code | Meaning |
+| Reason | Meaning |
 | --- | --- |
-| `invalid_input` | Bad argument or usage, JSON, input event, key combo, character the remote layout cannot produce, port, session name, URL, `--public` origin, TLS or token file; also an event or batch the engine rejected (HTTP 400/413/422). |
-| `unauthorized` | Token missing or wrong (HTTP 401), or Host/Origin rejected (HTTP 403). |
+| `invalid_input` | Invalid argument, JSON, input event, key combo, port, session name, URL, public origin, TLS or token file; also an invalid engine input batch (HTTP 400/413). |
+| `invalid_option`, `unknown_command`, `missing_input` | Unknown option or command, or required input missing (exit 2). |
+| `unauthorized` | Token missing or wrong (HTTP 401). |
+| `forbidden` | Host or Origin rejected (HTTP 403). |
+| `unsupported_input` | The backend cannot produce a character or apply the requested input (HTTP 422). |
 | `busy` | A viewer or SDK session holds control (HTTP 409), or a screenshot is already running (HTTP 503). Never retried. |
 | `unreachable` | Cannot connect to the URL. |
 | `timeout` | No reply within `--timeout`, or `up` did not become ready in time (`component` and `log` set). |
 | `not_running` | No session or logs with that name. |
 | `not_found` | `run` found no running session with that name. |
-| `invalid_option` | `run` was given no app. |
+| `missing_command` | `run` was given no app (exit 2). |
 | `spawn_failed` | `run` could not start the app. |
 | `already_running` | A session with that name is already running. |
+| `port_in_use` | The requested listen port is occupied. |
 | `component_failed` | display, desktop, engine or the background supervisor exited or could not start (`component`, `log` and `logs` are set), or an app started by `run` exited within a second (`component` is `apps`, `log` is set, no `logs`). |
-| `missing_dependency` | A required program (including the `run` app) or the engine binary is missing. |
+| `missing_dependency` | A required host program or the engine binary is missing. Failed app spawns use `spawn_failed`. |
 | `unsupported_platform` | `up`, `down` or `run` was run off Linux. |
+| `invalid_config` | Invalid configuration; the message names the file and key path. |
+| `disconnected`, `io_error`, `protocol_error` | Lost session, failed local I/O or an invalid engine response. |
+| `canceled` | Interrupted operation (exit 130). |
 | `internal` | Unexpected engine response or a CLI bug. |
 
-Input commands that fail after some batches report `applied` (events already applied) in the error.
+Input commands that fail after some batches report `data.applied` (events already applied). The SDK exposes the same snake_case `reason` through `RelayError.reason`.

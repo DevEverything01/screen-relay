@@ -91,7 +91,9 @@ A failed batch after earlier batches carries `applied`, the number of events alr
 
 ## Errors
 
-Errors are instances of the exported `RelayError` with a `code` and optional `hint`. Codes: `INVALID_ARGUMENT`, `UNSUPPORTED`, `NETWORK_ERROR`, `DISCONNECTED`, `PROTOCOL_ERROR`, `TIMEOUT`, `BUSY`, `UNAUTHORIZED`, `HTTP_ERROR`, `IO_ERROR`. A rejected WebSocket handshake is `NETWORK_ERROR`.
+Errors are instances of the exported `RelayError` with a `code`, a shared snake_case `reason`, `class`, `exitCode`, `status` and optional `hint`, `data` and `next`. Codes include `INVALID_ARGUMENT`, `NOT_FOUND`, `UNSUPPORTED`, `NETWORK_ERROR`, `DISCONNECTED`, `PROTOCOL_ERROR`, `TIMEOUT`, `BUSY`, `UNAUTHORIZED`, `HTTP_ERROR`, `IO_ERROR`, `CONFIG_ERROR`, `INTERNAL` and `CANCELED`. A rejected WebSocket handshake is `NETWORK_ERROR`.
+
+The SDK and CLI use the same reason registry in `src/protocol`. Match `error.reason` against the [CLI reasons](cli.md#error-codes) when handling failures across both interfaces. CLI JSON errors expose `reason` directly, with `message`, `status` and optional `data` and `next`; they no longer wrap an `error.code`. SDK HTTP input methods still return `{ events: number }`; the CLI wraps that count as `{"input":{"events":1},"outcome":"sent"}`. A partially applied input failure carries `applied` on the SDK error and `data.applied` in CLI JSON. Never retry the whole input blindly.
 
 ## Notes
 

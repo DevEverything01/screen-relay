@@ -4,17 +4,14 @@ import { createClient, RelayError, type Client } from '../sdk/index.js';
 import { MAX_INPUT_BATCH, isLoopback, validToken } from '../protocol/index.js';
 import { DEFAULT_PORT } from './host/common.js';
 import { connectHost } from './host/supervisor.js';
-import { readSession } from './host/state.js';
-import { emit, Failure } from './output.js';
+import { alive, readSession } from './host/state.js';
+import { count, emit, Failure, nextStep, receipt, row, sessionCommand, size } from './output.js';
 
 type Args = Record<string, any> & { command: string; json: boolean; name: string };
 
-interface Target { url: string; token?: string; ca?: string; connect?: string; timeout: number }
+interface Target { url: string; token?: string; ca?: string; connect?: string; timeout: number; signal?: AbortSignal }
 
 const PNG = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
-const CLIENT_CODES: Record<string, string> = {
-  INVALID_ARGUMENT: 'invalid_input', UNAUTHORIZED: 'unauthorized', BUSY: 'busy', UNSUPPORTED: 'invalid_input', IO_ERROR: 'invalid_input',
-};
 
 function detail(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -45,13 +42,16 @@ export function resolveTarget(args: Args): Target {
   let ca: string | undefined, connect: string | undefined;
   if (!url) {
     const session = readSession(String(args.name));
-    if (session?.state === 'ready') {
+    if (session?.state === 'ready' && alive(session.supervisor)) {
       url = String(session.localUrl);
       ca = session.tlsCert ?? undefined;
       connect = connectHost(session.bind) ?? undefined;
       tokenFile = tokenFile || session.tokenFile;
-    } else {
+    } else if (!session && args.name === 'default' && args.nameExplicit === false) {
       url = `http://127.0.0.1:${DEFAULT_PORT}`;
+    } else {
+      throw new Failure('not_running', `No running session named "${args.name}"`,
+        `Start it with \`${sessionCommand('up -d', args.name)}\`, or pass --url.`);
     }
   }
   let token: string | undefined;
@@ -59,7 +59,7 @@ export function resolveTarget(args: Args): Target {
     try { token = readFileSync(tokenFile, 'utf8').trim(); }
     catch (error) { throw new Failure('invalid_input', `Cannot read token file: ${detail(error)}`, 'Check --token-file.'); }
   }
-  return { url: checkUrl(url, token), token, ca, connect, timeout: Number(args.timeout ?? 10) };
+  return { url: checkUrl(url, token), token, ca, connect, timeout: Number(args.timeout ?? 10), signal: args.signal };
 }
 
 /** Turns an SDK error into the CLI failure shape the documented commands and exit codes use. */
@@ -67,15 +67,15 @@ export function clientFailure(error: unknown, url: string, timeout: number): Fai
   if (error instanceof Failure) return error;
   if (error instanceof RelayError) {
     if (error.code === 'TIMEOUT') return new Failure('timeout', `No reply from ${url} within ${timeout}s`, 'Raise --timeout or check the engine.');
-    if (error.code === 'NETWORK_ERROR') return new Failure('unreachable', `Cannot reach ${url}: ${error.message}`, 'Start a session with `relay up` or pass --url.');
+    if (error.code === 'NETWORK_ERROR') return new Failure('unreachable', `Couldn't reach ${url}. ${error.message}`, 'Start a session with `relay up` or pass --url.');
     const applied = (error as RelayError & { applied?: number }).applied;
-    return new Failure(CLIENT_CODES[error.code] ?? 'internal', error.message, error.hint ?? '', applied === undefined ? {} : { applied });
+    return new Failure(error.reason, error.message, error.hint ?? '', { ...error.data, ...(applied === undefined ? {} : { applied }) }, { next: error.next, status: error.status });
   }
   return new Failure('internal', detail(error));
 }
 
 function open(target: Target): Client {
-  return createClient({ url: target.url, token: target.token, ca: target.ca, connect: target.connect, timeout: target.timeout * 1000 });
+  return createClient({ url: target.url, token: target.token, ca: target.ca, connect: target.connect, timeout: target.timeout * 1000, signal: target.signal });
 }
 
 async function withClient<Result>(args: Args, action: (client: Client) => Promise<Result>): Promise<Result> {
@@ -94,11 +94,15 @@ function number(value: string): string {
 }
 
 function finish(args: Args, events: number, what: string): number {
-  emit(args, { applied: events }, `${what} (${events} events)`);
+  const target = resolveTarget(args);
+  emit(args, { input: { events }, outcome: 'sent' },
+    [receipt('Sent', count(events, 'event'), args), row('Target', target.url), row('Action', what),
+      nextStep('Check the screen', `${sessionCommand('screenshot', args.name)}${args.url ? ` --url ${args.url}` : ''}${args['token-file'] ? ` --token-file '${String(args['token-file']).replaceAll("'", "'\\''")}'` : ''}`, args)].join('\n'), {});
   return 0;
 }
 
 export async function cmdScreenshot(args: Args): Promise<number> {
+  if (args.json && args.file === '-') throw new Failure('invalid_input', '--json cannot be combined with PNG output on stdout', 'Run `relay screenshot --help`.');
   const data = await withClient(args, (client) => client.screenshot());
   if (data.length < 24 || !Buffer.from(data).subarray(0, 8).equals(PNG)) throw new Failure('internal', 'Engine did not return a PNG');
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
@@ -109,7 +113,9 @@ export async function cmdScreenshot(args: Args): Promise<number> {
   }
   try { writeFileSync(String(args.file), data); }
   catch (error) { throw new Failure('invalid_input', `Cannot write ${args.file}: ${detail(error)}`); }
-  emit(args, { path: resolve(String(args.file)), bytes: data.length, width, height }, `Saved ${args.file} (${width}x${height}, ${data.length} bytes)`);
+  const path = resolve(String(args.file));
+  emit(args, { screenshot: { path, bytes: data.length, width, height }, outcome: 'saved' },
+    [receipt('Saved', path, args), row('Resolution', `${width}x${height}`), row('Size', size(data.length))].join('\n'), { identifier: path });
   return 0;
 }
 
@@ -140,7 +146,7 @@ export async function cmdKey(args: Args): Promise<number> {
 export async function cmdType(args: Args): Promise<number> {
   const text = textArgument(args, args.text);
   const events = await withClient(args, (client) => client.type(text));
-  return finish(args, events.events, `Typed ${Array.from(text).length} characters`);
+  return finish(args, events.events, `Typed ${count(Array.from(text).length, 'character')}`);
 }
 
 export async function cmdInput(args: Args): Promise<number> {
@@ -166,7 +172,7 @@ export async function cmdRemoteStatus(args: Args): Promise<number> {
     capabilities = await client.capabilities();
     metrics = await client.status();
   } catch (error) { throw clientFailure(error, target.url, target.timeout); }
-  emit(args, { url: target.url, capabilities, metrics },
-    `${target.url}: up (${capabilities.backend} ${capabilities.width}x${capabilities.height}, ${metrics.frames_encoded} frames encoded)`);
+  emit(args, { session: { url: target.url, state: 'ready', capabilities, metrics } },
+    [row('URL', target.url), row('State', 'ready'), row('Backend', capabilities.backend), row('Resolution', `${capabilities.width}x${capabilities.height}`), row('Frames encoded', metrics.frames_encoded)].join('\n'));
   return 0;
 }

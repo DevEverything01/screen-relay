@@ -3,15 +3,16 @@ import { writeFile } from 'node:fs/promises';
 import { request as httpRequest } from 'node:http';
 import { request as httpsRequest, type RequestOptions } from 'node:https';
 import {
-  RelayError, baseUrl, integer, encodeInput, encodeInputBatch, comboEvents, textEvents,
+  RelayError, responseError, baseUrl, integer, encodeInput, encodeInputBatch, comboEvents, textEvents,
   batches, parseHeader, HEADER_SIZE, MESSAGE_TYPES, MAX_INPUT_BATCH, MAX_INPUT_PENDING,
   type InputEvent,
 } from '../protocol/index.js';
 
-export { RelayError };
+export { RelayError, ERROR_REASONS } from '../protocol/index.js';
+export type { ErrorClass, ErrorReason, ErrorOptions, NextCommand } from '../protocol/index.js';
 export type { InputEvent };
 export type Input = InputEvent;
-export interface ClientOptions { url?: string; token?: string; timeout?: number; ca?: string; connect?: string }
+export interface ClientOptions { url?: string; token?: string; timeout?: number; ca?: string; connect?: string; signal?: AbortSignal }
 export type Options = ClientOptions;
 export interface InputResult { events: number }
 export type Status = Record<string, unknown>;
@@ -42,32 +43,11 @@ export interface Session {
   close(): void;
 }
 
-function target({ url = 'http://127.0.0.1:8080', timeout = 10000, token, ca, connect }: ClientOptions) {
-  return { base: baseUrl(url, token), timeout: integer(timeout, 1, 2147483647, 'timeout'), token, ca, connect };
+function target({ url = 'http://127.0.0.1:8080', timeout = 10000, token, ca, connect, signal }: ClientOptions) {
+  return { base: baseUrl(url, token), timeout: integer(timeout, 1, 2147483647, 'timeout'), token, ca, connect, signal };
 }
 
 type Server = ReturnType<typeof target>;
-
-const STATUS_MESSAGES: Record<number, [string, string]> = {
-  401: ['Token missing or wrong', 'Pass --token-file FILE or set RELAY_TOKEN_FILE.'],
-  403: ['Rejected by the Host/Origin policy', 'Connect through a loopback address or the configured public URL.'],
-  409: ['A viewer or SDK session holds control', 'Close it and run the command again; input is never retried.'],
-  413: ['Input batch too large', `Send at most ${MAX_INPUT_BATCH} events per batch.`],
-  503: ['Engine busy or screenshot unavailable', 'Try again in a moment.'],
-};
-
-function responseError(status: number, detail: { error?: string; index?: number } | null): RelayError {
-  if (detail?.index !== undefined) {
-    return new RelayError('INVALID_ARGUMENT', `Engine rejected input event ${detail.index} (${detail.error})`, 'Check the event against the SDK input schema.');
-  }
-  const code = status === 401 || status === 403 ? 'UNAUTHORIZED'
-    : detail?.error === 'busy' || status === 429 || status === 409 ? 'BUSY'
-    : detail?.error === 'unsupported_input' || status === 422 ? 'UNSUPPORTED'
-    : detail?.error === 'invalid_input' || status === 413 ? 'INVALID_ARGUMENT' : 'HTTP_ERROR';
-  const known = STATUS_MESSAGES[status];
-  if (known && code !== 'HTTP_ERROR') return new RelayError(code, known[0], known[1]);
-  return new RelayError(code, `Server returned HTTP ${status}`);
-}
 
 function headers(server: Server, body?: Uint8Array): Record<string, string> {
   const result: Record<string, string> = server.token ? { Authorization: `Bearer ${server.token}` } : {};
@@ -100,6 +80,7 @@ function nodeRequest<Result>(server: Server, path: string, binary: boolean, body
     method: body === undefined ? 'GET' : 'POST',
     headers: requestHeaders,
     timeout: server.timeout,
+    signal: server.signal,
   };
   if (ca) {
     options.ca = ca;
@@ -133,7 +114,8 @@ function nodeRequest<Result>(server: Server, path: string, binary: boolean, body
     });
     sent.once('timeout', () => sent.destroy(new RelayError('TIMEOUT', 'Request timed out')));
     sent.once('error', (error) => {
-      if (error instanceof RelayError) reject(error);
+      if (server.signal?.aborted) reject(new RelayError('canceled', 'Request canceled.'));
+      else if (error instanceof RelayError) reject(error);
       else reject(new RelayError('NETWORK_ERROR', `Request failed: ${error.message}`));
     });
     if (body !== undefined) sent.write(Buffer.from(body));
@@ -144,6 +126,7 @@ function nodeRequest<Result>(server: Server, path: string, binary: boolean, body
 async function request<Result>(
   server: Server, path: string, binary = false, body?: Uint8Array,
 ): Promise<Result> {
+  if (server.signal?.aborted) throw new RelayError('canceled', 'Request canceled.');
   if (server.ca || server.connect) return nodeRequest<Result>(server, path, binary, body);
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -153,7 +136,8 @@ async function request<Result>(
   const operation = (async () => {
     try {
       const response = await fetch(new URL(path, server.base), {
-        signal: controller.signal, redirect: 'error', headers: headers(server, body),
+        signal: server.signal ? AbortSignal.any([controller.signal, server.signal]) : controller.signal,
+        redirect: 'error', headers: headers(server, body),
         method: body === undefined ? 'GET' : 'POST', body: body === undefined ? undefined : Buffer.from(body),
       });
       if (!response.ok) {
@@ -184,6 +168,7 @@ async function request<Result>(
       return Buffer.concat(chunks, size) as Result;
     } catch (error) {
       if (error instanceof RelayError) throw error;
+      if (server.signal?.aborted) throw new RelayError('canceled', 'Request canceled.');
       if (controller.signal.aborted) throw new RelayError('TIMEOUT', 'Request timed out');
       throw new RelayError('NETWORK_ERROR', `Request failed: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -220,7 +205,9 @@ export function createClient(options: ClientOptions = {}): Client {
       let result: { applied: number };
       try { result = await request<{ applied: number }>(server, '/input', false, payload.body); }
       catch (error) {
-        if (error instanceof RelayError) Object.assign(error, { applied: events });
+        if (error instanceof RelayError) {
+          Object.assign(error, { applied: events, data: { ...error.data, applied: events } });
+        }
         throw error;
       }
       if (!result || result.applied !== payload.count) throw new RelayError('PROTOCOL_ERROR', 'Invalid input result');
@@ -269,6 +256,7 @@ export function createClient(options: ClientOptions = {}): Client {
 
 export async function connect(options: ClientOptions = {}): Promise<Session> {
   const server = target(options);
+  if (server.signal?.aborted) throw new RelayError('canceled', 'Control connection canceled.');
   if (typeof WebSocket === 'undefined') throw new RelayError('UNSUPPORTED', 'Control sessions require Node 22 or newer');
   const wsUrl = new URL('/control', server.base);
   wsUrl.protocol = server.base.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -282,11 +270,14 @@ export async function connect(options: ClientOptions = {}): Promise<Session> {
   const finish = (error: RelayError) => {
     if (closed) return;
     closed = true;
+    server.signal?.removeEventListener('abort', cancel);
     if (!ready) rejectReady(error);
     for (const item of pending.values()) { clearTimeout(item.timer); item.reject(error); }
     pending.clear();
     if (socket.readyState < WebSocket.CLOSING) socket.close();
   };
+  const cancel = () => finish(new RelayError('canceled', 'Control connection canceled.'));
+  server.signal?.addEventListener('abort', cancel, { once: true });
   socket.addEventListener('error', () => finish(new RelayError('NETWORK_ERROR', 'Control connection failed')));
   socket.addEventListener('close', () => finish(new RelayError('DISCONNECTED', 'Control connection closed')));
   socket.addEventListener('message', ({ data }) => {
@@ -318,7 +309,7 @@ export async function connect(options: ClientOptions = {}): Promise<Session> {
     status: () => request(server, '/metrics'),
     async screenshot(path) {
       if (closed) throw new RelayError('DISCONNECTED', 'Control connection closed');
-      return screenshot({ url: server.base.href, timeout: server.timeout, token: server.token }, path);
+      return screenshot({ ...options, url: server.base.href, timeout: server.timeout, token: server.token }, path);
     },
     input(event) {
       if (closed) return Promise.reject(new RelayError('DISCONNECTED', 'Control connection closed'));
