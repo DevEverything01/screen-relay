@@ -22,6 +22,12 @@ export function requireLinux(): void {
 }
 
 export function which(program: string): string | undefined {
+  if (program.includes('/')) {
+    try {
+      if (statSync(program).isFile()) { accessSync(program, constants.X_OK); return program; }
+    } catch {}
+    return undefined;
+  }
   for (const directory of (process.env.PATH ?? '').split(delimiter)) {
     const candidate = join(directory || '.', program);
     try {

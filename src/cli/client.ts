@@ -18,7 +18,18 @@ function detail(error: unknown): string {
 }
 
 function invalidUrl(url: string): Failure {
-  return new Failure('invalid_input', `Invalid server URL: ${url}`, 'Use an HTTPS origin or http://127.0.0.1:PORT.');
+  let safe = url;
+  try {
+    const parsed = new URL(url);
+    parsed.username = '';
+    parsed.password = '';
+    parsed.search = '';
+    parsed.hash = '';
+    safe = parsed.toString();
+  } catch {
+    safe = url.replace(/\/\/[^/@\s]*@/, '//[redacted]@').split(/[?#]/, 1)[0];
+  }
+  return new Failure('invalid_input', `Invalid server URL: ${safe}`, 'Use an HTTPS origin or http://127.0.0.1:PORT.');
 }
 
 function checkUrl(url: string, token?: string): string {
@@ -99,8 +110,7 @@ function open(target: Target): Client {
   return createClient({ url: target.url, token: target.token, ca: target.ca, connect: target.connect, timeout: target.timeout * 1000, signal: target.signal });
 }
 
-async function withClient<Result>(args: Args, action: (client: Client) => Promise<Result>): Promise<Result> {
-  const target = resolveTarget(args);
+async function withClient<Result>(args: Args, action: (client: Client) => Promise<Result>, target = resolveTarget(args)): Promise<Result> {
   try { return await action(open(target)); }
   catch (error) { throw clientFailure(error, target); }
 }
@@ -114,8 +124,7 @@ function number(value: string): string {
   return String(Number(value));
 }
 
-function finish(args: Args, events: number, what: string): number {
-  const target = resolveTarget(args);
+function finish(args: Args, events: number, what: string, target: Target): number {
   emit(args, { input: { events }, outcome: 'sent' },
     [receipt('Sent', count(events, 'event'), args), row('Target', target.url), row('Action', what),
       nextStep('Check the screen', `${sessionCommand('screenshot', args.name)}${args.url ? ` --url ${args.url}` : ''}${args['token-file'] ? ` --token-file '${String(args['token-file']).replaceAll("'", "'\\''")}'` : ''}`, args)].join('\n'), {});
@@ -141,33 +150,38 @@ export async function cmdScreenshot(args: Args): Promise<number> {
 }
 
 export async function cmdClick(args: Args): Promise<number> {
+  const target = resolveTarget(args);
   const button = String(args.button) as 'left' | 'middle' | 'right';
-  const events = await withClient(args, (client) => client.click(Number(args.x), Number(args.y), { button }));
-  return finish(args, events.events, `Clicked ${button} at ${number(args.x)},${number(args.y)}`);
+  const events = await withClient(args, (client) => client.click(Number(args.x), Number(args.y), { button }), target);
+  return finish(args, events.events, `Clicked ${button} at ${number(args.x)},${number(args.y)}`, target);
 }
 
 export async function cmdMove(args: Args): Promise<number> {
-  const events = await withClient(args, (client) => client.move(Number(args.x), Number(args.y)));
-  return finish(args, events.events, `Moved to ${number(args.x)},${number(args.y)}`);
+  const target = resolveTarget(args);
+  const events = await withClient(args, (client) => client.move(Number(args.x), Number(args.y)), target);
+  return finish(args, events.events, `Moved to ${number(args.x)},${number(args.y)}`, target);
 }
 
 export async function cmdScroll(args: Args): Promise<number> {
   const dx = Number(args.dx ?? 0), dy = Number(args.dy ?? 0);
   if (!dx && !dy) throw new Failure('invalid_input', 'Nothing to scroll', 'Pass --dy N (positive scrolls down) and/or --dx N.');
-  const events = await withClient(args, (client) => client.scroll(Number(args.x), Number(args.y), { dx, dy }));
-  return finish(args, events.events, `Scrolled dx=${dx} dy=${dy}`);
+  const target = resolveTarget(args);
+  const events = await withClient(args, (client) => client.scroll(Number(args.x), Number(args.y), { dx, dy }), target);
+  return finish(args, events.events, `Scrolled dx=${dx} dy=${dy}`, target);
 }
 
 export async function cmdKey(args: Args): Promise<number> {
   const combos = (Array.isArray(args.combos) ? args.combos : [args.combos]).map(String);
-  const events = await withClient(args, (client) => client.key(...combos));
-  return finish(args, events.events, `Pressed ${combos.join(' ')}`);
+  const target = resolveTarget(args);
+  const events = await withClient(args, (client) => client.key(...combos), target);
+  return finish(args, events.events, `Pressed ${combos.join(' ')}`, target);
 }
 
 export async function cmdType(args: Args): Promise<number> {
   const text = textArgument(args, args.text);
-  const events = await withClient(args, (client) => client.type(text));
-  return finish(args, events.events, `Typed ${count(Array.from(text).length, 'character')}`);
+  const target = resolveTarget(args);
+  const events = await withClient(args, (client) => client.type(text), target);
+  return finish(args, events.events, `Typed ${count(Array.from(text).length, 'character')}`, target);
 }
 
 export async function cmdInput(args: Args): Promise<number> {
@@ -181,8 +195,9 @@ export async function cmdInput(args: Args): Promise<number> {
     throw new Failure('invalid_input', `Input must be a JSON array of 1 to ${MAX_INPUT_BATCH} events`,
       'Example: [{"type":"keyDown","key":4},{"type":"keyUp","key":4}]');
   }
-  const result = await withClient(args, (client) => client.input(events as never));
-  return finish(args, result.events, 'Sent input');
+  const target = resolveTarget(args);
+  const result = await withClient(args, (client) => client.input(events as never), target);
+  return finish(args, result.events, 'Sent input', target);
 }
 
 export async function cmdRemoteStatus(args: Args): Promise<number> {

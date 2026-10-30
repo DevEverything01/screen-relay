@@ -95,6 +95,8 @@ export async function startWatcher(command: string[], env: NodeJS.ProcessEnv, lo
     stdio: ['ignore', logFd, logFd, 'pipe'],
   });
   const stream = watcher.stdio[3] as Readable;
+  let exited = false;
+  watcher.once('exit', () => { exited = true; });
   const result = await new Promise<string>((resolve) => {
     let data = '';
     const timeout = setTimeout(() => resolve(''), 10000);
@@ -117,7 +119,7 @@ export async function startWatcher(command: string[], env: NodeJS.ProcessEnv, lo
   stream.destroy();
   if (!result) {
     watcher.kill('SIGTERM');
-    await new Promise<void>((resolve) => watcher.once('exit', () => resolve()));
+    if (!exited) await new Promise<void>((resolve) => watcher.once('exit', () => resolve()));
     throw new Failure('timeout', 'App watcher did not report startup', 'Read `relay logs apps`.');
   }
   let response: { pid?: number; error?: string };
