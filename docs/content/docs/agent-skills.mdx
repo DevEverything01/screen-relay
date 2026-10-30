@@ -3,7 +3,17 @@ title: Agent skills
 description: Serve the agent workflows that ship with the relay CLI and load the core desktop workflow.
 ---
 
-Relay ships agent skills with the CLI. The skills describe how an agent should start a session, take screenshots, send input, and recover from errors. Because they ship with the CLI, their instructions match the installed version.
+`relay skills` serves the agent workflows that ship inside the CLI. A skill is a short guide that tells an agent how to start a session, take screenshots, send input, and recover from errors. Because the skills ship with the CLI, their instructions always match the installed version, and they work offline without contacting an engine.
+
+## Start here
+
+An agent should begin with one command:
+
+```sh
+relay skills get core
+```
+
+It prints the core workflow. When the agent needs more, `relay skills list` shows the other skills and `relay skills get <name>` loads one.
 
 ## Commands
 
@@ -13,17 +23,33 @@ relay skills get <name> [--full] [--json]
 relay skills path [name]
 ```
 
-`list` shows available skills and leaves out hidden skills. It is the default when no command is given. `get` prints a skill's workflow, including a hidden skill asked for by name; `--full` appends its `references/` and `templates/` files. `path` prints the skills directory, or a named skill directory.
+| Command | What it does |
+| --- | --- |
+| `list` | Shows available skills and leaves out hidden skills. It is the default when no subcommand is given. |
+| `get <name>` | Prints a skill's workflow, including a hidden skill asked for by name. `--full` appends its `references/` and `templates/` files. |
+| `path [name]` | Prints the skills directory, or the directory of a named skill. |
 
-An unknown skill is a Not found error (`not_found`, exit 1) whose recovery is `relay skills list`.
-
-```json
-{"skills":[{"name":"core","description":"Control a relay desktop from an agent using screenshots and input commands."}]}
-{"skill":{"name":"core","content":"---\nname: core\n..."}}
-{"path":"/usr/local/lib/relay/skills"}
+```console
+$ relay skills list
+core              Control a relay desktop from an agent using screenshots and input commands.
+vercel-sandbox    Run and control relay inside a Vercel Sandbox.
 ```
 
-`relay skills get core` is the documented first step for agents. It works offline and never contacts an engine.
+With `--json`:
+
+```json
+{"skills":[{"name":"core","description":"Control a relay desktop from an agent using screenshots and input commands."},{"name":"vercel-sandbox","description":"Run and control relay inside a Vercel Sandbox."}]}
+{"skill":{"name":"core","content":"---\nname: core\n..."}}
+{"path":"/path/to/relay/skills"}
+```
+
+An unknown skill is a `not_found` error (exit 1) whose recovery is `relay skills list`.
+
+## Agent-aware help
+
+Relay detects when an AI agent runs it and changes only the help text. In an agent, `relay --help` opens with a `Start here (for AI agents)` block that points to `relay skills get core`, then lists the commands grouped as VM commands, client commands, and other commands, then global options, examples, and a documentation link. The layout is plain text without color. Every other command behaves the same whether or not an agent is detected.
+
+Set `RELAY_AGENT=1` to force this layout or `RELAY_AGENT=0` to force the human one. Details are in the [CLI reference](/docs/cli#help-layouts).
 
 ## Shipped skills
 
