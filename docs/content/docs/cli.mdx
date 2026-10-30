@@ -1,147 +1,48 @@
 ---
 title: CLI reference
-description: Every relay command, option, output shape, and error code.
+description: Every relay command with its options, an example, and what it prints, plus global options, JSON output, errors, exit codes, and environment variables.
 ---
 
-`relay` is one Node command (Node 26 or newer, dependencies bundled). Host commands (`up`, `down`, `logs`, `doctor`, `run`) manage a session on the Linux machine. `up`, `down`, and `run` fail with `unsupported_platform` elsewhere. Client commands (`status`, `screenshot`, `click`, `move`, `scroll`, `key`, `type`, `input`) run anywhere.
+`relay` is one command (Node 26 or newer, dependencies bundled). Run `relay --help` for the list, `relay help <command>` or `relay <command> --help` for one command, and `relay <command> --help --json` for machine-readable options. In this page "the VM" is the Linux machine that shows the desktop; see [Architecture](/docs/architecture) for how the pieces fit.
 
-## Common
+| Group | Commands | Where they run |
+| --- | --- | --- |
+| [VM commands](#vm-commands) | `up`, `down`, `logs`, `run`, `doctor` | On the VM. `up`, `down`, and `run` fail with `unsupported_platform` off Linux. |
+| [Client commands](#client-commands) | `status`, `screenshot`, `click`, `move`, `scroll`, `key`, `type`, `input` | On the VM, or anywhere with `--url` and a token. |
+| [Other commands](#other-commands) | `skills`, `help` | Anywhere. They never contact an engine. |
 
-| Item | Detail |
-| --- | --- |
-| `--json` | Every command. Success object on stdout. On failure, an error object on stderr. |
-| Error shape | `{"status":"error","reason":"<snake_case>","message":"<headline>"}` on stderr, with optional `next` and `data`. `status` is `action_required` when input can unblock a command before any effect. See [Error codes](#error-codes). |
-| Human errors | A headline, context, and one recovery command on stderr. No stack trace or raw engine payload. |
-| `--name N` | Session name, default `default`. Up to 64 characters. The first character is a letter, digit, `_`, or `-`; later characters may also be `.`. |
-| `skills` | `list`, `get <name> [--full] [--json]`, and `path [name]` serve the skills shipped with this CLI. See [Agent skills](/docs/agent-skills). |
-| State directory | `${XDG_STATE_HOME:-~/.local/state}/relay/<name>/` (mode 0700): `session.json`, `token` (0600), `display.log`, `dbus.log` when relay starts its own bus, `desktop.log`, `engine.log`, `apps.log` (after `run`), `supervisor.log` (`-d` only). |
+Options common to every command are in [Global options](#global-options). Client commands also share the [client target rules](#client-target).
 
-### Exit codes
+## VM commands
 
-| Code | Meaning |
-| --- | --- |
-| 0 | Success. |
-| 1 | Runtime, network, permission, configuration, or missing-session failure. |
-| 2 | Usage error, invalid value, or missing input. |
-| 130 | Interrupted with Ctrl+C. A foreground `up` stops its session on the first interrupt; a second interrupt exits immediately. |
-| 128+n | Terminated by signal n. |
+### up
 
-An existing session's `status` exits 0 for `ready`, `starting`, `stopped`, and `failed`. A missing session exits 1. Exit code 3 is no longer used.
-
-### Help and options
-
-`relay --help`, `relay -h`, and `relay help` show root help. Use `relay help <COMMAND>` or `relay <COMMAND> --help` for one command. Help works offline, writes to stdout, and exits 0 without starting anything.
-
-`relay <COMMAND> --help --json` returns metadata with `path`, `summary`, `runsOn` (`vm`, `client`, or `anywhere`), `arguments`, `options`, `examples`, and the result schema. `relay help --all --json` returns every command.
-
-Help has two layouts. Without an agent, root help shows `relay <VERSION>`, `▲ relay [options] <command>`, a dim `` For command help, run `relay <command> --help` `` line, three dim sections named `VM commands`, `Client commands`, and `Other commands` with each command's arguments and summary, then examples. Command help shows the command name, its usage, the summary, a line saying where the command runs, alphabetical options with their defaults, and examples. Color is used only when stdout is a TTY and color is allowed, so a pipe, `NO_COLOR`, `--no-color`, or `TERM=dumb` prints the same text without ANSI codes.
-
-When an AI agent is detected, help uses the descriptive layout instead: version and usage, the full `Start here (for AI agents)` block on root help, a line saying where the command runs, commands grouped as VM commands, client commands, and other commands, arguments, alphabetical options, global options, examples, notes, and a documentation link. The agent layout is plain text without ANSI codes and omits empty sections. Detection affects help only; every other command behaves the same either way. `RELAY_AGENT=1` or `RELAY_AGENT=0` forces either layout.
-
-Global options work before or after the command: `-h`/`--help`, `-v`/`--version`, `--json`, `--no-color`, and `--name <NAME>`. Version output contains only the version, `0.1.0`; `--version --json` returns `{"version":"0.1.0"}`. Options accept `--name <NAME>` and `--name=NAME`. `--` ends option parsing. Boolean options accept `--no-<OPTION>`. Unknown options, commands, and extra positionals fail before work, with at most one close suggestion and a help command. Options do not accept prefix matching.
-
-The only short options are `-h`, `-v`, `-f` (`logs --follow`), and `-d` (`up --detach`, the compose convention). `--name` has no short form.
-
-### Output
-
-Queries write data to stdout. Mutations write receipts and next steps to stderr. When stdout is piped, `up` writes only the viewer URL (including `#token=` when needed), `screenshot` writes only the saved path, and input commands write nothing. Treat the viewer URL as a secret when it includes a token.
-
-TTY receipts use `✓`, `!`, and `✗` in column 0, text from column 2, and label values from column 18. Non-TTY stderr or `TERM=dumb` uses plain words and no color. Color precedence is `--no-color`, nonempty `NO_COLOR`, `FORCE_COLOR` (`0` disables it), then detection for each stream.
-
-`--json` writes exactly one JSON document followed by a newline to stdout, pretty-printed with two spaces on a TTY and compact otherwise. Successful JSON commands leave stderr empty. Failures leave stdout empty and write one compact error document to stderr. Keys use camelCase. Success may include `warnings: [{reason, message}]` and `next: [{command, argv}]`.
-
-| Command | JSON success shape |
-| --- | --- |
-| `up` | `{"session":{...},"outcome":"started"}` |
-| `down` | `{"session":{...},"outcome":"stopped"}` or `"unchanged"` |
-| `status` | `{"session":{...}}` |
-| `screenshot` | `{"screenshot":{"path":"<PATH>","width":1280,"height":720,"bytes":12345},"outcome":"saved"}` |
-| `click`, `move`, `scroll`, `key`, `type`, `input` | `{"input":{"events":1},"outcome":"sent"}` |
-| `doctor` | `{"checks":[...],"summary":{...}}` |
-| `run` | `{"app":{"pid":4412,"command":["<APP>","<ARG>"]},"outcome":"started"}` |
-
-These envelopes replace the former flat objects, input `applied` count, and nested `error` object. Scripts must read the named object and `reason` instead of `error.code`.
-
-### Settings
-
-Precedence is an explicit option, its `RELAY_*` environment variable, the config file, then the default. An explicit invalid value fails instead of falling back. Config validation reports all problems before starting processes.
-
-| Variable | Applies to |
-| --- | --- |
-| `RELAY_CONFIG` | `up --config`; otherwise `${XDG_CONFIG_HOME:-~/.config}/relay/config.yaml` when present |
-| `RELAY_PORT`, `RELAY_BIND`, `RELAY_PUBLIC`, `RELAY_TLS_CERT`, `RELAY_TLS_KEY`, `RELAY_DESKTOP` | The matching `up` options |
-| `RELAY_RESOLUTION`, `RELAY_FPS`, `RELAY_BITRATE_MIN`, `RELAY_BITRATE_START`, `RELAY_BITRATE_MAX`, `RELAY_KEYBOARD_LAYOUT` | The matching config keys |
-| `RELAY_URL` | Client `--url` |
-| `RELAY_TOKEN_FILE` | Client `--token-file` |
-| `RELAY_AGENT` | Help layout: `1` uses the agent layout, `0` uses the human layout. It does not change any other output. |
-
-### Client target
-
-Client commands take `--url`, `--token-file`, and `--timeout` (seconds, default 10). They pick the engine in this order:
-
-1. `--url`, else `RELAY_URL`.
-2. The local session named by `--name`, if it is ready: its URL, token file, and TLS certificate. The session certificate is trusted without a hostname check, as a local session needs.
-3. `http://127.0.0.1:8080` only when no session was explicitly selected and the default session does not exist. An explicitly selected missing session, a stopped session, or one whose supervisor is gone fails with `not_running`. Pass `--url` to target an engine without a local session.
-
-The token comes from `--token-file`, else `RELAY_TOKEN_FILE`, else the local session. The file holds the 64-character token. The client only reads it, so its mode does not matter.
-
-URL rules: an origin only (no path, query, or credentials). Plain HTTP only for `localhost` and `127.0.0.1`; other hosts need HTTPS and a token. Redirects are refused.
-
-## install.sh
-
-```sh
-./install.sh [--prefix DIR] [--no-desktop] [--no-deps] [--client-only]
-```
-
-| Flag | Meaning |
-| --- | --- |
-| `--prefix DIR` | Absolute install location. Default `$PREFIX`, else `~/.local`. |
-| `--no-desktop` | Skip XFCE and the other desktop packages. |
-| `--no-deps` | Skip apt. Dependencies must already be present. |
-| `--client-only` | Install only the CLI, for example on a laptop. Works off Linux. |
-
-Apt needs root or passwordless sudo. On apt systems it installs the build tools, the X11 libraries, `libx264`, `libwebsockets`, `xvfb`, `xauth`, `x11-utils`, `x11-xkb-utils`, `util-linux` (for `setpriv`), and with the desktop: D-Bus, XFCE (`xfce4-session`, `xfwm4`, `xfce4-panel`, `xfdesktop4`, `xfce4-settings`, `thunar`, `xfce4-terminal`), and `glycin-loaders` when the distribution has it. It uses the system `node` when it is 26 or newer; otherwise it downloads the version pinned in `.node-version` from `https://nodejs.org/dist/`, checks it against that release's `SHASUMS256.txt`, and unpacks it in `<prefix>/lib/relay/node`. It runs `npm ci` and `npm run build` with that Node. It is safe to re-run.
-
-It installs the CLI as `<prefix>/lib/relay/relay.mjs` with a `<prefix>/bin/relay` launcher that prefers `<prefix>/lib/relay/node`, the engine, and the built viewer in `<prefix>/lib/relay/` (the engine is linked as `<prefix>/bin/relay-engine`). When `<prefix>/bin` is not on `PATH` it prints:
-
-```text
-Not on PATH; add it with: export PATH="<prefix>/bin:$PATH"
-```
-
-A full install ends by running `relay doctor` and exits non-zero if doctor finds a failure.
-
-## up
+Starts a virtual display, the desktop, and the engine, then supervises them. Without `-d` it runs in the foreground and Ctrl+C stops the session.
 
 ```sh
 relay up [-d] [--name N] [--config FILE] [--port N] [--desktop xfce|none|CMD] [--display :N]
          [--public HTTPS_URL] [--tls-cert F --tls-key F] [--bind ADDR] [--timeout S]
 ```
 
-Starts Xvfb at the configured resolution (default 1280x720), the desktop, and the engine, then supervises them. Without `-d` it runs in the foreground; Ctrl+C stops it.
-
-| Flag | Default | Meaning |
+| Option | Default | Meaning |
 | --- | --- | --- |
 | `-d`, `--detach` | off | Run in the background. Returns once ready, or with the startup error. |
-| `--name N` | `default` | Session name. One running session per name. |
-| `--config F` | `$RELAY_CONFIG`, else `${XDG_CONFIG_HOME:-~/.config}/relay/config.yaml` when it exists | Config file. Flags beat the file. See [Configuration](/docs/configuration). |
-| `--port N` | `8080` | Listen port. |
-| `--desktop` | `xfce`; `none` with `--display` | `xfce`, `none` (no desktop), or a command such as `openbox`. Runs under `dbus-run-session` when it is installed. |
-| `--display :N` | new Xvfb | Attach to an existing display. Uses your `XAUTHORITY`. The CLI never stops or changes a display it did not start. |
-| `--public URL` | off | Public HTTPS origin. Binds `0.0.0.0` unless `--bind` is set, generates a token, and allows that origin. It expects a TLS proxy in front unless `--tls-cert` is given. See [Remote access](/docs/remote-access). |
-| `--tls-cert F`, `--tls-key F` | off | Serve TLS natively. Both are required together. |
-| `--bind ADDR` | `127.0.0.1` | Listen address. Any other address generates a token. |
+| `--config FILE` | `$RELAY_CONFIG`, else `${XDG_CONFIG_HOME:-~/.config}/relay/config.yaml` when it exists | YAML config file. Flags beat the file. See [Configuration](/docs/configuration). |
+| `--port N` | `8080` | Listen port. Env: `RELAY_PORT`. |
+| `--desktop` | `xfce`; `none` with `--display` | `xfce`, `none` (no desktop), or a command such as `openbox`. Runs under `dbus-run-session` when it is installed. Env: `RELAY_DESKTOP`. |
+| `--display :N` | new display | Attach to an existing X display. Uses your `XAUTHORITY`. relay never stops or changes a display it did not start. It uses the existing display size. |
+| `--public URL` | off | Public HTTPS origin. Binds `0.0.0.0` unless `--bind` is set, generates a token, and allows that origin. It expects a TLS proxy in front unless `--tls-cert` is given. See [Remote access](/docs/remote-access). Env: `RELAY_PUBLIC`. |
+| `--tls-cert F`, `--tls-key F` | off | Serve TLS directly. Both are required together. Env: `RELAY_TLS_CERT`, `RELAY_TLS_KEY`. |
+| `--bind ADDR` | `127.0.0.1` | Listen address. Any other address generates a token. Env: `RELAY_BIND`. |
 | `--timeout S` | `30` | Seconds to wait for readiness. |
 
-Ready means:
+Settings that only exist in the config file (resolution, frame rate, bitrate, keyboard layout) are listed in [Configuration](/docs/configuration) and [Environment variables](#environment-variables). The default resolution is 1280x720.
 
-1. The engine this run started has logged its ready line, and `GET /screenshot.png` returns a PNG.
-2. The desktop shows its own signal on the display: for `xfce`, a window manager (`_NET_SUPPORTING_WM_CHECK`) with at least one managed window (`_NET_CLIENT_LIST`); for a custom command, at least one window on the root. Skipped for `--desktop none`.
+```sh
+relay up -d --name demo --port 8084
+```
 
-If that does not happen within `--timeout`, `up` fails with `timeout`. If a component exits first, it fails with `component_failed`. Both errors name the component and include its log tail. After ready, the supervisor keeps watching. If the display, desktop, or engine exits later, the whole session stops and `status` shows the error. Apps started with `run` are not supervised; they stop with `down`.
-
-`up` prints the token once, when there is one ([Tokens](/docs/remote-access#tokens)).
-
-TTY receipt, loopback (no token), on stderr:
+Prints this receipt on stderr (stdout when piped is only the viewer URL):
 
 ```console
 $ relay up -d --name demo --port 8084
@@ -155,7 +56,7 @@ $ relay up -d --name demo --port 8084
     relay down --name demo
 ```
 
-With `--public` (token shortened here):
+With `--public` the viewer line carries the token (shortened here):
 
 ```console
 $ relay up -d --name pub --port 8082 --public https://desk.example.com --desktop none
@@ -169,7 +70,16 @@ $ relay up -d --name pub --port 8082 --public https://desk.example.com --desktop
     relay down --name pub
 ```
 
-The TLS proxy line is left out with `--tls-cert`. With a non-loopback `--bind` and no `--public`, `up` instead prints `Listening on ADDR:PORT; reach it through a loopback port publish or SSH tunnel.`
+The TLS proxy line is left out with `--tls-cert`. With a non-loopback `--bind` and no `--public`, `up` instead prints `Listening on ADDR:PORT; reach it through a loopback port publish or SSH tunnel.` Treat a viewer URL with `#token=` as a secret.
+
+Ready means:
+
+1. The engine this run started has logged its ready line, and `GET /screenshot.png` returns a PNG.
+2. The desktop shows its own signal on the display: for `xfce`, a window manager (`_NET_SUPPORTING_WM_CHECK`) with at least one managed window (`_NET_CLIENT_LIST`); for a custom command, at least one window on the root. Skipped for `--desktop none`.
+
+If that does not happen within `--timeout`, `up` fails with `timeout`. If a component exits first, it fails with `component_failed`. Both errors name the component and include its log tail. After ready, the supervisor keeps watching. If the display, desktop, or engine exits later, the whole session stops and `status` shows the error. Apps started with `run` are not supervised; they stop with `down`.
+
+`up` prints the token once, when there is one ([Tokens](/docs/remote-access#tokens)).
 
 `up -d --json` prints one object when ready. Foreground `up --json` defers its result until supervision ends, so a later engine failure leaves stdout empty. Interrupting it stops the session without printing a success document.
 
@@ -188,28 +98,116 @@ The TLS proxy line is left out with `--tls-cert`. With a non-loopback `--bind` a
 | `bind`, `port`, `public` | Listen address, port, and whether `--public` was set. |
 | `resolution`, `fps` | Display size and capture frame rate. |
 
-A failed start, for example a desktop command that exits:
+### down
 
-```console
-$ relay up -d --name bad --port 8085 --desktop false --json
-{"status":"error","reason":"component_failed","message":"Failed to start the desktop. It exited with code 1.","next":[{"command":"relay logs desktop --name bad","argv":["relay","logs","desktop","--name","bad"]}],"data":{"component":"desktop","logs":"/home/relay/.local/state/relay/bad"}}
-```
-
-## down
+Stops the session and the processes it started, including apps started with `run`. Safe to run twice.
 
 ```sh
 relay down [--name N]
 ```
 
-Stops the session and the processes it started. Safe to run twice. `--json` prints `{"session":{"name":"default"},"outcome":"stopped"}`; the outcome is `unchanged` when nothing was running.
+```sh
+relay down --name demo
+```
 
-## status
+`--json` prints `{"session":{"name":"default"},"outcome":"stopped"}`. The outcome is `unchanged` when nothing was running.
+
+### logs
+
+Prints the last 200 lines of one component's log, or of every log that exists.
+
+```sh
+relay logs [component] [--name N] [-f|--follow]
+```
+
+| Argument or option | Meaning |
+| --- | --- |
+| `component` | `display`, `dbus`, `desktop`, `engine`, or `apps`. Omit it to print every log that exists. |
+| `-f`, `--follow` | Keep printing new lines. Cannot be combined with `--json`. |
+
+```sh
+relay logs engine --follow
+```
+
+`--json` wraps the logs by component, for example `{"logs":{"display":"...","desktop":"...","engine":"..."}}`. A session started with `-d` also writes its own startup and supervision messages to `supervisor.log` in the [state directory](#state-directory).
+
+### run
+
+Starts an app on the session's desktop and returns its pid. Use `--` before the app so its own flags pass through unchanged.
+
+```sh
+relay run -- <app> [args]... [--name N] [--restart]
+```
+
+| Option | Meaning |
+| --- | --- |
+| `--restart` | Start the app again whenever it exits, until the session stops. |
+
+The app gets the desktop's D-Bus session bus, display, X authority, runtime, config, and cache directories, and ICE authority. Sharing the bus lets accessibility clients find the app. With `up --display :N`, apps inherit the caller's session environment instead. Apps run with ambient capabilities cleared and stop with `relay down`. Their output goes to `relay logs apps`.
+
+With `--restart`, retries wait 1 second, doubling up to 30 seconds. The delay resets after the app stays up for 60 seconds. Each restart is recorded in `relay logs apps`. The returned pid is the first app process, not its watcher; it changes on restart. Without the flag, apps start once.
+
+```console
+$ relay run -- mousepad notes.txt
+✓ Started         mousepad
+  PID             4412
+  Display         :0
+  Logs            ~/.local/state/relay/default/apps.log
+```
+
+`--json` prints `{"app":{"pid":4412,"command":["mousepad","notes.txt"]},"outcome":"started"}`. A missing app is `missing_command`; an app that cannot start is `spawn_failed`; an app that exits within a second is `component_failed` with `component` set to `apps`.
+
+### doctor
+
+Checks this machine and prints the fix command for each problem. Takes only the [global options](#global-options).
+
+```sh
+relay doctor
+```
+
+Exits 1 if any check fails; `warn` does not fail. `--json` prints `{"checks":[...],"summary":{...}}`. Each check has `name`, `status` (`ok`, `warn`, or `fail`), `detail`, and `fix`.
+
+| Check | What it looks at |
+| --- | --- |
+| `platform` | Linux. Off Linux this is the only check, and it fails. |
+| `user` | Root or the UID (information only). |
+| `node` | Node 26 or newer. |
+| `setpriv` | `util-linux`, used to start apps without ambient capabilities. |
+| `home`, `state dir` | `HOME` and the state directory are writable. |
+| `engine` | `relay-engine` is found and runs. |
+| `libx264` | The x264 library is installed. |
+| `Xvfb`, `xauth`, `xprop`, `xwininfo`, `xdpyinfo` | Programs are on `PATH`. |
+| `setxkbmap` | Program is on `PATH`; relay uses it when the keyboard layout is not `us`. |
+| `dbus-run-session`, `xfce4-session` | Present (warn only). |
+| `/tmp/.X11-unix` | Usable by Xvfb. |
+| `port` | `127.0.0.1:8080` is free (warn only). |
+| `X extensions` | A scratch Xvfb offers XTEST, DAMAGE, XFIXES, and MIT-SHM. |
+| `ambient caps` | Inherited ambient capabilities. `up` and `run` clear them; GTK apps started from another shell with them set crash on icons. |
+| `icon decoding` | gdk-pixbuf decodes a PNG and an SVG under your user with ambient capabilities cleared. On failure it suggests `glycin-loaders` or reports blocked user namespaces for bubblewrap. Warn only when gdk-pixbuf is not installed. |
+
+## Client commands
+
+Client commands talk to an engine over HTTP. All of them take the options below, which are not repeated per command. Rules for choosing the engine and token are in [Client target](#client-target).
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `--url URL` | local session | Engine origin. Env: `RELAY_URL`. |
+| `--token-file FILE` | local session token | File holding the token. Env: `RELAY_TOKEN_FILE`. |
+| `--timeout S` | `10` | Seconds to wait for a reply. |
+
+Input commands (`click`, `move`, `scroll`, `key`, `type`, `input`) print nothing on success, print `{"input":{"events":1},"outcome":"sent"}` with `--json`, and follow the [input rules](#input-rules). Success means the engine applied the events, not that the application reacted; take a screenshot to confirm.
+
+### status
+
+Shows the local session and asks its engine for its capabilities, or shows a remote engine when you pass `--url`.
 
 ```sh
 relay status [--name N] [--url URL] [--token-file F] [--timeout S] [--show-token]
 ```
 
-Without `--url` (or `RELAY_URL`), shows the local session and asks its engine for capabilities. Exits 0 for an existing session, including a stopped or failed one. A missing session exits 1. The token is hidden unless `--show-token`.
+| Option | Meaning |
+| --- | --- |
+| `--show-token` | Include the session token in the output. Hidden by default. |
 
 ```console
 $ relay status
@@ -222,7 +220,7 @@ $ relay status
   Logs            /home/relay/.local/state/relay/default
 ```
 
-`status --json` for a running session (capabilities trimmed):
+Exits 0 for an existing session in any state, including stopped or failed. A missing session exits 1 with `not_running`. `--json` for a running session (capabilities trimmed):
 
 ```json
 {"session":{"name":"demo","state":"ready","logs":"/home/relay/.local/state/relay/demo","display":":1","xauthority":"/home/relay/.local/state/relay/demo/Xauthority","running":true,"capabilities":{"version":1,"backend":"x11","width":1280,"height":720,"fps":60}}}
@@ -253,128 +251,241 @@ $ relay status --url http://127.0.0.1:18200 --token-file ./token
   Resolution      1280x720
 ```
 
-## logs
+### screenshot
 
-```sh
-relay logs [component] [--name N] [-f|--follow]
-```
-
-Prints the last 200 lines of one component's log, or of every log that exists. Components are `display`, `dbus`, `desktop`, `engine`, and `apps`. `--follow` keeps printing new lines. `--json` wraps the component logs in `logs`, for example `{"logs":{"display":"...","desktop":"...","engine":"..."}}`, and cannot be combined with `--follow`. The `-d` supervisor's own output is in `supervisor.log` in the state directory.
-
-## doctor
-
-```sh
-relay doctor
-```
-
-Checks this machine and prints the fix command for each problem. Exits 1 if any check fails; `warn` does not fail. `--json` gives `checks` and `summary`; each check includes `name`, `status`, `detail`, and `fix`, with status `ok`, `warn`, or `fail`.
-
-| Check | What it looks at |
-| --- | --- |
-| `platform` | Linux. Off Linux this is the only check, and it fails. |
-| `user` | Root or the UID (information only). |
-| `node` | Node 26 or newer. |
-| `setpriv` | `util-linux`, used to start apps without ambient capabilities. |
-| `home`, `state dir` | `HOME` and the state directory are writable. |
-| `engine` | `relay-engine` is found and runs. |
-| `libx264` | The x264 library is installed. |
-| `Xvfb`, `xauth`, `xprop`, `xwininfo`, `xdpyinfo` | Programs are on `PATH`. |
-| `setxkbmap` | Program is on `PATH`; relay uses it when the keyboard layout is not `us`. |
-| `dbus-run-session`, `xfce4-session` | Present (warn only). |
-| `/tmp/.X11-unix` | Usable by Xvfb. |
-| `port` | `127.0.0.1:8080` is free (warn only). |
-| `X extensions` | A scratch Xvfb offers XTEST, DAMAGE, XFIXES, and MIT-SHM. |
-| `ambient caps` | Inherited ambient capabilities. `up` and `run` clear them; GTK apps started from another shell with them set crash on icons. |
-| `icon decoding` | gdk-pixbuf decodes a PNG and an SVG under your user with ambient capabilities cleared. On failure it suggests `glycin-loaders` or reports blocked user namespaces for bubblewrap. Warn only when gdk-pixbuf is not installed. |
-
-## run
-
-```sh
-relay run -- <app> [args]... [--name N] [--restart]
-```
-
-Starts an app on the session's desktop and returns its pid. The app gets the desktop's D-Bus session bus, display, X authority, runtime, config, and cache directories, and ICE authority. Sharing the bus lets accessibility clients find the app. With `up --display :N`, apps inherit the caller's session environment instead. Apps run with ambient capabilities cleared and stop with `relay down`. Output goes to `relay logs apps`.
-
-`--restart` starts the app again whenever it exits, until the session stops. Retries wait 1 second, doubling up to 30 seconds; the delay resets after the app stays up for 60 seconds. Each restart is recorded in `relay logs apps`. The returned pid is the first app process, not its watcher; it changes on restart. Without this flag, apps start once.
-
-```console
-$ relay run -- mousepad notes.txt
-✓ Started         mousepad
-  PID             4412
-  Display         :0
-  Logs            ~/.local/state/relay/default/apps.log
-```
-
-## screenshot
+Saves a PNG of the screen. Works while a viewer is connected.
 
 ```sh
 relay screenshot [file] [--url URL] [--token-file FILE] [--timeout S]
 ```
 
-Saves a PNG of the screen. Default file `screen.png`. `-` writes the PNG to stdout. Works while a viewer is connected. `--json` wraps `path`, `bytes`, `width`, and `height` in `screenshot`, with outcome `saved`.
+| Argument | Default | Meaning |
+| --- | --- | --- |
+| `file` | `screen.png` | Destination path. `-` writes the PNG bytes to stdout and cannot be combined with `--json`. |
 
-## click
+```sh
+relay screenshot /tmp/relay.png
+```
+
+When piped, prints only the saved path. `--json` prints `{"screenshot":{"path":"/tmp/relay.png","width":1280,"height":720,"bytes":12345},"outcome":"saved"}`.
+
+### click
+
+Clicks at a point. Coordinates are fractions of the screen from 0 to 1, from the top-left.
 
 ```sh
 relay click <x> <y> [--button left|middle|right]
 ```
 
-Clicks at X Y. Default button `left`.
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `--button` | `left` | `left`, `middle`, or `right`. |
 
-## move
+```sh
+relay click 0.5 0.5
+```
+
+### move
+
+Moves the pointer.
 
 ```sh
 relay move <x> <y>
 ```
 
-## scroll
+```sh
+relay move 0.5 0.5
+```
+
+### scroll
+
+Moves to a point, then scrolls.
 
 ```sh
 relay scroll <x> <y> [--dx N] [--dy N]
 ```
 
-Moves to X Y, then scrolls. `--dx` and `--dy` are wheel notches. Positive `--dy` scrolls down, positive `--dx` right. At least one must be nonzero.
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `--dy N` | `0` | Vertical wheel notches. Positive scrolls down. |
+| `--dx N` | `0` | Horizontal wheel notches. Positive scrolls right. |
 
-## key
+At least one of `--dx` and `--dy` must be nonzero.
+
+```sh
+relay scroll 0.5 0.5 --dy 3
+```
+
+### key
+
+Presses each key combination in order. Combos are `+`-joined: `ctrl+l`, `Enter`, `alt+Tab`, `ctrl++`.
 
 ```sh
 relay key <combo>...
 ```
 
-Presses each combo in order. Combos are `+`-joined: `ctrl+l`, `Enter`, `alt+Tab`, `ctrl++`. Modifiers are `ctrl`, `shift`, `alt`, `super` (also `control`, `meta`, `cmd`, `win`). Keys are a US-layout character or a name such as `Enter`, `Tab`, `Escape`, `Backspace`, `Delete`, `Home`, `End`, `PageUp`, `PageDown`, `Up`, `Down`, `Left`, `Right`, or `F1` to `F24`.
+Modifiers are `ctrl`, `shift`, `alt`, and `super` (also `control`, `meta`, `cmd`, `win`). Keys are physical keys: a US-layout character or a name such as `Enter`, `Tab`, `Escape`, `Backspace`, `Delete`, `Home`, `End`, `PageUp`, `PageDown`, `Up`, `Down`, `Left`, `Right`, or `F1` to `F24`.
 
-## type
+```sh
+relay key ctrl+l
+```
+
+### type
+
+Types text, one text event per Unicode scalar value. The engine produces each character using the current remote keyboard layout, or reports `unsupported_input` when it cannot. Unlike `key`, it does not assume a US layout.
 
 ```sh
 relay type <text>
 relay type --stdin
 ```
 
-Types text as text events, one per Unicode scalar value. The engine produces the requested character using the current remote layout, or reports `unsupported_input` when it cannot. Unlike `key`, text input does not assume a US keyboard layout.
+| Option | Meaning |
+| --- | --- |
+| `--stdin` | Read the text from stdin instead of the argument. |
 
-## input
+```sh
+relay type "Hello, 世界"
+```
+
+### input
+
+Sends a JSON array of raw input events, with the same schema as the [SDK](/docs/sdk#input-events). It accepts 1 to 256 events.
 
 ```sh
 relay input <json>
 relay input --stdin
 ```
 
-Sends a nonempty JSON array of raw events with the same schema as the [SDK](/docs/sdk#input-events). The SDK sends each raw event as its own batch and checks the engine's advertised `max_input_batch`.
+| Option | Meaning |
+| --- | --- |
+| `--stdin` | Read the JSON array from stdin instead of the argument. |
 
 ```sh
 relay input '[{"type":"keyDown","key":4},{"type":"keyUp","key":4}]'
 ```
 
-## Input behavior
+The SDK sends each raw event as its own batch and checks the engine's advertised `max_input_batch`.
+
+### Input rules
 
 - X and Y are fractions of the screen from 0 to 1, from the top-left.
 - Input goes to the engine as `POST /input` batches limited by the capabilities `max_input_batch` value (currently 256 events; [Protocol](/docs/protocol#post-input)).
-- `type` sends one text event per character and `key` one group per combo. Events are packed into as many batches as needed and never split.
-- If a viewer or SDK session holds control, the input queue already holds 1024 events, or the session ends between batches, the batch fails with `busy` (HTTP 409). It is never retried. Another controller can take control between batches, so a long `type` or `key` can stop partway, and a batch still queued when the session ends fails as `busy` after applying a prefix. The JSON error then carries `data.applied`, the number of events already applied.
+- `type` sends one text event per character and `key` one group per combo. Events are packed into as many batches as needed and a combo is never split.
+- Only one input owner can send input at a time: a viewer, an SDK control session, or the CLI. If another owner holds control, the input queue already holds 1024 events, or the session ends between batches, the batch fails with `busy` (HTTP 409). It is never retried. Another owner can take control between batches, so a long `type` or `key` can stop partway, and a batch still queued when the session ends fails as `busy` after applying a prefix. The JSON error then carries `data.applied`, the number of events already applied.
 - Held keys and buttons are released at the end of each batch, and when it fails.
-- `--json` prints `{"input":{"events":1},"outcome":"sent"}` with the applied event count. Success means the engine applied the events, not that the application reacted. Take a screenshot to confirm.
 
-## Error codes
+## Other commands
+
+### skills
+
+Serves the agent skills that ship with the CLI, so their instructions match the installed version. Works offline.
+
+```sh
+relay skills list
+relay skills get <name> [--full] [--json]
+relay skills path [name]
+```
+
+```sh
+relay skills get core
+```
+
+See [Agent skills](/docs/agent-skills) for the output shapes, the shipped skills, and the core workflow.
+
+### help
+
+Shows help for the CLI or one command.
+
+```sh
+relay help [command] [--all]
+```
+
+`--all --json` returns every command. See [Help layouts](#help-layouts).
+
+## Global options
+
+These work on every command, before or after the command name.
+
+| Option | Meaning |
+| --- | --- |
+| `-h`, `--help` | Show help. |
+| `-v`, `--version` | Print only the version, `0.1.0`. With `--json`, `{"version":"0.1.0"}`. |
+| `--json` | Print one JSON document. See [JSON output](#json-output). |
+| `--no-color` | Disable color. |
+| `--name NAME` | Session name, default `default`. Up to 64 characters. The first character is a letter, digit, `_`, or `-`; later characters may also be `.`. |
+
+Options accept `--name <NAME>` and `--name=NAME`. `--` ends option parsing. Boolean options accept `--no-<OPTION>`. Unknown options, commands, and extra positionals fail before any work, with at most one close suggestion and a help command. Options do not accept prefix matching. The only short options are `-h`, `-v`, `-f` (`logs --follow`), and `-d` (`up --detach`).
+
+### Help layouts
+
+Help works offline, writes to stdout, and exits 0 without starting anything. `relay <command> --help --json` returns `path`, `summary`, `runsOn` (`vm`, `client`, or `anywhere`), `arguments`, `options`, `examples`, `notes`, and the result schema. `relay help --all --json` returns every command.
+
+Help has two layouts. For people, root help shows the version, usage, three sections (`VM commands`, `Client commands`, `Other commands`), and examples. Command help adds where the command runs, alphabetical options with defaults, and examples. Color is used only when stdout is a terminal and color is allowed, so a pipe, `NO_COLOR`, `--no-color`, or `TERM=dumb` prints plain text.
+
+When an AI agent is detected, help uses a descriptive plain-text layout: usage, a `Start here (for AI agents)` block on root help that points to `relay skills get core`, where the command runs, arguments, options, global options, examples, notes, and a documentation link. Detection affects help only; every other command behaves the same. Set `RELAY_AGENT=1` or `RELAY_AGENT=0` to force a layout. See [Agent skills](/docs/agent-skills#agent-aware-help).
+
+## Client target
+
+Client commands pick the engine in this order:
+
+1. `--url`, else `RELAY_URL`.
+2. The local session named by `--name`, if it is ready: its URL, token file, and TLS certificate. The session certificate is trusted without a hostname check, as a local session needs.
+3. `http://127.0.0.1:8080` only when no session was explicitly selected and the default session does not exist.
+
+An explicitly selected missing session, a stopped session, or one whose supervisor is gone fails with `not_running`. Pass `--url` to target an engine without a local session.
+
+The token comes from `--token-file`, else `RELAY_TOKEN_FILE`, else the local session. The file holds the 64-character token. The client only reads it, so its mode does not matter. See [Tokens](/docs/remote-access#tokens).
+
+URL rules: an origin only (no path, query, or credentials). Plain HTTP only for `localhost` and `127.0.0.1`; other hosts need HTTPS and a token. Redirects are refused.
+
+```sh
+relay screenshot desk.png --url https://desk.example.com --token-file ./token
+```
+
+## Output
+
+Queries write data to stdout. Mutations write receipts and next steps to stderr. When stdout is piped, `up` writes only the viewer URL (including `#token=` when needed), `screenshot` writes only the saved path, and input commands write nothing.
+
+Terminal receipts use `✓`, `!`, and `✗` in column 0, text from column 2, and label values from column 18. Non-terminal stderr or `TERM=dumb` uses plain words and no color. Color precedence is `--no-color`, nonempty `NO_COLOR`, `FORCE_COLOR` (`0` disables it), then detection for each stream. Human errors are a headline, context, and one recovery command on stderr, with no stack trace.
+
+## JSON output
+
+`--json` writes exactly one JSON document and a newline to stdout, pretty-printed with two spaces on a terminal and compact otherwise. A successful JSON command leaves stderr empty. A failure leaves stdout empty and writes one compact error document to stderr. Keys use camelCase. Success may include `warnings: [{reason, message}]` and `next: [{command, argv}]`.
+
+| Command | JSON success shape |
+| --- | --- |
+| `up` | `{"session":{...},"outcome":"started"}` |
+| `down` | `{"session":{...},"outcome":"stopped"}` or `"unchanged"` |
+| `status` | `{"session":{...}}` |
+| `screenshot` | `{"screenshot":{"path":"<PATH>","width":1280,"height":720,"bytes":12345},"outcome":"saved"}` |
+| `click`, `move`, `scroll`, `key`, `type`, `input` | `{"input":{"events":1},"outcome":"sent"}` |
+| `doctor` | `{"checks":[...],"summary":{...}}` |
+| `logs` | `{"logs":{"<component>":"<text>"}}` |
+| `run` | `{"app":{"pid":4412,"command":["<APP>","<ARG>"]},"outcome":"started"}` |
+| `skills` | `{"skills":[...]}`, `{"skill":{...}}`, or `{"path":"..."}` |
+
+### Error document
+
+```json
+{"status":"error","reason":"not_running","message":"No session named \"default\"","next":[{"command":"relay up -d","argv":["relay","up","-d"]}]}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `status` | `error`, or `action_required` when different input can unblock the command before it had any effect. |
+| `reason` | Stable snake_case code. Match this, not the message. |
+| `message` | One-line headline. |
+| `next` | Optional recovery commands. `command` is the full command line and `argv` is the same command split, starting with `relay`. |
+| `data` | Optional context, such as `component` and `logs` after a component failure, `applied` after a partial input failure, or `httpStatus` from the engine. |
+
+A failed start, for example a desktop command that exits:
+
+```console
+$ relay up -d --name bad --port 8085 --desktop false --json
+{"status":"error","reason":"component_failed","message":"Failed to start the desktop. It exited with code 1.","next":[{"command":"relay logs desktop --name bad","argv":["relay","logs","desktop","--name","bad"]}],"data":{"component":"desktop","logs":"/home/relay/.local/state/relay/bad"}}
+```
+
+### Error reasons
 
 | Reason | Meaning |
 | --- | --- |
@@ -400,14 +511,55 @@ relay input '[{"type":"keyDown","key":4},{"type":"keyUp","key":4}]'
 | `canceled` | Interrupted operation (exit 130). |
 | `internal` | Unexpected engine response or a CLI bug. |
 
-Input commands that fail after some batches report `data.applied` (events already applied). The SDK exposes the same snake_case `reason` through `RelayError.reason`.
+Input commands that fail after some batches report `data.applied` (events already applied). The SDK exposes the same snake_case `reason` through `RelayError.reason` ([SDK errors](/docs/sdk#errors)). For fixes by reason, see [Troubleshooting](/docs/troubleshooting).
 
-## skills
+### Exit codes
+
+| Code | Meaning |
+| --- | --- |
+| 0 | Success. |
+| 1 | Runtime, network, permission, configuration, or missing-session failure. |
+| 2 | Usage error, invalid value, or missing input. |
+| 130 | Interrupted with Ctrl+C. A foreground `up` stops its session on the first interrupt; a second interrupt exits immediately. |
+| 128+n | Terminated by signal n. |
+
+## Environment variables
+
+Precedence is an explicit option, its `RELAY_*` variable, the config file, then the default. An explicit invalid value fails instead of falling back. Config validation reports all problems before starting any process.
+
+| Variable | Applies to |
+| --- | --- |
+| `RELAY_CONFIG` | `up --config`; otherwise `${XDG_CONFIG_HOME:-~/.config}/relay/config.yaml` when present. |
+| `RELAY_PORT`, `RELAY_BIND`, `RELAY_PUBLIC`, `RELAY_TLS_CERT`, `RELAY_TLS_KEY`, `RELAY_DESKTOP` | The matching `up` options. |
+| `RELAY_RESOLUTION`, `RELAY_FPS`, `RELAY_BITRATE_MIN`, `RELAY_BITRATE_START`, `RELAY_BITRATE_MAX`, `RELAY_KEYBOARD_LAYOUT` | The matching config keys (`display.resolution`, `stream.fps`, `stream.bitrate.*`, `keyboard.layout`). See [Configuration](/docs/configuration). |
+| `RELAY_URL` | Client `--url`. |
+| `RELAY_TOKEN_FILE` | Client `--token-file`. |
+| `RELAY_AGENT` | Help layout: `1` for the agent layout, `0` for the human layout. No other output changes. |
+| `NO_COLOR`, `FORCE_COLOR` | Color, as described under [Output](#output). |
+
+### State directory
+
+Each session keeps its files in `${XDG_STATE_HOME:-~/.local/state}/relay/<name>/` (mode 0700): `session.json`, `token` (0600), `display.log`, `dbus.log` when relay starts its own bus, `desktop.log`, `engine.log`, `apps.log` (after `run`), and `supervisor.log` (`-d` only).
+
+## install.sh
 
 ```sh
-relay skills list
-relay skills get <name> [--full] [--json]
-relay skills path [name]
+./install.sh [--prefix DIR] [--no-desktop] [--no-deps] [--client-only]
 ```
 
-Skills ship with the CLI, so their instructions match the installed version. See [Agent skills](/docs/agent-skills) for the output shapes, the shipped skills, and the core workflow.
+| Flag | Meaning |
+| --- | --- |
+| `--prefix DIR` | Absolute install location. Default `$PREFIX`, else `~/.local`. |
+| `--no-desktop` | Skip XFCE and the other desktop packages. |
+| `--no-deps` | Skip apt. Dependencies must already be present. |
+| `--client-only` | Install only the CLI, for example on a laptop. Works off Linux. |
+
+Apt needs root or passwordless sudo. On apt systems it installs the build tools, the X11 libraries, `libx264`, `libwebsockets`, `xvfb`, `xauth`, `x11-utils`, `x11-xkb-utils`, `util-linux` (for `setpriv`), and with the desktop: D-Bus, XFCE (`xfce4-session`, `xfwm4`, `xfce4-panel`, `xfdesktop4`, `xfce4-settings`, `thunar`, `xfce4-terminal`), and `glycin-loaders` when the distribution has it. It uses the system `node` when it is 26 or newer; otherwise it downloads the version pinned in `.node-version` from `https://nodejs.org/dist/`, checks it against that release's `SHASUMS256.txt`, and unpacks it in `<prefix>/lib/relay/node`. It runs `npm ci` and `npm run build` with that Node. It is safe to re-run.
+
+It installs the CLI as `<prefix>/lib/relay/relay.mjs` with a `<prefix>/bin/relay` launcher that prefers `<prefix>/lib/relay/node`, the engine, and the built viewer in `<prefix>/lib/relay/` (the engine is linked as `<prefix>/bin/relay-engine`). When `<prefix>/bin` is not on `PATH` it prints:
+
+```text
+Not on PATH; add it with: export PATH="<prefix>/bin:$PATH"
+```
+
+A full install ends by running `relay doctor` and exits non-zero if doctor finds a failure.

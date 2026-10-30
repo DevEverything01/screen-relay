@@ -1,100 +1,91 @@
 ---
-title: Architecture
-description: The capture, encoding, and input pipeline, its threads, flow control, and how to add a backend.
+title: How relay works
+description: What happens between the desktop on the VM and the browser, how the stream adapts to the network, how input gets back, and the limits to expect.
 ---
+
+After reading this page you know what relay does with each frame of your desktop, why the picture gets softer on a slow link and sharper when you stop moving, and which limits to plan around.
 
 <Diagram name="architecture" title="Relay architecture: the capture and encode pipeline in a Linux VM, the browser viewer, and the input path" aspectRatio="720 / 448" />
 
-The pipeline in text:
+The same flow in text:
 
 ```text
-X11 display (Xvfb)
-  -> CaptureSource (XDamage, MIT-SHM)
-  -> CaptureEncoder (BGRA/ARGB to NV12, x264)
-  -> flow control (ACK credit)
+virtual display
+  -> capture of changed regions
+  -> H.264 encoding
+  -> adaptive flow control
   -> WebSocket /stream
-  -> browser VideoDecoder -> canvas
+  -> browser viewer (decode, draw)
 
-browser input over /stream (same WebSocket as the video)
+viewer input over /stream (same WebSocket as the video)
 agent or relay CLI/SDK input over /input (HTTP) or /control (WebSocket)
-  -> InputController -> InputBackend (XTest) -> X11 display
+  -> input checks
+  -> input injection
+  -> virtual display
 ```
 
 Only one of the viewer, `/control`, and `/input` owns input at a time.
 
-## Folders
+## What runs where
 
-| Path | Contents |
+| Where | What runs |
 | --- | --- |
-| `src/engine/core/` | Backend-neutral pipeline: `CaptureSource`, the input controller and input backend interface, encoder, color conversion, flow control |
-| `src/engine/server/` | `main.cpp` (entry point), `config` (arguments, token and origin policy), `wire` (NSL1 encoding), `server` (session, writes, libwebsockets callback, HTTP routes), `metrics` (cgroup parsing), `screenshot` |
-| `src/engine/backends/linux/x11/` | X11 capture (XDamage, MIT-SHM, XFixes cursor) and XTest input primitives |
-| `src/protocol/` | Runtime-neutral wire constants and encoding, HID key table, key-combo and text parsing, origin and token rules |
-| `src/sdk/` | Node client library on top of the protocol |
-| `src/cli/` | The `relay` CLI: argument parsing, output, client commands on the SDK, host commands that supervise the display, desktop, and engine |
-| `viewer/` | Browser viewer source: `index.html` and `main.ts`; the build bundles it into `dist/viewer/viewer.js` |
-| `tests/` | Unit tests and `tests/smoke.sh` |
+| VM | The virtual display, the desktop and its apps, and the engine. The engine captures, encodes, streams, and applies input. `relay up` starts all three. |
+| Browser | The viewer. It decodes the video, draws it on a canvas, and sends your keyboard and mouse back. |
+| Anywhere else | Agents and the `relay` client commands, which talk to the engine over HTTP and WebSocket. See [Remote access](/docs/remote-access) for how to reach a VM from another machine. |
 
-## Interfaces
+All the heavy work, capturing and encoding, happens on the VM. The browser only has to decode H.264, which current Chrome, Edge, and Safari can do.
 
-- `CaptureSource` (`src/engine/core/capture-source.hpp`): `fd()`, `dimensions()`, `drainDamage()`, `pixelFormat()`, `capture()`. A frame is a non-owning CPU view (BGRA or ARGB), valid until the next capture. Optional `cursorSupported()` and `cursor(force)`.
-- `InputBackend` (`src/engine/core/input.hpp`): platform primitives only: `nativeKey(usage)`, `pressKey`, `releaseKey`, `typeText(codepoint)`, `pressButton`, `releaseButton`, `move`, `scroll`, `resetLocks`, `fence(mark)`, `pending`, `cancel`, `flush`, `dimensions`, `name`. A backend may queue its work on its own thread; `pending` counts the events still queued, and the service thread refuses a batch that would take the queue past 1024 events. `fence` completes a caller's `InputFence` after everything posted before it, and `cancel` drops queued text and moves as not applied while keeping key and button releases and reporting how many records were dropped.
-- `InputController` (`src/engine/core/input.hpp`): owns one `InputBackend`, validates each `InputEvent`, maps normalized pointer coordinates to pixels, dedupes held keys and buttons by native key id, and releases everything on `releaseAll`. Its `resetLocks` turns Caps Lock off when a new input session starts. It forwards `fence` and `cancel` to the backend. It returns `InputStatus`: `invalid` for a rejected event, `unsupported` when the backend has no native key for a usage or cannot type a codepoint.
-- `InputQueue` (`src/engine/core/input.hpp`): the backend work queue. It counts one protocol record as one queued unit however many platform jobs that record posts, so admission, `pending`, and cancelled-record counts share one unit. `cancel` drops queued text and moves and leaves each fence it covered in worker order, so the worker completes it as not applied only after its own `XSync`.
-- `CaptureEncoder` takes a `CaptureSourceFactory`, so tests can inject a source with no X11.
-- The worker requires a valid fd. Core enforces the source size limits once: 320 to 1920 by 240 to 1080, both even, in the capture worker and on the input backend's dimensions at startup. The image stride must be between width x 4 and width x 8 bytes.
+## From the desktop to the browser
 
-## Threads and ownership
+1. **Virtual display.** `relay up` starts an X11 display with no monitor attached and runs the desktop on it. The default size is 1280x720; you can set it in [Configuration](/docs/configuration). It can also attach to a display that already exists.
+2. **Capture only what changed.** The display reports which regions changed. A still desktop costs almost nothing: nothing is captured or sent until something moves. A fresh screenshot does not depend on the stream, so `relay screenshot` works with or without a viewer.
+3. **Encode to H.264.** Changed frames are converted and compressed for low delay: no look-ahead and no reordering, so a frame leaves the VM as soon as it is encoded. The first frame of every connection, and any recovery after a failure, is a full picture the viewer can start from.
+4. **Adapt to the network.** See [the next section](#adapting-to-the-network).
+5. **Stream.** Frames travel over one WebSocket, `/stream`. The mouse cursor is sent as a separate small image, so it moves without waiting for the video.
+6. **Decode and draw.** The viewer decodes each frame in order and draws it on a canvas, at most once per display refresh. It then tells the engine the frame is done. A tab that is hidden pauses the stream, and returning to it reconnects with a fresh picture.
 
-- The service thread owns libwebsockets, the `InputController`, flow-control state, and all socket writes.
-- On Linux, input work runs on a thread that owns the input X connection. The service thread only queues events, so it never waits for a slow character. The `/input` and `/control` replies are written when that thread completes the batch's fence, which waits for the X server to process the batch; that gives clients backpressure and keeps `applied` true. Shutdown destroys the input controller and joins its thread before the libwebsockets context is destroyed; the thread wakes the service thread through a shared context holder that is cleared first.
-- On Linux, the service thread sets `TCP_NODELAY` and `TCP_NOTSENT_LOWAT` on the stream socket.
-- The capture worker owns its `CaptureSource`, a reusable YUV frame, and the x264 encoder. It publishes owning `EncodedFrame` vectors to a bounded queue and wakes the service thread with `lws_cancel_service`.
-- A separate screenshot worker owns its own `CaptureSource`.
-- Each X11 backend object owns its own X connection. Xlib threading is initialized once by `initializeNativeBackend()`.
-- Workers finish before the resources they use are destroyed.
-- A full queue fails the generation. It never drops an encoded reference frame.
-- Held keys and buttons are released on blur, disconnect, timeout, and generation change.
+The picture uses 4:2:0 chroma, as most video does. Fine colored text can look slightly softer than the screen it came from.
 
-## Flow control
+## Adapting to the network
 
-| Rule | Value |
+The engine does not send frames faster than the viewer reports it can handle them. Each frame the viewer finishes is acknowledged, and the engine only keeps a few frames in flight:
+
+- **A fast link** carries a few frames at a time and the bitrate climbs toward the maximum. The default is 8 Mbps at the start, between 1 and 40 Mbps.
+- **A slow link** backs off. When frames start to queue up, the engine lowers the bitrate and keeps fewer frames in flight, and it skips capture work while it waits, so the desktop stays responsive instead of falling seconds behind.
+- **A still screen** gets sharper. About 150 ms after the picture stops changing, the engine re-sends it at higher quality, and keeps refining it while the link is idle. When something changes again, it returns to fast, lower-quality frames.
+- **A stalled link** ends the connection. If the viewer acknowledges nothing for about 3 seconds, the engine closes the stream and the viewer reconnects with a fresh picture.
+
+You can set the frame rate (10 to 60, default 60) and the bitrate range in [Configuration](/docs/configuration). The live numbers are in `GET /metrics`; see [API and protocol](/docs/protocol#get-metrics).
+
+## From the browser or an agent back to the desktop
+
+Input reaches the desktop from three places:
+
+| Source | Path |
 | --- | --- |
-| Initial credit | 1 frame |
-| Window after first ACK | `clamp(ceil(ack_rtt / 16.667 ms) + 1, 2, 8)` |
-| ACK RTT | EWMA, `0.875 * old + 0.125 * sample` |
-| In flight | At most 8 frames and 8 MiB |
-| Admission pause | Oldest outstanding capture reaches 250 ms |
-| Generation closed | No ACK progress for 3 s, or oldest capture 3 s old (checked every 100 ms) |
-| x264 | ultrafast, zerolatency, CRF 10, no B frames, no lookahead, no scheduled IDRs (IDR only at session start and recovery), 1 thread |
-| Bitrate target | Starts at `--bitrate-start` (default 8 Mbps), clamped by `--bitrate-min` and `--bitrate-max` (default 1 to 40 Mbps). The VBV buffer holds about 1/15 s at the target rate. |
-| Decrease | Target x 0.75 (and at most 90% of measured goodput) when 2+ frames and enough bytes are outstanding, oldest capture is 200 ms old, and 500 ms since the last decrease. Floor is the configured minimum. |
-| Increase | Target x 1.10 after a busy 1 s sample, oldest under 100 ms, 1 s since last increase, 2 s since last decrease. |
+| Viewer (a person) | Keyboard and mouse events go back over the same `/stream` WebSocket. |
+| Agent over HTTP | The CLI client commands and the SDK send batches to `POST /input`. |
+| Agent over WebSocket | A long-lived `/control` connection sends one event at a time and gets a reply for each. |
 
-Frame rate and bitrate limits are engine flags: `--fps` takes 10 to 60, and `--bitrate-min`, `--bitrate-start`, and `--bitrate-max` take bits per second with `250000 <= min <= start <= max <= 100000000`. `relay-engine --help` lists them with their defaults.
+Whatever the source, the engine checks each event, then injects it into the display as real keyboard and mouse input. The reply to an agent comes only after the display has received the input, so an agent that waits for it is paced by the desktop. Applied means the desktop received the input, not that the app has reacted yet.
 
-ACK time includes network, decode, scheduling, and waiting for a frame to be drawn or superseded. It is not pure RTT. Paths with latency near 200 ms can back off repeatedly.
+### One input owner at a time
 
-Quality recovery: when the picture is unchanged for 150 ms, the capture worker re-encodes the full picture as a P frame. If the transport queue is empty it keeps refining at up to the configured frame rate, using a VBV buffer twice the motion size at the current target bitrate. Forced IDR frames at session start and recovery use that same larger buffer. Refinement stops when x264 reports an effective CRF within 1 of the target and the frame is small enough to transfer in two frame intervals at the target rate, when a refinement frame is at most one eighth the size of the cascade's first refinement frame, after 8 refinement frames, or when changed pixels arrive. The worker restores the motion VBV before encoding the next changed frame. Refinement starts only when no frames are in flight, although an already published refinement frame can delay later damage.
+Only one of the viewer, `/control`, and `/input` can send input at once. A second one is refused with a `busy` error instead of mixing with the first. When the owner disconnects, times out, or the tab loses focus, every key and mouse button it was holding is released, so nothing stays stuck down.
 
-Failure handling: a capture or encode failure keeps pending work and forces an IDR in the same generation. The first two consecutive failures reopen the encoder after 1 s. The third, or a failed reopen, is fatal and the server exits.
+Typed text goes through the keyboard layout of the display (`us` by default). Characters the layout has are typed with their own keys. Characters it lacks, such as CJK on `us`, are still typed. Details and limits are in [API and protocol](/docs/protocol#text-events).
 
-Color: little-endian BGRA and big-endian ARGB convert to NV12 with limited-range BT.709 in `src/engine/core/color.cpp` (NEON on AArch64, SSE2 on x86, scalar elsewhere), chroma signaled as center-sited. 4:2:0 loses colored-text detail.
+## Limits you will notice
 
-`GET /metrics` exposes the flow counters. See [Protocol](/docs/protocol#get-metrics).
+| Limit | What it means |
+| --- | --- |
+| Resolution | Even width from 320 to 1920 and even height from 240 to 1080. Larger desktops are not supported. |
+| Latency on slow links | The picture is as fresh as the link allows. Near 200 ms of delay the stream can lower its quality repeatedly. Move the VM closer, or lower `stream.bitrate.max`. |
+| X11 only | Relay captures and controls an X11 display. Wayland is not supported today. |
+| Video only | No audio, clipboard sync, or live resize. Change the size in the configuration and restart the session. |
+| Browser | Needs H.264 decoding in the browser (WebCodecs): current Chrome, Edge, or Safari. |
+| Colored text | 4:2:0 video softens fine colored text. |
+| Failure | If capture or encoding fails repeatedly, the engine exits and the session ends. `relay logs` shows why. |
 
-## Adding a backend
-
-1. Create `src/engine/backends/<os>/<name>/` implementing `initializeNativeBackend`, `makeCaptureSource`, and `makeInputBackend`.
-2. Add `BACKEND_DIR_<name>` (folder) and `BACKEND_PKGS_<name>` (pkg-config modules) to the `Makefile`.
-3. Build with `make BACKEND=<name>`. The Makefile builds exactly one backend (default `x11`, folder `linux/x11`).
-4. Implement capture and the input primitives only: map a HID usage to a native key, press and release a native key or button, type a Unicode codepoint, move, scroll, reset locks, flush, `dimensions`, and `name`. Core owns protocol validation, coordinate mapping, held input, and the size limits.
-5. `src/engine/core/` and `src/engine/server/` must not include backend headers.
-
-A Wayland backend must also handle portal authorization and revocation, negotiated format and dimensions, the notification fd, frame ownership, and separately authorized input. It must turn permission denial and session closure into explicit failures and release held input. The CPU-view interface may need revising. No Wayland code exists.
-
-## Build
-
-C++17. The engine needs `libx264`, `libwebsockets` with TLS, and `libx11`, `libxext`, `libxdamage`, `libxfixes`, and `libxtst`. It does not link FFmpeg. `make test` runs the color, flow, input, server, and backend unit tests; `make test-backend` also needs FFmpeg 7 development libraries (`libavcodec` ABI 61, `libavutil`, `libswscale`; no FFmpeg 8-only APIs) to decode the encoder output.
-
-`npm run build` produces `dist/cli/relay.mjs`, `dist/sdk/`, and `dist/viewer/`. `make install` puts the engine and built viewer in `<prefix>/lib/relay/` and links `<prefix>/bin/relay-engine`; `./install.sh` also installs the CLI as `<prefix>/lib/relay/relay.mjs` with a `<prefix>/bin/relay` launcher.
+See [Troubleshooting](/docs/troubleshooting) when something is slow or stuck.

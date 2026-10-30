@@ -1,24 +1,167 @@
 ---
 title: Troubleshooting
-description: Match a symptom to its cause and fix, starting with relay doctor and the component logs.
+description: Find your symptom, see its cause, and apply the fix, starting with relay doctor and the session logs.
 ---
 
-Start with `relay doctor`. It prints the fix command for each problem it finds. Read logs with `relay logs [display|dbus|desktop|engine|apps]`. Error codes are in the [CLI reference](/docs/cli#error-codes).
+Start with `relay doctor` on the VM. It checks the machine and prints a fix command for each problem. Then read the logs of the component that failed:
 
-| Symptom | Cause | Fix |
-| --- | --- | --- |
-| `relay: command not found` after `./install.sh` | `~/.local/bin` (or `<prefix>/bin`) is not on `PATH`. `install.sh` prints a `Not on PATH` line. | `export PATH="$HOME/.local/bin:$PATH"`, or run `~/.local/bin/relay`. |
-| XFCE aborts with a `default_icon_at_size` assertion (libwnck) | Fresh Ubuntu 26.04. gdk-pixbuf 2.44 decodes images through `glycin-loaders`, which `--no-install-recommends` skips. Glycin's bubblewrap also refuses to run when an unprivileged user holds ambient capabilities. | Re-run `./install.sh`; it installs the loaders. `up` clears ambient capabilities for desktop processes. `doctor` checks icon decoding. By hand: `sudo apt-get install glycin-loaders`. |
-| `component_failed` from `up`, or `status` shows `failed` | A component exited during startup or after ready. The session stops. | The error names the component, exit code, and log tail. Read `relay logs <component>`. For `-d`, also read `supervisor.log` in the state directory. |
-| `timeout` from `up` | The engine or desktop was not ready within `--timeout` (default 30 s). | Read the log tail in the error. On a slow machine, raise `--timeout`. |
-| `already_running` | A session with that name is running. | `relay down --name N`, or use another `--name` and `--port`. |
-| `engine exited with code 1` and `Cannot listen on 127.0.0.1:8080` in the log | Another session or process owns the port. | `relay up --port 8081`, or `relay down` the old session. |
-| Blank page, "WebCodecs", or decoder error | The browser lacks H.264 WebCodecs, or the page is not a secure context. | Use current Chrome, Edge, or Safari over `https://` or `http://127.0.0.1`. |
-| Viewer or command says busy (HTTP 409) | One controller at a time. A viewer or an SDK session holds control. | Close the other viewer or SDK session, then retry. Screenshots are not affected. A long `type` may have stopped partway; the JSON error's `data.applied` says how far. |
-| `busy` from `screenshot` (HTTP 503) | A screenshot is already running. | Retry. Only one runs at a time. |
-| `unauthorized` (HTTP 401) | Missing or wrong token. | Pass `--token-file` or set `RELAY_TOKEN_FILE`. Open the viewer from the `#token=` link. From the host to a container, see [Docker](/docs/docker#control-from-the-host). |
-| `forbidden` (HTTP 403) | `Host` or `Origin` is not loopback or the `--public` URL. | Connect through `127.0.0.1` or `localhost`, or through the `--public` URL with the proxy keeping `Host` and `Origin`. |
-| Viewer cannot connect through a proxy | The proxy drops WebSocket upgrades, rewrites `Host` or `Origin`, or the `--public` URL does not match. | See [Remote access](/docs/remote-access#behind-a-tls-proxy). |
-| `install.sh` fails on a non-apt distribution | Automatic dependencies need apt. | Install the equivalent packages, then run `./install.sh --no-deps`. |
-| `Cannot open display` with `--display` | Missing `XAUTHORITY` for that display. | Export the session's `XAUTHORITY`. Never run `xhost +`. |
-| Metrics show `resources_available: false` | No cgroup v2 counters. | Harmless. Streaming is unaffected. |
+```sh
+relay logs engine
+relay logs desktop
+```
+
+The components are `display`, `dbus`, `desktop`, `engine`, and `apps`. Add `--follow` to keep printing new lines. Each error has a `reason`, listed in the [CLI reference](/docs/cli#error-reasons), and `--json` prints it in a machine-readable form.
+
+## Install and setup
+
+### `relay: command not found` after install
+
+The command is in `~/.local/bin`, which a fresh shell often does not have on `PATH`. The installer prints a `Not on PATH` line when this happens.
+
+Fix: run `export PATH="$HOME/.local/bin:$PATH"` and add it to your shell profile, or run `~/.local/bin/relay` directly.
+
+### The installer fails on a non-apt distribution
+
+Automatic dependency installation needs apt (Debian or Ubuntu). It also needs root or passwordless `sudo`.
+
+Fix: install the equivalent packages yourself, then run `./install.sh --no-deps`.
+
+### `unsupported_platform`: "Host commands run on Linux only"
+
+You ran `up`, `down`, or `run` on a machine that is not Linux, such as a Mac. `relay doctor` on that machine fails its `platform` check for the same reason. These commands start the desktop, so they run only on the VM.
+
+Fix: run them on the Linux VM. On your Mac, install the CLI with `./install.sh --client-only` and use the client commands (`status`, `screenshot`, `click`, `move`, `scroll`, `key`, `type`, `input`) with `--url` and a token. See [Remote access](/docs/remote-access#control-a-session-from-your-laptop).
+
+### `missing_dependency`, or `relay doctor` reports a failed check
+
+A program relay needs, such as `Xvfb`, `xauth`, `xprop`, `xwininfo`, `xdpyinfo`, or the engine, is missing or not on `PATH`. A failed check makes `doctor` exit with status 1, and a `warn` check does not.
+
+Fix: run the fix command that `doctor` prints next to the failed check. On Debian or Ubuntu, re-running `./install.sh` installs everything. On other distributions, install the packages by hand and use `--no-deps`.
+
+### XFCE exits right after start on Ubuntu 26.04 with an icon error
+
+Newer image libraries decode pictures through `glycin-loaders`, which a minimal install can skip. Without it, XFCE aborts with a `default_icon_at_size` assertion. The `icon decoding` check in `relay doctor` catches this.
+
+Fix: re-run `./install.sh`, or run `sudo apt-get install glycin-loaders`.
+
+## Starting a session
+
+### `already_running`
+
+A session with that name is running.
+
+Fix: `relay down --name NAME`, or start the new one with another `--name` and `--port`.
+
+### `port_in_use`, or `Cannot listen on 127.0.0.1:8080` in the engine log
+
+Another session or process holds the port.
+
+Fix: `relay up --port 8081`, or `relay down` the session that holds it.
+
+### `component_failed`, or `status` shows `failed`
+
+The display, desktop, or engine exited during startup or later. The whole session stops. The error names the component, its exit code, and the end of its log.
+
+Fix: read `relay logs COMPONENT`. For a background session started with `-d`, also read `supervisor.log` in the session's state directory (`~/.local/state/relay/<name>/`).
+
+### `timeout` from `up`
+
+The desktop or engine was not ready within `--timeout` (30 seconds by default).
+
+Fix: read the log tail in the error. On a slow machine, raise it, for example `relay up --timeout 90`.
+
+### `invalid_config`, or a setting is rejected
+
+A value in the config file is wrong, or a key is unknown. The message names the file and the key.
+
+Fix: correct the key. Allowed values are in [Configuration](/docs/configuration).
+
+### `Cannot open display` with `--display`
+
+Relay cannot read the X authority for that display.
+
+Fix: export that session's `XAUTHORITY`. Never run `xhost +`.
+
+## Viewer
+
+### Blank page, "WebCodecs", or a decoder error
+
+The browser lacks H.264 WebCodecs, or the page is not a secure context.
+
+Fix: use current Chrome, Edge, or Safari, over `https://` or `http://127.0.0.1`.
+
+### The viewer cannot connect through a proxy
+
+The proxy drops WebSocket upgrades, changes `Host` or `Origin`, or the `--public` URL does not match the address you open.
+
+Fix: see [Remote access](/docs/remote-access#behind-a-tls-proxy).
+
+### The picture is the wrong size, or too small
+
+The desktop has a fixed size, set when the session starts. The viewer scales it to fit your window.
+
+Fix: open the viewer's scaling panel and choose **Actual size** to see it at 1:1, or **Sharp pixels** to avoid blur when scaled. To change the desktop size, set `display.resolution` and restart the session. There is no live resize. See [Configuration](/docs/configuration#displayresolution). With `--display`, relay uses the size of that existing screen instead.
+
+## Input
+
+### `busy` (HTTP 409)
+
+Only one input owner can send input at a time: the browser viewer, or one agent using `/control`. Another owner is connected, or the input queue is full.
+
+Fix: close the other viewer tab or agent session, then retry. Screenshots are not affected. A long `type` or `key` can stop partway when another owner takes over. The JSON error's `data.applied` says how many events went through.
+
+### `busy` from `screenshot` (HTTP 503)
+
+A screenshot is already running. Only one runs at a time.
+
+Fix: retry.
+
+### Typed text comes out in the wrong case
+
+Caps Lock can differ between your computer and the desktop. Relay turns Caps Lock off on the desktop when a viewer or agent connects, and the viewer copies your local Caps Lock state as you type.
+
+Fix: reload the viewer, then press Caps Lock on your keyboard to match the state you want. `relay type` is not affected by your local Caps Lock.
+
+### Characters are wrong or missing
+
+`relay type` produces characters through the desktop's keyboard layout. `relay key` presses physical keys, so key combinations follow the layout too. A character the layout lacks may fail with `unsupported_input`.
+
+Fix: set `keyboard.layout` to the layout you need and restart the session (see [Configuration](/docs/configuration#keyboardlayout)). Use `relay type` for text and `relay key` for shortcuts.
+
+### Cmd shortcuts do not work in the viewer on a Mac
+
+The viewer maps your Command key to Ctrl by default on macOS, so Cmd+C sends Ctrl+C.
+
+Fix: open the viewer's key panel and toggle **Use ⌘ as Ctrl** off to send Command as Super.
+
+## Tokens and origins
+
+### `unauthorized` (HTTP 401)
+
+The token is missing or wrong.
+
+Fix: pass `--token-file` or set `RELAY_TOKEN_FILE`, and open the viewer from the link with `#token=`. A new `relay up` makes a new token, so copy it again after a restart. From a host to a container, see [Docker](/docs/docker#control-from-the-host).
+
+### `forbidden` (HTTP 403)
+
+The `Host` or `Origin` of the request is not loopback or the `--public` URL.
+
+Fix: connect through `127.0.0.1` or `localhost`, or through the `--public` URL with a proxy that keeps `Host` and `Origin` unchanged.
+
+### `invalid_input` about a URL or plain HTTP
+
+Client commands accept an origin only (no path, query, or credentials), and they refuse plain HTTP to anything but `localhost` and `127.0.0.1`.
+
+Fix: use an `https://` URL, or tunnel and use `http://127.0.0.1`.
+
+### `unreachable`
+
+The client could not connect. The message says why: `Connection refused.`, `The host name did not resolve.`, or `The TLS certificate was rejected.`
+
+Fix: check the URL and that the session is running (`relay status` on the VM). For a rejected certificate, use one your client trusts.
+
+## Other
+
+### Metrics show `resources_available: false`
+
+The VM has no cgroup v2 counters. This is harmless and streaming is unaffected.
