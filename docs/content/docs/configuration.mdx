@@ -1,4 +1,7 @@
-# Config
+---
+title: Configuration
+description: Config file location, keys, defaults, backend behavior, and precedence.
+---
 
 `relay up` reads an optional YAML file on the machine that runs the desktop. Viewers and the client-only CLI do not read it. Every key is optional, and no file means the defaults.
 
@@ -16,7 +19,7 @@ A file named by `--config` or `RELAY_CONFIG` that is missing is an error. The de
 
 | Key | Default | Allowed | Applies to |
 | --- | --- | --- | --- |
-| `display.resolution` | `1280x720` | `WIDTHxHEIGHT`; width even 320..1920, height even 240..1080 | Every backend; ignored on an attached display |
+| `display.resolution` | `1280x720` | `WIDTHxHEIGHT`; even width 320..1920, even height 240..1080 | Every backend; ignored on an attached display |
 | `stream.fps` | `60` | integer 10..60 | Every backend |
 | `stream.bitrate.min` | `1M` | bits per second 250000..100000000; integer or a `k` or `M` suffix (1000-based) | Every backend |
 | `stream.bitrate.start` | `8M` | same range; `min <= start <= max` | Every backend |
@@ -26,12 +29,12 @@ A file named by `--config` or `RELAY_CONFIG` that is missing is an error. The de
 | `server.public` | unset | HTTPS origin such as `https://desktop.example.com` | Every backend |
 | `server.tls_cert` | unset | certificate file | Every backend |
 | `server.tls_key` | unset | private key for the certificate | Every backend |
-| `keyboard.layout` | `us` | layout name or comma-separated list letters, digits, `_` and `-` | Linux only; applied with `setxkbmap` |
+| `keyboard.layout` | `us` | layout name or comma-separated list using letters, digits, `_`, and `-` | Linux only; applied with `setxkbmap` |
 | `desktop` | `xfce`; `none` with `--display` | `xfce`, `none`, or a command | Linux only |
 
 Unknown keys are an error and name the dotted path. Wrong types and out-of-range values are errors too.
 
-Each key also has a `RELAY_*` variable: `RELAY_RESOLUTION`, `RELAY_FPS`, `RELAY_BITRATE_MIN`, `RELAY_BITRATE_START`, `RELAY_BITRATE_MAX`, `RELAY_PORT`, `RELAY_BIND`, `RELAY_PUBLIC`, `RELAY_TLS_CERT`, `RELAY_TLS_KEY`, `RELAY_KEYBOARD_LAYOUT` and `RELAY_DESKTOP`.
+Each key also has a `RELAY_*` variable: `RELAY_RESOLUTION`, `RELAY_FPS`, `RELAY_BITRATE_MIN`, `RELAY_BITRATE_START`, `RELAY_BITRATE_MAX`, `RELAY_PORT`, `RELAY_BIND`, `RELAY_PUBLIC`, `RELAY_TLS_CERT`, `RELAY_TLS_KEY`, `RELAY_KEYBOARD_LAYOUT`, and `RELAY_DESKTOP`.
 
 ## Backends
 

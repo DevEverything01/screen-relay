@@ -1,4 +1,7 @@
-# Architecture
+---
+title: Architecture
+description: The capture, encoding, and input pipeline, its threads, flow control, and how to add a backend.
+---
 
 ```text
 X11 display
@@ -20,30 +23,30 @@ browser or agent input -> InputController -> InputBackend (XTest)
 | `src/engine/backends/linux/x11/` | X11 capture (XDamage, MIT-SHM, XFixes cursor) and XTest input primitives |
 | `src/protocol/` | Runtime-neutral wire constants and encoding, HID key table, key-combo and text parsing, origin and token rules |
 | `src/sdk/` | Node client library on top of the protocol |
-| `src/cli/` | The `relay` CLI: argument parsing, output, client commands on the SDK, host commands that supervise the display, desktop and engine |
+| `src/cli/` | The `relay` CLI: argument parsing, output, client commands on the SDK, host commands that supervise the display, desktop, and engine |
 | `viewer/` | Browser viewer source: `index.html` and `main.ts`; the build bundles it into `dist/viewer/viewer.js` |
-| `tests/` | Unit tests, `tests/smoke.sh` |
+| `tests/` | Unit tests and `tests/smoke.sh` |
 
 ## Interfaces
 
 - `CaptureSource` (`src/engine/core/capture-source.hpp`): `fd()`, `dimensions()`, `drainDamage()`, `pixelFormat()`, `capture()`. A frame is a non-owning CPU view (BGRA or ARGB), valid until the next capture. Optional `cursorSupported()` and `cursor(force)`.
 - `InputBackend` (`src/engine/core/input.hpp`): platform primitives only: `nativeKey(usage)`, `pressKey`, `releaseKey`, `typeText(codepoint)`, `pressButton`, `releaseButton`, `move`, `scroll`, `resetLocks`, `fence(mark)`, `pending`, `cancel`, `flush`, `dimensions`, `name`. A backend may queue its work on its own thread; `pending` counts the events still queued, and the service thread refuses a batch that would take the queue past 1024 events. `fence` completes a caller's `InputFence` after everything posted before it, and `cancel` drops queued text and moves as not applied while keeping key and button releases and reporting how many records were dropped.
 - `InputController` (`src/engine/core/input.hpp`): owns one `InputBackend`, validates each `InputEvent`, maps normalized pointer coordinates to pixels, dedupes held keys and buttons by native key id, and releases everything on `releaseAll`. Its `resetLocks` turns Caps Lock off when a new input session starts. It forwards `fence` and `cancel` to the backend. It returns `InputStatus`: `invalid` for a rejected event, `unsupported` when the backend has no native key for a usage or cannot type a codepoint.
-- `InputQueue` (`src/engine/core/input.hpp`): the backend work queue. It counts one protocol record as one queued unit however many platform jobs that record posts, so admission, `pending` and cancelled-record counts share one unit. `cancel` drops queued text and moves and leaves each fence it covered in worker order, so the worker completes it as not applied only after its own `XSync`.
+- `InputQueue` (`src/engine/core/input.hpp`): the backend work queue. It counts one protocol record as one queued unit however many platform jobs that record posts, so admission, `pending`, and cancelled-record counts share one unit. `cancel` drops queued text and moves and leaves each fence it covered in worker order, so the worker completes it as not applied only after its own `XSync`.
 - `CaptureEncoder` takes a `CaptureSourceFactory`, so tests can inject a source with no X11.
 - The worker requires a valid fd. Core enforces the source size limits once: 320 to 1920 by 240 to 1080, both even, in the capture worker and on the input backend's dimensions at startup. The image stride must be between width x 4 and width x 8 bytes.
 
 ## Threads and ownership
 
-- The service thread owns libwebsockets, the `InputController`, flow-control state and all socket writes.
-- On Linux, input work runs on a thread that owns the input X connection. The service thread only queues events, so it never waits for a slow character. The `/input` and `/control` replies are written when that thread completes the batch's fence, which waits for the X server to process the batch; that gives clients backpressure and keeps `applied` true. Shutdown destroys the input controller, and joins its thread, before the libwebsockets context is destroyed; the thread wakes the service thread through a shared context holder that is cleared first.
+- The service thread owns libwebsockets, the `InputController`, flow-control state, and all socket writes.
+- On Linux, input work runs on a thread that owns the input X connection. The service thread only queues events, so it never waits for a slow character. The `/input` and `/control` replies are written when that thread completes the batch's fence, which waits for the X server to process the batch; that gives clients backpressure and keeps `applied` true. Shutdown destroys the input controller and joins its thread before the libwebsockets context is destroyed; the thread wakes the service thread through a shared context holder that is cleared first.
 - On Linux, the service thread sets `TCP_NODELAY` and `TCP_NOTSENT_LOWAT` on the stream socket.
-- The capture worker owns its `CaptureSource`, a reusable YUV frame and the x264 encoder. It publishes owning `EncodedFrame` vectors to a bounded queue and wakes the service thread with `lws_cancel_service`.
+- The capture worker owns its `CaptureSource`, a reusable YUV frame, and the x264 encoder. It publishes owning `EncodedFrame` vectors to a bounded queue and wakes the service thread with `lws_cancel_service`.
 - A separate screenshot worker owns its own `CaptureSource`.
 - Each X11 backend object owns its own X connection. Xlib threading is initialized once by `initializeNativeBackend()`.
 - Workers finish before the resources they use are destroyed.
 - A full queue fails the generation. It never drops an encoded reference frame.
-- Held keys and buttons are released on blur, disconnect, timeout and generation change.
+- Held keys and buttons are released on blur, disconnect, timeout, and generation change.
 
 ## Flow control
 
@@ -56,11 +59,11 @@ browser or agent input -> InputController -> InputBackend (XTest)
 | Admission pause | Oldest outstanding capture reaches 250 ms |
 | Generation closed | No ACK progress for 3 s, or oldest capture 3 s old (checked every 100 ms) |
 | x264 | ultrafast, zerolatency, CRF 10, no B frames, no lookahead, no scheduled IDRs (IDR only at session start and recovery), 1 thread |
-| Bitrate target | Starts at `--bitrate-start` (default 8 Mbps), clamped by `--bitrate-min` and `--bitrate-max` (default 1 to 40 Mbps). VBV buffer holds about 1/15 s at the target rate. |
+| Bitrate target | Starts at `--bitrate-start` (default 8 Mbps), clamped by `--bitrate-min` and `--bitrate-max` (default 1 to 40 Mbps). The VBV buffer holds about 1/15 s at the target rate. |
 | Decrease | Target x 0.75 (and at most 90% of measured goodput) when 2+ frames and enough bytes are outstanding, oldest capture is 200 ms old, and 500 ms since the last decrease. Floor is the configured minimum. |
 | Increase | Target x 1.10 after a busy 1 s sample, oldest under 100 ms, 1 s since last increase, 2 s since last decrease. |
 
-Frame rate and bitrate limits are engine flags: `--fps` takes 10 to 60, and `--bitrate-min`, `--bitrate-start` and `--bitrate-max` take bits per second with `250000 <= min <= start <= max <= 100000000`. `relay-engine --help` lists them with their defaults.
+Frame rate and bitrate limits are engine flags: `--fps` takes 10 to 60, and `--bitrate-min`, `--bitrate-start`, and `--bitrate-max` take bits per second with `250000 <= min <= start <= max <= 100000000`. `relay-engine --help` lists them with their defaults.
 
 ACK time includes network, decode, scheduling, and waiting for a frame to be drawn or superseded. It is not pure RTT. Paths with latency near 200 ms can back off repeatedly.
 
@@ -70,20 +73,20 @@ Failure handling: a capture or encode failure keeps pending work and forces an I
 
 Color: little-endian BGRA and big-endian ARGB convert to NV12 with limited-range BT.709 in `src/engine/core/color.cpp` (NEON on AArch64, SSE2 on x86, scalar elsewhere), chroma signaled as center-sited. 4:2:0 loses colored-text detail.
 
-`GET /metrics` exposes the flow counters. See [Protocol](protocol.md#get-metrics).
+`GET /metrics` exposes the flow counters. See [Protocol](/docs/protocol#get-metrics).
 
 ## Adding a backend
 
-1. Create `src/engine/backends/<os>/<name>/` implementing `initializeNativeBackend`, `makeCaptureSource` and `makeInputBackend`.
+1. Create `src/engine/backends/<os>/<name>/` implementing `initializeNativeBackend`, `makeCaptureSource`, and `makeInputBackend`.
 2. Add `BACKEND_DIR_<name>` (folder) and `BACKEND_PKGS_<name>` (pkg-config modules) to the `Makefile`.
 3. Build with `make BACKEND=<name>`. The Makefile builds exactly one backend (default `x11`, folder `linux/x11`).
-4. Implement capture and the input primitives only: map a HID usage to a native key, press and release a native key or button, type a Unicode codepoint, move, scroll, reset locks, flush, `dimensions` and `name`. Core owns protocol validation, coordinate mapping, held input and the size limits.
+4. Implement capture and the input primitives only: map a HID usage to a native key, press and release a native key or button, type a Unicode codepoint, move, scroll, reset locks, flush, `dimensions`, and `name`. Core owns protocol validation, coordinate mapping, held input, and the size limits.
 5. `src/engine/core/` and `src/engine/server/` must not include backend headers.
 
 A Wayland backend must also handle portal authorization and revocation, negotiated format and dimensions, the notification fd, frame ownership, and separately authorized input. It must turn permission denial and session closure into explicit failures and release held input. The CPU-view interface may need revising. No Wayland code exists.
 
 ## Build
 
-C++17. The engine needs `libx264`, `libwebsockets` with TLS, and `libx11`, `libxext`, `libxdamage`, `libxfixes`, `libxtst`. It does not link FFmpeg. `make test` runs the color, flow, input, server and backend unit tests; `make test-backend` also needs FFmpeg 7 development libraries (`libavcodec` ABI 61, `libavutil`, `libswscale`; no FFmpeg 8-only APIs) to decode the encoder output.
+C++17. The engine needs `libx264`, `libwebsockets` with TLS, and `libx11`, `libxext`, `libxdamage`, `libxfixes`, and `libxtst`. It does not link FFmpeg. `make test` runs the color, flow, input, server, and backend unit tests; `make test-backend` also needs FFmpeg 7 development libraries (`libavcodec` ABI 61, `libavutil`, `libswscale`; no FFmpeg 8-only APIs) to decode the encoder output.
 
-`npm run build` produces `dist/cli/relay.mjs`, `dist/sdk/` and `dist/viewer/`. `make install` puts the engine and built viewer in `<prefix>/lib/relay/` and links `<prefix>/bin/relay-engine`; `./install.sh` also installs the CLI as `<prefix>/lib/relay/relay.mjs` with a `<prefix>/bin/relay` launcher.
+`npm run build` produces `dist/cli/relay.mjs`, `dist/sdk/`, and `dist/viewer/`. `make install` puts the engine and built viewer in `<prefix>/lib/relay/` and links `<prefix>/bin/relay-engine`; `./install.sh` also installs the CLI as `<prefix>/lib/relay/relay.mjs` with a `<prefix>/bin/relay` launcher.

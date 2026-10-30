@@ -1,0 +1,5 @@
+allowBuilds:
+  esbuild: true
+
+minimumReleaseAgeExclude:
+  - '@vercel/geistdocs@2.14.1'
