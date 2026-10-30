@@ -1,5 +1,7 @@
 # Tests
 
+See the [relay documentation](https://relay.vercel.app/docs) for installation and usage.
+
 Use disposable desktops. New results go to `tests/results/` (untracked).
 
 Run `npm test` for the TypeScript unit tests; it builds `dist/` first. `make test` runs the native ones.

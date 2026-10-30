@@ -1,5 +1,7 @@
 # CLI reference
 
+The published reference is at https://relay.vercel.app/docs/cli.
+
 Run `relay help` for root help, `relay help <command>` for one command, and `relay help --all --json` for every command's metadata. Help works offline.
 
 ## VM commands
