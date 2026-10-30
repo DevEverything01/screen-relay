@@ -11,6 +11,8 @@ const skills = await import(pathToFileURL(bundle).href);
 
 test('lists visible skills and loads full references', () => {
   assert.deepEqual(skills.list().map(({ name }) => name), ['core', 'vercel-sandbox']);
+  assert.equal(skills.get('relay').name, 'relay');
+  assert.equal(skills.path(), join(root, 'skills'));
   const core = skills.get('core', { full: true });
   assert.equal(core.name, 'core');
   assert.match(core.content, /## references\/cli\.md/);

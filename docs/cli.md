@@ -400,12 +400,12 @@ relay skills get <name> [--full] [--json]
 relay skills path [name]
 ```
 
-`list` shows available skills; it is the default when no command is given. `get` prints a skill's workflow; `--full` appends its `references/` and `templates/` files. `path` prints the skill-data directory, or a named skill directory. An unknown skill is a Not found error (`not_found`, exit 1) whose recovery is `relay skills list`.
+`list` shows available skills, leaving out the hidden `relay` stub; it is the default when no command is given. `get` prints a skill's workflow, including a hidden one asked for by name; `--full` appends its `references/` and `templates/` files. `path` prints the skills directory, or a named skill directory. An unknown skill is a Not found error (`not_found`, exit 1) whose recovery is `relay skills list`.
 
 ```json
 {"skills":[{"name":"core","description":"Control a relay desktop from an agent using screenshots and input commands."}]}
 {"skill":{"name":"core","content":"---\nname: core\n..."}}
-{"path":"/usr/local/lib/relay/skill-data"}
+{"path":"/usr/local/lib/relay/skills"}
 ```
 
 Skills ship with the CLI, so their instructions match the installed version. `relay skills get core` is the documented first step for agents.

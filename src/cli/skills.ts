@@ -6,28 +6,25 @@ import { emit, Failure } from './output.js';
 
 type Skill = { name: string; description: string; hidden: boolean; directory: string };
 const runtimeDirectory = dirname(fileURLToPath(import.meta.url));
-const skillDataDirectory = [join(runtimeDirectory, 'skill-data'), resolve(runtimeDirectory, '../../skill-data')].find((path) => {
+const skillsDirectory = [join(runtimeDirectory, 'skills'), resolve(runtimeDirectory, '../../skills')].find((path) => {
   try { return statSync(path).isDirectory(); } catch { return false; }
-}) ?? join(runtimeDirectory, 'skill-data');
-const skillDirectories = [skillDataDirectory, join(dirname(skillDataDirectory), 'skills')];
+}) ?? join(runtimeDirectory, 'skills');
 
 function discover(): Skill[] {
-  return skillDirectories.flatMap((directory) => {
-    let entries: string[];
-    try { entries = readdirSync(directory); } catch { return []; }
-    return entries.flatMap((entry) => {
-      const location = join(directory, entry);
-      const file = join(location, 'SKILL.md');
-      try {
-        if (!statSync(location).isDirectory()) return [];
-        const content = readFileSync(file, 'utf8');
-        const frontmatter = content.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/)?.[1];
-        if (!frontmatter) return [];
-        const metadata = parse(frontmatter) as Record<string, unknown>;
-        if (typeof metadata.name !== 'string') return [];
-        return [{ name: metadata.name, description: typeof metadata.description === 'string' ? metadata.description : '', hidden: metadata.hidden === true, directory: location }];
-      } catch { return []; }
-    });
+  let entries: string[];
+  try { entries = readdirSync(skillsDirectory); } catch { return []; }
+  return entries.flatMap((entry) => {
+    const location = join(skillsDirectory, entry);
+    const file = join(location, 'SKILL.md');
+    try {
+      if (!statSync(location).isDirectory()) return [];
+      const content = readFileSync(file, 'utf8');
+      const frontmatter = content.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/)?.[1];
+      if (!frontmatter) return [];
+      const metadata = parse(frontmatter) as Record<string, unknown>;
+      if (typeof metadata.name !== 'string') return [];
+      return [{ name: metadata.name, description: typeof metadata.description === 'string' ? metadata.description : '', hidden: metadata.hidden === true, directory: location }];
+    } catch { return []; }
   }).sort((left, right) => left.name.localeCompare(right.name));
 }
 
@@ -60,9 +57,9 @@ export function get(name: string, options: { full?: boolean } = {}): { name: str
   return { name: skill.name, content };
 }
 
-/** Returns the skill-data directory, or a named skill's directory. */
+/** Returns the skills directory, or a named skill's directory. */
 export function path(name?: string): string {
-  if (!name) return skillDataDirectory;
+  if (!name) return skillsDirectory;
   const skill = discover().find((candidate) => candidate.name === name);
   if (!skill) throw missing(name);
   return skill.directory;

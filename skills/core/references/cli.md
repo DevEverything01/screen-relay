@@ -50,7 +50,7 @@ relay skills get <name> [--full] [--json]
 relay skills path [name]
 ```
 
-`list` is the default. `get` prints a skill workflow; `--full` appends its `references/` and `templates/`. `path` prints the skill-data directory or one skill's directory. An unknown skill is `not_found` (exit 1).
+`list` is the default and leaves out hidden skills. `get` prints a skill workflow, including a hidden one asked for by name; `--full` appends its `references/` and `templates/`. `path` prints the skills directory or one skill's directory. An unknown skill is `not_found` (exit 1).
 
 ## Global options
 

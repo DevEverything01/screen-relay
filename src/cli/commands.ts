@@ -109,7 +109,7 @@ export const commands: Record<string, Command> = {
     subcommands: [
       { name: 'list', summary: 'List the skills shipped with this CLI', examples: example('List the skills', 'relay skills list') },
       { name: 'get', summary: 'Print one skill workflow', examples: example('Read the core workflow', 'relay skills get core') },
-      { name: 'path', summary: 'Print the skill data directory', examples: example('Print the skill directory', 'relay skills path') },
+      { name: 'path', summary: 'Print the skills directory', examples: example('Print the skill directory', 'relay skills path') },
     ],
     examples: [
       { description: 'List the skills', command: 'relay skills list' },

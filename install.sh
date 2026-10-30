@@ -101,8 +101,8 @@ on_path() {
 install_cli() {
   install -d "$prefix/bin" "$prefix/lib/relay"
   install -m 0755 dist/cli/relay.mjs "$prefix/lib/relay/relay.mjs"
-  install -d "$prefix/lib/relay/skill-data"
-  cp -R skill-data/. "$prefix/lib/relay/skill-data/"
+  install -d "$prefix/lib/relay/skills"
+  cp -R skills/. "$prefix/lib/relay/skills/"
   cat > "$prefix/bin/relay" <<EOF
 #!/bin/sh
 node='$prefix/lib/relay/node/bin/node'
