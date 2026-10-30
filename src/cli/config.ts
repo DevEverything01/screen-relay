@@ -43,7 +43,7 @@ function isFile(path: string): boolean {
 export function locate(path?: string): [string | null, boolean] {
   if (path !== undefined) return [expandUser(path), true];
   const environment = process.env.RELAY_CONFIG;
-  if (environment !== undefined) return [expandUser(environment), true];
+  if (environment) return [expandUser(environment), true];
   const configHome = process.env.XDG_CONFIG_HOME || join(homedir(), '.config');
   const defaultPath = join(configHome, 'relay', 'config.yaml');
   return [isFile(defaultPath) ? defaultPath : null, false];

@@ -1,6 +1,6 @@
 import { spawnSync, type ChildProcess, type SpawnOptions } from 'node:child_process';
 import { accessSync, closeSync, constants, fchmodSync, mkdirSync, openSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import type { Readable } from 'node:stream';
 import { createClient } from '../../sdk/index.js';
 import { Failure, nextFor, sessionCommand } from '../output.js';
@@ -273,7 +273,7 @@ export class Session {
     else if (this.args.public) engineCommand.push('--behind-tls-proxy');
     const scheme = this.args['tls-cert'] ? 'https' : 'http';
     const localUrl = `${scheme}://127.0.0.1:${this.args.port}`;
-    this.save({ bind, localUrl, url: this.args.public || localUrl, tlsCert: this.args['tls-cert'] ?? null });
+    this.save({ bind, localUrl, url: this.args.public || localUrl, tlsCert: this.args['tls-cert'] ? resolve(String(this.args['tls-cert'])) : null });
     const engineChild = this.spawn('engine', engineCommand);
     await waitSpawn(engineChild);
     await this.waitReady(engineChild.pid!, { url: localUrl, token, caFile: this.data.tlsCert, connect: connectHost(bind) }, desktop);

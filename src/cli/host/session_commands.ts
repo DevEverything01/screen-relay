@@ -239,6 +239,11 @@ export async function cmdRun(args: Args): Promise<number> {
       const child = spawnCleared(command, { cwd: homedir(), env, stdio: ['ignore', log, log], detached: true, signal: args.signal });
       await new Promise<void>((resolve, reject) => { child.once('spawn', () => resolve()); child.once('error', reject); });
       pid = child.pid!;
+      const earlyExit = child.exitCode !== null ? child.exitCode : child.signalCode !== null ? 1 : await Promise.race([
+        new Promise<number | null>((resolve) => child.once('exit', (code) => resolve(code ?? 1))),
+        delay(1000).then(() => null),
+      ]);
+      if (earlyExit) throw new Failure('component_failed', `${command[0]} exited with code ${earlyExit}`, 'Read `relay logs apps`.', { component: 'apps', log: tail(path) });
       child.unref();
     }
   } catch (error) {
