@@ -81,7 +81,7 @@ Payload is exactly 16 bytes. On `/stream` the header sequence is zero. On `/cont
 | 14 | 2 | Modifier mask, HID bits 0 to 7 |
 
 - Key usages are 0x00 to 0xE7 (231). Larger values are rejected. Unmapped usages within range return status 2.
-- Key codes name physical keys, so the remote layout decides the character. A text event has code 0 and a value that is one Unicode scalar value, 1 to 0x10FFFF and not 0xD800 to 0xDFFF; its masks are zero and coordinates are ignored. Text returns status 2 when the backend cannot type the character.
+- Key codes name physical keys, so the remote layout decides the character. A text event has code 0 and a value that is one Unicode scalar value, 1 to 0x10FFFF and not 0xD800 to 0xDFFF; its masks are zero and coordinates are ignored. Text returns status 2 when the backend cannot type the character. Text 0x0A is the Return key and 0x09 is the Tab key, so applications see the named keys rather than those control characters.
 - Wheel delta is in steps of 120, magnitude at most 1200. Vertical wheel maps to X buttons 4/5, horizontal to 6/7.
 - Release all needs code, value and masks zero. Coordinates are ignored.
 - Held key and button sets are authoritative. Repeated transitions are deduplicated. A text event never changes held keys.

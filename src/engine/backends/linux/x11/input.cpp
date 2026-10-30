@@ -3,8 +3,9 @@
 #include <X11/XKBlib.h>
 #include <X11/keysym.h>
 #include <X11/extensions/XTest.h>
+#include <set>
 #include <stdexcept>
-#include <unistd.h>
+#include <vector>
 
 namespace relay {
 namespace {
@@ -38,12 +39,24 @@ constexpr int hidKeycode(uint16_t hid) {
 static_assert(hidKeycode(4) == 30 && hidKeycode(11) == 35 && hidKeycode(39) == 11 && hidKeycode(68) == 87 &&
               hidKeycode(69) == 88 && hidKeycode(70) == 99 && hidKeycode(115) == 194 && hidKeycode(225) == 42 &&
               hidKeycode(3) == 0);
+constexpr size_t spareCount = 16;
 KeySym textKeysym(uint32_t codepoint) {
+  if (codepoint == '\n') return XK_Return;
+  if (codepoint == '\t') return XK_Tab;
   return codepoint <= 0xff ? KeySym(codepoint) : KeySym(0x01000000u | codepoint);
 }
 class X11Input final : public InputBackend {
+  struct Spare {
+    KeyCode code = 0;
+    KeySym symbol = NoSymbol;
+    uint64_t used = 0;
+  };
   Display* display = nullptr;
   uint16_t width = 0, height = 0;
+  int columns = 1;
+  uint64_t typed = 0;
+  std::vector<Spare> spares;
+  std::set<KeyCode> held;
  public:
   X11Input() {
     display = XOpenDisplay(nullptr);
@@ -56,8 +69,13 @@ class X11Input final : public InputBackend {
       throw std::runtime_error("input requires the XTest extension");
     }
     width = uint16_t(root_width); height = uint16_t(root_height);
+    findSpares();
   }
-  ~X11Input() override { if (display) XCloseDisplay(display); }
+  ~X11Input() override {
+    if (!display) return;
+    restoreSpares();
+    XCloseDisplay(display);
+  }
   std::pair<uint16_t, uint16_t> dimensions() const override { return {width, height}; }
   const char* name() const override { return "x11"; }
   std::optional<NativeKey> nativeKey(uint16_t usage) const override {
@@ -67,21 +85,32 @@ class X11Input final : public InputBackend {
   }
   bool typeText(uint32_t codepoint) override {
     const KeySym symbol = textKeysym(codepoint);
-    const KeyCode found = XKeysymToKeycode(display, symbol);
-    const KeyCode shift = XKeysymToKeycode(display, XK_Shift_L);
-    for (int level = 0; found && level < 2; ++level) {
-      if (XkbKeycodeToKeysym(display, found, 0, level) != symbol) continue;
-      if (level && !shift) break;
-      if (level) XTestFakeKeyEvent(display, shift, True, CurrentTime);
-      XTestFakeKeyEvent(display, found, True, CurrentTime);
-      XTestFakeKeyEvent(display, found, False, CurrentTime);
-      if (level) XTestFakeKeyEvent(display, shift, False, CurrentTime);
+    for (auto& spare : spares) {
+      if (spare.symbol != symbol) continue;
+      spare.used = ++typed;
+      tap(spare.code);
       return true;
     }
-    return bindText(symbol);
+    const KeyCode found = XKeysymToKeycode(display, symbol);
+    if (found && !held.count(found) && XkbKeycodeToKeysym(display, found, 0, 0) == symbol) {
+      tap(found);
+      return true;
+    }
+    Spare* spare = nullptr;
+    for (auto& candidate : spares) if (!spare || candidate.used < spare->used) spare = &candidate;
+    if (!spare) return false;
+    bind(*spare, symbol);
+    tap(spare->code);
+    return true;
   }
-  void pressKey(NativeKey key) override { XTestFakeKeyEvent(display, key, True, CurrentTime); }
-  void releaseKey(NativeKey key) override { XTestFakeKeyEvent(display, key, False, CurrentTime); }
+  void pressKey(NativeKey key) override {
+    held.insert(KeyCode(key));
+    XTestFakeKeyEvent(display, key, True, CurrentTime);
+  }
+  void releaseKey(NativeKey key) override {
+    held.erase(KeyCode(key));
+    XTestFakeKeyEvent(display, key, False, CurrentTime);
+  }
   void pressButton(unsigned button) override { XTestFakeButtonEvent(display, button, True, CurrentTime); }
   void releaseButton(unsigned button) override { XTestFakeButtonEvent(display, button, False, CurrentTime); }
   void move(int x, int y) override { XTestFakeMotionEvent(display, DefaultScreen(display), x, y, CurrentTime); }
@@ -92,36 +121,42 @@ class X11Input final : public InputBackend {
       XTestFakeButtonEvent(display, button, False, CurrentTime);
     }
   }
-  void resetLocks() override { XkbLockModifiers(display, XkbUseCoreKbd, LockMask, 0); }
+  void resetLocks() override { XkbLockModifiers(display, XkbUseCoreKbd, LockMask, 0); restoreSpares(); }
   void flush() override { XFlush(display); }
 
  private:
-  bool bindText(KeySym symbol) {
+  void tap(KeyCode code) {
+    XTestFakeKeyEvent(display, code, True, CurrentTime);
+    XTestFakeKeyEvent(display, code, False, CurrentTime);
+  }
+  void bind(Spare& spare, KeySym symbol) {
+    std::vector<KeySym> symbols(size_t(columns), symbol);
+    XChangeKeyboardMapping(display, spare.code, columns, symbols.data(), 1);
+    spare.symbol = symbol;
+    spare.used = ++typed;
+  }
+  void restoreSpares() {
+    for (auto& spare : spares) {
+      if (spare.symbol == NoSymbol) continue;
+      std::vector<KeySym> symbols(size_t(columns), NoSymbol);
+      XChangeKeyboardMapping(display, spare.code, columns, symbols.data(), 1);
+      spare.symbol = NoSymbol;
+    }
+  }
+  void findSpares() {
     int min = 0, max = 0, count = 0;
     XDisplayKeycodes(display, &min, &max);
-    KeySym* map = max >= min ? XGetKeyboardMapping(display, KeyCode(min), max - min + 1, &count) : nullptr;
-    if (!map || count < 1) { if (map) XFree(map); return false; }
-    KeyCode spare = 0;
-    for (int index = max - min; index >= 0 && !spare; --index) {
-      spare = KeyCode(min + index);
+    if (max < min) return;
+    KeySym* map = XGetKeyboardMapping(display, KeyCode(min), max - min + 1, &count);
+    if (!map || count < 1) { if (map) XFree(map); return; }
+    columns = count;
+    for (int index = max - min; index >= 0 && spares.size() < spareCount; --index) {
+      bool empty = true;
       for (int column = 0; column < count; ++column)
-        if (map[index * count + column] != NoSymbol) { spare = 0; break; }
+        if (map[index * count + column] != NoSymbol) { empty = false; break; }
+      if (empty) spares.push_back(Spare{KeyCode(min + index), NoSymbol, 0});
     }
     XFree(map);
-    if (!spare) return false;
-    KeySym bound[2] = {symbol, symbol};
-    XChangeKeyboardMapping(display, spare, 2, bound, 1);
-    XSync(display, False);
-    usleep(12000);
-    XTestFakeKeyEvent(display, spare, True, CurrentTime);
-    XTestFakeKeyEvent(display, spare, False, CurrentTime);
-    XSync(display, False);
-    usleep(12000);
-    bound[0] = NoSymbol;
-    bound[1] = NoSymbol;
-    XChangeKeyboardMapping(display, spare, 2, bound, 1);
-    XSync(display, False);
-    return true;
   }
 };
 }  // namespace
