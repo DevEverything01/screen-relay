@@ -252,6 +252,7 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
         }
         const std::string json = "{\"version\":1,\"backend\":\"" + std::string(s->input->name()) +
             "\",\"width\":" + std::to_string(s->width) + ",\"height\":" + std::to_string(s->height) +
+            ",\"fps\":" + std::to_string(s->config.fps) +
             ",\"input\":{\"keyboard\":true,\"pointer\":true,\"buttons\":true,\"wheel\":true}," +
             "\"screenshot\":\"/screenshot.png\",\"control\":\"/control\",\"wayland\":false," +
             "\"max_input_pending\":32,\"cursor\":" + (s->capture.stats().cursor_supported ? "true" : "false") +

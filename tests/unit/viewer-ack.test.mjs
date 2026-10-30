@@ -3,12 +3,12 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { createContext, runInContext } from 'node:vm';
 
-function viewer() {
+function viewer({ devicePixelRatio = 1, storage } = {}) {
   const listeners = {}, elements = {}, sockets = [];
   const element = () => ({
     style: { setProperty(name, value) { this[name] = value; } }, classList: { toggle() {} }, hidden: false, width: 1280, height: 720,
     textContent: '', value: '', getContext: () => ({ drawImage() {} }),
-    addEventListener() {}, setAttribute() {}, querySelector: () => element(),
+    addEventListener() {}, setAttribute(name, value) { (this.attributes ||= {})[name] = String(value); }, querySelector: () => element(),
     getBoundingClientRect: () => ({ left: 0, top: 0, right: 1280, bottom: 720, width: 1280, height: 720 }),
   });
   class Socket {
@@ -30,13 +30,14 @@ function viewer() {
     addEventListener: (name, callback) => { listeners[name] = callback; },
   };
   const context = createContext({
-    document, window: { VideoDecoder: Decoder, EncodedVideoChunk: true, addEventListener() {} },
+    document, window: { devicePixelRatio, VideoDecoder: Decoder, EncodedVideoChunk: true, addEventListener() {} },
     location: { protocol: 'http:', hostname: 'localhost', host: 'localhost', hash: '' },
     URLSearchParams, WebSocket: Socket, VideoDecoder: Decoder,
     EncodedVideoChunk: class { constructor(options) { Object.assign(this, options); } },
     MutationObserver: class { observe() {} }, ResizeObserver: class { observe() {} },
     performance: { now: () => 0 }, setInterval: () => 1, clearInterval() {},
     setTimeout: () => 1, clearTimeout() {}, requestAnimationFrame: () => 1, cancelAnimationFrame() {},
+    fetch: async () => ({ ok: false, status: 401 }), localStorage: storage,
   });
   runInContext(readFileSync('viewer/viewer.js', 'utf8'), context);
   const frame = (seq, width = 1280, height = 720) => runInContext(`(() => {
@@ -80,4 +81,29 @@ test('frames up to 1920x1080 are drawn and size the canvas; wider frames are rej
   assert.deepEqual([app.context.window.nativeStats.drawn, canvas.width, canvas.height], [1, 1920, 1080]);
   app.frame(2, 1922, 1080);
   assert.equal(app.context.window.nativeStats.decodeerrors, 1);
+});
+
+test('actual size is one stream pixel per device pixel and follows density changes', () => {
+  const app = viewer({ devicePixelRatio: 2 });
+  const canvas = app.document.querySelector('#screen');
+  runInContext('setScale("actual")', app.context);
+  assert.deepEqual([canvas.style.width, canvas.style.height], ['640px', '360px']);
+  app.context.window.devicePixelRatio = 1;
+  runInContext('watchDpr()', app.context);
+  assert.deepEqual([canvas.style.width, canvas.style.height], ['1280px', '720px']);
+});
+
+test('scale mode and sharp pixels survive a reload; blocked storage still works', () => {
+  const values = new Map();
+  const storage = { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) };
+  const first = viewer({ devicePixelRatio: 2, storage });
+  runInContext('setScale("actual"); toggleSharp()', first.context);
+  const reloaded = viewer({ devicePixelRatio: 2, storage });
+  const canvas = reloaded.document.querySelector('#screen');
+  assert.deepEqual([canvas.style.width, canvas.style.height, canvas.style.imageRendering], ['640px', '360px', 'pixelated']);
+  assert.equal(reloaded.document.querySelector('[data-scale="actual"]').attributes['aria-pressed'], 'true');
+  const blocked = { getItem() { throw new Error('blocked'); }, setItem() { throw new Error('blocked'); } };
+  const fallback = viewer({ devicePixelRatio: 2, storage: blocked });
+  runInContext('setScale("actual")', fallback.context);
+  assert.equal(fallback.document.querySelector('#screen').style.width, '640px');
 });

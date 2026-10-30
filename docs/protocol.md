@@ -122,10 +122,10 @@ Fresh native PNG, independent of who owns control. Works with a viewer connected
 JSON. Real output:
 
 ```json
-{"version":1,"backend":"x11","width":1280,"height":720,"input":{"keyboard":true,"pointer":true,"buttons":true,"wheel":true},"screenshot":"/screenshot.png","control":"/control","wayland":false,"max_input_pending":32,"cursor":true,"input_endpoint":"/input","max_input_batch":256,"audio":false,"clipboard":false,"resize":false,"ime":false}
+{"version":1,"backend":"x11","width":1280,"height":720,"fps":60,"input":{"keyboard":true,"pointer":true,"buttons":true,"wheel":true},"screenshot":"/screenshot.png","control":"/control","wayland":false,"max_input_pending":32,"cursor":true,"input_endpoint":"/input","max_input_batch":256,"audio":false,"clipboard":false,"resize":false,"ime":false}
 ```
 
-`cursor` says whether `/stream` sends cursor images. `max_input_batch` is the `POST /input` record limit.
+`fps` is the configured capture frame rate. `cursor` says whether `/stream` sends cursor images. `max_input_batch` is the `POST /input` record limit.
 
 ## GET /metrics
 
