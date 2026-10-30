@@ -3,7 +3,7 @@ import { writeFile } from 'node:fs/promises';
 import { request as httpRequest } from 'node:http';
 import { request as httpsRequest, type RequestOptions } from 'node:https';
 import {
-  RelayError, responseError, baseUrl, integer, encodeInput, encodeInputBatch, comboEvents, textEvents,
+  RelayError, networkError, responseError, baseUrl, integer, encodeInput, encodeInputBatch, comboEvents, textEvents,
   batches, parseHeader, HEADER_SIZE, MESSAGE_TYPES, MAX_INPUT_BATCH, MAX_INPUT_PENDING,
   type InputEvent,
 } from '../protocol/index.js';
@@ -58,7 +58,7 @@ function headers(server: Server, body?: Uint8Array): Record<string, string> {
 function decode<Result>(data: Buffer, binary: boolean): Result {
   if (binary) return data as Result;
   try { return JSON.parse(data.toString('utf8')) as Result; }
-  catch { throw new RelayError('PROTOCOL_ERROR', 'Invalid JSON response'); }
+  catch { throw new RelayError('protocol_error', 'Invalid JSON response'); }
 }
 
 function nodeRequest<Result>(server: Server, path: string, binary: boolean, body?: Uint8Array): Promise<Result> {
@@ -66,7 +66,7 @@ function nodeRequest<Result>(server: Server, path: string, binary: boolean, body
   let ca: Buffer | undefined;
   if (server.ca) {
     try { ca = readFileSync(server.ca); }
-    catch (error) { return Promise.reject(new RelayError('IO_ERROR', `Cannot read certificate ${server.ca}: ${error instanceof Error ? error.message : String(error)}`)); }
+    catch (error) { return Promise.reject(new RelayError('io_error', `Cannot read certificate ${server.ca}: ${error instanceof Error ? error.message : String(error)}`)); }
   }
   const hostname = server.connect ?? base.hostname.replace(/^\[|\]$/g, '');
   const requestHeaders = headers(server, body);
@@ -93,7 +93,7 @@ function nodeRequest<Result>(server: Server, path: string, binary: boolean, body
       let size = 0;
       response.on('data', (chunk: Buffer) => {
         size += chunk.length;
-        if (size > 8 * 1024 * 1024) sent.destroy(new RelayError('PROTOCOL_ERROR', 'Response exceeds 8 MiB'));
+        if (size > 8 * 1024 * 1024) sent.destroy(new RelayError('protocol_error', 'Response exceeds 8 MiB'));
         else chunks.push(chunk);
       });
       response.once('end', () => {
@@ -106,17 +106,17 @@ function nodeRequest<Result>(server: Server, path: string, binary: boolean, body
           return;
         }
         if (status >= 300) {
-          reject(new RelayError('HTTP_ERROR', 'Server answered with a redirect; refusing to follow it'));
+          reject(new RelayError('component_failed', 'Server answered with a redirect; refusing to follow it'));
           return;
         }
         try { resolve(decode<Result>(data, binary)); } catch (error) { reject(error); }
       });
     });
-    sent.once('timeout', () => sent.destroy(new RelayError('TIMEOUT', 'Request timed out')));
+    sent.once('timeout', () => sent.destroy(new RelayError('timeout', 'The request timed out.')));
     sent.once('error', (error) => {
       if (server.signal?.aborted) reject(new RelayError('canceled', 'Request canceled.'));
       else if (error instanceof RelayError) reject(error);
-      else reject(new RelayError('NETWORK_ERROR', `Request failed: ${error.message}`));
+      else reject(networkError(error));
     });
     if (body !== undefined) sent.write(Buffer.from(body));
     sent.end();
@@ -131,7 +131,7 @@ async function request<Result>(
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const deadline = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => { controller.abort(); reject(new RelayError('TIMEOUT', 'Request timed out')); }, server.timeout);
+    timer = setTimeout(() => { controller.abort(); reject(new RelayError('timeout', 'The request timed out.')); }, server.timeout);
   });
   const operation = (async () => {
     try {
@@ -147,9 +147,9 @@ async function request<Result>(
       }
       if (!binary) {
         try { return await response.json() as Result; }
-        catch (error) { if (error instanceof SyntaxError) throw new RelayError('PROTOCOL_ERROR', 'Invalid JSON response'); throw error; }
+        catch (error) { if (error instanceof SyntaxError) throw new RelayError('protocol_error', 'Invalid JSON response'); throw error; }
       }
-      if (!response.body) throw new RelayError('PROTOCOL_ERROR', 'Missing screenshot body');
+      if (!response.body) throw new RelayError('protocol_error', 'Missing screenshot body');
       const chunks: Uint8Array[] = [];
       let size = 0;
       const reader = response.body.getReader();
@@ -160,7 +160,7 @@ async function request<Result>(
           size += chunk.value.length;
           if (size > 8 * 1024 * 1024) {
             controller.abort();
-            throw new RelayError('PROTOCOL_ERROR', 'Screenshot exceeds 8 MiB');
+            throw new RelayError('protocol_error', 'Screenshot exceeds 8 MiB');
           }
           chunks.push(chunk.value);
         }
@@ -169,8 +169,8 @@ async function request<Result>(
     } catch (error) {
       if (error instanceof RelayError) throw error;
       if (server.signal?.aborted) throw new RelayError('canceled', 'Request canceled.');
-      if (controller.signal.aborted) throw new RelayError('TIMEOUT', 'Request timed out');
-      throw new RelayError('NETWORK_ERROR', `Request failed: ${error instanceof Error ? error.message : String(error)}`);
+      if (controller.signal.aborted) throw new RelayError('timeout', 'The request timed out.');
+      throw networkError(error);
     }
   })();
   try { return await Promise.race([operation, deadline]); } finally { clearTimeout(timer); }
@@ -188,7 +188,7 @@ export async function screenshot(options: ClientOptions = {}, path?: string): Pr
   const bytes = await request<Uint8Array>(target(options), '/screenshot.png', true);
   if (path !== undefined) {
     try { await writeFile(path, bytes); }
-    catch (error) { throw new RelayError('IO_ERROR', `Screenshot write failed: ${error instanceof Error ? error.message : String(error)}`); }
+    catch (error) { throw new RelayError('io_error', `Screenshot write failed: ${error instanceof Error ? error.message : String(error)}`); }
   }
   return bytes;
 }
@@ -210,7 +210,7 @@ export function createClient(options: ClientOptions = {}): Client {
         }
         throw error;
       }
-      if (!result || result.applied !== payload.count) throw new RelayError('PROTOCOL_ERROR', 'Invalid input result');
+      if (!result || result.applied !== payload.count) throw new RelayError('protocol_error', 'Invalid input result');
       events += result.applied;
     }
     return { events };
@@ -221,7 +221,7 @@ export function createClient(options: ClientOptions = {}): Client {
     screenshot: () => request(server, '/screenshot.png', true),
     async click(x, y, { button = 'left' } = {}) {
       const buttons = { left: 1, middle: 2, right: 3 } as const;
-      if (!Object.hasOwn(buttons, button)) throw new RelayError('INVALID_ARGUMENT', 'Invalid button');
+      if (!Object.hasOwn(buttons, button)) throw new RelayError('invalid_input', 'Invalid button');
       const code = buttons[button];
       return send([[{ type: 'buttonDown', button: code, x, y }, { type: 'buttonUp', button: code, x, y }]]);
     },
@@ -229,7 +229,7 @@ export function createClient(options: ClientOptions = {}): Client {
     async scroll(x, y, { dx = 0, dy = 0 } = {}) {
       integer(dx, -Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER, 'dx');
       integer(dy, -Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER, 'dy');
-      if (!dx && !dy) throw new RelayError('INVALID_ARGUMENT', 'Nothing to scroll');
+      if (!dx && !dy) throw new RelayError('invalid_input', 'Nothing to scroll');
       integer(1 + Math.ceil(Math.abs(dx) / 10) + Math.ceil(Math.abs(dy) / 10), 1, MAX_INPUT_BATCH, 'scroll event count');
       const events: InputEvent[] = [{ type: 'pointerMove', x, y }];
       for (const [axis, notches] of [['vertical', dy], ['horizontal', dx]] as const) {
@@ -243,12 +243,12 @@ export function createClient(options: ClientOptions = {}): Client {
       return send([events]);
     },
     async key(...combos) {
-      if (!combos.length) throw new RelayError('INVALID_ARGUMENT', 'At least one key combo is required');
+      if (!combos.length) throw new RelayError('invalid_input', 'At least one key combo is required');
       return send(combos.map(comboEvents));
     },
     async type(text) { return send(textEvents(text).map(event => [event])); },
     async input(events) {
-      if (!Array.isArray(events) || !events.length) throw new RelayError('INVALID_ARGUMENT', 'Input must be a nonempty array');
+      if (!Array.isArray(events) || !events.length) throw new RelayError('invalid_input', 'Input must be a nonempty array');
       return send(events.map(event => [event]));
     },
   };
@@ -257,7 +257,7 @@ export function createClient(options: ClientOptions = {}): Client {
 export async function connect(options: ClientOptions = {}): Promise<Session> {
   const server = target(options);
   if (server.signal?.aborted) throw new RelayError('canceled', 'Control connection canceled.');
-  if (typeof WebSocket === 'undefined') throw new RelayError('UNSUPPORTED', 'Control sessions require Node 22 or newer');
+  if (typeof WebSocket === 'undefined') throw new RelayError('unsupported_platform', 'Control sessions require Node 22 or newer');
   const wsUrl = new URL('/control', server.base);
   wsUrl.protocol = server.base.protocol === 'https:' ? 'wss:' : 'ws:';
   const socket = new WebSocket(wsUrl, server.token ? ['nsl1', `bearer.${server.token}`] : 'nsl1');
@@ -278,8 +278,8 @@ export async function connect(options: ClientOptions = {}): Promise<Session> {
   };
   const cancel = () => finish(new RelayError('canceled', 'Control connection canceled.'));
   server.signal?.addEventListener('abort', cancel, { once: true });
-  socket.addEventListener('error', () => finish(new RelayError('NETWORK_ERROR', 'Control connection failed')));
-  socket.addEventListener('close', () => finish(new RelayError('DISCONNECTED', 'Control connection closed')));
+  socket.addEventListener('error', () => finish(new RelayError('unreachable', 'The connection failed.')));
+  socket.addEventListener('close', () => finish(new RelayError('disconnected', 'Control connection closed')));
   socket.addEventListener('message', ({ data }) => {
     try {
       if (!(data instanceof ArrayBuffer)) throw new Error('Non-binary message');
@@ -296,11 +296,11 @@ export async function connect(options: ClientOptions = {}): Promise<Session> {
       const item = pending.get(header.sequence)!;
       pending.delete(header.sequence);
       clearTimeout(item.timer);
-      if (payload.getUint8(0)) item.reject(new RelayError(payload.getUint8(0) === 1 ? 'INVALID_ARGUMENT' : 'UNSUPPORTED', 'Input rejected by server'));
+      if (payload.getUint8(0)) item.reject(new RelayError(payload.getUint8(0) === 1 ? 'invalid_input' : 'unsupported_input', 'Input rejected by server'));
       else item.resolve();
-    } catch (error) { finish(new RelayError('PROTOCOL_ERROR', error instanceof Error ? error.message : String(error))); }
+    } catch (error) { finish(new RelayError('protocol_error', error instanceof Error ? error.message : String(error))); }
   });
-  const timer = setTimeout(() => finish(new RelayError('TIMEOUT', 'Control connection timed out')), server.timeout);
+  const timer = setTimeout(() => finish(new RelayError('timeout', 'Control connection timed out')), server.timeout);
   let surface: Session['surface'];
   try { surface = await initial; } finally { clearTimeout(timer); }
   return {
@@ -308,13 +308,13 @@ export async function connect(options: ClientOptions = {}): Promise<Session> {
     capabilities: () => request(server, '/capabilities'),
     status: () => request(server, '/metrics'),
     async screenshot(path) {
-      if (closed) throw new RelayError('DISCONNECTED', 'Control connection closed');
+      if (closed) throw new RelayError('disconnected', 'Control connection closed');
       return screenshot({ ...options, url: server.base.href, timeout: server.timeout, token: server.token }, path);
     },
     input(event) {
-      if (closed) return Promise.reject(new RelayError('DISCONNECTED', 'Control connection closed'));
-      if (pending.size >= MAX_INPUT_PENDING) return Promise.reject(new RelayError('BUSY', 'Too many pending input requests'));
-      if (sequence === 0xffffffff) return Promise.reject(new RelayError('PROTOCOL_ERROR', 'Input sequence exhausted; reconnect'));
+      if (closed) return Promise.reject(new RelayError('disconnected', 'Control connection closed'));
+      if (pending.size >= MAX_INPUT_PENDING) return Promise.reject(new RelayError('busy', 'Too many pending input requests'));
+      if (sequence === 0xffffffff) return Promise.reject(new RelayError('protocol_error', 'Input sequence exhausted; reconnect'));
       let message: Uint8Array;
       try { message = encodeInput(event, generation, sequence + 1); } catch (error) { return Promise.reject(error); }
       sequence++;
@@ -322,19 +322,19 @@ export async function connect(options: ClientOptions = {}): Promise<Session> {
         const requestSequence = sequence;
         const timer = setTimeout(() => {
           pending.delete(requestSequence);
-          reject(new RelayError('TIMEOUT', 'Input acknowledgement timed out'));
-          finish(new RelayError('DISCONNECTED', 'Control connection timed out'));
+          reject(new RelayError('timeout', 'Input acknowledgement timed out'));
+          finish(new RelayError('disconnected', 'Control connection timed out'));
         }, server.timeout);
         pending.set(requestSequence, { resolve, reject, timer });
         try { socket.send(Buffer.from(message)); }
         catch (error) {
           clearTimeout(timer);
           pending.delete(requestSequence);
-          reject(new RelayError('NETWORK_ERROR', error instanceof Error ? error.message : String(error)));
-          finish(new RelayError('DISCONNECTED', 'Control connection failed'));
+          reject(networkError(error));
+          finish(new RelayError('disconnected', 'Control connection failed'));
         }
       });
     },
-    close() { finish(new RelayError('DISCONNECTED', 'Control connection closed')); },
+    close() { finish(new RelayError('disconnected', 'Control connection closed')); },
   };
 }

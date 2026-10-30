@@ -1,5 +1,5 @@
 import { RelayError } from './errors.js';
-export { RelayError, ERROR_REASONS, responseError } from './errors.js';
+export { RelayError, ERROR_REASONS, networkError, responseError } from './errors.js';
 export type { ErrorClass, ErrorReason, ErrorOptions, NextCommand } from './errors.js';
 
 export const MAGIC = 0x4e534c31;
@@ -21,23 +21,23 @@ export type InputEvent = (
 ) & { buttons?: number; modifiers?: number };
 
 export function integer(value: number, min: number, max: number, name: string): number {
-  if (!Number.isInteger(value) || value < min || value > max) throw new RelayError('INVALID_ARGUMENT', `Invalid ${name}`);
+  if (!Number.isInteger(value) || value < min || value > max) throw new RelayError('invalid_input', `Invalid ${name}`);
   return value;
 }
 
 export function coordinate(value: number, name: string): number {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 1) throw new RelayError('INVALID_ARGUMENT', `Invalid ${name}`);
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 1) throw new RelayError('invalid_input', `Invalid ${name}`);
   return Math.round(value * 65535);
 }
 
 export function encodeInputRecord(event: InputEvent): Uint8Array {
-  if (!event || typeof event !== 'object' || !Object.hasOwn(INPUT_TYPES, event.type)) throw new RelayError('INVALID_ARGUMENT', 'Unknown input type');
+  if (!event || typeof event !== 'object' || !Object.hasOwn(INPUT_TYPES, event.type)) throw new RelayError('invalid_input', 'Unknown input type');
   const bytes = new Uint8Array(INPUT_SIZE);
   const view = new DataView(bytes.buffer);
   view.setUint8(0, INPUT_TYPES[event.type]);
   const buttons = integer(event.buttons ?? 0, 0, 31, 'buttons');
   const modifiers = integer(event.modifiers ?? 0, 0, 255, 'modifiers');
-  if ((event.type === 'releaseAll' || event.type === 'text') && (buttons || modifiers)) throw new RelayError('INVALID_ARGUMENT', 'Release and text events require zero masks');
+  if ((event.type === 'releaseAll' || event.type === 'text') && (buttons || modifiers)) throw new RelayError('invalid_input', 'Release and text events require zero masks');
   view.setUint16(12, buttons);
   view.setUint16(14, modifiers);
   if (event.type === 'pointerMove' || event.type === 'buttonDown' || event.type === 'buttonUp' || event.type === 'wheel') {
@@ -47,15 +47,15 @@ export function encodeInputRecord(event: InputEvent): Uint8Array {
   if (event.type === 'keyDown' || event.type === 'keyUp') view.setUint16(2, integer(event.key, 0, 231, 'key'));
   if (event.type === 'buttonDown' || event.type === 'buttonUp') view.setUint16(2, integer(event.button, 1, 3, 'button'));
   if (event.type === 'wheel') {
-    if (event.axis !== 'vertical' && event.axis !== 'horizontal') throw new RelayError('INVALID_ARGUMENT', 'Invalid wheel axis');
+    if (event.axis !== 'vertical' && event.axis !== 'horizontal') throw new RelayError('invalid_input', 'Invalid wheel axis');
     const delta = integer(event.delta, -1200, 1200, 'wheel delta');
-    if (delta % 120) throw new RelayError('INVALID_ARGUMENT', 'Wheel delta must be a multiple of 120');
+    if (delta % 120) throw new RelayError('invalid_input', 'Wheel delta must be a multiple of 120');
     view.setUint16(2, event.axis === 'horizontal' ? 1 : 0);
     view.setInt32(4, delta);
   }
   if (event.type === 'text') {
     const codepoint = integer(event.codepoint, 1, 0x10ffff, 'Unicode scalar');
-    if (codepoint >= 0xd800 && codepoint <= 0xdfff) throw new RelayError('INVALID_ARGUMENT', 'Invalid Unicode scalar');
+    if (codepoint >= 0xd800 && codepoint <= 0xdfff) throw new RelayError('invalid_input', 'Invalid Unicode scalar');
     view.setInt32(4, codepoint);
     view.setUint16(8, 0);
     view.setUint16(10, 0);
@@ -64,7 +64,7 @@ export function encodeInputRecord(event: InputEvent): Uint8Array {
 }
 
 export function encodeInputBatch(events: InputEvent[]): Uint8Array {
-  if (!Array.isArray(events)) throw new RelayError('INVALID_ARGUMENT', 'Input must be an array');
+  if (!Array.isArray(events)) throw new RelayError('invalid_input', 'Input must be an array');
   integer(events.length, 1, MAX_INPUT_BATCH, 'input batch length');
   const bytes = new Uint8Array(events.length * INPUT_SIZE);
   for (let index = 0; index < events.length; index++) bytes.set(encodeInputRecord(events[index]), index * INPUT_SIZE);
@@ -76,7 +76,7 @@ export function batches(groups: InputEvent[][], limit = MAX_INPUT_BATCH): InputE
   const result: InputEvent[][] = [];
   let batch: InputEvent[] = [];
   for (const group of groups) {
-    if (group.length > limit) throw new RelayError('INVALID_ARGUMENT', `An input group has more than ${limit} events`);
+    if (group.length > limit) throw new RelayError('invalid_input', `An input group has more than ${limit} events`);
     if (batch.length + group.length > limit) {
       result.push(batch);
       batch = [];
@@ -113,12 +113,12 @@ export interface Header { type: number; flags: number; generation: number; seque
 
 export function parseHeader(bytes: Uint8Array | ArrayBuffer): Header {
   const data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-  if (data.byteLength < HEADER_SIZE || data.byteLength > 8388640) throw new RelayError('PROTOCOL_ERROR', 'Invalid message length');
+  if (data.byteLength < HEADER_SIZE || data.byteLength > 8388640) throw new RelayError('protocol_error', 'Invalid message length');
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
   const type = view.getUint8(5), flags = view.getUint16(6), generation = view.getUint32(8);
   if (view.getUint32(0) !== MAGIC || view.getUint8(4) !== VERSION || type < 1 || type > 6 ||
       flags > (type === MESSAGE_TYPES.frame ? 1 : 0) || !generation || view.getUint32(16) !== data.byteLength - HEADER_SIZE) {
-    throw new RelayError('PROTOCOL_ERROR', 'Invalid message envelope');
+    throw new RelayError('protocol_error', 'Invalid message envelope');
   }
   return { type, flags, generation, sequence: view.getUint32(12), payloadLength: view.getUint32(16) };
 }
@@ -152,14 +152,14 @@ const shifted = '!@#$%^&*()_+{}|:"~<>?';
 const unshifted = "1234567890-=[]\\;'`,./";
 
 export function comboEvents(spec: string): InputEvent[] {
-  if (typeof spec !== 'string' || !spec) throw new RelayError('INVALID_ARGUMENT', 'Invalid key combo');
+  if (typeof spec !== 'string' || !spec) throw new RelayError('invalid_input', 'Invalid key combo');
   const split = spec === '+' || spec.endsWith('++') ? spec.length - 2 : spec.lastIndexOf('+');
-  if (split === 0 && spec !== '+') throw new RelayError('INVALID_ARGUMENT', `Invalid key combo "${spec}"`);
+  if (split === 0 && spec !== '+') throw new RelayError('invalid_input', `Invalid key combo "${spec}"`);
   const held = split > 0 ? spec.slice(0, split).split('+') : [];
   const key = spec === '+' || spec.endsWith('++') ? '+' : spec.slice(split + 1);
   const modifiers: number[] = [];
   for (const name of held) {
-    if (!Object.hasOwn(MODIFIERS, name.toLowerCase())) throw new RelayError('INVALID_ARGUMENT', `Invalid key combo "${spec}"`);
+    if (!Object.hasOwn(MODIFIERS, name.toLowerCase())) throw new RelayError('invalid_input', `Invalid key combo "${spec}"`);
     const code = MODIFIERS[name.toLowerCase()];
     if (!modifiers.includes(code)) modifiers.push(code);
   }
@@ -175,16 +175,16 @@ export function comboEvents(spec: string): InputEvent[] {
     else code = ({ '\n': 40, '\t': 43, ' ': 44 } as Record<string, number>)[plain];
     if ((shiftedIndex >= 0 || /[A-Z]/.test(key)) && !modifiers.includes(225)) modifiers.push(225);
   }
-  if (code === undefined || !key) throw new RelayError('INVALID_ARGUMENT', `Unknown key "${key}"`);
+  if (code === undefined || !key) throw new RelayError('invalid_input', `Unknown key "${key}"`);
   const keys = [...modifiers.filter(modifier => modifier !== code), code];
   return [...keys.map(key => ({ type: 'keyDown' as const, key })), ...keys.reverse().map(key => ({ type: 'keyUp' as const, key }))];
 }
 
 export function textEvents(text: string): InputEvent[] {
-  if (typeof text !== 'string') throw new RelayError('INVALID_ARGUMENT', 'Text must be a string');
+  if (typeof text !== 'string') throw new RelayError('invalid_input', 'Text must be a string');
   return Array.from(text, character => {
     const codepoint = character.codePointAt(0)!;
-    if (!codepoint || (codepoint >= 0xd800 && codepoint <= 0xdfff)) throw new RelayError('INVALID_ARGUMENT', 'Invalid Unicode scalar');
+    if (!codepoint || (codepoint >= 0xd800 && codepoint <= 0xdfff)) throw new RelayError('invalid_input', 'Invalid Unicode scalar');
     return { type: 'text', codepoint };
   });
 }
@@ -199,12 +199,12 @@ export function validToken(token: unknown): token is string {
 
 export function baseUrl(url: string, token?: string): URL {
   let parsed: URL;
-  try { parsed = new URL(url); } catch { throw new RelayError('INVALID_ARGUMENT', 'Invalid server URL'); }
+  try { parsed = new URL(url); } catch { throw new RelayError('invalid_input', 'Invalid server URL'); }
   const local = isLoopback(parsed.hostname);
   if (!['http:', 'https:'].includes(parsed.protocol) || (!local && parsed.protocol !== 'https:') ||
       parsed.username || parsed.password || parsed.pathname !== '/' || parsed.search || parsed.hash) {
-    throw new RelayError('INVALID_ARGUMENT', 'Server URL must be an HTTPS origin or loopback HTTP origin');
+    throw new RelayError('invalid_input', 'Server URL must be an HTTPS origin or loopback HTTP origin');
   }
-  if ((token !== undefined && !validToken(token)) || (!local && !token)) throw new RelayError('INVALID_ARGUMENT', 'Remote connections require a 64-character hexadecimal token');
+  if ((token !== undefined && !validToken(token)) || (!local && !token)) throw new RelayError('invalid_input', 'Remote connections require a 64-character hexadecimal token');
   return parsed;
 }
