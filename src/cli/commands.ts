@@ -72,7 +72,7 @@ export const commands: Record<string, Command> = {
       { ...timeout, default: 30 },
     ],
     examples: example('Start a session in the background', 'relay up -d'),
-    notes: ['Without --detach, Ctrl+C stops the session.', '--display uses the existing display size and defaults to no desktop.', 'Flags override config values. RELAY_CONFIG selects the config file.'],
+    notes: ['Without --detach, Ctrl+C stops the session.', '--display uses the existing display size and defaults to no desktop.', 'Flags override config values. RELAY_CONFIG selects the config file.', 'Config-only settings and their variables: display.resolution (RELAY_RESOLUTION), stream.fps (RELAY_FPS), stream.bitrate.* (RELAY_BITRATE_MIN, RELAY_BITRATE_START, RELAY_BITRATE_MAX), keyboard.layout (RELAY_KEYBOARD_LAYOUT).'],
     resultSchema: { session: 'object', outcome: 'started' },
     run: cmdUp,
   },
