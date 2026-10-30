@@ -10,6 +10,7 @@
 | Error shape | `{"status":"error","reason":"<snake_case>","message":"<headline>"}` on stderr, with optional `next` and `data`. `status` is `action_required` when input can unblock a command before any effect. See [Error codes](#error-codes). |
 | Human errors | A headline, context and one recovery command on stderr; no stack trace or raw engine payload. |
 | `--name N` | Session name, default `default`. Letters, digits, `.`, `_`, `-`, up to 64 characters. |
+| `skills` | `list`, `get <name> [--full] [--json]`, and `path [name]` serve the skills shipped with this CLI. |
 | State directory | `${XDG_STATE_HOME:-~/.local/state}/relay/<name>/` (mode 0700): `session.json`, `token` (0600), `display.log`, `desktop.log`, `engine.log`, `apps.log` (after `run`), `supervisor.log` (`-d` only). |
 
 ### Exit codes
@@ -388,3 +389,13 @@ relay input '[{"type":"keyDown","key":4},{"type":"keyUp","key":4}]'
 | `internal` | Unexpected engine response or a CLI bug. |
 
 Input commands that fail after some batches report `data.applied` (events already applied). The SDK exposes the same snake_case `reason` through `RelayError.reason`.
+
+## skills
+
+```sh
+relay skills list
+relay skills get <name> [--full] [--json]
+relay skills path [name]
+```
+
+`list` shows available skills. `get` prints a skill's workflow; `--full` appends its `references/` and `templates/` files. `path` prints the skill-data directory, or a named skill directory.
