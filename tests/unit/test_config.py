@@ -76,6 +76,14 @@ desktop: none
             load(str(self.write("stream:\n  bitrate:\n    min: 10M\n    start: 1M\n    max: 40M\n")))
         self.assertIn('min <= start <= max', caught.exception.message)
 
+    def test_invalid_utf8_is_invalid_input(self):
+        path = Path(self.directory.name) / 'config.yaml'
+        path.write_bytes(b'desktop: \xff\xfe\n')
+        with self.assertRaises(Failure) as caught:
+            load(str(path))
+        self.assertEqual(caught.exception.code, 'invalid_input')
+        self.assertIn('Cannot read config file', caught.exception.message)
+
     def test_flags_beat_file(self):
         settings, _, present = load(str(self.write("server:\n  port: 9090\n  bind: 0.0.0.0\ndesktop: none\n")))
         args = SimpleNamespace(port=9000, bind=None, public=None, tls_cert=None, tls_key=None, desktop=None)

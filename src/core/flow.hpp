@@ -25,16 +25,18 @@ struct FlowControl {
   uint64_t sample_start_us = 0, sample_bytes = 0, sample_acks = 0, previous_sent_us = 0;
   uint64_t last_decrease_us = 0, last_increase_us = 0;
   double goodput_bps = 0;
+  unsigned frame_rate = 60;
 
   /** Applies the configured bitrate limits and starts at the configured initial rate. */
-  void configure(uint64_t minimum, uint64_t initial, uint64_t maximum) {
-    min_bitrate = minimum; initial_bitrate = initial; max_bitrate = maximum; target_bitrate = initial;
+  void configure(uint64_t minimum, uint64_t initial, uint64_t maximum, unsigned fps = 60) {
+    min_bitrate = minimum; initial_bitrate = initial; max_bitrate = maximum; target_bitrate = initial; frame_rate = fps;
   }
   /** Restores the idle transport state while keeping the configured bitrate limits. */
   void reset() {
     const uint64_t minimum = min_bitrate, initial = initial_bitrate, maximum = max_bitrate;
+    const unsigned fps = frame_rate;
     *this = FlowControl{};
-    configure(minimum, initial, maximum);
+    configure(minimum, initial, maximum, fps);
   }
   uint64_t oldestAge(uint64_t now) const {
     return frames.empty() ? 0 : now - std::min(now, frames.front().captured_us);
@@ -66,7 +68,7 @@ struct FlowControl {
     ack_rtt_us = acknowledged ? ack_rtt_us * 0.875 + rtt * 0.125 : rtt;
     window = std::clamp(unsigned(std::ceil(ack_rtt_us / 16666.667)) + 1, 2u, 8u);
     // Sample continuous demand only: idle gaps and tiny updates are not capacity evidence.
-    if (previous_sent_us && frame.sent_us - previous_sent_us > 50000) {
+    if (previous_sent_us && frame.sent_us - previous_sent_us > 3000000 / frame_rate) {
       sample_start_us = sample_bytes = sample_acks = 0;
     }
     if (!sample_start_us) sample_start_us = frame.sent_us;

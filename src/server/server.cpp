@@ -45,7 +45,7 @@ Server::Server(Config settings) : config(std::move(settings)), capture([this](En
   if (!context || !generation || gen != generation) return;
   pending_cursor = std::move(cursor);
   lws_cancel_service(context);
-}) { flow.configure(config.bitrate_min, config.bitrate_start, config.bitrate_max); }
+}) { flow.configure(config.bitrate_min, config.bitrate_start, config.bitrate_max, config.fps); }
 void Server::release() { if (input) input->releaseAll(); }
 void Server::end() {
   release();

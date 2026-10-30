@@ -116,5 +116,10 @@ int main() {
     queued.update(550002); // 250ms backlog must back off despite RTT/cap inflation.
     assert(queued.target_bitrate < target);
   }
+
+  FlowControl slow;
+  slow.configure(1000000, 8000000, 40000000, 10);
+  demand(slow, 100, 18000, 100000);
+  assert(slow.target_bitrate > 8000000);
   std::cout << "flow policy checks passed\n";
 }

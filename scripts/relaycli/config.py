@@ -60,7 +60,7 @@ def read(source):
         raise Failure('missing_dependency', 'PyYAML is not installed', 'Install it with: sudo apt install python3-yaml') from None
     try:
         text = source.read_text()
-    except OSError as error:
+    except (OSError, UnicodeDecodeError) as error:
         raise Failure('invalid_input', f'Cannot read config file {source}: {error}',
                       'Check --config or RELAY_CONFIG.') from None
     try:
