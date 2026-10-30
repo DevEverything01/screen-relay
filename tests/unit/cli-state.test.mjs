@@ -14,6 +14,14 @@ const bundle = buildSync({ entryPoints: [join(root, 'src/cli/host/state.ts')], b
 const bundlePath = join(directory, 'state.mjs');
 writeFileSync(bundlePath, bundle.outputFiles[0].contents);
 const state = await import(pathToFileURL(bundlePath).href);
+const supervisorBundle = buildSync({ entryPoints: [join(root, 'src/cli/host/supervisor.ts')], bundle: true, platform: 'node', format: 'esm', write: false });
+const supervisorPath = join(directory, 'supervisor.mjs');
+writeFileSync(supervisorPath, supervisorBundle.outputFiles[0].contents);
+const { splitCommand } = await import(pathToFileURL(supervisorPath).href);
+
+test('desktop command parsing preserves quoted empty arguments', () => {
+  assert.deepEqual(splitCommand('my-desktop --profile "" --fullscreen'), ['my-desktop', '--profile', '', '--fullscreen']);
+});
 
 test('session sweep does not match a longer RELAY_SESSION value', { skip: !existsSync('/proc/self/environ') }, async () => {
   const session = join(directory, 'desk');

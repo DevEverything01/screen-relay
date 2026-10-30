@@ -253,14 +253,42 @@ void cancelsQueuedWork() {
   f.input.cancel();
   require(f.backend.cancelled, "the controller did not forward the cancel");
 }
+
+void countsCancelledRecords() {
+  relay::InputQueue queue;
+  queue.post(relay::InputJob{relay::InputJob::Kind::motion});
+  queue.post(relay::InputJob{relay::InputJob::Kind::scroll});
+  queue.post(relay::InputJob{relay::InputJob::Kind::flush});
+  require(queue.pending() == 1, "a wheel record counted as two queued events");
+  relay::InputJob release{relay::InputJob::Kind::key};
+  release.code = 30;
+  queue.post(release);
+  queue.post(relay::InputJob{relay::InputJob::Kind::flush});
+  const auto mark = std::make_shared<Mark>();
+  relay::InputJob fence{relay::InputJob::Kind::fence};
+  fence.fence = mark;
+  queue.post(fence);
+  queue.cancel();
+  require(!mark->finished, "cancel completed the fence off the worker");
+  require(queue.take().kind == relay::InputJob::Kind::flush, "the cancelled wheel record kept its work");
+  require(queue.pending() == 1, "the cancelled wheel record stayed counted");
+  require(queue.take().kind == relay::InputJob::Kind::key, "cancel dropped the retained key release");
+  queue.take();
+  require(!mark->finished, "the fence completed before the retained release was applied");
+  queue.take().complete();
+  require(mark->finished && !mark->applied && mark->dropped == 1,
+          "a cancelled wheel record did not report one dropped record");
+  require(1 - mark->dropped == 0, "a cancelled wheel record reported more applied records than it posted");
+  require(queue.pending() == 0 && queue.empty(), "a cancelled record stayed counted");
+}
 }
 
 int main() {
   try {
     rejectsInvalidEvents(); acceptsBoundaryValues(); mapsCoordinates(); pointerEventsMoveFirst();
     dedupesHeldInput(); sharesNativeKey(); releasesAllHeldInput(); resetsLocks(); typesText(); reportsUnsupportedUsage();
-    fencesAfterWork(); cancelsQueuedWork();
-    std::puts("input: validation, coordinates, dedupe, release-all, locks, text, fences and unsupported usages passed");
+    fencesAfterWork(); cancelsQueuedWork(); countsCancelledRecords();
+    std::puts("input: validation, coordinates, dedupe, release-all, locks, text, fences, cancel counting and unsupported usages passed");
     return 0;
   } catch (const std::exception& error) {
     std::fprintf(stderr, "input: %s\n", error.what());

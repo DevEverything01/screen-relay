@@ -97,6 +97,7 @@ function nodeRequest<Result>(server: Server, path: string, binary: boolean, body
         else chunks.push(chunk);
       });
       response.once('end', () => {
+        clearTimeout(timer);
         const status = response.statusCode ?? 0;
         const data = Buffer.concat(chunks);
         if (status >= 400) {
@@ -112,8 +113,10 @@ function nodeRequest<Result>(server: Server, path: string, binary: boolean, body
         try { resolve(decode<Result>(data, binary)); } catch (error) { reject(error); }
       });
     });
+    const timer = setTimeout(() => sent.destroy(new RelayError('timeout', 'The request timed out.')), server.timeout);
     sent.once('timeout', () => sent.destroy(new RelayError('timeout', 'The request timed out.')));
     sent.once('error', (error) => {
+      clearTimeout(timer);
       if (server.signal?.aborted) reject(new RelayError('canceled', 'Request canceled.'));
       else if (error instanceof RelayError) reject(error);
       else reject(networkError(error));
@@ -206,7 +209,9 @@ export function createClient(options: ClientOptions = {}): Client {
       try { result = await request<{ applied: number }>(server, '/input', false, payload.body); }
       catch (error) {
         if (error instanceof RelayError) {
-          const partial = typeof error.data?.applied === 'number' ? error.data.applied : 0;
+          const partial = Math.min(payload.count, typeof error.data?.applied === 'number'
+            ? error.data.applied
+            : typeof error.data?.index === 'number' ? error.data.index : 0);
           const applied = events + partial;
           Object.assign(error, { applied, data: { ...error.data, applied } });
         }
@@ -258,6 +263,7 @@ export function createClient(options: ClientOptions = {}): Client {
 
 export async function connect(options: ClientOptions = {}): Promise<Session> {
   const server = target(options);
+  if (server.ca || server.connect) throw new RelayError('invalid_option', 'Control connections do not support ca or connect options.');
   if (server.signal?.aborted) throw new RelayError('canceled', 'Control connection canceled.');
   if (typeof WebSocket === 'undefined') throw new RelayError('unsupported_platform', 'Control sessions require Node 22 or newer');
   const wsUrl = new URL('/control', server.base);
