@@ -6,24 +6,12 @@ import { tmpdir } from 'node:os';
 import { createServer } from 'node:net';
 import { deflateSync } from 'node:zlib';
 import { emit, Failure, formatDoctor } from '../output.js';
-import { CLEAR_CAPS_SCRIPT, DEFAULT_PORT, clearedCommand, isLinux, run, spawnCleared, which } from './common.js';
+import { DEFAULT_PORT, clearedCommand, isLinux, run, spawnCleared, which } from './common.js';
 import type { HostArgs } from './common.js';
 import { stateDir } from './state.js';
 import { findEngine, startXvfb, xQuery } from './supervisor.js';
 
 const TINY_SVG = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>');
-const ICON_SCRIPT = [
-  'import ctypes,os,sys',
-  'ctypes.CDLL(None).prctl(47,4,0,0,0)',
-  'pixbuf=ctypes.CDLL(sys.argv[1])',
-  'pixbuf.gdk_pixbuf_new_from_file.restype=ctypes.c_void_p',
-  'pixbuf.gdk_pixbuf_new_from_file.argtypes=[ctypes.c_char_p,ctypes.POINTER(ctypes.c_void_p)]',
-  'error=ctypes.c_void_p()',
-  'if not pixbuf.gdk_pixbuf_new_from_file(sys.argv[2].encode(),ctypes.byref(error)):',
-  ' text=ctypes.cast(error.value+8,ctypes.POINTER(ctypes.c_char_p)).contents.value if error.value else None',
-  ' sys.stderr.write((text or b"decode failed").decode(errors="replace")); sys.exit(1)',
-].join('\n');
-
 function crc32(data: Buffer): number {
   let crc = 0xffffffff;
   for (const byte of data) {
@@ -62,12 +50,22 @@ function findLibrary(name: string): string | null {
   return match?.[1] ?? null;
 }
 
-function iconProbe(library: string, suffix: string, data: Buffer): [boolean, string] {
+const ICON_TOOLS: Record<string, (image: string) => string[]> = {
+  'gdk-pixbuf-thumbnailer': (image) => ['-s', '16', image, `${image}.out.png`],
+  'gdk-pixbuf-pixdata': (image) => [image, `${image}.out`],
+};
+
+function iconTool(): string | undefined {
+  return Object.keys(ICON_TOOLS).find((program) => which(program));
+}
+
+function iconProbe(tool: string, suffix: string, data: Buffer): [boolean, string] {
   const directory = mkdtempSync(join(tmpdir(), 'relay-icon-'));
   const image = join(directory, `probe${suffix}`);
   try {
     writeFileSync(image, data);
-    const result = spawnSync('python3', ['-c', ICON_SCRIPT, library, image], { encoding: 'utf8', timeout: 20000 });
+    const command = clearedCommand([tool, ...ICON_TOOLS[tool](image)]);
+    const result = spawnSync(command[0], command.slice(1), { encoding: 'utf8', timeout: 20000 });
     return [result.status === 0, result.stderr?.trim() || (result.status === 0 ? '' : 'probe crashed or timed out')];
   } finally { rmSync(directory, { recursive: true, force: true }); }
 }
@@ -87,10 +85,9 @@ export async function cmdDoctor(args: HostArgs): Promise<number> {
     const root = typeof process.getuid === 'function' && process.getuid() === 0;
     const sudo = root ? '' : 'sudo ';
     const apt = `${sudo}apt-get install -y --no-install-recommends `;
-    const python = run(['python3', '--version']);
-    const pythonVersion = /Python (\d+)\.(\d+)\.(\d+)/.exec(`${python.stdout ?? ''}${python.stderr ?? ''}`);
     check('user', true, root ? 'root' : `uid ${process.getuid?.() ?? -1}`);
-    check('python3', Boolean(pythonVersion && (Number(pythonVersion[1]) > 3 || Number(pythonVersion[1]) === 3 && Number(pythonVersion[2]) >= 8)), pythonVersion?.[0]?.replace('Python ', '') ?? 'not found', `${apt}python3`);
+    check('node', Number(process.versions.node.split('.')[0]) >= 20, process.versions.node, `${apt}nodejs npm`);
+    check('setpriv', Boolean(which('setpriv')), which('setpriv') ?? 'not found', `${apt}util-linux`);
     let homeWritable = true;
     try { accessSync(homedir(), constants.W_OK); } catch { homeWritable = false; }
     check('home', homeWritable, homedir(), 'export HOME=/path/to/a/writable/dir');
@@ -150,21 +147,25 @@ export async function cmdDoctor(args: HostArgs): Promise<number> {
     const capLine = readFileSync('/proc/self/status', 'utf8').split(/\r?\n/).find((line) => line.startsWith('CapAmb:'))?.split(/\s+/)[1] ?? '0';
     check('ambient caps', BigInt(`0x${capLine}`) === 0n, capLine === '0' ? 'none' : `${capLine}: apps that inherit them crash on icons`, 'Start apps with `relay run -- APP`, which clears them; the desktop and its menus already do.', 'warn');
     const library = findLibrary('gdk_pixbuf-2.0');
-    if (library) {
-      let [ok, message] = iconProbe(library, '.png', tinyPng());
+    const tool = iconTool();
+    if (!library) check('icon decoding', false, 'gdk-pixbuf not installed (desktop not installed)', './install.sh', 'warn');
+    else if (!tool) check('icon decoding', false, `gdk-pixbuf tools not installed (${Object.keys(ICON_TOOLS).join(' or ')})`, './install.sh', 'warn');
+    else {
+      let [ok, message] = iconProbe(tool, '.png', tinyPng());
       let kind = 'PNG';
-      if (ok) { [ok, message] = iconProbe(library, '.svg', TINY_SVG); kind = 'SVG'; }
+      if (ok) { [ok, message] = iconProbe(tool, '.svg', TINY_SVG); kind = 'SVG'; }
       let fix = 'See the detail; read `relay logs desktop` after a failed start.';
       if (!ok && run(['apt-cache', 'show', 'glycin-loaders']).status === 0 && run(['dpkg', '-s', 'glycin-loaders']).status !== 0) fix = `${apt}glycin-loaders`;
       else if (!ok && which('bwrap')) {
-        const sandbox = spawnSync('python3', ['-c', CLEAR_CAPS_SCRIPT, 'bwrap', '--ro-bind', '/', '/', '--unshare-user', 'true'], { encoding: 'utf8' });
+        const command = clearedCommand(['bwrap', '--ro-bind', '/', '/', '--unshare-user', 'true']);
+        const sandbox = spawnSync(command[0], command.slice(1), { encoding: 'utf8' });
         if (sandbox.status !== 0) {
           message += `; bubblewrap failed: ${sandbox.stderr?.trim() ?? ''}`;
           fix = 'Image loaders sandbox with bubblewrap, which needs unprivileged user namespaces: allow them for bwrap (AppArmor profile or kernel.unprivileged_userns_clone=1). relay never disables sandboxing.';
         }
       }
       check('icon decoding', ok, ok ? 'gdk-pixbuf decodes PNG and SVG' : `${kind}: ${message}`, fix, kind === 'SVG' ? 'warn' : 'fail');
-    } else check('icon decoding', false, 'gdk-pixbuf not installed (desktop not installed)', './install.sh', 'warn');
+    }
   }
   const failed = checks.some((item) => item.status === 'fail');
   emit(args, { ok: !failed, checks }, formatDoctor(checks));

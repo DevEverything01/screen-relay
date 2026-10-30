@@ -8,7 +8,11 @@ xterm_pid=''
 
 running() { [ -r "/proc/$1/stat" ] && [ "$(cut -d' ' -f3 "/proc/$1/stat")" != Z ]; }
 step() { printf '== %s\n' "$*"; }
-field() { python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(*[d[k] for k in sys.argv[2:]])' "$@"; }
+field() {
+  file=$1
+  shift
+  node -e 'const d=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); console.log(process.argv.slice(2).map(k=>d[k]).join(" "))' "$file" "$@"
+}
 fail() {
   printf 'FAIL: %s\n' "$*" >&2
   "$relay" logs --name "$name" >&2 2>/dev/null || true
@@ -33,7 +37,7 @@ step "up -d (session $name, port $port)"
 
 step 'status --json'
 "$relay" status --name "$name" --json > "$work/status.json" || fail 'status reports the session is not running'
-[ "$(field "$work/status.json" running state)" = 'True ready' ] || fail "unexpected status: $(cat "$work/status.json")"
+[ "$(field "$work/status.json" running state)" = 'true ready' ] || fail "unexpected status: $(cat "$work/status.json")"
 set -- $(field "$work/status.json" display xauthority logs)
 display=$1 xauthority=$2 logs=$3
 
@@ -58,49 +62,53 @@ sleep 1
 "$relay" click --name "$name" "$1" "$2" || fail click
 "$relay" type --name "$name" 'hello smoke' || fail type
 "$relay" key --name "$name" Enter || fail key
-check='import sys; d=open(sys.argv[1],"rb").read(); sys.exit(0 if b"\x1b[M" in d and b"hello smoke\n" in d else 1)'
-for _ in $(seq 25); do python3 -c "$check" "$work/typed" && break; sleep 0.2; done
-python3 -c "$check" "$work/typed" || fail "xterm did not receive the click and text: $(od -c "$work/typed" | head -5)"
+check='const d=require("fs").readFileSync(process.argv[1]); process.exit(d.includes(Buffer.from("\x1b[M")) && d.includes(Buffer.from("hello smoke\n")) ? 0 : 1);'
+for _ in $(seq 25); do node -e "$check" "$work/typed" && break; sleep 0.2; done
+node -e "$check" "$work/typed" || fail "xterm did not receive the click and text: $(od -c "$work/typed" | head -5)"
 "$relay" screenshot --name "$name" "$work/after.png" >/dev/null || fail 'screenshot after input'
 
 step 'run shares the desktop bus and restarts apps'
-python3 - "$relay" "$name" "$logs/session.json" <<'PY' || fail 'run environment or restart'
-import json
-import os
-from pathlib import Path
-import signal
-import subprocess
-import sys
-import time
-
-relay, name, record = sys.argv[1:]
-session = json.loads(Path(record).read_text())
-
-def environment(pid):
-    return dict(item.split(b'=', 1) for item in Path(f'/proc/{pid}/environ').read_bytes().split(b'\0') if b'=' in item)
-
-desktop = environment(session['components']['desktop']['pid'])
-for options in ([], ['--restart']):
-    command = [relay, 'run', '--name', name, '--json', *options, '--', 'xterm', '-T', f'{name}-restart']
-    app = json.loads(subprocess.check_output(command))
-    actual = environment(app['pid'])
-    for key in (b'DBUS_SESSION_BUS_ADDRESS', b'XDG_RUNTIME_DIR', b'XDG_CONFIG_HOME', b'XDG_CACHE_HOME', b'ICEAUTHORITY'):
-        assert actual[key] == desktop[key], (key, actual, desktop)
-    if options:
-        watcher = Path(f'/proc/{app["pid"]}/stat').read_text().split(') ', 1)[1].split()[1]
-        assert environment(watcher)[b'RELAY_SESSION'] == str(Path(record).parent).encode()
-        os.kill(app['pid'], signal.SIGTERM)
-        deadline = time.monotonic() + 10
-        while time.monotonic() < deadline:
-            children = Path(f'/proc/{watcher}/task/{watcher}/children').read_text().split()
-            if children and children[0] != str(app['pid']):
-                assert environment(children[0])[b'DBUS_SESSION_BUS_ADDRESS'] == desktop[b'DBUS_SESSION_BUS_ADDRESS']
-                print(f'Restarted xterm: {app["pid"]} -> {children[0]}')
-                break
-            time.sleep(0.1)
-        else:
-            raise AssertionError('xterm did not restart')
-PY
+node - "$relay" "$name" "$logs/session.json" <<'NODE' || fail 'run environment or restart'
+const fs = require('fs');
+const path = require('path');
+const { execFileSync } = require('child_process');
+const [relay, name, record] = process.argv.slice(2);
+const session = JSON.parse(fs.readFileSync(record, 'utf8'));
+const environment = (pid) => {
+  const result = {};
+  for (const item of fs.readFileSync(`/proc/${pid}/environ`).toString().split('\0')) {
+    const at = item.indexOf('=');
+    if (at > 0) result[item.slice(0, at)] = item.slice(at + 1);
+  }
+  return result;
+};
+const pause = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+const desktop = environment(session.components.desktop.pid);
+for (const options of [[], ['--restart']]) {
+  const app = JSON.parse(execFileSync(relay, ['run', '--name', name, '--json', ...options, '--', 'xterm', '-T', `${name}-restart`], { encoding: 'utf8' }));
+  const actual = environment(app.pid);
+  for (const key of ['DBUS_SESSION_BUS_ADDRESS', 'XDG_RUNTIME_DIR', 'XDG_CONFIG_HOME', 'XDG_CACHE_HOME', 'ICEAUTHORITY']) {
+    if (actual[key] !== desktop[key]) throw new Error(`${key} differs: ${actual[key]} != ${desktop[key]}`);
+  }
+  if (!options.length) continue;
+  const watcher = Number(fs.readFileSync(`/proc/${app.pid}/stat`, 'utf8').split(') ')[1].split(' ')[1]);
+  if (environment(watcher).RELAY_SESSION !== path.dirname(record)) throw new Error('watcher has no session marker');
+  process.kill(app.pid, 'SIGTERM');
+  const deadline = Date.now() + 10000;
+  let restarted = false;
+  while (Date.now() < deadline) {
+    const children = fs.readFileSync(`/proc/${watcher}/task/${watcher}/children`, 'utf8').split(/\s+/).filter(Boolean);
+    if (children.length && children[0] !== String(app.pid)) {
+      if (environment(children[0]).DBUS_SESSION_BUS_ADDRESS !== desktop.DBUS_SESSION_BUS_ADDRESS) throw new Error('restarted app lost the bus');
+      console.log(`Restarted xterm: ${app.pid} -> ${children[0]}`);
+      restarted = true;
+      break;
+    }
+    pause(100);
+  }
+  if (!restarted) throw new Error('xterm did not restart');
+}
+NODE
 
 step 'down (twice: must be idempotent)'
 "$relay" down --name "$name" || fail down
@@ -113,7 +121,7 @@ left=$(grep -ls "RELAY_SESSION=$logs" /proc/[0-9]*/environ 2>/dev/null || true)
 for _ in $(seq 25); do running "$xterm_pid" || break; sleep 0.2; done
 if running "$xterm_pid"; then fail 'xterm still running after its display stopped'; fi
 [ ! -e "/tmp/.X11-unix/X${display#:}" ] || fail "display socket $display still exists"
-if python3 -c 'import socket,sys; socket.create_connection(("127.0.0.1", int(sys.argv[1])), 1)' "$port" 2>/dev/null; then
+if node -e 'const s=require("net").connect(Number(process.argv[1]), "127.0.0.1"); s.on("connect", () => { s.destroy(); process.exit(0); }); s.on("error", () => process.exit(1));' "$port"; then
   fail "port $port still accepts connections"
 fi
 rm -rf "$work"

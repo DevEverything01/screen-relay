@@ -7,7 +7,6 @@ import { Failure } from '../output.js';
 export const DEFAULT_PORT = 8080;
 export const COMPONENTS: string[] = ['display', 'dbus', 'desktop', 'engine', 'apps'];
 export const LAUNCHER_DIR = dirname(fileURLToPath(import.meta.url));
-export const CLEAR_CAPS_SCRIPT = 'import ctypes,os,sys; ctypes.CDLL(None).prctl(47,4,0,0,0); os.execvp(sys.argv[0],sys.argv)';
 
 export type HostArgs = Record<string, unknown> & { command: string; json: boolean; name: string };
 
@@ -35,8 +34,9 @@ export function which(program: string): string | undefined {
   return undefined;
 }
 
+/** Prefixes a command so it runs without inheritable or ambient capabilities, as delivered apps expect. */
 export function clearedCommand(command: string[]): [string, ...string[]] {
-  return ['python3', '-c', CLEAR_CAPS_SCRIPT, ...command];
+  return ['setpriv', '--inh-caps=-all', '--ambient-caps=-all', ...command];
 }
 
 export function spawnCleared(command: string[], options: SpawnOptions = {}): ChildProcess {

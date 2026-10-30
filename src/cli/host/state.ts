@@ -1,21 +1,10 @@
-import { spawn } from 'node:child_process';
-import { closeSync, fstatSync, openSync, readFileSync, readdirSync, readSync, renameSync, writeFileSync } from 'node:fs';
+import { closeSync, fstatSync, openSync, readFileSync, readdirSync, readSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { Failure } from '../output.js';
 
 export type ProcessIdentity = { pid: number; start: string | null };
 export type SessionData = Record<string, any>;
-
-const LOCK_SCRIPT = [
-  'import fcntl,os,sys,time',
-  'handle=open(sys.argv[1],"a")',
-  'try: fcntl.flock(handle,fcntl.LOCK_EX|fcntl.LOCK_NB)',
-  'except BlockingIOError: print("busy",flush=True); sys.exit(1)',
-  'print("locked",flush=True)',
-  'parent=os.getppid()',
-  'while os.getppid()==parent and os.path.exists(f"/proc/{parent}"): time.sleep(0.1)',
-].join('\n');
 
 export function stateDir(name: string): string {
   if (!/^[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}$/.test(name)) {
@@ -111,24 +100,30 @@ export async function reap(directory: string, session: SessionData | null): Prom
   await sweep(directory);
 }
 
-export async function lock(name: string, directory: string): Promise<{ close(): Promise<void> }> {
+/** Holds the session lock file until close; a lock whose owner is gone is replaced. */
+export function lock(name: string, directory: string): { close(): void } {
   const file = join(directory, 'lock');
-  const child = spawn('python3', ['-c', LOCK_SCRIPT, file], { stdio: ['ignore', 'pipe', 'ignore'] });
-  const response = await new Promise<{ line: string; error?: Error }>((resolve) => {
-    child.stdout?.once('data', (data: Buffer) => resolve({ line: data.toString().trim() }));
-    child.once('error', (error) => resolve({ line: '', error }));
-    child.once('exit', () => resolve({ line: '' }));
-  });
-  if (response.error) throw new Failure('missing_dependency', 'python3 is required for session locking', 'Install python3 and run `relay doctor`.');
-  if (response.line !== 'locked') {
-    throw new Failure('already_running', `Session "${name}" is already running`,
-      'Stop it with `relay down --name ' + name + '` or pick another --name.');
+  const owner = identity(process.pid);
+  const busy = () => new Failure('already_running', `Session "${name}" is already running`,
+    'Stop it with `relay down --name ' + name + '` or pick another --name.');
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      writeFileSync(file, JSON.stringify(owner), { flag: 'wx', mode: 0o600 });
+      return {
+        close() {
+          try {
+            const held = JSON.parse(readFileSync(file, 'utf8')) as ProcessIdentity;
+            if (held.pid === owner.pid && held.start === owner.start) rmSync(file, { force: true });
+          } catch {}
+        },
+      };
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw new Failure('internal', `Cannot lock ${file}: ${String(error)}`);
+      let existing: unknown = null;
+      try { existing = JSON.parse(readFileSync(file, 'utf8')); } catch {}
+      if (alive(existing)) throw busy();
+      rmSync(file, { force: true });
+    }
   }
-  return {
-    async close() {
-      if (child.exitCode !== null || child.signalCode !== null) return;
-      child.kill('SIGTERM');
-      await new Promise<void>((resolve) => child.once('exit', () => resolve()));
-    },
-  };
+  throw busy();
 }

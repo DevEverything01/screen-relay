@@ -38,7 +38,7 @@ async function main() {
     while (!stopping.value && alive(supervisor)) {
       const started = Date.now();
       try {
-        processChild = spawn('python3', ['-c', caps, ...command], {
+        processChild = spawn('setpriv', ['--inh-caps=-all', '--ambient-caps=-all', ...command], {
           cwd: os.homedir(), env: process.env, detached: true,
           stdio: ['ignore', 'inherit', 'inherit']
         });
