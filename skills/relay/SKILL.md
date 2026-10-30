@@ -9,7 +9,7 @@ Streams a Linux X11 desktop to a browser and lets you control it from the CLI.
 
 ## Setup
 
-On a Debian/Ubuntu machine, from the repo:
+On a Debian/Ubuntu machine with Node 20 or newer, from the repo:
 
 ```sh
 ./install.sh
@@ -35,8 +35,8 @@ relay scroll 0.5 0.5 --dy 3
 - Coordinates are 0 to 1 from the top-left.
 - Take a screenshot, act, then take another to confirm. Success means the engine applied the input, not that the app reacted.
 - Add `--json` to parse output. Input commands print `{"applied": N}`.
-- `type` is US layout only: printable ASCII, newline, tab.
-- A long `type` is sent in batches of 256 events. If it fails partway, the error has `applied`; do not resend the whole text blindly.
+- `type` sends text events, so the remote keyboard layout decides each character; `key` combos stay physical keys.
+- A long `type` is sent in batches of at most 256 events. If it fails partway, the error has `applied`; do not resend the whole text blindly.
 
 ## Remote use
 

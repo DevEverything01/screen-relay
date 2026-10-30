@@ -15,19 +15,20 @@ browser or agent input -> InputController -> InputBackend (XTest)
 
 | Path | Contents |
 | --- | --- |
-| `src/core/` | Backend-neutral pipeline: `CaptureSource`, the input controller and input backend interface, encoder, color conversion, flow control |
-| `src/server/` | `main.cpp` (entry point), `config` (arguments, token and origin policy), `wire` (NSL1 encoding), `server` (session, writes, libwebsockets callback, HTTP routes), `metrics` (cgroup parsing), `screenshot` |
-| `src/backends/linux/x11/` | X11 capture (XDamage, MIT-SHM, XFixes cursor) and XTest input primitives |
-| `viewer/` | Browser decoder, renderer, cursor overlay, human input |
-| `src/sdk/` | Node client library |
-| `scripts/` | The `relay` CLI: `relay` is a thin launcher, `relaycli/` holds the commands, session supervision and client |
-| `tests/` | Unit and integration tests |
+| `src/engine/core/` | Backend-neutral pipeline: `CaptureSource`, the input controller and input backend interface, encoder, color conversion, flow control |
+| `src/engine/server/` | `main.cpp` (entry point), `config` (arguments, token and origin policy), `wire` (NSL1 encoding), `server` (session, writes, libwebsockets callback, HTTP routes), `metrics` (cgroup parsing), `screenshot` |
+| `src/engine/backends/linux/x11/` | X11 capture (XDamage, MIT-SHM, XFixes cursor) and XTest input primitives |
+| `src/protocol/` | Runtime-neutral wire constants and encoding, HID key table, key-combo and text parsing, origin and token rules |
+| `src/sdk/` | Node client library on top of the protocol |
+| `src/cli/` | The `relay` CLI: argument parsing, output, client commands on the SDK, host commands that supervise the display, desktop and engine |
+| `viewer/` | Browser viewer source: `index.html` and `main.ts`; the build bundles it into `dist/viewer/viewer.js` |
+| `tests/` | Unit tests, `tests/smoke.sh` |
 
 ## Interfaces
 
-- `CaptureSource` (`src/core/capture-source.hpp`): `fd()`, `dimensions()`, `drainDamage()`, `pixelFormat()`, `capture()`. A frame is a non-owning CPU view (BGRA or ARGB), valid until the next capture. Optional `cursorSupported()` and `cursor(force)`.
-- `InputBackend` (`src/core/input.hpp`): platform primitives only: `nativeKey(usage)`, `pressKey`, `releaseKey`, `typeText(codepoint)`, `pressButton`, `releaseButton`, `move`, `scroll`, `resetLocks`, `flush`, `dimensions`, `name`.
-- `InputController` (`src/core/input.hpp`): owns one `InputBackend`, validates each `InputEvent`, maps normalized pointer coordinates to pixels, dedupes held keys and buttons by native key id, and releases everything on `releaseAll`. Its `resetLocks` turns Caps Lock off when a new input session starts. It returns `InputStatus`: `invalid` for a rejected event, `unsupported` when the backend has no native key for a usage or cannot type a codepoint.
+- `CaptureSource` (`src/engine/core/capture-source.hpp`): `fd()`, `dimensions()`, `drainDamage()`, `pixelFormat()`, `capture()`. A frame is a non-owning CPU view (BGRA or ARGB), valid until the next capture. Optional `cursorSupported()` and `cursor(force)`.
+- `InputBackend` (`src/engine/core/input.hpp`): platform primitives only: `nativeKey(usage)`, `pressKey`, `releaseKey`, `typeText(codepoint)`, `pressButton`, `releaseButton`, `move`, `scroll`, `resetLocks`, `flush`, `dimensions`, `name`.
+- `InputController` (`src/engine/core/input.hpp`): owns one `InputBackend`, validates each `InputEvent`, maps normalized pointer coordinates to pixels, dedupes held keys and buttons by native key id, and releases everything on `releaseAll`. Its `resetLocks` turns Caps Lock off when a new input session starts. It returns `InputStatus`: `invalid` for a rejected event, `unsupported` when the backend has no native key for a usage or cannot type a codepoint.
 - `CaptureEncoder` takes a `CaptureSourceFactory`, so tests can inject a source with no X11.
 - The worker requires a valid fd. Core enforces the source size limits once: 320 to 1920 by 240 to 1080, both even, in the capture worker and on the input backend's dimensions at startup. The image stride must be between width x 4 and width x 8 bytes.
 
@@ -65,17 +66,17 @@ Quality recovery: when the picture is unchanged for 150 ms, the capture worker r
 
 Failure handling: a capture or encode failure keeps pending work and forces an IDR in the same generation. The first two consecutive failures reopen the encoder after 1 s. The third, or a failed reopen, is fatal and the server exits.
 
-Color: little-endian BGRA and big-endian ARGB convert to NV12 with limited-range BT.709 in `src/core/color.cpp` (NEON on AArch64, SSE2 on x86, scalar elsewhere), chroma signaled as center-sited. 4:2:0 loses colored-text detail.
+Color: little-endian BGRA and big-endian ARGB convert to NV12 with limited-range BT.709 in `src/engine/core/color.cpp` (NEON on AArch64, SSE2 on x86, scalar elsewhere), chroma signaled as center-sited. 4:2:0 loses colored-text detail.
 
 `GET /metrics` exposes the flow counters. See [Protocol](protocol.md#get-metrics).
 
 ## Adding a backend
 
-1. Create `src/backends/<os>/<name>/` implementing `initializeNativeBackend`, `makeCaptureSource` and `makeInputBackend`.
+1. Create `src/engine/backends/<os>/<name>/` implementing `initializeNativeBackend`, `makeCaptureSource` and `makeInputBackend`.
 2. Add `BACKEND_DIR_<name>` (folder) and `BACKEND_PKGS_<name>` (pkg-config modules) to the `Makefile`.
 3. Build with `make BACKEND=<name>`. The Makefile builds exactly one backend (default `x11`, folder `linux/x11`).
 4. Implement capture and the input primitives only: map a HID usage to a native key, press and release a native key or button, type a Unicode codepoint, move, scroll, reset locks, flush, `dimensions` and `name`. Core owns protocol validation, coordinate mapping, held input and the size limits.
-5. `src/core/` and `src/server/` must not include backend headers.
+5. `src/engine/core/` and `src/engine/server/` must not include backend headers.
 
 A Wayland backend must also handle portal authorization and revocation, negotiated format and dimensions, the notification fd, frame ownership, and separately authorized input. It must turn permission denial and session closure into explicit failures and release held input. The CPU-view interface may need revising. No Wayland code exists.
 
@@ -83,4 +84,4 @@ A Wayland backend must also handle portal authorization and revocation, negotiat
 
 C++17. The engine needs `libx264`, `libwebsockets` with TLS, and `libx11`, `libxext`, `libxdamage`, `libxfixes`, `libxtst`. It does not link FFmpeg. `make test` runs the color, flow, input, server and backend unit tests; `make test-backend` also needs FFmpeg 7 development libraries (`libavcodec` ABI 61, `libavutil`, `libswscale`; no FFmpeg 8-only APIs) to decode the encoder output.
 
-`make install` puts the engine, viewer and CLI in `<prefix>/lib/relay/` and links `<prefix>/bin/relay` and `<prefix>/bin/relay-engine`.
+`npm run build` produces `dist/cli/relay.mjs`, `dist/sdk/` and `dist/viewer/`. `make install` puts the engine and built viewer in `<prefix>/lib/relay/` and links `<prefix>/bin/relay-engine`; `./install.sh` also installs the CLI as `<prefix>/lib/relay/relay.mjs` with a `<prefix>/bin/relay` link.

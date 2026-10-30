@@ -33,13 +33,15 @@ try {
 
 ## Options
 
-`createClient`, `connect` and the standalone HTTP functions take `{ url, timeout, token }`.
+`createClient`, `connect` and the standalone HTTP functions take `{ url, timeout, token, ca, connect }`.
 
 | Option | Rule |
 | --- | --- |
 | `url` | Default `http://127.0.0.1:8080`. Origin only: no path, credentials, query or fragment. Plain HTTP only for `localhost` and `127.0.0.1`. Other hosts need HTTPS. |
 | `token` | 64 lowercase hex characters. Required for remote hosts. |
 | `timeout` | Milliseconds per request. Default 10000. |
+| `ca` | Certificate file trusted for HTTPS requests, without a hostname check. Used for a local session's own certificate. |
+| `connect` | Address to dial instead of the URL host, with the URL host kept as the `Host` header. Used for a session bound to one interface. |
 
 Redirects are not followed. Token handling: [Remote access](remote-access.md#tokens).
 
@@ -57,7 +59,7 @@ Redirects are not followed. Token handling: [Remote access](remote-access.md#tok
 
 ## HTTP client
 
-`createClient` returns a stateless client. Its methods use HTTP and never open a WebSocket. `status()` requests `/metrics`, `capabilities()` returns backend features including `max_input_batch`, and `screenshot()` returns PNG bytes. The current engine does not yet return `fps`.
+`createClient` returns a stateless client. Its methods use HTTP and never open a WebSocket. `status()` requests `/metrics`, `capabilities()` returns backend features including `fps` and `max_input_batch`, and `screenshot()` returns PNG bytes.
 
 | Method | Behavior |
 | --- | --- |
@@ -72,7 +74,7 @@ Coordinates are fractions from 0 to 1. Input methods return `{ events: number }`
 
 Input batches run in order and are never retried. If a later batch or event fails, earlier events may already have taken effect. A viewer or persistent control session causes HTTP input to fail with `BUSY`; status, capabilities and screenshots remain available.
 
-The current engine does not yet support text events, so nonempty `type()` calls fail until engine support is added.
+A failed batch after earlier batches carries `applied`, the number of events already sent.
 
 ## Input events
 

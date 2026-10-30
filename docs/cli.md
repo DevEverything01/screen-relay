@@ -1,6 +1,6 @@
 # CLI reference
 
-`relay` is one Python 3 command (stdlib only, plus PyYAML when a config file is loaded). Host commands (`up`, `down`, `logs`, `doctor`, `run`) manage a session on the Linux machine; `up`, `down` and `run` fail with `unsupported_platform` elsewhere. Client commands (`status`, `screenshot`, `click`, `move`, `scroll`, `key`, `type`, `input`) run anywhere.
+`relay` is one Node command (Node 20 or newer, dependencies bundled). Host commands (`up`, `down`, `logs`, `doctor`, `run`) manage a session on the Linux machine; `up`, `down` and `run` fail with `unsupported_platform` elsewhere. Client commands (`status`, `screenshot`, `click`, `move`, `scroll`, `key`, `type`, `input`) run anywhere.
 
 ## Common
 
@@ -27,7 +27,7 @@
 Client commands take `--url`, `--token-file` and `--timeout` (seconds, default 10). They pick the engine in this order:
 
 1. `--url`, else `RELAY_URL`.
-2. The local session named by `--name`, if it is ready: its URL, token file and TLS certificate.
+2. The local session named by `--name`, if it is ready: its URL, token file and TLS certificate. The session certificate is trusted without a hostname check, as a local session needs.
 3. `http://127.0.0.1:8080`.
 
 The token comes from `--token-file`, else `RELAY_TOKEN_FILE`, else the local session. The file holds the 64-character token; the client only reads it, so its mode does not matter.
@@ -45,11 +45,11 @@ URL rules: an origin only (no path, query or credentials). Plain HTTP only for `
 | `--prefix DIR` | Absolute install location. Default `$PREFIX`, else `~/.local`. |
 | `--no-desktop` | Skip XFCE and the other desktop packages. |
 | `--no-deps` | Skip apt. Dependencies must already be present. |
-| `--client-only` | Install only the CLI, for example on a laptop. Installs `python3` only. A config file also needs `python3-yaml`. Works off Linux. |
+| `--client-only` | Install only the CLI, for example on a laptop. Needs Node 20 or newer with npm. Works off Linux. |
 
-Apt needs root or passwordless sudo. The full install adds build tools, the X11 libraries, `libx264`, `libwebsockets`, `xvfb`, `xauth`, `x11-utils`, `python3-yaml`, and with the desktop: D-Bus, XFCE (`xfce4-session`, `xfwm4`, `xfce4-panel`, `xfdesktop4`, `xfce4-settings`, `thunar`, `xfce4-terminal`) and `glycin-loaders` when the distro has it. Safe to re-run.
+Apt needs root or passwordless sudo. On apt systems it installs `nodejs` and `npm` when Node 20 or newer is missing, then the build tools, the X11 libraries, `libx264`, `libwebsockets`, `xvfb`, `xauth`, `x11-utils`, `x11-xkb-utils`, `util-linux` (for `setpriv`), and with the desktop: D-Bus, XFCE (`xfce4-session`, `xfwm4`, `xfce4-panel`, `xfdesktop4`, `xfce4-settings`, `thunar`, `xfce4-terminal`) and `glycin-loaders` when the distro has it. It runs `npm ci` and `npm run build`. Safe to re-run.
 
-It installs `<prefix>/bin/relay` and the engine in `<prefix>/lib/relay/` (linked as `<prefix>/bin/relay-engine`). When `<prefix>/bin` is not on `PATH` it prints:
+It installs the CLI as `<prefix>/lib/relay/relay.mjs` (linked as `<prefix>/bin/relay`), the engine and the built viewer in `<prefix>/lib/relay/` (the engine is linked as `<prefix>/bin/relay-engine`). When `<prefix>/bin` is not on `PATH` it prints:
 
 ```text
 Not on PATH; add it with: export PATH="<prefix>/bin:$PATH"
@@ -214,7 +214,8 @@ Checks this machine and prints the fix command for each problem. Exits 1 if any 
 | --- | --- |
 | `platform` | Linux. Off Linux this is the only check, and it fails. |
 | `user` | Root or the UID (information only). |
-| `python3` | Python 3.8 or newer. |
+| `node` | Node 20 or newer. |
+| `setpriv` | `util-linux`, used to start apps without ambient capabilities. |
 | `home`, `state dir` | `HOME` and the state directory are writable. |
 | `engine` | `relay-engine` is found and runs. |
 | `libx264` | The x264 library is installed. |
@@ -286,7 +287,7 @@ relay type TEXT
 relay type --stdin
 ```
 
-Types text with a US layout: printable ASCII, newline and tab. If any character cannot be mapped, nothing is sent and the command fails with `invalid_input`.
+Types text as text events, one per Unicode character, so the remote keyboard layout decides each character. The engine produces the character by pressing a key of the current layout, or reports `invalid_input` when it cannot.
 
 ## input
 
@@ -305,7 +306,7 @@ relay input '[{"type":"keyDown","key":4},{"type":"keyUp","key":4}]'
 
 - X and Y are fractions of the screen from 0 to 1, from the top-left.
 - Input goes to the engine as `POST /input` batches of at most 256 events ([protocol](protocol.md#post-input)). `click`, `move`, `scroll` and `input` send one batch.
-- `type` sends one group per character (2 events, 4 with shift) and `key` one group per combo. Groups are packed into as many batches as needed and never split.
+- `type` sends one text event per character and `key` one group per combo. Events are packed into as many batches as needed and never split.
 - If a viewer or SDK session holds control, the batch fails with `busy` (HTTP 409). It is never retried. Another controller can take control between batches, so a long `type` or `key` can stop partway. The error then carries `applied`, the number of events already applied.
 - Held keys and buttons are released at the end of each batch, and when it fails.
 - `--json` prints `{"applied": N}`. Success means the engine applied the events, not that the application reacted. Take a screenshot to confirm.
@@ -314,7 +315,7 @@ relay input '[{"type":"keyDown","key":4},{"type":"keyUp","key":4}]'
 
 | Code | Meaning |
 | --- | --- |
-| `invalid_input` | Bad argument or usage, JSON, input event, key combo, unmappable character, port, session name, URL, `--public` origin, TLS or token file; also an event or batch the engine rejected (HTTP 400/413/422). |
+| `invalid_input` | Bad argument or usage, JSON, input event, key combo, character the remote layout cannot produce, port, session name, URL, `--public` origin, TLS or token file; also an event or batch the engine rejected (HTTP 400/413/422). |
 | `unauthorized` | Token missing or wrong (HTTP 401), or Host/Origin rejected (HTTP 403). |
 | `busy` | A viewer or SDK session holds control (HTTP 409), or a screenshot is already running (HTTP 503). Never retried. |
 | `unreachable` | Cannot connect to the URL. |
