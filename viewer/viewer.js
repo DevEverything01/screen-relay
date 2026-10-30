@@ -48,8 +48,8 @@ const stats = window.nativeStats = {
 };
 let socket, decoder, retryTimer, deadline, frameHandle, drawnThisFrame = false, transportBroken = false;
 let generation = 0, sequence = 0, lastTimestamp = -1, ready = false, retry = 0, epoch = 0;
-let buttons = 0, modifiers = 0, x = 0, y = 0, viewOnly = false;
-const pending = new Map(), decoded = [], held = new Set();
+let buttons = 0, modifiers = 0, x = 0, y = 0, viewOnly = false, capsLock = false;
+const pending = new Map(), decoded = [], held = new Set(), latched = new Map();
 const keys = {};
 const assignKeys = (first, names) => names.split(" ").forEach((name, i) => keys[name] = first + i);
 assignKeys(4, Array.from({ length: 26 }, (_, i) => `Key${String.fromCharCode(65 + i)}`).join(" "));
@@ -64,6 +64,25 @@ const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
 function setModifier(code, down) {
   if (code < 224 || code > 231) return;
   modifiers = down ? modifiers | 1 << (code - 224) : modifiers & ~(1 << (code - 224));
+}
+function syncCaps(event) {
+  if (viewOnly) return;
+  const local = event.getModifierState("CapsLock");
+  if (local === capsLock) return;
+  capsLock = local;
+  sendInput(1, keys.CapsLock);
+  sendInput(2, keys.CapsLock);
+}
+function clearLatched() {
+  for (const button of latched.values()) button.setAttribute("aria-pressed", "false");
+  latched.clear();
+}
+function releaseLatched() {
+  for (const code of latched.keys()) {
+    setModifier(code, false);
+    sendInput(2, code);
+  }
+  clearLatched();
 }
 const authHeaders = () => accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
 function header(type, gen, seq, size) {
@@ -92,6 +111,7 @@ function release() {
   buttons = modifiers = 0;
   if (ready) sendInput(7);
   held.clear();
+  clearLatched();
 }
 function reset() {
   release();
@@ -109,6 +129,7 @@ function reset() {
   stats.outstanding = 0;
   stats.pendingBytes = 0;
   generation = 0;
+  capsLock = false;
   sequence = 0;
   lastTimestamp = -1;
   if (decoder && decoder.state !== "closed") decoder.close();
@@ -345,15 +366,20 @@ canvas.addEventListener("keydown", (e) => {
   const code = keys[e.code];
   if (!code) return;
   e.preventDefault();
+  syncCaps(e);
+  if (e.code === "CapsLock") return;
   if (e.repeat || held.has(code)) return;
   held.add(code);
   setModifier(code, true);
   sendInput(1, code);
+  if (code < 224) releaseLatched();
 });
 canvas.addEventListener("keyup", (e) => {
   const code = keys[e.code];
   if (!code) return;
   e.preventDefault();
+  syncCaps(e);
+  if (e.code === "CapsLock") return;
   if (!held.delete(code)) return;
   setModifier(code, false);
   sendInput(2, code);
@@ -548,9 +574,27 @@ document.addEventListener("fullscreenchange", () => {
   toolbar.querySelector('[data-action="fullscreen"]').setAttribute("aria-pressed", String(Boolean(document.fullscreenElement)));
 });
 panels.keys.addEventListener("click", (e) => {
+  const hold = e.target.closest("[data-hold]");
+  if (hold) {
+    const code = keys[hold.dataset.hold];
+    if (latched.has(code)) {
+      latched.delete(code);
+      setModifier(code, false);
+      sendInput(2, code);
+      hold.setAttribute("aria-pressed", "false");
+    } else {
+      latched.set(code, hold);
+      setModifier(code, true);
+      sendInput(1, code);
+      hold.setAttribute("aria-pressed", "true");
+    }
+    canvas.focus();
+    return;
+  }
   const button = e.target.closest("[data-keys]");
   if (!button) return;
   const codes = button.dataset.keys.split("+").map((name) => keys[name]);
+  const releasesLatched = codes.some((code) => code < 224);
   for (const code of codes) {
     setModifier(code, true);
     sendInput(1, code);
@@ -559,6 +603,7 @@ panels.keys.addEventListener("click", (e) => {
     setModifier(code, false);
     sendInput(2, code);
   }
+  if (releasesLatched) releaseLatched();
   showPanel(null);
   canvas.focus();
 });

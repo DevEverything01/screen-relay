@@ -7,15 +7,20 @@ function viewer() {
   const listeners = {}, elements = {}, sockets = [];
   const element = () => ({
     style: { setProperty(name, value) { this[name] = value; } }, classList: { toggle() {} }, hidden: false, width: 1280, height: 720,
-    textContent: '', value: '', getContext: () => ({ drawImage() {} }),
-    addEventListener() {}, setAttribute() {}, querySelector: () => element(),
+    textContent: '', value: '', attributes: {}, handlers: {}, getContext: () => ({ drawImage() {} }),
+    addEventListener(name, callback) { this.handlers[name] = callback; },
+    setAttribute(name, value) { this.attributes[name] = value; }, focus() {}, querySelector: () => element(),
     getBoundingClientRect: () => ({ left: 0, top: 0, right: 1280, bottom: 720, width: 1280, height: 720 }),
   });
   class Socket {
     static OPEN = 1;
     static CLOSING = 2;
-    constructor() { this.readyState = Socket.OPEN; this.events = []; sockets.push(this); }
-    send(data) { const view = new DataView(data); this.events.push([view.getUint8(5), view.getUint32(12)]); }
+    constructor() { this.readyState = Socket.OPEN; this.events = []; this.inputs = []; sockets.push(this); }
+    send(data) {
+      const view = new DataView(data), type = view.getUint8(5);
+      this.events.push([type, view.getUint32(12)]);
+      if (type === 3) this.inputs.push({ event: view.getUint8(20), code: view.getUint16(22), modifiers: view.getUint16(34) });
+    }
     close() { this.events.push('close'); this.readyState = Socket.CLOSING; }
   }
   class Decoder {
@@ -80,4 +85,72 @@ test('frames up to 1920x1080 are drawn and size the canvas; wider frames are rej
   assert.deepEqual([app.context.window.nativeStats.drawn, canvas.width, canvas.height], [1, 1920, 1080]);
   app.frame(2, 1922, 1080);
   assert.equal(app.context.window.nativeStats.decodeerrors, 1);
+});
+
+function key(app, type, code, capsLock = false) {
+  app.document.querySelector('#screen').handlers[type]({
+    code, repeat: false, preventDefault() {},
+    getModifierState: (name) => name === 'CapsLock' ? capsLock : false,
+  });
+}
+
+const inputBytes = (app) => app.sockets[0].inputs.map(({ event, code }) => [event, code]);
+
+test('macOS Caps Lock keydown and keyup each toggle the remote once', () => {
+  const app = viewer();
+  app.frame(1);
+  key(app, 'keydown', 'CapsLock', true);
+  key(app, 'keyup', 'CapsLock', false);
+  key(app, 'keydown', 'CapsLock', true);
+  key(app, 'keyup', 'CapsLock', false);
+  assert.deepEqual(inputBytes(app), [[1, 57], [2, 57], [1, 57], [2, 57], [1, 57], [2, 57], [1, 57], [2, 57]]);
+});
+
+test('Windows Caps Lock keydown and keyup per press produce one tap', () => {
+  const app = viewer();
+  app.frame(1);
+  key(app, 'keydown', 'CapsLock', true);
+  key(app, 'keyup', 'CapsLock', true);
+  key(app, 'keydown', 'CapsLock', false);
+  key(app, 'keyup', 'CapsLock', false);
+  assert.deepEqual(inputBytes(app), [[1, 57], [2, 57], [1, 57], [2, 57]]);
+});
+
+test('a letter typed with Caps Lock already on sends the tap before the letter', () => {
+  const app = viewer();
+  app.frame(1);
+  key(app, 'keydown', 'KeyA', true);
+  assert.deepEqual(inputBytes(app), [[1, 57], [2, 57], [1, 4]]);
+});
+
+test('a held modifier toggle wraps exactly the next key and then releases', () => {
+  const app = viewer();
+  app.frame(1);
+  const panel = app.document.querySelector('#keys-panel');
+  const button = { dataset: { hold: 'MetaLeft' }, setAttribute(name, value) { this[name] = value; } };
+  const toggle = () => panel.handlers.click({ target: { closest: (selector) => selector === '[data-hold]' ? button : null } });
+  toggle();
+  assert.equal(button['aria-pressed'], 'true');
+  key(app, 'keydown', 'KeyL');
+  key(app, 'keyup', 'KeyL');
+  assert.deepEqual(inputBytes(app), [[1, 227], [1, 15], [2, 227], [2, 15]]);
+  assert.equal(button['aria-pressed'], 'false');
+  key(app, 'keydown', 'KeyM');
+  key(app, 'keyup', 'KeyM');
+  assert.deepEqual(inputBytes(app).slice(4), [[1, 16], [2, 16]]);
+  toggle();
+  assert.equal(button['aria-pressed'], 'true');
+  toggle();
+  assert.equal(button['aria-pressed'], 'false');
+  assert.deepEqual(inputBytes(app).slice(6), [[1, 227], [2, 227]]);
+});
+
+test('Caps Lock tracking resets with the generation', () => {
+  const app = viewer();
+  app.frame(1);
+  key(app, 'keydown', 'CapsLock', true);
+  runInContext('reset()', app.context);
+  app.frame(1);
+  key(app, 'keydown', 'KeyA', true);
+  assert.deepEqual(inputBytes(app), [[1, 57], [2, 57], [7, 0], [1, 57], [2, 57], [1, 4]]);
 });

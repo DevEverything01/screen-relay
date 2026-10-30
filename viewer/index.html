@@ -36,6 +36,8 @@ svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.75;strok
 .panel{display:flex;align-items:center;gap:6px;padding:6px;border-radius:12px}
 .panel button{padding:6px 10px;border:0;border-radius:8px;background:rgba(255,255,255,.08);color:#ededed;font:inherit;cursor:pointer;white-space:nowrap}
 .panel button:hover{background:rgba(255,255,255,.16)}
+.panel button[aria-pressed=true]{background:rgba(255,255,255,.24);color:#fff}
+#keys-panel{flex-wrap:wrap;justify-content:center;max-width:min(92vw,540px)}
 .panel label{padding:0 2px 0 4px;color:#a1a1a1}
 #access-token{width:22ch;padding:6px 8px;border:1px solid rgba(255,255,255,.14);border-radius:8px;background:rgba(255,255,255,.06);color:#ededed;font:inherit}
 button:focus-visible,input:focus-visible{outline:2px solid #3b82f6;outline-offset:2px}
@@ -63,11 +65,20 @@ button:focus-visible,input:focus-visible{outline:2px solid #3b82f6;outline-offse
     </div>
   </div>
   <div id="keys-panel" class="panel" hidden>
+    <button type="button" data-hold="ControlLeft" aria-pressed="false" aria-label="Hold Ctrl" title="Hold Ctrl">Ctrl</button>
+    <button type="button" data-hold="AltLeft" aria-pressed="false" aria-label="Hold Alt" title="Hold Alt">Alt</button>
+    <button type="button" data-hold="ShiftLeft" aria-pressed="false" aria-label="Hold Shift" title="Hold Shift">Shift</button>
+    <button type="button" data-hold="MetaLeft" aria-pressed="false" aria-label="Hold Super" title="Hold Super">Super</button>
     <button type="button" data-keys="ControlLeft+AltLeft+Delete">Ctrl+Alt+Del</button>
     <button type="button" data-keys="Escape">Esc</button>
     <button type="button" data-keys="Tab">Tab</button>
     <button type="button" data-keys="MetaLeft">Super</button>
     <button type="button" data-keys="AltLeft+Tab">Alt+Tab</button>
+    <button type="button" data-keys="ControlLeft+KeyC">Ctrl+C</button>
+    <button type="button" data-keys="ControlLeft+KeyV">Ctrl+V</button>
+    <button type="button" data-keys="ControlLeft+ShiftLeft+Escape">Ctrl+Shift+Esc</button>
+    <button type="button" data-keys="PrintScreen">Print Screen</button>
+    <button type="button" data-keys="MetaLeft+KeyD">Super+D</button>
   </div>
   <form id="connection-panel" class="panel" hidden>
     <label for="access-token">Access token</label>
