@@ -71,19 +71,20 @@ Payload is exactly 16 bytes. On `/stream` the header sequence is zero. On `/cont
 
 | Payload offset | Size | Field |
 | --- | ---: | --- |
-| 0 | 1 | Event: 1 key down, 2 key up, 3 pointer move, 4 button down, 5 button up, 6 wheel, 7 release all |
+| 0 | 1 | Event: 1 key down, 2 key up, 3 pointer move, 4 button down, 5 button up, 6 wheel, 7 release all, 8 text |
 | 1 | 1 | Reserved, zero |
 | 2 | 2 | Code: HID usage (key), button 1 to 3, 0 for move, wheel axis (0 vertical, 1 horizontal) |
-| 4 | 4 | Signed value: wheel delta, otherwise zero |
+| 4 | 4 | Signed value: wheel delta or text codepoint, otherwise zero |
 | 8 | 2 | X, 0 to 65535 |
 | 10 | 2 | Y, 0 to 65535 |
 | 12 | 2 | Button mask, low 5 bits only |
 | 14 | 2 | Modifier mask, HID bits 0 to 7 |
 
 - Key usages are 0x00 to 0xE7 (231). Larger values are rejected. Unmapped usages within range return status 2.
+- Key codes name physical keys, so the remote layout decides the character. A text event has code 0 and a value that is one Unicode scalar value, 1 to 0x10FFFF and not 0xD800 to 0xDFFF; its masks are zero and coordinates are ignored. Text returns status 2 when the backend cannot type the character.
 - Wheel delta is in steps of 120, magnitude at most 1200. Vertical wheel maps to X buttons 4/5, horizontal to 6/7.
 - Release all needs code, value and masks zero. Coordinates are ignored.
-- Held key and button sets are authoritative. Repeated transitions are deduplicated.
+- Held key and button sets are authoritative. Repeated transitions are deduplicated. A text event never changes held keys.
 - Fragmented control messages are accumulated up to 36 bytes.
 
 ## Agent control (`/control`)
@@ -101,7 +102,7 @@ Body: 1 to 256 type-3 records, 16 bytes each, same encoding as the `/control` pa
 | --- | --- | --- |
 | 200 | `{"applied":N}` | Every record was applied. |
 | 400 | `{"error":"invalid_input","index":I}` | Record `I` is invalid. Records before it were applied. Also returned, without `index`, when the length is zero or not a multiple of 16. |
-| 422 | `{"error":"unsupported_input","index":I}` | Record `I` is valid but unsupported, such as an unmapped key. Records before it were applied. |
+| 422 | `{"error":"unsupported_input","index":I}` | Record `I` is valid but unsupported, such as an unmapped key or a codepoint the backend cannot type. Records before it were applied. |
 | 401 | `{"error":"unauthorized"}` | Missing or wrong token. |
 | 403 | `{"error":"forbidden"}` | `Host` or `Origin` rejected. |
 | 409 | `{"error":"busy"}` | A viewer or `/control` session owns input. Nothing is applied. |
