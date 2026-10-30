@@ -99,7 +99,7 @@ if [ "$apt" = 1 ] && [ "$client" = 0 ]; then
   fi
 fi
 
-npm ci
+npm ci --include=dev
 npm run build
 
 on_path() {
