@@ -94,6 +94,18 @@ test('invalid URL recovery is a sentence in human mode and has no next command i
   assert.match(human.stderr, /\n {2}Use an HTTPS origin or a local address:\n {4}Pass --url https:\/\/desktop\.example\.com or --url http:\/\/127\.0\.0\.1:8080\.\n$/);
 });
 
+test('a skill name used as the skills action points at its get command', () => {
+  const env = { ...process.env, RELAY_AGENT: '0', RELAY_URL: '', RELAY_TOKEN_FILE: '' };
+  const human = spawnSync(process.execPath, [cli, 'skills', 'core'], { encoding: 'utf8', timeout: 15000, env });
+  assert.ifError(human.error);
+  assert.equal(human.status, 2);
+  assert.match(human.stderr, /relay skills get core/);
+  const json = spawnSync(process.execPath, [cli, 'skills', 'core', '--json'], { encoding: 'utf8', timeout: 15000, env });
+  assert.ifError(json.error);
+  assert.equal(json.status, 2);
+  assert.deepEqual(JSON.parse(json.stderr).next, [{ command: 'relay skills get core', argv: ['relay', 'skills', 'get', 'core'] }]);
+});
+
 const help = (value, argv = ['--help']) => spawnSync(process.execPath, [cli, ...argv], {
   encoding: 'utf8',
   timeout: 15000,

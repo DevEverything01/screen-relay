@@ -2,7 +2,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
-import { emit, Failure } from './output.js';
+import { emit, Failure, nextFor } from './output.js';
 
 type Skill = { name: string; description: string; hidden: boolean; directory: string };
 const runtimeDirectory = dirname(fileURLToPath(import.meta.url));
@@ -63,6 +63,12 @@ export function path(name?: string): string {
   const skill = discover().find((candidate) => candidate.name === name);
   if (!skill) throw missing(name);
   return skill.directory;
+}
+
+/** Explains an unknown action; a skill name points at its get command instead. */
+export function unknownAction(action: string): Failure | string {
+  if (!list().some((skill) => skill.name === action)) return `Unknown command '${action}' for relay skills.`;
+  return new Failure('invalid_input', `Unknown command '${action}' for relay skills. Did you mean \`relay skills get ${action}\`?`, '', {}, { next: nextFor(`relay skills get ${action}`), label: `Show the ${action} skill` });
 }
 
 /** Runs skills list, get and path, printing text or the noun-shaped JSON document. */

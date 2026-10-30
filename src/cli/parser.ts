@@ -83,6 +83,6 @@ export function parseCommand(argv: string[], environment: NodeJS.ProcessEnv = pr
     args[parameter.name] = Array.isArray(raw) ? raw.map((item) => valueFor(parameter, item, name)) : valueFor(parameter, raw, name);
   }
   const problem = command.validate?.(args);
-  if (problem) throw usageFailure(problem, name);
+  if (problem) throw problem instanceof Failure ? problem : usageFailure(problem, name);
   return args;
 }
