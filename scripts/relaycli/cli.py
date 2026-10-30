@@ -36,7 +36,8 @@ def parser():
 
     up = add('up', cmd_up, 'start a display, desktop and engine (foreground; -d for background)', [common, named])
     up.add_argument('-d', '--detach', action='store_true', help='run in the background and return once ready')
-    up.add_argument('--port', type=int, default=DEFAULT_PORT, help=f'engine port (default: {DEFAULT_PORT})')
+    up.add_argument('--config', metavar='FILE', help='config file (env RELAY_CONFIG; default: ~/.config/relay/config.yaml)')
+    up.add_argument('--port', type=int, default=None, help=f'engine port (default: {DEFAULT_PORT})')
     up.add_argument('--desktop', help='xfce (default), none, or a command to run as the desktop')
     up.add_argument('--display', help='attach to an existing X display such as :0 instead of starting Xvfb')
     up.add_argument('--public', metavar='HTTPS_URL', help='serve behind a TLS proxy at this origin (binds 0.0.0.0, adds a token)')

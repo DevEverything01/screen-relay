@@ -1,0 +1,26 @@
+# relay settings. Every key is optional; the values below are the defaults.
+
+display:
+  # WIDTHxHEIGHT. Width even 320..1920, height even 240..1080.
+  resolution: 1280x720
+
+stream:
+  # 10..60.
+  fps: 60
+  # Bits per second, 250000..100000000. A k or M suffix is 1000-based.
+  # Require min <= start <= max.
+  bitrate:
+    min: 1M
+    start: 8M
+    max: 40M
+
+server:
+  # 1..65535.
+  port: 8080
+  bind: 127.0.0.1
+  # public: https://desktop.example.com
+  # tls_cert: /path/fullchain.pem
+  # tls_key: /path/key.pem
+
+# xfce, none, or a command. Default: xfce, or none with --display.
+desktop: xfce
