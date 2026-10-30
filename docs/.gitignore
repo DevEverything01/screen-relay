@@ -3,6 +3,7 @@ node_modules
 
 # generated content
 .source
+next-env.d.ts
 
 # test and build output
 coverage
