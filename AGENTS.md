@@ -1,6 +1,6 @@
 # Relay
 
-Relay streams a Linux desktop to a browser and lets people and agents control it from a CLI and a Node SDK. See [README.md](README.md) and the [documentation site](https://relay.vercel.app/docs) for how it works.
+Relay streams a Linux desktop to a browser and lets people and agents control it from a CLI and a Node SDK. See [README.md](README.md) and the [documentation site](https://relay.labs.vercel.dev/docs) for how it works.
 
 ## Writing
 

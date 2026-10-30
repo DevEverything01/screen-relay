@@ -29,6 +29,6 @@ The viewer link with its token is in the container output.
 
 ## Docs
 
-Read the [documentation](https://relay.vercel.app/docs) for installation, the CLI reference, configuration, remote access, Docker, agent skills, the Node SDK, the protocol, architecture, and troubleshooting.
+Read the [documentation](https://relay.labs.vercel.dev/docs) for installation, the CLI reference, configuration, remote access, Docker, agent skills, the Node SDK, the protocol, architecture, and troubleshooting.
 
 The test layers are described in [tests/README.md](tests/README.md).

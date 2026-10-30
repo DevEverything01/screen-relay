@@ -2,7 +2,7 @@ import { commands, globalOptions, type Command, type Parameter, type RunsOn, typ
 import { agent, type OutputOptions } from './mode.js';
 import { theme } from './theme.js';
 
-const docs = 'https://relay.vercel.app/docs/cli';
+const docs = 'https://relay.labs.vercel.dev/docs/cli';
 const summary = 'Start a streamed Linux desktop and control it';
 const width = 80;
 const labelLimit = 24;
