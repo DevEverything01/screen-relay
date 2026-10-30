@@ -89,14 +89,14 @@ Use these instructions when an AI coding agent edits this project.
 ## Migration guidelines
 
 - When migrating from Fumadocs or a custom Geist docs site, inventory `source.config.ts`, route files, `middleware.ts` or `proxy.ts`, `public/llms.txt`, OG routes, Tailwind CSS setup, and required environment variables before editing.
-- Use `@vercel/geistdocs` for public repositories. Use `@vercel/geistdocs-private` only in internal environments with access to the restricted `@vercel/geistcn` and `@vercel/geistcn-assets` packages.
-- Keep private npm credentials out of source files; configure them through local npm authentication, Vercel project settings, and GitHub Actions secrets.
+- Use `@vercel/geistdocs` from the public npm registry.
+- Keep credentials out of source files; configure them through local npm authentication, Vercel project settings, and GitHub Actions secrets.
 - Inventory direct app usage of `ai` and `@ai-sdk/react`. Package-owned Ask AI uses AI SDK v6; migrate local AI SDK code separately from Geistdocs route adapters.
 - Import source-config helpers from `@vercel/geistdocs/source-config` in `source.config.ts`. Do not import runtime component entry points from source config.
 - Move existing `middleware.ts` behavior into `createProxy({ before })` or `createProxy({ after })` hooks.
 - Delete `public/llms.txt` when using `createLlmsRoute`; otherwise the static file can mask the App Router route.
 - Set `openGraph.images` in `createDocsPage` only when the app includes the Geistdocs OG route, or override metadata to avoid broken `/og/...` URLs.
-- Keep the generated package-specific Next.js configuration. The private template includes the additional Geistcn transpilation settings it requires.
+- Keep the generated package-specific Next.js configuration.
 - Apply `geistFontClasses`, `tailwind`, and `tailwind-preflight` to the root `<html>` element.
 - Import the selected Geistdocs package's stylesheet and keep its generated Tailwind source configuration.
 - Add local fallbacks for production-only environment variables so migration builds do not require production secrets.

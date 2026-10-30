@@ -1,5 +1,3 @@
-/* Provider foundation and Geistdocs theme rules are package-owned. The private
-   package build adds its consumer-source registration after this import. */
 @import "@vercel/geistdocs/styles.css";
 
 :root {
@@ -10,21 +8,12 @@
     "ss11" 1;
 }
 
-/* App-only override: this template uses the 200 surface as the page
-   background (the package defaults to background-100). */
 @layer base {
   body {
     @apply text-gray-1000;
   }
 }
 
-/* Align docs content with navbar on mobile */
-/*
- * On mobile the sticky MobileDocsBar abuts the navbar via a negative top
- * margin, which would otherwise overlap and clip the page breadcrumb rendered
- * above it. Hide the breadcrumb on mobile so the bar sits flush under the
- * navbar; it stays visible on desktop, where the bar is hidden.
- */
 @container (max-width: 960px) {
   #nd-page {
     @apply px-6;
@@ -35,7 +24,6 @@
   }
 }
 
-/* TOC and footer links use gray-1000 */
 #nd-toc {
   @apply text-gray-1000;
 }
