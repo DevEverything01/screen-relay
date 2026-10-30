@@ -1,0 +1,65 @@
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { parse } from 'yaml';
+import { Failure } from './output.js';
+
+type Skill = { name: string; description: string; hidden: boolean; directory: string };
+const runtimeDirectory = dirname(fileURLToPath(import.meta.url));
+const skillDataDirectory = [join(runtimeDirectory, 'skill-data'), resolve(runtimeDirectory, '../../skill-data')].find((path) => {
+  try { return statSync(path).isDirectory(); } catch { return false; }
+}) ?? join(runtimeDirectory, 'skill-data');
+const skillDirectories = [skillDataDirectory, join(dirname(skillDataDirectory), 'skills')];
+
+function discover(): Skill[] {
+  return skillDirectories.flatMap((directory) => {
+    let entries: string[];
+    try { entries = readdirSync(directory); } catch { return []; }
+    return entries.flatMap((entry) => {
+      const location = join(directory, entry);
+      const file = join(location, 'SKILL.md');
+      try {
+        if (!statSync(location).isDirectory()) return [];
+        const content = readFileSync(file, 'utf8');
+        const frontmatter = content.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/)?.[1];
+        if (!frontmatter) return [];
+        const metadata = parse(frontmatter) as Record<string, unknown>;
+        if (typeof metadata.name !== 'string') return [];
+        return [{ name: metadata.name, description: typeof metadata.description === 'string' ? metadata.description : '', hidden: metadata.hidden === true, directory: location }];
+      } catch { return []; }
+    });
+  }).sort((left, right) => left.name.localeCompare(right.name));
+}
+
+/** Lists visible skills with their names and descriptions. */
+export function list(): { name: string; description: string }[] {
+  return discover().filter((skill) => !skill.hidden).map(({ name, description }) => ({ name, description }));
+}
+
+/** Returns a skill's Markdown, optionally appending all reference and template files. */
+export function get(name: string, options: { full?: boolean } = {}): { name: string; content: string } {
+  const skill = discover().find((candidate) => candidate.name === name);
+  if (!skill) throw new Failure('not_found', `Skill not found: ${name}`);
+  let content = readFileSync(join(skill.directory, 'SKILL.md'), 'utf8');
+  if (options.full) {
+    for (const subdirectory of ['references', 'templates']) {
+      const directory = join(skill.directory, subdirectory);
+      let entries: string[];
+      try { entries = readdirSync(directory).sort(); } catch { continue; }
+      for (const entry of entries) {
+        const path = join(directory, entry);
+        if (!statSync(path).isFile()) continue;
+        content += `\n\n## ${subdirectory}/${entry}\n\n${readFileSync(path, 'utf8').trimEnd()}\n`;
+      }
+    }
+  }
+  return { name: skill.name, content };
+}
+
+/** Returns the skill-data directory, or a named skill's directory. */
+export function path(name?: string): string {
+  if (!name) return skillDataDirectory;
+  const skill = discover().find((candidate) => candidate.name === name);
+  if (!skill) throw new Failure('not_found', `Skill not found: ${name}`);
+  return skill.directory;
+}

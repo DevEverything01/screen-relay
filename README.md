@@ -52,7 +52,7 @@ relay status --json
 relay down
 ```
 
-Coordinates are 0 to 1. See the [CLI reference](docs/cli.md) and the [agent skill](skills/relay/SKILL.md).
+Coordinates are 0 to 1. Load the current agent workflow with `relay skills get core`. See the [CLI reference](docs/cli.md).
 
 ## Limits
 

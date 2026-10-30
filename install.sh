@@ -69,6 +69,8 @@ on_path() {
 install_cli() {
   install -d "$prefix/bin" "$prefix/lib/relay"
   install -m 0755 dist/cli/relay.mjs "$prefix/lib/relay/relay.mjs"
+  install -d "$prefix/lib/relay/skill-data"
+  cp -R skill-data/. "$prefix/lib/relay/skill-data/"
   ln -sfn ../lib/relay/relay.mjs "$prefix/bin/relay"
 }
 if [ "$client" = 1 ]; then
