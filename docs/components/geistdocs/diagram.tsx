@@ -1,6 +1,7 @@
 "use client";
 
 import { useTheme } from "next-themes";
+import { useEffect, useState } from "react";
 
 type DiagramProps = {
   name: string;
@@ -12,10 +13,14 @@ type DiagramProps = {
 export const Diagram = ({
   name,
   title,
-  aspectRatio = "1124 / 452",
+  aspectRatio = "720 / 448",
 }: DiagramProps) => {
   const { resolvedTheme } = useTheme();
-  const query = resolvedTheme === "light" || resolvedTheme === "dark" ? `?theme=${resolvedTheme}` : "";
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => setMounted(true), []);
+
+  const query = mounted && resolvedTheme ? `?theme=${resolvedTheme}` : "";
 
   return (
     <iframe

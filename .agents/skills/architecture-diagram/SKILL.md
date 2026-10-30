@@ -24,12 +24,12 @@ Diagrams are standalone HTML files that the docs embed with the `Diagram` compon
 3. Draw one arrow per real data path. Label arrows that cross a boundary with the route or protocol (`/stream`).
 4. Group components by where they run: an outer dashed container for a machine, a nested panel for a process. Put the client outside.
 5. Mark the entry point of the flow with the highlighted circle node. Use it once.
-6. Keep the diagram at 12 nodes or fewer. Move detail to the page text.
+6. Lay it out for the 720px docs column at 1:1 scale (see style.md) and keep it to 12 nodes or fewer. Move detail to the page text.
 
 ## Embed it
 
 ```mdx
-<Diagram name="architecture" title="Relay architecture" aspectRatio="1124 / 452" />
+<Diagram name="architecture" title="Relay architecture" aspectRatio="720 / 448" />
 ```
 
 `aspectRatio` is the SVG `viewBox` width and height. The component passes the site theme to the iframe.

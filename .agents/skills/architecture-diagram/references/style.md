@@ -23,7 +23,7 @@ The style follows Vercel architecture diagrams: dashed containers, thin gray con
 - Stroke width 1 with `vector-effect: non-scaling-stroke`, so lines stay 1px at any scale.
 - Dash pattern `4 4`.
 - Outer container radius 8, nested panel radius 8, node radius 6.
-- Nodes are 120 x 64 (152 wide for wider labels). Gap between nodes in a row is 32, row gap 52 between a node bottom and the next row.
+- Nodes are 120 x 64 (152 wide for wider labels). Gap between nodes in a row is 40, row gap 44 between a node bottom and the next row.
 - Container padding is 20 to 28 from its border to the nearest node. A container header sits 20 from the top, icon first, label 8 to 10 to its right.
 
 ## Typography
@@ -56,6 +56,8 @@ Node text is centered, label at the vertical middle minus 6, second line at the 
 
 A circle of radius 30 filled with `--hl-fill`, ringed with a 1px `--hl-ring` stroke, with a globe icon drawn at 24 px in `--hl-icon` (1.2 stroke). Place it directly in front of the node it enters. Use it once per diagram.
 
-## Scaling
+## Size and scaling
 
-One SVG with a `viewBox`, `width: 100%`, `height: auto`. The diagram scales to the container width. Keep the `viewBox` size and the `aspectRatio` prop of `<Diagram>` equal.
+Lay diagrams out for the docs content column, not for a wide canvas. The column is about 720px wide at a 1440px viewport, so the target `viewBox` width is 720 and the height is whatever the layout needs (the architecture diagram is 720 x 448). The font sizes above are in `viewBox` units, so at 720 wide they render at 1:1. Do not design a wider canvas and let it scale down: a 1124 wide diagram renders at 0.64 and its labels shrink to about 8px. When the content does not fit in 720, wrap it onto more rows or place clients below the container instead.
+
+One SVG with a `viewBox`, `width: 100%`, `height: auto`. Keep the `viewBox` size and the `aspectRatio` prop of `<Diagram>` equal. On a phone the diagram scales down with the column; keep node text short so it stays readable.
