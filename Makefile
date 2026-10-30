@@ -60,7 +60,12 @@ test-backend: build/backend-source-test
 
 SERVER_TEST_SRCS = src/engine/server/config.cpp src/engine/server/metrics.cpp src/engine/server/wire.cpp
 
-build/server-test: tests/unit/server-test.cpp $(SERVER_TEST_SRCS) $(wildcard src/engine/server/*.hpp) $(wildcard src/engine/core/*.hpp)
+build/test-viewer/viewer.js:
+	mkdir -p build/test-viewer
+	: > build/test-viewer/index.html
+	: > build/test-viewer/viewer.js
+
+build/server-test: tests/unit/server-test.cpp $(SERVER_TEST_SRCS) $(wildcard src/engine/server/*.hpp) $(wildcard src/engine/core/*.hpp) build/test-viewer/viewer.js
 	mkdir -p build
 	$(CXX) -Isrc/engine $(shell pkg-config --cflags libwebsockets) $(CXXFLAGS) tests/unit/server-test.cpp $(SERVER_TEST_SRCS) -o $@ $(shell pkg-config --libs libwebsockets)
 
