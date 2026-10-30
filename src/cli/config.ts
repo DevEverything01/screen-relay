@@ -157,7 +157,7 @@ function collect(errors: Failure[], validate: () => void): void {
 function report(errors: Failure[], source: string, reason = 'invalid_config'): void {
   if (!errors.length) return;
   throw new Failure(reason, errors.map((error) => `${source}: ${error.message}.`).join(' '),
-    [...new Set(errors.map((error) => error.hint).filter(Boolean))].join(' '),
+    [...new Set(errors.map((error) => error.hint).filter(Boolean))].join(' ') || 'Correct the values, then retry.',
     { errors: errors.map((error) => ({ source, ...error.payload() })) });
 }
 
@@ -293,7 +293,7 @@ export function applyTo(args: Record<string, unknown>, settings: ConfigSettings,
     } } });
   });
   if (Boolean(resolved['tls-cert']) !== Boolean(resolved['tls-key'])) {
-    errors.push(new Failure('invalid_input', 'server.tls_cert and server.tls_key must be set together'));
+    errors.push(new Failure('invalid_input', 'server.tls_cert and server.tls_key must be set together', 'Set both or neither.'));
   }
   report(errors, 'Settings', 'invalid_input');
   Object.assign(args, resolved);

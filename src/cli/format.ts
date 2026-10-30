@@ -1,13 +1,46 @@
 import type { OutputOptions } from './mode.js';
+import type { NextCommand } from '../protocol/errors.js';
 import { theme } from './theme.js';
 
-export function row(label: string, value: unknown, glyph = ' '): string {
-  return `${glyph} ${label.padEnd(16)}${String(value ?? '')}`;
+/** Splits a command line on whitespace while keeping single- and double-quoted runs together. */
+export function tokens(command: string): string[] {
+  const result: string[] = [];
+  let token = '';
+  let quote = '';
+  for (const character of command) {
+    if (quote) {
+      if (character === quote) quote = '';
+      else token += character;
+    } else if (character === "'" || character === '"') quote = character;
+    else if (/\s/.test(character)) {
+      if (token) result.push(token);
+      token = '';
+    } else token += character;
+  }
+  if (token) result.push(token);
+  return result;
+}
+
+export function nextCommand(command: string): NextCommand {
+  return { command, argv: tokens(command) };
+}
+
+export function nextFor(command: string): NextCommand[] {
+  return [nextCommand(command)];
+}
+
+export function quote(value: string): string {
+  return /^[A-Za-z0-9_./:@=-]+$/.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+export function row(label: string, value: unknown, args: OutputOptions = {}): string {
+  const gutter = theme(args).plain ? '' : ' ';
+  return `${gutter}${label.padEnd(16)}${String(value ?? '')}`;
 }
 
 export function receipt(label: string, value: unknown, args: OutputOptions = {}): string {
   const style = theme(args);
-  return style.plain ? `${style.primary(label)} ${String(value ?? '')}` : row(style.primary(label.padEnd(16)), value, style.success);
+  return style.plain ? `${style.primary(label)} ${String(value ?? '')}` : `${style.success} ${style.primary(label.padEnd(16))}${String(value ?? '')}`;
 }
 
 export function nextStep(benefit: string, command: string, args: OutputOptions = {}): string {
@@ -15,8 +48,7 @@ export function nextStep(benefit: string, command: string, args: OutputOptions =
 }
 
 export function sessionCommand(command: string, name: string): string {
-  const quoted = /^[A-Za-z0-9_.-]+$/.test(name) ? name : `'${name.replaceAll("'", "'\\''")}'`;
-  return `relay ${command}${name === 'default' ? '' : ` --name ${quoted}`}`;
+  return `relay ${command}${name === 'default' ? '' : ` --name ${quote(name)}`}`;
 }
 
 export function count(value: number, noun: string): string {

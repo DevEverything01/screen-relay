@@ -3,7 +3,7 @@ import { accessSync, closeSync, constants, fchmodSync, mkdirSync, openSync, rmSy
 import { join } from 'node:path';
 import type { Readable } from 'node:stream';
 import { createClient } from '../../sdk/index.js';
-import { Failure } from '../output.js';
+import { Failure, nextFor, sessionCommand } from '../output.js';
 import { HostArgs, LAUNCHER_DIR, spawnCleared, which } from './common.js';
 import { identity, SessionData, tail, writeSession } from './state.js';
 
@@ -174,7 +174,9 @@ export class Session {
   }
 
   failure(name: string, code: string, message: string): Failure {
-    return new Failure(code, message, HINTS[name] ?? '', { component: name, log: tail(join(this.dir, `${name}.log`)), logs: this.dir });
+    const recovery = code === 'component_failed' || code === 'timeout'
+      ? { next: nextFor(sessionCommand(`logs ${name}`, this.args.name)), label: 'Read the logs' } : {};
+    return new Failure(code, message, HINTS[name] ?? '', { component: name, log: tail(join(this.dir, `${name}.log`)), logs: this.dir }, recovery);
   }
 
   checkChildren(): void {
@@ -391,7 +393,7 @@ function splitCommand(value: string): string[] {
     else token += char;
   }
   if (escaped) token += '\\';
-  if (quote) throw new Failure('invalid_input', 'Invalid desktop command quoting');
+  if (quote) throw new Failure('invalid_input', 'Invalid desktop command quoting', 'Check --desktop.');
   if (token) result.push(token);
   return result;
 }

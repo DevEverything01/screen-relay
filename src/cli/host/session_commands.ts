@@ -26,11 +26,11 @@ export async function cmdUp(args: Args): Promise<number> {
   applyTo(args, settings, present);
   const port = Number(args.port ?? 8080);
   const timeout = Number(args.timeout ?? 30);
-  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Failure('invalid_input', 'Port must be between 1 and 65535');
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Failure('invalid_input', 'Port must be between 1 and 65535', 'Run `relay up --help`.');
   if (args.public && !/^https:\/\/[^/?#@\\\s]+$/.test(String(args.public))) {
     throw new Failure('invalid_input', '--public must be an HTTPS origin like https://desk.example.com', 'No path, query or credentials.');
   }
-  if (Boolean(args['tls-cert']) !== Boolean(args['tls-key'])) throw new Failure('invalid_input', '--tls-cert and --tls-key go together');
+  if (Boolean(args['tls-cert']) !== Boolean(args['tls-key'])) throw new Failure('invalid_input', '--tls-cert and --tls-key go together', 'Run `relay up --help`.');
   const directory = stateDir(args.name);
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   const { chmodSync } = await import('node:fs');
@@ -125,8 +125,8 @@ async function detach(args: Args, directory: string, timeout: number, warnings: 
   }
   const payload = JSON.parse(result.trim().split(/\r?\n/).at(-1) ?? '{}');
   if (payload.error) {
-    const { code, message, hint, ...extra } = payload.error;
-    throw new Failure(code, message, hint ?? '', extra);
+    const { reason, message, hint, ...extra } = payload.error;
+    throw new Failure(reason, message, hint ?? '', extra);
   }
   emit(args, { session: payload, outcome: 'started', ...(warnings.length ? { warnings } : {}) }, formatReady(payload, args, true), { identifier: String(payload.viewer) });
   child.unref();
@@ -189,11 +189,11 @@ export async function cmdStatus(args: Args): Promise<number> {
         url: session.localUrl, token: token ?? undefined, ca: session.tlsCert ?? undefined, connect: connectHost(session.bind) ?? undefined, timeout: timeout * 1000, signal: args.signal,
       }).capabilities();
     } catch (error) {
-      session.health = clientFailure(error, String(session.localUrl), Number(args.timeout ?? 10)).payload();
+      session.health = clientFailure(error, { url: String(session.localUrl), timeout: Number(args.timeout ?? 10), explicit: false }).payload();
     }
   }
   args.signal?.throwIfAborted();
-  emit(args, { session }, formatStatus(args.name, session));
+  emit(args, { session }, formatStatus(args.name, session, args));
   printNext(args, session.running ? 'Read the engine log' : 'Start it', sessionCommand(session.running ? 'logs engine' : 'up -d', args.name));
   return 0;
 }
@@ -204,7 +204,7 @@ export async function cmdLogs(args: Args): Promise<number> {
   const files = components.map((component) => join(directory, `${component}.log`)).filter(existsSync);
   if (!files.length) throw new Failure('not_running', `No logs for "${args.name}"`, 'Start a session with `relay up`.');
   if (args.json) {
-    if (args.follow) throw new Failure('invalid_input', '--follow cannot be combined with --json');
+    if (args.follow) throw new Failure('invalid_input', '--follow cannot be combined with --json', 'Run `relay logs --help`.');
     emit(args, { logs: Object.fromEntries(files.map((file) => [file.slice(file.lastIndexOf('/') + 1, -4), tail(file, 200)])) }, '');
     return 0;
   }
@@ -217,10 +217,10 @@ export async function cmdLogs(args: Args): Promise<number> {
 
 export async function cmdRun(args: Args): Promise<number> {
   requireLinux();
-  const command = Array.isArray(args.app) ? args.app.map(String) : args.app ? [String(args.app)] : [];
-  if (command[0] === '--') command.shift();
+  const rest = args.args === undefined ? [] : Array.isArray(args.args) ? args.args : [args.args];
+  const command = [args.app, ...rest].filter((value) => value !== undefined).map(String);
   if (!command.length) throw new Failure('missing_command', 'Name the app to start', 'Run `relay run --help`.');
-  if (!which(command[0])) throw new Failure('spawn_failed', `${command[0]} was not found`, 'Run `relay run --help`.');
+  if (!which(command[0])) throw new Failure('spawn_failed', `${command[0]} was not found`, 'Install it or check the name, then run the command again.');
   const session = readSession(args.name);
   if (!session || session.state !== 'ready' || !alive(session.supervisor)) throw new Failure('not_found', `No running session named "${args.name}"`, 'Start one with `relay up -d`.');
   const directory = stateDir(args.name);

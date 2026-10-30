@@ -1,6 +1,8 @@
 import { build } from 'esbuild';
-import { chmod, copyFile, mkdir } from 'node:fs/promises';
+import { chmod, copyFile, mkdir, readFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
+
+const { version } = JSON.parse(await readFile(new URL('./package.json', import.meta.url), 'utf8'));
 
 const entries = [
   { entry: 'src/cli/main.ts', outfile: 'dist/cli/relay.mjs' },
@@ -16,6 +18,7 @@ await Promise.all(entries.map(async ({ entry, outfile }) => {
     platform: 'node',
     format: 'esm',
     target: 'node20',
+    define: { __RELAY_VERSION__: JSON.stringify(version) },
     banner: { js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" },
     packages: 'bundle',
   });

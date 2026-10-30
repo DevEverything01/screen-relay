@@ -19,5 +19,5 @@ test('lists visible skills and loads full references', () => {
 });
 
 test('unknown skill names fail with a not-found error', () => {
-  assert.throws(() => skills.get('missing'), { code: 'not_found', message: 'Skill not found: missing' });
+  assert.throws(() => skills.get('missing'), { reason: 'not_found', message: 'Skill not found: missing' });
 });

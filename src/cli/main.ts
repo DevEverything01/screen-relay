@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 import { commands, type Args } from './commands.js';
 import { formatHelp, helpDocument } from './help.js';
-import { parseCommand, unknownToken, UsageFailure } from './parser.js';
+import { parseCommand, unknownToken } from './parser.js';
 import { emit, Failure, printFailure, writeText } from './output.js';
 import { RelayError } from '../protocol/index.js';
 
 export { commands } from './commands.js';
 
-const version = 'unreleased';
+declare const __RELAY_VERSION__: string;
+const version = typeof __RELAY_VERSION__ === 'string' ? __RELAY_VERSION__ : '0.0.0';
 
 export async function main(argv = process.argv.slice(2)): Promise<number> {
   let jsonMode = argv.slice(0, argv.indexOf('--') < 0 ? argv.length : argv.indexOf('--')).reduce((json, token) => token === '--json' ? true : token === '--no-json' ? false : json, false);
@@ -47,16 +48,8 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     return signalExit || result || 0;
   } catch (error) {
     if (signalExit) return signalExit;
-    if (error instanceof UsageFailure) {
-      printFailure(error, jsonMode, args);
-      return 2;
-    }
-    if (error instanceof Failure) {
-      printFailure(error, jsonMode, args);
-      return error.exitCode;
-    }
     if (error instanceof RelayError) {
-      printFailure(new Failure(error.reason, error.message, error.hint ?? '', error.data ?? {}), jsonMode, args);
+      printFailure(error, jsonMode, args);
       return error.exitCode;
     }
     if (error instanceof Error && error.name === 'AbortError') return 130;

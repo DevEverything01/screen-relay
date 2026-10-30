@@ -2,7 +2,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
-import { Failure } from './output.js';
+import { emit, Failure } from './output.js';
 
 type Skill = { name: string; description: string; hidden: boolean; directory: string };
 const runtimeDirectory = dirname(fileURLToPath(import.meta.url));
@@ -36,10 +36,14 @@ export function list(): { name: string; description: string }[] {
   return discover().filter((skill) => !skill.hidden).map(({ name, description }) => ({ name, description }));
 }
 
+function missing(name: string): Failure {
+  return new Failure('not_found', `Skill not found: ${name}`, 'List the skills with `relay skills list`.');
+}
+
 /** Returns a skill's Markdown, optionally appending all reference and template files. */
 export function get(name: string, options: { full?: boolean } = {}): { name: string; content: string } {
   const skill = discover().find((candidate) => candidate.name === name);
-  if (!skill) throw new Failure('not_found', `Skill not found: ${name}`);
+  if (!skill) throw missing(name);
   let content = readFileSync(join(skill.directory, 'SKILL.md'), 'utf8');
   if (options.full) {
     for (const subdirectory of ['references', 'templates']) {
@@ -60,6 +64,24 @@ export function get(name: string, options: { full?: boolean } = {}): { name: str
 export function path(name?: string): string {
   if (!name) return skillDataDirectory;
   const skill = discover().find((candidate) => candidate.name === name);
-  if (!skill) throw new Failure('not_found', `Skill not found: ${name}`);
+  if (!skill) throw missing(name);
   return skill.directory;
+}
+
+/** Runs skills list, get and path, printing text or the noun-shaped JSON document. */
+export async function cmdSkills(args: Record<string, unknown> & { json: boolean }): Promise<number> {
+  const action = String(args.action ?? 'list');
+  if (action === 'list') {
+    const skills = list();
+    emit(args, { skills }, skills.map(({ name, description }) => `${name.padEnd(18)}${description}`).join('\n') || 'No skills found.');
+    return 0;
+  }
+  if (action === 'get') {
+    const skill = get(String(args.skill), { full: Boolean(args.full) });
+    emit(args, { skill }, skill.content.trimEnd());
+    return 0;
+  }
+  const directory = path(args.skill === undefined ? undefined : String(args.skill));
+  emit(args, { path: directory }, directory);
+  return 0;
 }

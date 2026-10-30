@@ -174,6 +174,6 @@ export async function cmdDoctor(args: HostArgs): Promise<number> {
     warnings: checks.filter((item) => item.status === 'warn').length,
     failed: checks.filter((item) => item.status === 'fail').length,
   };
-  emit(args, { checks, summary }, formatDoctor(checks));
+  emit(args, { checks, summary }, formatDoctor(checks, args));
   return failed ? 1 : 0;
 }

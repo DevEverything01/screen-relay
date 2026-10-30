@@ -1,10 +1,8 @@
 import { commands, globalOptions, type Args, type Parameter } from './commands.js';
 import { Failure } from './output.js';
 
-export class UsageFailure extends Failure {}
-
-export function usageFailure(message: string, command = '', reason = 'invalid_input'): UsageFailure {
-  return new UsageFailure(reason, message, `Run \`relay help${command ? ` ${command}` : ''}\`.`);
+export function usageFailure(message: string, command = '', reason = 'invalid_input'): Failure {
+  return new Failure(reason, message, `Run \`relay help${command ? ` ${command}` : ''}\`.`);
 }
 
 function distance(left: string, right: string): number {
@@ -17,7 +15,7 @@ function distance(left: string, right: string): number {
   return previous[right.length];
 }
 
-export function unknownToken(kind: string, token: string, choices: string[], command = ''): UsageFailure {
+export function unknownToken(kind: string, token: string, choices: string[], command = ''): Failure {
   const closest = choices.map((choice) => ({ choice, distance: distance(token, choice) })).sort((left, right) => left.distance - right.distance)[0];
   return usageFailure(`Unknown ${kind} '${token}'.${closest && closest.distance <= 2 ? ` Did you mean '${closest.choice}'?` : ''}`, command, kind === 'command' ? 'unknown_command' : 'invalid_option');
 }
@@ -30,6 +28,7 @@ function valueFor(parameter: Parameter, raw: unknown, command: string): unknown 
   return value;
 }
 
+/** Parses argv against the command metadata, returning validated values or a usage failure. */
 export function parseCommand(argv: string[], environment: NodeJS.ProcessEnv = process.env): Args {
   const values: Record<string, unknown> = {};
   const positionals: string[] = [];

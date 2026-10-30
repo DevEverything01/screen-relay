@@ -5,11 +5,11 @@ import { MAX_INPUT_BATCH, isLoopback, validToken } from '../protocol/index.js';
 import { DEFAULT_PORT } from './host/common.js';
 import { connectHost } from './host/supervisor.js';
 import { alive, readSession } from './host/state.js';
-import { count, emit, Failure, nextStep, receipt, row, sessionCommand, size } from './output.js';
+import { count, emit, Failure, nextFor, nextStep, quote, receipt, row, sessionCommand, size } from './output.js';
 
 type Args = Record<string, any> & { command: string; json: boolean; name: string };
 
-interface Target { url: string; token?: string; ca?: string; connect?: string; timeout: number; signal?: AbortSignal }
+interface Target { url: string; token?: string; ca?: string; connect?: string; timeout: number; signal?: AbortSignal; explicit: boolean }
 
 const PNG = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 
@@ -37,7 +37,9 @@ function checkUrl(url: string, token?: string): string {
 
 /** Resolves the engine a client command talks to from flags, the environment, or the local session. */
 export function resolveTarget(args: Args): Target {
-  let url: string | undefined = typeof args.url === 'string' ? args.url : process.env.RELAY_URL;
+  let url: string | undefined = typeof args.url === 'string' && args.url ? args.url : undefined;
+  if (!url && process.env.RELAY_URL) url = process.env.RELAY_URL;
+  const explicit = Boolean(url);
   let tokenFile = typeof args['token-file'] === 'string' ? args['token-file'] : process.env.RELAY_TOKEN_FILE;
   let ca: string | undefined, connect: string | undefined;
   if (!url) {
@@ -51,7 +53,7 @@ export function resolveTarget(args: Args): Target {
       url = `http://127.0.0.1:${DEFAULT_PORT}`;
     } else {
       throw new Failure('not_running', `No running session named "${args.name}"`,
-        `Start it with \`${sessionCommand('up -d', args.name)}\`, or pass --url.`);
+        `Start it with \`${sessionCommand('up -d', args.name)}\`, or pass --url.`, {}, { next: nextFor(sessionCommand('up -d', args.name)), label: 'Start a session' });
     }
   }
   let token: string | undefined;
@@ -59,19 +61,30 @@ export function resolveTarget(args: Args): Target {
     try { token = readFileSync(tokenFile, 'utf8').trim(); }
     catch (error) { throw new Failure('invalid_input', `Cannot read token file: ${detail(error)}`, 'Check --token-file.'); }
   }
-  return { url: checkUrl(url, token), token, ca, connect, timeout: Number(args.timeout ?? 10), signal: args.signal };
+  return { url: checkUrl(url, token), token, ca, connect, timeout: Number(args.timeout ?? 10), signal: args.signal, explicit };
 }
 
 /** Turns an SDK error into the CLI failure shape the documented commands and exit codes use. */
-export function clientFailure(error: unknown, url: string, timeout: number): Failure {
+export function clientFailure(error: unknown, target: Target): Failure {
   if (error instanceof Failure) return error;
   if (error instanceof RelayError) {
-    if (error.code === 'TIMEOUT') return new Failure('timeout', `No reply from ${url} within ${timeout}s`, 'Raise --timeout or check the engine.');
-    if (error.code === 'NETWORK_ERROR') return new Failure('unreachable', `Couldn't reach ${url}. ${error.message}`, 'Start a session with `relay up` or pass --url.');
+    const host = new URL(target.url).host;
+    if (error.reason === 'timeout') {
+      return new Failure('timeout', `Couldn't reach ${host}. The request timed out.`, 'Raise --timeout, or check the engine.', {}, remoteRecovery(target));
+    }
+    if (error.reason === 'unreachable') {
+      return new Failure('unreachable', `Couldn't reach ${host}. ${error.message}`, 'Check the address.', {}, remoteRecovery(target));
+    }
     const applied = (error as RelayError & { applied?: number }).applied;
-    return new Failure(error.reason, error.message, error.hint ?? '', { ...error.data, ...(applied === undefined ? {} : { applied }) }, { next: error.next, status: error.status });
+    return new Failure(error.reason, error.message, error.hint ?? '', { ...error.data, ...(applied === undefined ? {} : { applied }) }, { next: error.next, status: error.status, label: error.label });
   }
   return new Failure('internal', detail(error));
+}
+
+function remoteRecovery(target: Target): { next?: ReturnType<typeof nextFor>; label: string } {
+  return target.explicit
+    ? { next: nextFor(`relay status --url ${quote(target.url)}`), label: 'Check the remote session' }
+    : { next: nextFor('relay up -d'), label: 'Start a session' };
 }
 
 function open(target: Target): Client {
@@ -81,7 +94,7 @@ function open(target: Target): Client {
 async function withClient<Result>(args: Args, action: (client: Client) => Promise<Result>): Promise<Result> {
   const target = resolveTarget(args);
   try { return await action(open(target)); }
-  catch (error) { throw clientFailure(error, target.url, target.timeout); }
+  catch (error) { throw clientFailure(error, target); }
 }
 
 function textArgument(args: Args, value: unknown): string {
@@ -112,7 +125,7 @@ export async function cmdScreenshot(args: Args): Promise<number> {
     return 0;
   }
   try { writeFileSync(String(args.file), data); }
-  catch (error) { throw new Failure('invalid_input', `Cannot write ${args.file}: ${detail(error)}`); }
+  catch (error) { throw new Failure('invalid_input', `Cannot write ${args.file}: ${detail(error)}`, 'Check the path.'); }
   const path = resolve(String(args.file));
   emit(args, { screenshot: { path, bytes: data.length, width, height }, outcome: 'saved' },
     [receipt('Saved', path, args), row('Resolution', `${width}x${height}`), row('Size', size(data.length))].join('\n'), { identifier: path });
@@ -171,7 +184,7 @@ export async function cmdRemoteStatus(args: Args): Promise<number> {
   try {
     capabilities = await client.capabilities();
     metrics = await client.status();
-  } catch (error) { throw clientFailure(error, target.url, target.timeout); }
+  } catch (error) { throw clientFailure(error, target); }
   emit(args, { session: { url: target.url, state: 'ready', capabilities, metrics } },
     [row('URL', target.url), row('State', 'ready'), row('Backend', capabilities.backend), row('Resolution', `${capabilities.width}x${capabilities.height}`), row('Frames encoded', metrics.frames_encoded)].join('\n'));
   return 0;

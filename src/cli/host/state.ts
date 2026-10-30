@@ -121,7 +121,7 @@ export function lock(name: string, directory: string): { close(): void } {
         },
       };
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw new Failure('internal', `Cannot lock ${file}: ${String(error)}`);
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw new Failure('internal', `Cannot lock ${file}: ${String(error)}`, 'Check the state directory permissions with `relay doctor`.');
       let existing: unknown = null;
       try { existing = JSON.parse(readFileSync(file, 'utf8')); } catch {}
       if (alive(existing)) throw busy();
