@@ -123,5 +123,5 @@ export const commands: Record<string, Command> = {
       : args.full && args.action !== 'get' ? '--full only applies to relay skills get' : undefined,
     run: cmdSkills,
   },
-  help: { summary: 'Show command help', group: 'Machine', arguments: [{ name: 'topic', type: 'string', valueHint: '<COMMAND>', summary: 'Command to describe' }], options: [{ name: 'all', type: 'boolean', summary: 'Describe every command' }], examples: example('Read click help', 'relay help click'), notes: [], resultSchema: { path: 'string', summary: 'string', arguments: 'array', options: 'array', examples: 'array', resultSchema: 'object' } },
+  help: { summary: 'Show command help', group: 'Machine', arguments: [{ name: 'topic', type: 'string', valueHint: 'command', summary: 'Command to describe' }], options: [{ name: 'all', type: 'boolean', summary: 'Describe every command' }], examples: example('Read click help', 'relay help click'), notes: [], resultSchema: { path: 'string', summary: 'string', arguments: 'array', options: 'array', examples: 'array', resultSchema: 'object' } },
 };
