@@ -71,27 +71,36 @@ Payload is exactly 16 bytes. On `/stream` the header sequence is zero. On `/cont
 
 | Payload offset | Size | Field |
 | --- | ---: | --- |
-| 0 | 1 | Event: 1 key down, 2 key up, 3 pointer move, 4 button down, 5 button up, 6 wheel, 7 release all |
+| 0 | 1 | Event: 1 key down, 2 key up, 3 pointer move, 4 button down, 5 button up, 6 wheel, 7 release all, 8 text |
 | 1 | 1 | Reserved, zero |
 | 2 | 2 | Code: HID usage (key), button 1 to 3, 0 for move, wheel axis (0 vertical, 1 horizontal) |
-| 4 | 4 | Signed value: wheel delta, otherwise zero |
+| 4 | 4 | Signed value: wheel delta or text codepoint, otherwise zero |
 | 8 | 2 | X, 0 to 65535 |
 | 10 | 2 | Y, 0 to 65535 |
 | 12 | 2 | Button mask, low 5 bits only |
 | 14 | 2 | Modifier mask, HID bits 0 to 7 |
 
 - Key usages are 0x00 to 0xE7 (231). Larger values are rejected. Unmapped usages within range return status 2.
+- Key codes name physical keys, so the remote layout decides the character. A text event has code 0 and a value that is one Unicode scalar value, 1 to 0x10FFFF and not 0xD800 to 0xDFFF; its masks are zero and coordinates are ignored. Text returns status 2 when the backend cannot type the character. Text 0x0A is the Return key and 0x09 is the Tab key, so applications see the named keys rather than those control characters.
 - Wheel delta is in steps of 120, magnitude at most 1200. Vertical wheel maps to X buttons 4/5, horizontal to 6/7.
 - Release all needs code, value and masks zero. Coordinates are ignored.
-- Held key and button sets are authoritative. Repeated transitions are deduplicated.
+- Held key and button sets are authoritative. Repeated transitions are deduplicated. A text event never changes held keys.
 - Fragmented control messages are accumulated up to 36 bytes.
+
+### How text is typed
+
+A character the layout has is typed with its own key, so no mapping changes. A character the layout lacks, such as CJK on `us`, is typed by binding one of the empty spare keycodes to its keysym, tapping it, and leaving the binding in place so an application that reads the mapping late still gets the right character. With no empty keycode at all, the character is unsupported.
+
+The guarantee and its limit: a binding stays valid for at least 50 ms and until 16 newer characters needed spares. A binding is replaced only when a newer character needs a spare and takes the least recently used one, or when the engine exits; reconnecting does not unbind spares. An application that stays frozen longer than that can miss characters typed during the freeze, because by then its keycode reads a different keysym. This is a limit of X11 itself, not of relay: a client resolves keysyms when it gets round to the event, using whatever mapping the server has at that moment.
+
+Held modifiers are lifted for the tap and pressed again right after, so held Shift or Ctrl never changes the typed character. The held key set does not change, and a repeated release still reaches the backend once.
 
 ## Agent control (`/control`)
 
 1. Server sends type 4 (control ready): nonzero generation, sequence zero, payload is 4 bytes width and height.
-2. Client sends type 3 requests. Server replies type 5 with the request sequence and one status byte: 0 submitted, 1 invalid, 2 unsupported.
+2. Client sends type 3 requests. Server replies type 5 with the request sequence and one status byte: 0 applied, 1 invalid, 2 unsupported. The reply is written only after the backend applied the request, so a client that waits for it before the next request is paced by the desktop.
 3. At most 32 replies are queued. Protocol violations close the connection and release held input.
-4. No video session starts. Reconnect never replays requests. "Submitted" does not mean the application reacted.
+4. No video session starts. Reconnect never replays requests. Applied does not mean the application reacted.
 
 ## POST /input
 
@@ -101,13 +110,14 @@ Body: 1 to 256 type-3 records, 16 bytes each, same encoding as the `/control` pa
 | --- | --- | --- |
 | 200 | `{"applied":N}` | Every record was applied. |
 | 400 | `{"error":"invalid_input","index":I}` | Record `I` is invalid. Records before it were applied. Also returned, without `index`, when the length is zero or not a multiple of 16. |
-| 422 | `{"error":"unsupported_input","index":I}` | Record `I` is valid but unsupported, such as an unmapped key. Records before it were applied. |
+| 422 | `{"error":"unsupported_input","index":I}` | Record `I` is valid but unsupported, such as an unmapped key or a codepoint the backend cannot type. Records before it were applied. |
 | 401 | `{"error":"unauthorized"}` | Missing or wrong token. |
 | 403 | `{"error":"forbidden"}` | `Host` or `Origin` rejected. |
-| 409 | `{"error":"busy"}` | A viewer or `/control` session owns input. Nothing is applied. |
+| 409 | `{"error":"busy"}` | A viewer or `/control` session owns input, or the input queue already holds 1024 events. Nothing is applied. |
+| 409 | `{"error":"busy","applied":N}` | The session ended after the batch started. `N` records were applied and the rest were dropped, so `N` can be zero or part of the batch. |
 | 411, 413 | `length_required`, `too_large` | No `Content-Length`, or more than 256 records. |
 
-Records are applied in order and stop at the first failure. The request holds the control slot only while it is applied. Held keys and buttons are released when the batch ends or fails. The server never retries.
+Records are applied in order and stop at the first failure. The response is written only after the backend applied the records, so a client that awaits it knows the desktop received them, and a long batch of slow characters returns when its last character is typed. Held keys and buttons are released when the batch ends or fails. At most 1024 events may wait in the input queue; a batch that would take it past that limit is refused as `busy` before any of it is queued. If the session ends before a queued batch is applied, its queued text and moves are dropped, the request fails as `busy` with `applied` counting the records that did run, and key and button releases still run. The server never retries.
 
 ## GET /screenshot.png
 
@@ -150,6 +160,7 @@ CPU is cumulative microseconds. Memory is bytes, from the mounted cgroup v2. If 
 | Control replies queued | 32 |
 | Input record | 16 bytes |
 | `POST /input` batch | 256 records |
+| Input queue | 1024 events |
 | Cursor image | 256x256 |
 
 The server and viewer ship together. Older viewers that only know type 1 do not support the cursor extension.

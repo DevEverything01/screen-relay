@@ -52,7 +52,7 @@ relay status --json
 relay down
 ```
 
-Coordinates are 0 to 1. See the [CLI reference](docs/cli.md) and the [agent skill](skills/relay/SKILL.md).
+Coordinates are 0 to 1. Load the current agent workflow with `relay skills get core`. See the [CLI reference](docs/cli.md).
 
 ## Limits
 
@@ -63,7 +63,7 @@ Coordinates are 0 to 1. See the [CLI reference](docs/cli.md) and the [agent skil
 | Control | One controller at a time: a browser viewer or one agent. Screenshots work any time. |
 | Not supported | Audio, clipboard, IME, relative pointer, hardware encoding |
 | Auth | One shared token per session. No multi-user identity. |
-| Install | The engine installs on Linux only, and automatic dependencies need apt (Debian/Ubuntu). `--client-only` installs the CLI on any OS with Python 3. |
+| Install | The engine installs on Linux only, and automatic dependencies need apt (Debian/Ubuntu). `--client-only` installs the CLI on any OS with Node 26 or newer. |
 
 Experimental. The v1 CLI was verified in two places. On a fresh Vercel Sandbox (Ubuntu 26.04 x86_64): install, `up -d --public`, the viewer link, remote screenshot, click, type and key, `busy` while a viewer is open, `tests/smoke.sh` passing, and a clean `down`. In Docker (Debian trixie arm64), as non-root and as root. Earlier Ubuntu 24.04 ARM64 results came from the previous launcher. Not tested on other distributions, WAN links or long runs.
 
@@ -78,5 +78,5 @@ Experimental. The v1 CLI was verified in two places. On a fresh Vercel Sandbox (
 | [Troubleshooting](docs/troubleshooting.md) | Symptom, cause, fix |
 | [Architecture](docs/architecture.md) | Pipeline, folders, adding a backend |
 | [Protocol](docs/protocol.md) | Wire format and HTTP endpoints |
-| [Node SDK](docs/sdk.md) | Library for Node 22+ |
+| [Node SDK](docs/sdk.md) | Library for Node 26+ |
 | [Tests](tests/README.md) | Running each test layer |

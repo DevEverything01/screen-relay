@@ -1,0 +1,701 @@
+import { HID_KEYS, encodeInput, header, type InputEvent } from '../src/protocol/index.js';
+
+const keys = HID_KEYS;
+const canvas = document.querySelector('#screen') as HTMLCanvasElement,
+  ctx = canvas.getContext('2d')!,
+  status = document.querySelector('#status')!;
+const cursor = document.querySelector('#cursor') as HTMLCanvasElement, cursorContext = cursor.getContext('2d')!;
+let accessToken = '';
+const trustedPage = location.protocol === 'https:' || ['localhost', '127.0.0.1'].includes(location.hostname);
+{
+  const fragmentToken = new URLSearchParams(location.hash.slice(1)).get('token');
+  if (fragmentToken !== null) {
+    history.replaceState(null, '', location.pathname + location.search);
+    if (/^[0-9a-f]{64}$/.test(fragmentToken) && trustedPage) accessToken = (document.querySelector('#access-token') as HTMLInputElement).value = fragmentToken;
+  }
+}
+let cursorAvailable = false, cursorHotX = 0, cursorHotY = 0, pointerPosition: any;
+function renderCursor() {
+  canvas.style.cursor = cursorAvailable && ready ? 'none' : 'default';
+  const r = canvas.getBoundingClientRect(), p = pointerPosition;
+  cursor.hidden = !cursorAvailable || !ready || !p || p.pointerType === 'touch' ||
+    p.clientX < r.left || p.clientX >= r.right || p.clientY < r.top || p.clientY >= r.bottom;
+  if (cursor.hidden) return;
+  const sx = r.width / canvas.width, sy = r.height / canvas.height;
+  cursor.style.width = `${cursor.width * sx}px`;
+  cursor.style.height = `${cursor.height * sy}px`;
+  cursor.style.left = `${p.clientX - cursorHotX * sx}px`;
+  cursor.style.top = `${p.clientY - cursorHotY * sy}px`;
+}
+function receiveCursor(data: ArrayBuffer) {
+  const v = new DataView(data);
+  if (data.byteLength < 28 || data.byteLength > 28 + 256 * 256 * 4 ||
+      v.getUint16(6) || v.getUint32(12) || !generation || v.getUint32(8) !== generation) {
+    throw new Error('Invalid cursor envelope');
+  }
+  const width = v.getUint16(20), height = v.getUint16(22),
+    hotX = v.getUint16(24), hotY = v.getUint16(26);
+  if (width > 256 || height > 256 || data.byteLength !== 28 + width * height * 4 ||
+      (width && height ? hotX >= width || hotY >= height : width || height || hotX || hotY)) {
+    throw new Error('Invalid cursor image');
+  }
+  cursorAvailable = width > 0;
+  cursorHotX = hotX; cursorHotY = hotY;
+  cursor.width = width || 1; cursor.height = height || 1;
+  if (cursorAvailable) cursorContext.putImageData(new ImageData(new Uint8ClampedArray(data, 28), width, height), 0, 0);
+  renderCursor();
+}
+const stats = ((window as any).nativeStats = {
+  received: 0, drawn: 0, superseded: 0, bytes: 0, decodeerrors: 0, outstanding: 0, pendingBytes: 0, pendingHighWater: 0,
+});
+let socket: WebSocket, decoder: VideoDecoder, retryTimer: any, deadline: any, frameHandle = 0, drawnThisFrame = false, transportBroken = false;
+let generation = 0, sequence = 0, lastTimestamp = -1, ready = false, retry = 0, epoch = 0;
+let buttons = 0, modifiers = 0, x = 0, y = 0, viewOnly = false, capsLock = false,
+  metaAsCtrl = stored('relay.metaCtrl') === null ? macos() : stored('relay.metaCtrl') === '1';
+const pending = new Map(), decoded: any[] = [], held = new Set<number>(), latched = new Map<number, Element>();
+const clamp = (value: number, low: number, high: number) => Math.max(low, Math.min(high, value));
+
+function macos(): boolean {
+  const platform = (globalThis as any).navigator?.userAgentData?.platform || (globalThis as any).navigator?.platform || '';
+  return platform === 'macOS' || platform === 'MacIntel';
+}
+const SWAP_META_CONTROL: Record<number, number> = { 224: 227, 227: 224, 228: 231, 231: 228 };
+function mapKey(code: number): number {
+  return metaAsCtrl ? SWAP_META_CONTROL[code] ?? code : code;
+}
+
+function setModifier(code: number, down: boolean) {
+  if (code < 224 || code > 231) return;
+  modifiers = down ? modifiers | 1 << (code - 224) : modifiers & ~(1 << (code - 224));
+}
+function syncCaps(event: KeyboardEvent) {
+  if (viewOnly) return;
+  const local = event.getModifierState('CapsLock');
+  if (local === capsLock) return;
+  if (sendInput({ type: 'keyDown', key: keys.CapsLock }) && sendInput({ type: 'keyUp', key: keys.CapsLock })) capsLock = local;
+}
+function clearLatched() {
+  for (const button of latched.values()) button.setAttribute('aria-pressed', 'false');
+  latched.clear();
+}
+function releaseLatched() {
+  for (const code of latched.keys()) releaseKey(code);
+  clearLatched();
+}
+const authHeaders = () => accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
+function sendInput(event: InputEvent): boolean {
+  if (!ready || socket?.readyState !== WebSocket.OPEN || (viewOnly && event.type !== 'releaseAll')) return false;
+  socket.send(encodeInput({ ...event, buttons, modifiers }, generation, 0));
+  return true;
+}
+function holdKey(code: number): boolean {
+  setModifier(code, true);
+  if (sendInput({ type: 'keyDown', key: code })) return true;
+  setModifier(code, false);
+  return false;
+}
+function releaseKey(code: number) {
+  setModifier(code, false);
+  sendInput({ type: 'keyUp', key: code });
+}
+function dropLatch(code: number): boolean {
+  const button = latched.get(code);
+  if (!button) return false;
+  latched.delete(code);
+  button.setAttribute('aria-pressed', 'false');
+  releaseKey(code);
+  return true;
+}
+function release() {
+  buttons = modifiers = 0;
+  if (ready) sendInput({ type: 'releaseAll' });
+  held.clear();
+  clearLatched();
+}
+function reset() {
+  release();
+  ready = false;
+  cursorAvailable = false;
+  cursor.width = cursor.height = 1;
+  renderCursor();
+  clearTimeout(deadline);
+  cancelAnimationFrame(frameHandle);
+  frameHandle = 0;
+  drawnThisFrame = false;
+  pending.clear();
+  for (const item of decoded) item.frame.close();
+  decoded.length = 0;
+  stats.outstanding = 0;
+  stats.pendingBytes = 0;
+  generation = 0;
+  capsLock = false;
+  sequence = 0;
+  lastTimestamp = -1;
+  if (decoder && decoder.state !== 'closed') decoder.close();
+  decoder = undefined as any;
+}
+function fail(message: string) {
+  stats.decodeerrors++;
+  status.textContent = message;
+  const old = socket;
+  reset();
+  if (old && old.readyState < WebSocket.CLOSING) old.close();
+}
+function watchPending(current: number) {
+  clearTimeout(deadline);
+  const oldest = pending.values().next().value as any;
+  if (oldest) {
+    deadline = setTimeout(() => {
+      if (current === epoch) fail('Decoder timed out; reconnecting');
+    }, Math.max(0, oldest.arrived + 5000 - performance.now()));
+  }
+}
+function schedulePresent() {
+  if (!frameHandle) frameHandle = requestAnimationFrame(present);
+}
+function ackFrame(item: any): boolean {
+  try {
+    if (socket?.readyState !== WebSocket.OPEN) throw new Error('Connection closed before ACK');
+    socket.send(header(2, item.gen, item.seq, 0));
+    return true;
+  } catch (error: any) {
+    fail(`ACK failed: ${error.message}`);
+    return false;
+  }
+}
+function retireDecoded() {
+  if (transportBroken || socket?.readyState !== WebSocket.OPEN) return;
+  for (const item of decoded) if (!ackFrame(item)) break;
+}
+function draw(item: any): boolean {
+  try {
+    if (item.gen !== generation) throw new Error('Stale decoded frame');
+    ctx.drawImage(item.frame, 0, 0, canvas.width, canvas.height);
+  } catch (error: any) {
+    item.frame.close();
+    fail(`Draw failed: ${error.message}`);
+    return false;
+  }
+  item.frame.close();
+  stats.drawn++;
+  const wasReady = ready;
+  ready = true;
+  if (!wasReady) renderCursor();
+  retry = 0;
+  status.textContent = 'Live · click to control';
+  drawnThisFrame = true;
+  return ackFrame(item);
+}
+function presentDecoded(item: any): boolean {
+  if (!decoded.length && !drawnThisFrame) {
+    if (!draw(item)) return false;
+  } else {
+    decoded.push(item);
+  }
+  while (decoded.length > 3) {
+    const dropped = decoded.shift();
+    dropped.frame.close();
+    stats.superseded++;
+    if (!ackFrame(dropped)) return false;
+  }
+  schedulePresent();
+  return true;
+}
+function present() {
+  frameHandle = 0;
+  drawnThisFrame = false;
+  const item = decoded.shift();
+  if (!item || !draw(item)) return;
+  schedulePresent();
+}
+function codecFromSps(bytes: Uint8Array): string {
+  for (let i = 0; i + 7 < bytes.length; i++) {
+    let n = 0;
+    if (bytes[i] === 0 && bytes[i + 1] === 0 && bytes[i + 2] === 1) n = i + 3;
+    else if (bytes[i] === 0 && bytes[i + 1] === 0 && bytes[i + 2] === 0 && bytes[i + 3] === 1) n = i + 4;
+    if (n && n + 3 < bytes.length && (bytes[n] & 31) === 7) {
+      return `avc1.${[bytes[n + 1], bytes[n + 2], bytes[n + 3]].map((v) => v.toString(16).padStart(2, '0')).join('')}`;
+    }
+  }
+  throw new Error('Keyframe is missing SPS');
+}
+function connect() {
+  clearTimeout(retryTimer);
+  epoch++;
+  const current = epoch;
+  if (socket && socket.readyState < WebSocket.CLOSING) {
+    release();
+    retireDecoded();
+    socket.close();
+  }
+  reset();
+  status.textContent = 'Connecting…';
+  if (!('VideoDecoder' in window) || !('EncodedVideoChunk' in window)) {
+    status.textContent = 'WebCodecs unavailable in this browser';
+    return;
+  }
+  socket = new WebSocket(
+    `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/stream`,
+    accessToken ? ['nsl1', `bearer.${accessToken}`] : 'nsl1',
+  );
+  transportBroken = false;
+  loadCapabilities();
+  const ws = socket;
+  ws.binaryType = 'arraybuffer';
+  ws.onopen = () => {
+    if (current === epoch) {
+      status.textContent = 'Waiting for frame…';
+      deadline = setTimeout(() => {
+        if (current === epoch) fail('First frame timed out; reconnecting');
+      }, 5000);
+    }
+  };
+  ws.onmessage = (e: MessageEvent) => {
+    if (current !== epoch || ws.readyState !== WebSocket.OPEN) return;
+    try {
+      if (
+        !(e.data instanceof ArrayBuffer) || e.data.byteLength < 20 ||
+        e.data.byteLength > 8388640
+      ) throw new Error('Invalid frame length');
+      const v = new DataView(e.data), gen = v.getUint32(8), seq = v.getUint32(12), flags = v.getUint16(6);
+      if (v.getUint32(0) !== 0x4e534c31 || v.getUint8(4) !== 1 || v.getUint32(16) !== e.data.byteLength - 20) {
+        throw new Error('Invalid message envelope');
+      }
+      if (v.getUint8(5) === 6) { receiveCursor(e.data); return; }
+      if (e.data.byteLength < 33) throw new Error('Invalid frame length');
+      const width = v.getUint16(20), height = v.getUint16(22), pts = v.getBigUint64(24);
+      if (
+        v.getUint8(5) !== 1 || flags > 1 || !gen || !seq ||
+        !width || width > 1920 || !height || height > 1080 ||
+        pts > BigInt(Number.MAX_SAFE_INTEGER)
+      ) throw new Error('Invalid frame header');
+      if (generation && gen < generation) throw new Error('Stale generation');
+      if (gen !== generation) {
+        reset();
+        generation = gen;
+        if (!(flags & 1) || seq !== 1) {
+          throw new Error('Generation must start with a keyframe');
+        }
+      }
+      const data = new Uint8Array(e.data, 32), timestamp = Number(pts);
+      if (
+        seq !== sequence + 1 || timestamp <= lastTimestamp ||
+        pending.size >= 8 || stats.pendingBytes + data.byteLength > 8388608
+      ) throw new Error('Unexpected frame sequence or queue limit');
+      sequence = seq;
+      lastTimestamp = timestamp;
+      stats.received++;
+      stats.bytes += data.byteLength;
+      pending.set(timestamp, { gen, seq, bytes: data.byteLength, arrived: performance.now() });
+      stats.outstanding = pending.size;
+      stats.pendingBytes += data.byteLength;
+      stats.pendingHighWater = Math.max(stats.pendingHighWater, pending.size);
+      watchPending(current);
+      if (!decoder) {
+        if (canvas.width !== width || canvas.height !== height) {
+          canvas.width = width; canvas.height = height;
+          canvas.style.setProperty('--w', String(width)); canvas.style.setProperty('--h', String(height));
+          syncSize();
+        }
+        const config = { codec: codecFromSps(data), codedWidth: width, codedHeight: height, optimizeForLatency: true };
+        const instance = new VideoDecoder({
+          output(frame: VideoFrame) {
+            let retained = false;
+            try {
+              if (current !== epoch || decoder !== instance) return;
+              const item = pending.get(frame.timestamp);
+              if (!item || item.gen !== generation) {
+                throw new Error('Unexpected decoded frame');
+              }
+              retained = true;
+              pending.delete(frame.timestamp);
+              stats.pendingBytes -= item.bytes;
+              stats.outstanding = pending.size;
+              if (!presentDecoded({ gen: item.gen, seq: item.seq, frame })) return;
+              watchPending(current);
+            } catch (error: any) {
+              fail(`Draw failed: ${error.message}`);
+            } finally {
+              if (!retained) frame.close();
+            }
+          },
+          error(error: Error) {
+            if (current === epoch && decoder === instance) fail(`Decode failed: ${error.message}`);
+          },
+        } as any);
+        decoder = instance;
+        decoder.configure(config);
+      }
+      decoder.decode(
+        new EncodedVideoChunk({ type: flags & 1 ? 'key' : 'delta', timestamp, data }),
+      );
+    } catch (error: any) {
+      if (current === epoch) fail(error.message);
+    }
+  };
+  ws.onerror = () => {
+    if (current === epoch) { transportBroken = true; status.textContent = 'Connection error'; }
+  };
+  ws.onclose = () => {
+    if (current !== epoch) return;
+    reset();
+    if (document.hidden) {
+      status.textContent = 'Paused while hidden';
+      return;
+    }
+    if (retry >= 5) {
+      status.textContent += ' · reconnect manually';
+      return;
+    }
+    const delay = Math.min(1000 * 2 ** retry++, 8000);
+    status.textContent += ` · retrying in ${delay / 1000}s`;
+    retryTimer = setTimeout(connect, delay);
+    checkAccess(current);
+  };
+}
+function position(e: MouseEvent) {
+  pointerPosition = { clientX: e.clientX, clientY: e.clientY, pointerType: (e as PointerEvent).pointerType };
+  renderCursor();
+  const r = canvas.getBoundingClientRect();
+  if (r.width <= 0 || r.height <= 0) return;
+  const px = clamp(Math.floor((e.clientX - r.left) * canvas.width / r.width), 0, canvas.width - 1);
+  const py = clamp(Math.floor((e.clientY - r.top) * canvas.height / r.height), 0, canvas.height - 1);
+  x = px / (canvas.width - 1);
+  y = py / (canvas.height - 1);
+}
+canvas.addEventListener('keydown', (e) => {
+  const code = mapKey(keys[e.code]);
+  if (!code) return;
+  e.preventDefault();
+  syncCaps(e);
+  if (e.code === 'CapsLock') return;
+  if (e.repeat || held.has(code)) return;
+  if (!holdKey(code)) return;
+  held.add(code);
+  if (code < 224) releaseLatched();
+});
+canvas.addEventListener('keyup', (e) => {
+  const code = mapKey(keys[e.code]);
+  if (!code) return;
+  e.preventDefault();
+  syncCaps(e);
+  if (e.code === 'CapsLock') return;
+  if (!held.delete(code)) return;
+  if (!dropLatch(code)) releaseKey(code);
+});
+canvas.addEventListener('pointermove', (e) => {
+  position(e);
+  sendInput({ type: 'pointerMove', x, y });
+});
+canvas.addEventListener('pointerleave', () => { pointerPosition = null; renderCursor(); });
+new ResizeObserver(renderCursor).observe(canvas);
+window.addEventListener('scroll', renderCursor, { passive: true });
+const buttonMap: Record<number, 1 | 2 | 3> = { 0: 1, 1: 2, 2: 3 };
+canvas.addEventListener('pointerdown', (e) => {
+  const button = buttonMap[e.button];
+  if (!button) return;
+  e.preventDefault();
+  canvas.focus();
+  position(e);
+  buttons |= 1 << (button - 1);
+  canvas.setPointerCapture(e.pointerId);
+  sendInput({ type: 'buttonDown', button, x, y });
+});
+canvas.addEventListener('pointerup', (e) => {
+  const button = buttonMap[e.button];
+  if (!button) return;
+  e.preventDefault();
+  position(e);
+  buttons &= ~(1 << (button - 1));
+  sendInput({ type: 'buttonUp', button, x, y });
+  if (!buttons && canvas.hasPointerCapture(e.pointerId)) {
+    canvas.releasePointerCapture(e.pointerId);
+  }
+});
+canvas.addEventListener('pointercancel', release);
+canvas.addEventListener('lostpointercapture', () => {
+  if (buttons) release();
+});
+canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+canvas.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  position(e);
+  for (const [axis, delta] of [[0, e.deltaY], [1, e.deltaX]] as const) {
+    if (delta) {
+      const notches = Math.max(1, Math.round(Math.abs(delta) / 100));
+      sendInput({ type: 'wheel', axis: axis ? 'horizontal' : 'vertical', delta: clamp(Math.sign(delta) * notches * 120, -1200, 1200), x, y });
+    }
+  }
+}, { passive: false });
+canvas.addEventListener('blur', release);
+window.addEventListener('blur', () => { release(); pointerPosition = null; renderCursor(); });
+const METRICS_UNAVAILABLE = 'Cgroup CPU (one core): unavailable · Cgroup RAM: unavailable';
+let hudTimer: any, metricsRequest: AbortController | null, configuredFps = 0;
+function hudText(fps: number, mbps: number, metrics: string) {
+  const stream = `Stream ${canvas.width}x${canvas.height}${configuredFps ? ` @ ${configuredFps} fps` : ''}`;
+  return `${stream} · Drawn FPS: ${fps.toFixed(1)} · Stream Mbps: ${mbps.toFixed(2)} · ${metrics}`;
+}
+function loadCapabilities() {
+  fetch('/capabilities', { cache: 'no-store', redirect: 'error', headers: authHeaders() })
+    .then((response) => (response.ok ? response.json() : null))
+    .then((data) => {
+      if (Number.isFinite(data?.fps) && data.fps > 0) configuredFps = data.fps;
+    })
+    .catch(() => {});
+}
+function startHud() {
+  let previousTime = performance.now(),
+    previousDrawn = stats.drawn,
+    previousBytes = stats.bytes,
+    previousCpu: number | undefined,
+    previousCpuTime = 0,
+    metrics = METRICS_UNAVAILABLE;
+  hudTimer = setInterval(() => {
+    const now = performance.now(), seconds = (now - previousTime) / 1000;
+    const fps = (stats.drawn - previousDrawn) / seconds;
+    const mbps = (stats.bytes - previousBytes) * 8 / seconds / 1_000_000;
+    document.querySelector('#hud')!.textContent = hudText(fps, mbps, metrics);
+    previousTime = now;
+    previousDrawn = stats.drawn;
+    previousBytes = stats.bytes;
+    if (!metricsRequest) {
+      const controller = metricsRequest = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 2000);
+      fetch('/metrics', { cache: 'no-store', signal: controller.signal, redirect: 'error', headers: authHeaders() })
+        .then((response) => {
+          if (!response.ok) throw new Error('Metrics unavailable');
+          return response.json();
+        })
+        .then((data) => {
+          const time = performance.now();
+          if (![data.usage_usec, data.memory_current, data.inactive_file].every((n) => Number.isFinite(n) && n >= 0)) {
+            throw new Error('Invalid metrics');
+          }
+          const cpu = previousCpu !== undefined && data.usage_usec >= previousCpu && time > previousCpuTime
+            ? `${((data.usage_usec - previousCpu) / ((time - previousCpuTime) * 1000) * 100).toFixed(1)}%`
+            : 'unavailable';
+          const ram = (Math.max(0, data.memory_current - data.inactive_file) / 1048576).toFixed(1);
+          metrics = `Cgroup CPU (one core): ${cpu} · Cgroup RAM: ${ram} MiB`;
+          previousCpu = data.usage_usec;
+          previousCpuTime = time;
+        })
+        .catch(() => {
+          metrics = METRICS_UNAVAILABLE;
+          previousCpu = undefined;
+        })
+        .finally(() => {
+          clearTimeout(timer);
+          if (metricsRequest === controller) metricsRequest = null;
+        });
+    }
+  }, 1000);
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    clearInterval(hudTimer);
+    metricsRequest?.abort();
+    metricsRequest = null;
+    document.querySelector('#hud')!.textContent = hudText(0, 0, METRICS_UNAVAILABLE);
+    release();
+    epoch++;
+    retireDecoded();
+    if (socket) socket.close();
+    reset();
+    clearTimeout(retryTimer);
+    status.textContent = 'Paused while hidden';
+  } else {
+    startHud();
+    retry = 0;
+    connect();
+  }
+});
+function checkAccess(current: number) {
+  fetch('/capabilities', { cache: 'no-store', redirect: 'error', headers: authHeaders() })
+    .then((response) => {
+      if (response.status !== 401 || current !== epoch) return;
+      clearTimeout(retryTimer);
+      status.textContent = accessToken ? 'Access token rejected' : 'Access token required';
+      setExpanded(true);
+      showPanel('connection', true);
+      (document.querySelector('#access-token') as HTMLInputElement).focus();
+    })
+    .catch(() => {});
+}
+function stored(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch (error) {
+    return null;
+  }
+}
+function store(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch (error) {}
+}
+const scaleButtons: Record<string, Element> = {
+  fit: document.querySelector('[data-scale="fit"]')!,
+  actual: document.querySelector('[data-scale="actual"]')!,
+  sharp: document.querySelector('[data-scale="sharp"]')!,
+};
+let scaleMode = stored('relay.scale') === 'actual' ? 'actual' : 'fit', sharpPixels = stored('relay.sharp') === '1', dprQuery: MediaQueryList | undefined;
+function syncSize() {
+  if (scaleMode !== 'actual') {
+    canvas.style.width = canvas.style.height = '';
+    return;
+  }
+  const ratio = window.devicePixelRatio || 1;
+  canvas.style.width = `${canvas.width / ratio}px`;
+  canvas.style.height = `${canvas.height / ratio}px`;
+}
+function applyScale() {
+  document.body.classList.toggle('actual', scaleMode === 'actual');
+  canvas.style.imageRendering = sharpPixels ? 'pixelated' : '';
+  scaleButtons.fit.setAttribute('aria-pressed', String(scaleMode === 'fit'));
+  scaleButtons.actual.setAttribute('aria-pressed', String(scaleMode === 'actual'));
+  scaleButtons.sharp.setAttribute('aria-pressed', String(sharpPixels));
+  syncSize();
+  renderCursor();
+}
+function setScale(mode: string) {
+  scaleMode = mode === 'actual' ? 'actual' : 'fit';
+  store('relay.scale', scaleMode);
+  applyScale();
+}
+function toggleSharp() {
+  sharpPixels = !sharpPixels;
+  store('relay.sharp', sharpPixels ? '1' : '0');
+  applyScale();
+}
+function watchDpr() {
+  syncSize();
+  dprQuery?.removeEventListener?.('change', watchDpr);
+  dprQuery = window.matchMedia?.(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
+  dprQuery?.addEventListener?.('change', watchDpr);
+}
+window.addEventListener('resize', watchDpr);
+const metaButton = document.querySelector('#meta-ctrl')!;
+function applyMeta() {
+  metaButton.setAttribute('aria-pressed', String(metaAsCtrl));
+}
+function toggleMeta() {
+  release();
+  metaAsCtrl = !metaAsCtrl;
+  store('relay.metaCtrl', metaAsCtrl ? '1' : '0');
+  applyMeta();
+}
+const toolbar = document.querySelector('#toolbar')!,
+  toggle = document.querySelector('#toolbar-toggle')!,
+  actions = document.querySelector('#toolbar-actions')!,
+  dot = document.querySelector('#dot')!,
+  panels: Record<string, HTMLElement> = { keys: document.querySelector('#keys-panel')!, connection: document.querySelector('#connection-panel') as HTMLElement };
+panels.scale = document.querySelector('#scale-panel') as HTMLElement;
+function showPanel(name: string | null, open = panels[name!]?.hidden) {
+  for (const [key, panel] of Object.entries(panels)) {
+    panel.hidden = !(key === name && open);
+    toolbar.querySelector(`[data-action="${key}"]`)!.setAttribute('aria-expanded', String(!panel.hidden));
+  }
+}
+function setExpanded(open: boolean) {
+  actions.hidden = !open;
+  toolbar.classList.toggle('open', open);
+  toggle.setAttribute('aria-expanded', String(open));
+  if (!open) showPanel(null);
+}
+function syncStatus() {
+  const text = status.textContent ?? '';
+  dot.className = 'dot' + (text.startsWith('Live') ? ' live' : /^(Connecting|Waiting|Paused)/.test(text) ? '' : ' error');
+  toggle.setAttribute('title', text);
+  toggle.setAttribute('aria-label', `Viewer controls: ${text}`);
+}
+new MutationObserver(syncStatus).observe(status, { childList: true, characterData: true, subtree: true });
+syncStatus();
+toggle.addEventListener('click', () => setExpanded(actions.hidden));
+canvas.addEventListener('pointerdown', () => showPanel(null));
+const toolbarActions: Record<string, (button: Element) => void> = {
+  fullscreen: () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen())
+    .catch(() => {}),
+  scale: () => showPanel('scale'),
+  keys: () => showPanel('keys'),
+  connection: () => showPanel('connection'),
+  screenshot: () => canvas.toBlob((blob) => {
+    if (!blob) return;
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `desktop-${new Date().toISOString().replace(/[:.]/g, '-')}.png`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  }, 'image/png'),
+  viewonly: (button) => {
+    release();
+    viewOnly = !viewOnly;
+    button.setAttribute('aria-pressed', String(viewOnly));
+  },
+  stats: (button) => {
+    const panel = document.querySelector('#stats')!;
+    panel.hidden = !panel.hidden;
+    button.setAttribute('aria-pressed', String(!panel.hidden));
+  },
+};
+actions.addEventListener('click', (e) => {
+  const button = (e.target as Element).closest('[data-action]');
+  if (button) toolbarActions[(button as HTMLElement).dataset.action!](button);
+});
+document.addEventListener('fullscreenchange', () => {
+  toolbar.querySelector('[data-action="fullscreen"]')!.setAttribute('aria-pressed', String(Boolean(document.fullscreenElement)));
+});
+panels.scale.addEventListener('click', (e) => {
+  const button = (e.target as Element).closest('[data-scale]');
+  if (!button) return;
+  if ((button as HTMLElement).dataset.scale === 'sharp') toggleSharp();
+  else setScale((button as HTMLElement).dataset.scale!);
+});
+function keepCanvasFocus(e: Event) {
+  if ((e.target as Element).closest('[data-hold]') || (e.target as Element).closest('[data-keys]') || (e.target as Element).closest('#meta-ctrl')) e.preventDefault();
+}
+panels.keys.addEventListener('pointerdown', keepCanvasFocus);
+panels.keys.addEventListener('mousedown', keepCanvasFocus);
+panels.keys.addEventListener('click', (e) => {
+  if ((e.target as Element).closest('#meta-ctrl')) {
+    toggleMeta();
+    canvas.focus();
+    return;
+  }
+  const hold = (e.target as Element).closest('[data-hold]');
+  if (hold) {
+    const code = keys[(hold as HTMLElement).dataset.hold!];
+    if (!dropLatch(code) && holdKey(code)) {
+      latched.set(code, hold);
+      hold.setAttribute('aria-pressed', 'true');
+    }
+    canvas.focus();
+    return;
+  }
+  const button = (e.target as Element).closest('[data-keys]');
+  if (!button) return;
+  const codes = (button as HTMLElement).dataset.keys!.split('+').map((name) => keys[name]);
+  const pressed: number[] = [];
+  for (const code of codes) if (!latched.has(code) && holdKey(code)) pressed.push(code);
+  for (const code of pressed.reverse()) releaseKey(code);
+  if (codes.some((code) => code < 224)) releaseLatched();
+  showPanel(null);
+  canvas.focus();
+});
+panels.connection.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const value = (document.querySelector('#access-token') as HTMLInputElement).value.trim();
+  if (value && (!/^[0-9a-f]{64}$/.test(value) || !trustedPage)) {
+    status.textContent = 'Use a 64-character token over HTTPS or a localhost tunnel';
+    return;
+  }
+  accessToken = value;
+  retry = 0;
+  connect();
+});
+if (!document.hidden) startHud();
+applyScale();
+applyMeta();
+watchDpr();
+connect();
+
+export { socket, capsLock, connect, reset, setScale, toggleSharp, watchDpr, toggleMeta };

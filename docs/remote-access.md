@@ -20,7 +20,7 @@ Use this for any gateway that terminates HTTPS and forwards to the VM (a cloud s
 relay up -d --public https://desktop.example.com
 ```
 
-`--public` binds `0.0.0.0` (unless `--bind` says otherwise), generates a token, and accepts only that origin. Without `--tls-cert` the engine serves plain HTTP and expects the proxy to terminate TLS; `up` prints `Expects a TLS proxy in front: ...` as a reminder. Run it only where the port is reachable just by the proxy. `up` prints the viewer link with the token in the URL fragment.
+`--public` binds `0.0.0.0` (unless `--bind` says otherwise), generates a token, and accepts only that origin. Without `--tls-cert` the engine serves plain HTTP and expects the proxy to terminate TLS; `up` prints a `TLS proxy` row with the forwarding target as a reminder. Run it only where the port is reachable just by the proxy. `up` prints the viewer link with the token in the URL fragment.
 
 The proxy must:
 

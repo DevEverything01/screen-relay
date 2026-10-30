@@ -10,7 +10,7 @@
 
 static bool engineConfig(const std::vector<std::string>& options, relay::Config& config) {
   relay::Config parsed;
-  std::vector<std::string> values = {"relay-engine", "--viewer-dir", "viewer"};
+  std::vector<std::string> values = {"relay-engine", "--viewer-dir", "build/test-viewer"};
   values.insert(values.end(), options.begin(), options.end());
   std::vector<char*> argv;
   for (auto& value : values) argv.push_back(value.data());

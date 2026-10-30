@@ -12,8 +12,6 @@
 
 A file named by `--config` or `RELAY_CONFIG` that is missing is an error. The default path is used only when it exists.
 
-Reading needs PyYAML (`python3-yaml` on Debian/Ubuntu). `./install.sh` installs it with the engine; `--client-only` does not.
-
 ## Keys
 
 | Key | Default | Allowed | Applies to |
@@ -28,9 +26,12 @@ Reading needs PyYAML (`python3-yaml` on Debian/Ubuntu). `./install.sh` installs 
 | `server.public` | unset | HTTPS origin such as `https://desktop.example.com` | Every backend |
 | `server.tls_cert` | unset | certificate file | Every backend |
 | `server.tls_key` | unset | private key for the certificate | Every backend |
+| `keyboard.layout` | `us` | layout name or comma-separated list letters, digits, `_` and `-` | Linux only; applied with `setxkbmap` |
 | `desktop` | `xfce`; `none` with `--display` | `xfce`, `none`, or a command | Linux only |
 
 Unknown keys are an error and name the dotted path. Wrong types and out-of-range values are errors too.
+
+Each key also has a `RELAY_*` variable: `RELAY_RESOLUTION`, `RELAY_FPS`, `RELAY_BITRATE_MIN`, `RELAY_BITRATE_START`, `RELAY_BITRATE_MAX`, `RELAY_PORT`, `RELAY_BIND`, `RELAY_PUBLIC`, `RELAY_TLS_CERT`, `RELAY_TLS_KEY`, `RELAY_KEYBOARD_LAYOUT` and `RELAY_DESKTOP`.
 
 ## Backends
 
@@ -39,10 +40,11 @@ A key says what the user wants. A backend either honors the key or says clearly 
 - `stream.*` and `server.*` are handled by the engine core and server, so every backend honors them.
 - `display.resolution` is the size of the display relay creates. A backend that attaches to an existing screen uses that screen's size instead and prints a note that the setting is ignored.
 - `desktop` is Linux only. It picks the desktop session relay starts.
+- `keyboard.layout` is Linux only. It sets the X11 keyboard layout of the display relay creates, so `relay type` and physical key combos match that layout.
 
 ## Precedence
 
-Command-line flags beat the file, and the file beats the defaults. `relay up --port 9000` uses 9000 even when the file sets another port.
+An option beats its `RELAY_*` variable, which beats the file, which beats the defaults. An explicit invalid value fails instead of falling back. `relay up --port 9000` uses 9000 even when the file sets another port.
 
 `--display :N` attaches to an existing display. Relay uses that display's size, ignores `display.resolution`, and prints one line to stderr when the file sets it. Any backend that attaches to an existing screen does the same.
 
@@ -63,6 +65,8 @@ server:
   public: https://desktop.example.com
   tls_cert: /path/fullchain.pem
   tls_key: /path/key.pem
+keyboard:
+  layout: us
 desktop: xfce
 ```
 

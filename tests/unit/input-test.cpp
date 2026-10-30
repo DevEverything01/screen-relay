@@ -11,7 +11,7 @@ namespace {
 void require(bool ok, const char* message) { if (!ok) throw std::runtime_error(message); }
 
 struct Call {
-  enum class Kind { pressKey, releaseKey, pressButton, releaseButton, move, scroll, resetLocks, flush } kind;
+  enum class Kind { pressKey, releaseKey, typeText, pressButton, releaseButton, move, scroll, resetLocks, flush } kind;
   uint32_t id = 0;
   int x = 0, y = 0;
 };
@@ -26,14 +26,24 @@ class FakeBackend final : public relay::InputBackend {
   }
   void pressKey(relay::NativeKey key) override { calls.push_back({Call::Kind::pressKey, key}); }
   void releaseKey(relay::NativeKey key) override { calls.push_back({Call::Kind::releaseKey, key}); }
+  bool typeText(uint32_t codepoint) override {
+    if (codepoint == 0x1F600) return false;
+    calls.push_back({Call::Kind::typeText, codepoint});
+    return true;
+  }
   void pressButton(unsigned button) override { calls.push_back({Call::Kind::pressButton, button}); }
   void releaseButton(unsigned button) override { calls.push_back({Call::Kind::releaseButton, button}); }
   void move(int x, int y) override { calls.push_back({Call::Kind::move, 0, x, y}); }
   void scroll(unsigned axis, int notches) override { calls.push_back({Call::Kind::scroll, axis, notches}); }
   void resetLocks() override { calls.push_back({Call::Kind::resetLocks}); }
+  void fence(std::shared_ptr<relay::InputFence> mark) override { fences.push_back(std::move(mark)); }
+  size_t pending() const override { return 0; }
+  void cancel() override { cancelled = true; }
   void flush() override { calls.push_back({Call::Kind::flush}); }
   std::pair<uint16_t, uint16_t> dimensions() const override { return {1280, 720}; }
   const char* name() const override { return "fake"; }
+  std::vector<std::shared_ptr<relay::InputFence>> fences;
+  bool cancelled = false;
 };
 
 struct Fixture {
@@ -74,7 +84,14 @@ void rejectsInvalidEvents() {
   reject(event(7, 0, 0, 1), "release-all with buttons was accepted");
   reject(event(7, 0, 0, 0, 1), "release-all with modifiers was accepted");
   reject(event(0, 10), "type 0 was accepted");
-  reject(event(8, 10), "type 8 was accepted");
+  reject(event(8, 10, 0x4e2d), "a text event with a key code was accepted");
+  reject(event(8, 0, 0), "text value 0 was accepted");
+  reject(event(8, 0, -1), "negative text value was accepted");
+  reject(event(8, 0, 0x110000), "text value above the Unicode range was accepted");
+  reject(event(8, 0, 0xD800), "text value at the start of the surrogate range was accepted");
+  reject(event(8, 0, 0xDFFF), "text value at the end of the surrogate range was accepted");
+  reject(event(8, 0, 0xE9, 1), "a text event with buttons was accepted");
+  reject(event(8, 0, 0xE9, 0, 1), "a text event with modifiers was accepted");
   reject(event(1, 10, 1), "a value on a key press was accepted");
   reject(event(3, 0, 1), "a value on a pointer move was accepted");
   reject(event(4, 1, 120), "a value on a button press was accepted");
@@ -185,19 +202,65 @@ void resetsLocks() {
   require(times(f.backend, Call::Kind::flush) == 1, "the lock reset was not flushed");
 }
 
+void typesText() {
+  Fixture f;
+  require(f.input.apply(event(8, 0, 1)) == relay::InputStatus::ok, "text value 1 was rejected");
+  require(f.input.apply(event(8, 0, 0xD7FF)) == relay::InputStatus::ok, "text value before the surrogate range was rejected");
+  require(f.input.apply(event(8, 0, 0xE000)) == relay::InputStatus::ok, "text value after the surrogate range was rejected");
+  require(f.input.apply(event(8, 0, 0x10FFFF)) == relay::InputStatus::ok, "text value 0x10FFFF was rejected");
+  require(times(f.backend, Call::Kind::typeText) == 4 && times(f.backend, Call::Kind::flush) == 4,
+          "not every text event reached the backend or was flushed");
+  require(f.backend.calls.size() == 8 && f.backend.calls[0].id == 1 && f.backend.calls[2].id == 0xD7FF &&
+          f.backend.calls[4].id == 0xE000 && f.backend.calls[6].id == 0x10FFFF,
+          "text events reached the backend in the wrong order or with the wrong codepoint");
+  f.backend.calls.clear();
+  require(f.input.apply(event(1, 10)) == relay::InputStatus::ok, "key press was rejected");
+  require(f.input.apply(event(8, 0, 0xE9)) == relay::InputStatus::ok, "text event was rejected while a key was held");
+  require(times(f.backend, Call::Kind::typeText) == 1 && times(f.backend, Call::Kind::pressKey) == 1 &&
+          times(f.backend, Call::Kind::releaseKey) == 0, "a text event pressed or released a key");
+  require(f.input.apply(event(7)) == relay::InputStatus::ok, "release-all was rejected");
+  require(times(f.backend, Call::Kind::releaseKey) == 1, "a text event changed the held key set");
+  f.backend.calls.clear();
+  require(f.input.apply(event(8, 0, 0x1F600)) == relay::InputStatus::unsupported, "untypeable text was not unsupported");
+  require(f.backend.calls.empty(), "an unsupported text event reached the backend");
+}
+
 void reportsUnsupportedUsage() {
   Fixture f;
   require(f.input.apply(event(1, 20)) == relay::InputStatus::unsupported, "a usage without a native key was not unsupported");
   require(f.input.apply(event(2, 20)) == relay::InputStatus::unsupported, "release of an unmapped usage was not unsupported");
   require(f.backend.calls.empty(), "an unmapped usage reached the backend");
 }
+
+struct Mark final : relay::InputFence {
+  bool applied = true, finished = false;
+  size_t dropped = 0;
+  void complete(bool value, size_t lost) override { applied = value; dropped = lost; finished = true; }
+};
+
+void fencesAfterWork() {
+  Fixture f;
+  const auto mark = std::make_shared<Mark>();
+  require(f.input.apply(event(8, 0, 'a')) == relay::InputStatus::ok, "text event was rejected");
+  f.input.fence(mark);
+  require(f.backend.fences.size() == 1 && f.backend.fences.front() == mark, "the fence did not reach the backend");
+  require(times(f.backend, Call::Kind::typeText) == 1, "the fence was posted before the batch text");
+  require(!mark->finished, "the backend completed the fence before it applied the work");
+}
+
+void cancelsQueuedWork() {
+  Fixture f;
+  f.input.cancel();
+  require(f.backend.cancelled, "the controller did not forward the cancel");
+}
 }
 
 int main() {
   try {
     rejectsInvalidEvents(); acceptsBoundaryValues(); mapsCoordinates(); pointerEventsMoveFirst();
-    dedupesHeldInput(); sharesNativeKey(); releasesAllHeldInput(); resetsLocks(); reportsUnsupportedUsage();
-    std::puts("input: validation, coordinates, dedupe, release-all, locks and unsupported usages passed");
+    dedupesHeldInput(); sharesNativeKey(); releasesAllHeldInput(); resetsLocks(); typesText(); reportsUnsupportedUsage();
+    fencesAfterWork(); cancelsQueuedWork();
+    std::puts("input: validation, coordinates, dedupe, release-all, locks, text, fences and unsupported usages passed");
     return 0;
   } catch (const std::exception& error) {
     std::fprintf(stderr, "input: %s\n", error.what());

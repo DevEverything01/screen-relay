@@ -11,7 +11,7 @@ Start with `relay doctor`. It prints the fix command for each problem it finds. 
 | `already_running` | A session with that name is running. | `relay down --name N`, or use another `--name` and `--port`. |
 | `engine exited with code 1` and `Cannot listen on 127.0.0.1:8080` in the log | Another session or process owns the port. | `relay up --port 8081`, or `relay down` the old session. |
 | Blank page, "WebCodecs" or decoder error | Browser lacks H.264 WebCodecs, or the page is not a secure context. | Use current Chrome, Edge or Safari over `https://` or `http://127.0.0.1`. |
-| Viewer or command says busy (HTTP 409) | One controller at a time. A viewer or an SDK session holds control. | Close the other viewer or SDK session, then retry. Screenshots are not affected. A long `type` may have stopped partway; the error's `applied` says how far. |
+| Viewer or command says busy (HTTP 409) | One controller at a time. A viewer or an SDK session holds control. | Close the other viewer or SDK session, then retry. Screenshots are not affected. A long `type` may have stopped partway; the JSON error's `data.applied` says how far. |
 | `busy` from `screenshot` (HTTP 503) | A screenshot is already running. | Retry. Only one runs at a time. |
 | `unauthorized` (HTTP 401) | Missing or wrong token. | Pass `--token-file` or set `RELAY_TOKEN_FILE`. Open the viewer from the `#token=` link. From the host to a container: [Docker](docker.md#control-from-the-host). |
 | `unauthorized` (HTTP 403) | `Host` or `Origin` is not loopback or the `--public` URL. | Connect through `127.0.0.1`/`localhost`, or through the `--public` URL with the proxy keeping `Host` and `Origin`. |
