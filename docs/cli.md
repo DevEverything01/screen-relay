@@ -31,6 +31,8 @@ An existing session's `status` exits 0 for `ready`, `starting`, `stopped` and `f
 
 Root help groups commands under Session, Control and Machine. Command help lists arguments, alphabetical options, global options, examples, notes and a documentation link. Empty sections are omitted. `relay <COMMAND> --help --json` returns metadata with `path`, `summary`, `arguments`, `options`, `examples` and the result schema. `relay help --all --json` returns every command.
 
+When an AI agent is detected, root help shows the full `Start here (for AI agents)` block and output is plain; otherwise root help gives one pointer line under the usage line. `RELAY_AGENT=1` or `RELAY_AGENT=0` forces either mode.
+
 Global options work before or after the command: `-h`/`--help`, `-v`/`--version`, `--json`, `--no-color` and `--name <NAME>`. Version output contains only the version, `0.1.0`; `--version --json` returns `{"version":"0.1.0"}`. Options accept `--name <NAME>` and `--name=NAME`. `--` ends option parsing. Boolean options accept `--no-<OPTION>`. Unknown options, commands and extra positionals fail before work, with at most one close suggestion and a help command. Options do not accept prefix matching.
 
 The only short options are `-h`, `-v`, `-f` (`logs --follow`), and `-d` (`up --detach`, the compose convention). `--name` has no short form.
@@ -66,6 +68,7 @@ Precedence is an explicit option, its `RELAY_*` environment variable, the config
 | `RELAY_RESOLUTION`, `RELAY_FPS`, `RELAY_BITRATE_MIN`, `RELAY_BITRATE_START`, `RELAY_BITRATE_MAX`, `RELAY_KEYBOARD_LAYOUT` | The matching config keys |
 | `RELAY_URL` | Client `--url` |
 | `RELAY_TOKEN_FILE` | Client `--token-file` |
+| `RELAY_AGENT` | Agent mode: `1` shows the agent help block and forces plain output, `0` shows the one-line pointer and human output. |
 
 ### Client target
 

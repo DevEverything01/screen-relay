@@ -47,6 +47,10 @@ export function nextStep(benefit: string, command: string, args: OutputOptions =
   return `\n  ${benefit}:\n    ${theme(args).command(command)}`;
 }
 
+export function hintStep(instruction: string, hint: string): string {
+  return `\n  ${instruction}:\n    ${hint}`;
+}
+
 export function sessionCommand(command: string, name: string): string {
   return `relay ${command}${name === 'default' ? '' : ` --name ${quote(name)}`}`;
 }

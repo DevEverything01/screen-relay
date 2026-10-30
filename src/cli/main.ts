@@ -1,14 +1,11 @@
 #!/usr/bin/env node
 import { commands, type Args } from './commands.js';
-import { formatHelp, helpDocument } from './help.js';
+import { formatHelp, helpDocument, version } from './help.js';
 import { parseCommand, unknownToken } from './parser.js';
 import { emit, Failure, printFailure, writeText } from './output.js';
 import { RelayError } from '../protocol/index.js';
 
 export { commands } from './commands.js';
-
-declare const __RELAY_VERSION__: string;
-const version = typeof __RELAY_VERSION__ === 'string' ? __RELAY_VERSION__ : '0.0.0';
 
 export async function main(argv = process.argv.slice(2)): Promise<number> {
   let jsonMode = argv.slice(0, argv.indexOf('--') < 0 ? argv.length : argv.indexOf('--')).reduce((json, token) => token === '--json' ? true : token === '--no-json' ? false : json, false);
@@ -39,7 +36,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       if (args.json) {
         const document = command === 'help' && args.all ? Object.keys(commands).map((name) => helpDocument(name)) : helpDocument(topic);
         emit(args, document, '');
-      } else writeText(formatHelp(topic));
+      } else writeText(formatHelp(topic, args));
       return 0;
     }
     args.signal = controller.signal;

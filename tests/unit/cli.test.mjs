@@ -19,6 +19,7 @@ const bundle = buildSync({
   external: ['yaml'],
   platform: 'node',
   format: 'esm',
+  banner: { js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" },
   write: false,
 });
 const bundlePath = join(directory, 'parser.mjs');
@@ -78,5 +79,35 @@ test('invalid URL diagnostics redact credentials and query strings', () => {
     assert.equal(result.status, 2);
     assert.doesNotMatch(result.stderr, /user|abc|def|secret/);
     assert.ok(result.stderr.includes(`Invalid server URL: ${safe}`));
+  }
+});
+
+test('RELAY_AGENT forces the agent block or the pointer line', () => {
+  const help = (value) => spawnSync(process.execPath, [cli, '--help'], {
+    encoding: 'utf8',
+    timeout: 15000,
+    env: { ...process.env, RELAY_AGENT: value },
+  });
+  const agent = help('1');
+  assert.ifError(agent.error);
+  assert.equal(agent.status, 0);
+  assert.match(agent.stdout, /Start here \(for AI agents\):/);
+  assert.doesNotMatch(agent.stdout, /For AI agents: relay skills get core/);
+  const human = help('0');
+  assert.ifError(human.error);
+  assert.equal(human.status, 0);
+  assert.match(human.stdout, /For AI agents: relay skills get core/);
+  assert.doesNotMatch(human.stdout, /Start here \(for AI agents\):/);
+});
+
+test('plain output contains no ANSI escape codes', () => {
+  for (const argv of [['--help'], ['click', '--help'], ['status', '--url', 'https://user:x y@[']]) {
+    const result = spawnSync(process.execPath, [cli, ...argv], {
+      encoding: 'utf8',
+      timeout: 15000,
+      env: { ...process.env, RELAY_AGENT: '0' },
+    });
+    assert.ifError(result.error);
+    assert.doesNotMatch(result.stdout + result.stderr, /\u001b\[/);
   }
 });

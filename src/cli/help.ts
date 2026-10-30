@@ -1,8 +1,16 @@
 import { commands, globalOptions, type Parameter, type Subcommand } from './commands.js';
+import { agent, type OutputOptions } from './mode.js';
+import { theme } from './theme.js';
 
 const docs = 'https://github.com/vercel-labs/relay/blob/main/docs/cli.md';
+const summary = 'Start a streamed Linux desktop and control it';
 const width = 80;
 const labelLimit = 24;
+
+declare const __RELAY_VERSION__: string;
+export const version = typeof __RELAY_VERSION__ === 'string' ? __RELAY_VERSION__ : '0.0.0';
+
+type Style = ReturnType<typeof theme>;
 
 function argumentSyntax(parameter: Parameter): string {
   const value = parameter.valueHint ?? `<${parameter.name.toUpperCase()}>`;
@@ -15,7 +23,8 @@ function optionSyntax(parameter: Parameter): string {
 }
 
 function description(parameter: Parameter): string {
-  return `${parameter.summary}${parameter.default !== undefined ? ` (default: ${parameter.default})` : ''}${parameter.acceptedValues ? `. Values: ${parameter.acceptedValues.join(', ')}` : ''}${parameter.environment ? `. Environment: ${parameter.environment}` : ''}`;
+  const showDefault = parameter.default !== undefined && parameter.default !== false;
+  return `${parameter.summary}${showDefault ? ` (default: ${parameter.default})` : ''}${parameter.acceptedValues ? `. Values: ${parameter.acceptedValues.join(', ')}` : ''}${parameter.environment ? `. Environment: ${parameter.environment}` : ''}`;
 }
 
 function wrapWords(text: string, limit: number): string[] {
@@ -60,7 +69,7 @@ export function helpDocument(name = ''): Record<string, unknown> {
   const publicParameter = ({ validate, deferredDefault, missingReason, brackets, ...parameter }: Parameter) => ({ repeat: 'last', ...parameter });
   return {
     path: name ? `relay ${name}` : 'relay',
-    summary: command?.summary ?? 'Start a streamed Linux desktop and control it',
+    summary: command?.summary ?? summary,
     arguments: command?.arguments.map(publicParameter) ?? [],
     options: [...(command?.options ?? []), ...globalOptions].map(publicParameter),
     examples: command?.examples ?? [],
@@ -71,11 +80,12 @@ export function helpDocument(name = ''): Record<string, unknown> {
   };
 }
 
-function usage(name: string): string {
+function usage(name: string, style: Style): string {
   const command = commands[name];
-  if (!command) return 'Usage: relay <command> [options]';
+  const head = `▲ ${style.strong('relay')}`;
+  if (!command) return `${head} <command> [options]`;
   const tail = command.usageTail ?? command.arguments.map(argumentSyntax).join(' ');
-  return `Usage: relay ${name}${command.separator ? ` ${command.separator}` : ''}${tail ? ` ${tail}` : ''} [options]`;
+  return `${head} ${name}${command.separator ? ` ${command.separator}` : ''}${tail ? ` ${tail}` : ''} [options]`;
 }
 
 const startHere = [
@@ -92,10 +102,15 @@ const startHere = [
   '  relay skills path [name]',
 ];
 
-export function formatHelp(name = ''): string {
+const agentPointer = 'For AI agents: relay skills get core';
+
+export function formatHelp(name = '', args: OutputOptions = {}): string {
+  const style = theme(args, process.stdout);
   const command = commands[name];
-  const lines = [usage(name), '', command?.summary ?? 'Start a streamed Linux desktop and control it'];
-  if (!command) lines.push('', ...startHere);
+  const lines = [style.muted(`relay ${version}`), '', usage(name, style), ''];
+  if (command) lines.push(command.summary);
+  else if (agent) lines.push(summary, '', ...startHere);
+  else lines.push(agentPointer, '', summary);
   if (command?.arguments.length) lines.push('', 'Arguments:', ...parameterRows(command.arguments, false));
   if (command?.options.length) lines.push('', 'Options:', ...parameterRows(command.options, true));
   if (!command) for (const group of ['Session', 'Control', 'Machine']) {
