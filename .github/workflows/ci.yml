@@ -142,4 +142,4 @@ jobs:
           persist-credentials: false
       - run: >-
           docker run --rm -v "$PWD:/src" -w /src "${{ matrix.image }}"
-          sh -c '${{ matrix.setup }} ./install.sh --prefix /usr/local && relay-engine --help && ./install.sh --backend all --no-desktop --prefix /usr/local && relay-engine --help'
+          sh -c '${{ matrix.setup }} ./install.sh --prefix /usr/local && relay-engine --help && ./install.sh --backend wayland --no-desktop --prefix /usr/local && output=$(relay-engine --help) && printf "%s\n" "$output" | grep -Fx "Compiled backends: x11, wayland" && ./install.sh --backend all --no-desktop --prefix /usr/local && relay-engine --help && RELAY_BACKEND=wayland relay doctor'

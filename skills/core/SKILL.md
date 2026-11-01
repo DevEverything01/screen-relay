@@ -17,11 +17,11 @@ On the Linux machine that will show the desktop, from a clone of the repository:
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-- `./install.sh --backend x11|wayland|all` picks the display server to install. The default is `x11`. `wayland` installs sway, XWayland and foot; `all` installs both.
+- `./install.sh --backend x11|wayland|all` picks the display server to install. The default is `x11`. `wayland` installs sway, XWayland, and foot; `all` installs both. Reinstalling keeps existing engine backends; to remove one, delete `<prefix>/lib/relay/relay-engine` and reinstall the backend you want.
 - `--no-deps` skips system packages, so you install the dependencies yourself. `--no-desktop` skips the XFCE desktop packages, D-Bus and fonts on x11. `--prefix DIR` installs under another absolute directory instead of `~/.local`.
 - `--client-only` installs only the CLI, for controlling a session on another machine with `--url` and a token file. It has no engine, so `up` does not work there.
 
-Automatic package installation supports Debian, Ubuntu, Fedora, Arch and Alpine, and needs root or passwordless `sudo`. On another distribution, install the dependencies yourself and pass `--no-deps`. The installer ends by running `relay doctor`, and it is safe to run again.
+Automatic package installation supports Debian, Ubuntu, Fedora, Arch, and Alpine, and needs root or passwordless `sudo`. On another distribution, install the dependencies yourself and pass `--no-deps`. The installer ends by running `relay doctor`, and it is safe to run again.
 
 ## Pick a backend
 

@@ -37,7 +37,7 @@ The installer installs the system packages relay needs, builds relay, installs `
 Options:
 
 - `--prefix DIR` installs somewhere else.
-- `--backend x11|wayland|all` picks the backend to install and build. Default `x11`; `wayland` installs sway, XWayland and foot; `all` installs both. See [Wayland](/docs/wayland).
+- `--backend x11|wayland|all` picks the backend to install and build. Default `x11`; `wayland` installs sway, XWayland, and foot; `all` installs both. Reinstalling keeps existing engine backends; to remove one, delete `<prefix>/lib/relay/relay-engine` and reinstall the backend you want. See [Wayland](/docs/wayland).
 - `--no-deps` skips package installation.
 - `--no-desktop` skips the XFCE packages.
 - `--client-only` installs only the CLI (see [step 6](#6-control-it-from-your-laptop)).

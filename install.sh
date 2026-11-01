@@ -7,7 +7,7 @@ backend=x11
 prefix=${PREFIX:-"$HOME/.local"}
 usage='Usage: ./install.sh [--prefix DIR] [--backend x11|wayland|all] [--no-desktop] [--no-deps] [--client-only]
   --prefix DIR               Install under DIR. Default: $PREFIX, else ~/.local.
-  --backend x11|wayland|all  Backend to install. Default: x11; wayland installs sway, XWayland and foot; all installs both.
+  --backend x11|wayland|all  Backend to install. Default: x11; wayland installs sway, XWayland, and foot; all installs both.
   --no-desktop               Skip the XFCE packages. Default: install them.
   --no-deps                  Skip package installation. Default: install them.
   --client-only              Install the CLI only. Default: install the engine too.'
@@ -30,6 +30,16 @@ case "$backend" in
   all) backends='x11 wayland'; doctor_backend=x11; groups='core x11 wayland xfce' ;;
   *) echo '--backend must be x11, wayland or all' >&2; exit 2 ;;
 esac
+engine="$prefix/lib/relay/relay-engine"
+if [ "$client" = 0 ] && [ -x "$engine" ] && installed=$("$engine" --help 2>/dev/null); then
+  case "$backend" in x11) other=wayland ;; wayland) other=x11 ;; all) other='' ;; esac
+  if [ -n "$other" ] &&
+    printf '%s\n' "$installed" | grep -Eq "^Compiled backends: (.*, )?$other(, |$)"; then
+    backends='x11 wayland'
+    groups='core x11 wayland xfce'
+    printf 'Keeping the %s backend that relay-engine already has. To drop it, delete %s and rerun this installer command.\n' "$other" "$engine" >&2
+  fi
+fi
 cd "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 
 elevate=''
