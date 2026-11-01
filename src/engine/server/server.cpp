@@ -1,4 +1,5 @@
 #include "server.hpp"
+#include "backend.hpp"
 #include "core/capture-source.hpp"
 #include "metrics.hpp"
 #include <algorithm>
@@ -52,7 +53,7 @@ Server::Server(Config settings) : config(std::move(settings)), capture([this](En
   pending.push_back(std::move(frame));
   lws_cancel_service(context);
   return true;
-}, CaptureSettings{config.fps, config.bitrate_min, config.bitrate_start, config.bitrate_max}, makeCaptureSource,
+}, CaptureSettings{config.fps, config.bitrate_min, config.bitrate_start, config.bitrate_max}, backendFor(config.backend).capture,
 [this](uint32_t gen, CursorImage&& cursor) {
   std::lock_guard<std::mutex> lock(mutex);
   if (!context || !generation || gen != generation) return;

@@ -37,7 +37,7 @@ class CaptureEncoder {
   using Publish = std::function<bool(EncodedFrame&&)>;
   using PublishCursor = std::function<void(uint32_t, CursorImage&&)>;
   explicit CaptureEncoder(Publish publish, CaptureSettings settings,
-                          CaptureSourceFactory factory = makeCaptureSource,
+                          CaptureSourceFactory factory,
                           PublishCursor cursor = {});
   ~CaptureEncoder();
   CaptureEncoder(const CaptureEncoder&) = delete;

@@ -91,7 +91,7 @@ Color: little-endian BGRA and big-endian ARGB convert to NV12 with limited-range
 
 1. Create `src/engine/backends/<os>/<name>/` implementing `initializeNativeBackend`, `makeCaptureSource`, and `makeInputBackend`.
 2. Add `BACKEND_DIR_<name>` (folder) and `BACKEND_PKGS_<name>` (pkg-config modules) to the `Makefile`.
-3. Build with `make BACKEND=<name>`. The Makefile builds exactly one backend (default `x11`, folder `linux/x11`).
+3. Build with `make BACKENDS=<name>` (default `x11`, folder `linux/x11`); quote a space-separated list to build multiple backends.
 4. Implement capture and the input primitives only: map a HID usage to a native key, press and release a native key or button, type a Unicode codepoint, move, scroll, reset locks, flush, `dimensions`, and `name`. Core owns protocol validation, coordinate mapping, held input, and the size limits.
 5. `src/engine/core/` and `src/engine/server/` must not include backend headers.
 

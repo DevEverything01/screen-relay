@@ -112,6 +112,4 @@ class InputController {
   std::set<NativeKey> keys;
   std::set<unsigned> buttons;
 };
-/// Selected native backend; unsupported display systems fail explicitly.
-std::unique_ptr<InputBackend> makeInputBackend();
 }  // namespace relay

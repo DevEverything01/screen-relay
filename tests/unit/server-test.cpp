@@ -8,7 +8,7 @@
 #include <utility>
 #include <vector>
 
-static bool engineConfig(const std::vector<std::string>& options, relay::Config& config) {
+static bool engineConfig(const std::vector<std::string>& options, relay::Config& config, std::string* error = nullptr) {
   relay::Config parsed;
   std::vector<std::string> values = {"relay-engine", "--viewer-dir", "build/test-viewer"};
   values.insert(values.end(), options.begin(), options.end());
@@ -16,7 +16,8 @@ static bool engineConfig(const std::vector<std::string>& options, relay::Config&
   for (auto& value : values) argv.push_back(value.data());
   try {
     if (!relay::parseConfig(int(argv.size()), argv.data(), parsed)) return false;
-  } catch (const std::runtime_error&) {
+  } catch (const std::runtime_error& exception) {
+    if (error) *error = exception.what();
     return false;
   }
   config = std::move(parsed);
@@ -50,8 +51,15 @@ int main() {
   const uint8_t ready[] = {0, 0, 'N', 'S', 'L', '1', 1, 4, 0, 0, 0, 0, 0, 7, 0, 0, 0, 0, 0, 0, 0, 4, 5, 0, 2, 208};
   assert(out == std::vector<uint8_t>(ready, ready + sizeof(ready)));
   Config engine;
-  assert(engineConfig({}, engine) && engine.fps == 60 && engine.bitrate_min == 1000000 &&
+  assert(engineConfig({}, engine) && engine.backend == "x11" && engine.fps == 60 && engine.bitrate_min == 1000000 &&
          engine.bitrate_start == 8000000 && engine.bitrate_max == 40000000);
+  assert(engineConfig({"--backend", "x11", "--output", "HDMI-A-1"}, engine) &&
+         engine.backend == "x11" && engine.output == "HDMI-A-1");
+  std::string error;
+  assert(!engineConfig({"--backend", "wayland2"}, engine, &error));
+  assert(error.find("wayland2") != std::string::npos && error.find("x11") != std::string::npos);
+  assert(!engineConfig({"--output"}, engine, &error));
+  assert(error == "Missing value for --output");
   assert(engineConfig({"--fps", "10"}, engine) && engine.fps == 10);
   assert(engineConfig({"--fps", "60"}, engine) && engine.fps == 60);
   assert(!engineConfig({"--fps", "9"}, engine) && !engineConfig({"--fps", "61"}, engine));

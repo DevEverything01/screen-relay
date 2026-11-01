@@ -190,6 +190,7 @@ class X11CaptureSource final : public CaptureSource {
   }
 };
 }
+namespace x11 {
 bool initializeNativeBackend() {
   static std::once_flag once;
   static bool initialized = false;
@@ -200,5 +201,6 @@ std::unique_ptr<CaptureSource> makeCaptureSource() {
   auto source = std::make_unique<X11CaptureSource>();
   source->init();
   return source;
+}
 }
 }
