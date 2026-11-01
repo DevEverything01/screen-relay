@@ -65,3 +65,29 @@ jobs:
           cache: npm
       - run: ./install.sh
       - run: PATH="$HOME/.local/bin:$PATH" tests/smoke.sh
+
+  install:
+    name: Install (${{ matrix.image }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: debian:trixie
+            command: ./install.sh --no-desktop --prefix /usr/local && relay-engine --help
+          - image: ubuntu:24.04
+            command: ./install.sh --no-desktop --prefix /usr/local && relay-engine --help
+          - image: ubuntu:26.04
+            command: ./install.sh --no-desktop --prefix /usr/local && relay-engine --help
+          - image: fedora:44
+            command: dnf -y install https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-44.noarch.rpm && ./install.sh --no-desktop --prefix /usr/local && relay-engine --help
+          - image: archlinux:latest
+            command: ./install.sh --no-desktop --prefix /usr/local && relay-engine --help
+          - image: alpine:3.24
+            command: ./install.sh --no-desktop --prefix /usr/local && relay-engine --help
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: docker run --rm -v "$PWD:/src" -w /src "${{ matrix.image }}" sh -c '${{ matrix.command }}'
