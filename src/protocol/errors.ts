@@ -139,7 +139,10 @@ export function responseError(status: number, detail: unknown): RelayError {
   };
   const index = Number.isInteger(body.index) && Number(body.index) >= 0 ? Number(body.index) : undefined;
   const applied = Number.isInteger(body.applied) && Number(body.applied) >= 0 ? Number(body.applied) : undefined;
-  return new RelayError(reason, messages[reason] ?? 'The engine could not complete the request.', {
+  const message = body.error === 'screenshot_unavailable'
+    ? 'The engine could not take a screenshot. On Wayland the compositor must support wlr-screencopy.'
+    : messages[reason] ?? 'The engine could not complete the request.';
+  return new RelayError(reason, message, {
     data: { httpStatus: status, ...(index === undefined ? {} : { index }), ...(applied === undefined ? {} : { applied }) },
   });
 }

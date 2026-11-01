@@ -144,6 +144,7 @@ A text event types one character, whatever the keyboard layout.
 - Value 0x0A types the Return key and 0x09 types the Tab key, so applications see the named keys.
 - Status 2 (unsupported) means the desktop could not type the character.
 - On X11, relay uses the layout's own key when it is available for the character. Otherwise, it uses a spare key temporarily bound to the character, such as for CJK on `us`. The binding stays valid for at least 50 ms, and relay uses up to 16 spare keys before reusing one. An application that stays frozen longer than 50 ms can miss characters typed during the freeze if their spare keys are reused. This is a limit of X11, not of relay.
+- On Wayland, relay adds characters with an XKB keysym that are missing from the active layout to up to 32 spare keys in its virtual keyboard keymap. It reuses the least recently used key when every available spare key has a character assigned.
 - With no spare key left at all, the character is unsupported.
 
 ## /control: agent input over WebSocket
@@ -204,6 +205,8 @@ One screenshot runs at a time. A second request while one is running gets HTTP 5
 curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/capabilities
 ```
 
+Example response for an X11 backend:
+
 ```json
 {"version":1,"backend":"x11","width":1280,"height":720,"fps":60,"input":{"keyboard":true,"pointer":true,"buttons":true,"wheel":true},"screenshot":"/screenshot.png","control":"/control","wayland":false,"max_input_pending":32,"cursor":true,"input_endpoint":"/input","max_input_batch":256,"audio":false,"clipboard":false,"resize":false,"ime":false}
 ```
@@ -212,6 +215,7 @@ curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/capabilities
 | --- | --- |
 | `fps` | The configured capture frame rate |
 | `cursor` | Whether `/stream` sends cursor images |
+| `wayland` | `true` when the engine runs the Wayland backend |
 | `max_input_batch` | The most records one `POST /input` accepts |
 | `max_input_pending` | The most `/control` replies that can be queued |
 | `audio`, `clipboard`, `resize`, `ime` | Features the engine does not offer today |
