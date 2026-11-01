@@ -33,6 +33,12 @@ std::string keysymName(uint32_t symbol) {
   xkb_keysym_get_name(xkb_keysym_t(symbol), name, sizeof name);
   return name;
 }
+/** Maps the newline and tab codepoints to the Return and Tab keys, so applications see the named keys. */
+xkb_keysym_t textKeysym(uint32_t codepoint) {
+  if (codepoint == '\n') return XKB_KEY_Return;
+  if (codepoint == '\t') return XKB_KEY_Tab;
+  return xkb_utf32_to_keysym(codepoint);
+}
 }
 
 std::string defaultKeymap() {
@@ -75,7 +81,7 @@ Keymap::Keymap(const std::string& base) {
 
 uint32_t Keymap::assign(uint32_t codepoint, bool& changed) {
   changed = false;
-  const xkb_keysym_t symbol = xkb_utf32_to_keysym(codepoint);
+  const xkb_keysym_t symbol = textKeysym(codepoint);
   if (!symbol) return 0;
   const auto existing = direct.find(symbol);
   if (existing != direct.end()) return existing->second;

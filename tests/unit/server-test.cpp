@@ -1,3 +1,4 @@
+#include "server/backend.hpp"
 #include "server/config.hpp"
 #include "server/metrics.hpp"
 #include "server/wire.hpp"
@@ -51,13 +52,14 @@ int main() {
   const uint8_t ready[] = {0, 0, 'N', 'S', 'L', '1', 1, 4, 0, 0, 0, 0, 0, 7, 0, 0, 0, 0, 0, 0, 0, 4, 5, 0, 2, 208};
   assert(out == std::vector<uint8_t>(ready, ready + sizeof(ready)));
   Config engine;
-  assert(engineConfig({}, engine) && engine.backend == "x11" && engine.fps == 60 && engine.bitrate_min == 1000000 &&
-         engine.bitrate_start == 8000000 && engine.bitrate_max == 40000000);
-  assert(engineConfig({"--backend", "x11", "--output", "HDMI-A-1"}, engine) &&
-         engine.backend == "x11" && engine.output == "HDMI-A-1");
+  const std::string defaultName = defaultBackend().name;
+  assert(engineConfig({}, engine) && engine.backend == defaultName && engine.fps == 60 &&
+         engine.bitrate_min == 1000000 && engine.bitrate_start == 8000000 && engine.bitrate_max == 40000000);
+  assert(engineConfig({"--backend", defaultName, "--output", "HDMI-A-1"}, engine) &&
+         engine.backend == defaultName && engine.output == "HDMI-A-1");
   std::string error;
   assert(!engineConfig({"--backend", "wayland2"}, engine, &error));
-  assert(error.find("wayland2") != std::string::npos && error.find("x11") != std::string::npos);
+  assert(error.find("wayland2") != std::string::npos && error.find(backendNames()) != std::string::npos);
   assert(!engineConfig({"--output"}, engine, &error));
   assert(error == "Missing value for --output");
   assert(engineConfig({"--fps", "10"}, engine) && engine.fps == 10);

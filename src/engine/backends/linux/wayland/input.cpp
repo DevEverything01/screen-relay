@@ -12,6 +12,7 @@
 #include <cerrno>
 #include <chrono>
 #include <condition_variable>
+#include <cstdio>
 #include <cstring>
 #include <exception>
 #include <limits>
@@ -517,6 +518,7 @@ class WaylandInput final : public InputBackend {
     wake_.notify_all();
     if (error) return;
     bool failed = false;
+    bool logged = false;
     std::unique_lock<std::mutex> lock(mutex_);
     for (;;) {
       wake_.wait(lock, [this] { return stopping_ || !queue_.empty(); });
@@ -529,8 +531,12 @@ class WaylandInput final : public InputBackend {
       bool success = false;
       try {
         success = apply(job, failed);
+      } catch (const std::exception& failure) {
+        if (!logged) std::fprintf(stderr, "input worker stopped: %s\n", failure.what());
+        logged = true;
       } catch (...) {
-        success = false;
+        if (!logged) std::fprintf(stderr, "input worker stopped: unknown error\n");
+        logged = true;
       }
       lock.lock();
       if (!success) {
