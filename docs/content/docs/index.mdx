@@ -19,17 +19,15 @@ relay up
 
 ## How it works
 
-<Diagram name="architecture" title="Relay architecture: the capture and encode pipeline in a Linux VM, the browser viewer, and the input path" aspectRatio="720 / 480" />
+<Diagram name="architecture" title="How relay connects the desktop, browser, and agent" aspectRatio="720 / 288" />
 
 The same flow in text:
 
 ```text
-Linux VM
-  display -> capture -> H.264 encode -> /stream WebSocket -> browser viewer
-
-viewer input over /stream
-agent input over /input (HTTP) or /control (WebSocket)
-  -> input checks -> keyboard and mouse input -> display
+Linux VM: Desktop (X11 or Wayland) -> relay engine (screen)
+relay engine -> Browser (video)
+Browser -> relay engine (clicks and keys)
+Your agent (CLI, SDK, or HTTP) <-> relay engine (screenshots and input)
 ```
 
 The VM runs a display and a desktop. The engine on the VM captures the screen, encodes it as H.264 video, and streams it to the viewer in the browser. The viewer, or an agent over HTTP or WebSocket, sends input back, and the engine applies it as keyboard and mouse input. Only one client can send input at a time. The stream lowers its bitrate on a slow link.

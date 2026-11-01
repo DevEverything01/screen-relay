@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Diagram name</title>
+<title>Desktop screen to browser</title>
 <script>
   var t = new URLSearchParams(location.search).get("theme");
   if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
@@ -12,75 +12,96 @@
 <style>
   :root {
     color-scheme: dark;
-    --bg: #000; --panel: #0a0a0a; --node: #111; --border: #5c5c5c;
-    --fg: #ededed; --muted: #8f8f8f; --line: #8f8f8f; --line-strong: #ededed;
-    --hl-fill: #0a2a5e; --hl-ring: #1e5fd6; --hl-icon: #cfe0ff;
+    --ds-background-100: oklch(0 0 0);
+    --ds-background-200: oklch(0.027 0 0);
+    --ds-gray-100: oklch(0.218 0 0);
+    --ds-gray-400: oklch(0.301 0 0);
+    --ds-gray-600: oklch(0.623 0 0);
+    --ds-gray-900: oklch(0.706 0 0);
+    --ds-gray-1000: oklch(0.946 0 0);
+    --ds-blue-700: oklch(57.61% 0.2321 258.23);
   }
   @media (prefers-color-scheme: light) {
     :root:not([data-theme]) {
       color-scheme: light;
-      --bg: #fff; --panel: #fafafa; --node: #fff; --border: #b8b8b8;
-      --fg: #171717; --muted: #666; --line: #7a7a7a; --line-strong: #171717;
-      --hl-fill: #dbe8ff; --hl-ring: #2563eb; --hl-icon: #1d4ed8;
+      --ds-background-100: oklch(1 0 0);
+      --ds-background-200: oklch(0.984 0 0);
+      --ds-gray-100: oklch(0.961 0 0);
+      --ds-gray-400: oklch(0.937 0 0);
+      --ds-gray-600: oklch(0.732 0 0);
+      --ds-gray-900: oklch(0.42 0 0);
+      --ds-gray-1000: oklch(0.205 0 0);
+      --ds-blue-700: oklch(57.61% 0.2508 258.23);
     }
   }
   :root[data-theme="light"] {
     color-scheme: light;
-    --bg: #fff; --panel: #fafafa; --node: #fff; --border: #b8b8b8;
-    --fg: #171717; --muted: #666; --line: #7a7a7a; --line-strong: #171717;
-    --hl-fill: #dbe8ff; --hl-ring: #2563eb; --hl-icon: #1d4ed8;
+    --ds-background-100: oklch(1 0 0);
+    --ds-background-200: oklch(0.984 0 0);
+    --ds-gray-100: oklch(0.961 0 0);
+    --ds-gray-400: oklch(0.937 0 0);
+    --ds-gray-600: oklch(0.732 0 0);
+    --ds-gray-900: oklch(0.42 0 0);
+    --ds-gray-1000: oklch(0.205 0 0);
+    --ds-blue-700: oklch(57.61% 0.2508 258.23);
   }
   html, body { margin: 0; background: transparent; }
-  :root[data-top], :root[data-top] body { background: var(--bg); }
+  :root[data-top], :root[data-top] body { background: var(--ds-background-100); }
   svg { display: block; width: 100%; height: auto; font-family: Geist, "Geist Sans", system-ui, -apple-system, "Segoe UI", sans-serif; }
-  .box { fill: var(--panel); stroke: var(--border); stroke-width: 1; stroke-dasharray: 4 4; vector-effect: non-scaling-stroke; }
-  .node { fill: var(--node); }
-  .label { fill: var(--fg); font-size: 15px; text-anchor: middle; }
-  .sub { fill: var(--muted); font-size: 11.5px; text-anchor: middle; }
-  .head { fill: var(--fg); font-size: 16px; font-weight: 500; }
-  .tag { fill: var(--muted); font-size: 12.5px; text-anchor: middle; }
-  .wire { fill: none; stroke: var(--line); stroke-width: 1; vector-effect: non-scaling-stroke; marker-end: url(#arrow); }
-  .wire.strong { stroke: var(--line-strong); }
-  .icon { fill: none; stroke: var(--muted); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
-  .icon.fg { stroke: var(--fg); }
-  .hl { fill: var(--hl-fill); stroke: var(--hl-ring); stroke-width: 1; vector-effect: non-scaling-stroke; }
-  .hl-icon { fill: none; stroke: var(--hl-icon); stroke-width: 1.2; vector-effect: non-scaling-stroke; }
-  #arrow path { fill: none; stroke: var(--line); stroke-width: 1; stroke-linecap: round; stroke-linejoin: round; }
+  .box { fill: var(--ds-background-200); stroke: var(--ds-gray-400); stroke-width: 1; vector-effect: non-scaling-stroke; }
+  .node { fill: var(--ds-gray-100); }
+  .engine { stroke: var(--ds-blue-700); }
+  .label { fill: var(--ds-gray-1000); font-size: 14px; font-weight: 500; }
+  .sub { fill: var(--ds-gray-900); font-size: 13px; }
+  .head { fill: var(--ds-gray-900); font-size: 13px; font-weight: 500; }
+  .tag { fill: var(--ds-gray-900); font-size: 12px; text-anchor: middle; }
+  .wire { fill: none; stroke: var(--ds-gray-600); stroke-width: 1; vector-effect: non-scaling-stroke; marker-end: url(#arrow); }
+  .icon { fill: none; stroke: var(--ds-gray-900); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  #arrow path { fill: none; stroke: var(--ds-gray-600); stroke-width: 1; stroke-linecap: round; stroke-linejoin: round; }
 </style>
 </head>
 <body>
-<svg viewBox="0 0 720 240" role="img" aria-labelledby="t d">
-  <title id="t">Diagram name</title>
-  <desc id="d">Describe the whole flow in one or two sentences.</desc>
+<svg viewBox="0 0 720 208" role="img" aria-labelledby="t d">
+  <title id="t">Desktop screen to browser</title>
+  <desc id="d">Inside a Linux VM, Desktop sends the screen to the relay engine. The engine sends video to Browser, where you watch the desktop.</desc>
   <defs>
     <marker id="arrow" viewBox="0 0 8 8" refX="6" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
-      <path d="M1.5 1.5 L5.5 4 L1.5 6.5"/>
+      <path d="M2 1.5 L6 4 L2 6.5"/>
     </marker>
   </defs>
 
-  <rect class="box" x="8" y="8" width="704" height="224" rx="8" style="fill:none"/>
-  <text class="head" x="28" y="40">Container</text>
+  <rect class="box" x="16" y="24" width="464" height="160" rx="12"/>
+  <text class="head" x="40" y="56">Linux VM</text>
 
-  <rect class="box node" x="40" y="80" width="120" height="64" rx="6"/>
-  <text class="label" x="100" y="110">First</text>
-  <text class="sub" x="100" y="127">detail</text>
-
-  <rect class="box node" x="280" y="80" width="120" height="64" rx="6"/>
-  <text class="label" x="340" y="110">Second</text>
-  <text class="sub" x="340" y="127">detail</text>
-
-  <path class="wire strong" d="M166 112H274"/>
-  <text class="tag" x="220" y="104">/route</text>
-
-  <path class="wire" d="M340 150V170a14 14 0 0 1-14 14H114a14 14 0 0 1-14-14V150"/>
-
-  <path class="wire" d="M406 112H494"/>
-  <circle class="hl" cx="530" cy="112" r="30"/>
-  <g transform="translate(518 100)">
-    <circle class="hl-icon" cx="12" cy="12" r="9"/>
-    <ellipse class="hl-icon" cx="12" cy="12" rx="4" ry="9"/>
-    <path class="hl-icon" d="M3 12h18"/>
+  <rect class="box node" x="40" y="80" width="160" height="80" rx="6"/>
+  <g class="icon" transform="translate(56 96)" aria-hidden="true">
+    <rect x="1" y="1" width="14" height="10" rx="1.5"/>
+    <path d="M8 11v4M5 15h6"/>
   </g>
+  <text class="label" x="80" y="112">Desktop</text>
+  <text class="sub" x="56" y="136">Your screen</text>
+
+  <rect class="box node engine" x="264" y="80" width="192" height="80" rx="6"/>
+  <g class="icon" transform="translate(280 96)" aria-hidden="true">
+    <rect x="3" y="3" width="10" height="10" rx="1.5"/>
+    <path d="M6 0v3M10 0v3M6 13v3M10 13v3M0 6h3M0 10h3M13 6h3M13 10h3"/>
+  </g>
+  <text class="label" x="304" y="112">relay engine</text>
+  <text class="sub" x="280" y="136">streams the screen</text>
+
+  <rect class="box node" x="520" y="80" width="176" height="80" rx="6"/>
+  <g class="icon" transform="translate(536 96)" aria-hidden="true">
+    <circle cx="8" cy="8" r="7"/>
+    <ellipse cx="8" cy="8" rx="3" ry="7"/>
+    <path d="M1 8h14"/>
+  </g>
+  <text class="label" x="560" y="112">Browser</text>
+  <text class="sub" x="536" y="136">watch the desktop</text>
+
+  <path class="wire" d="M205 120H259"/>
+  <text class="tag" x="232" y="109">screen</text>
+  <path class="wire" d="M461 120H515"/>
+  <text class="tag" x="500" y="109">video</text>
 </svg>
 </body>
 </html>

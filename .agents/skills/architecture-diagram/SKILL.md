@@ -11,37 +11,29 @@ Diagrams are standalone HTML files that the docs embed with the `Diagram` compon
 
 ## Folder convention
 
-- One folder per diagram: `docs/public/diagrams/<name>/index.html`. `<name>` is a short kebab-case slug.
-- The file is standalone: inline CSS, one inline SVG, no external requests. Start from [references/template.html](references/template.html).
-- The visual tokens are in [references/style.md](references/style.md). Reuse them so every diagram looks the same.
-- The theme comes from `?theme=light` or `?theme=dark`. Without the parameter the diagram follows `prefers-color-scheme` and defaults to dark.
-- Give the SVG a `<title>` and a `<desc>` that states the whole flow in words.
+- Save each diagram as `docs/public/diagrams/<slug>/index.html`, using a short kebab-case slug.
+- Keep the file standalone with inline CSS and SVG. Start from [references/template.html](references/template.html) and follow [references/style.md](references/style.md).
+- Support `?theme=light` and `?theme=dark`. Without either, follow `prefers-color-scheme` and default to dark. Keep the page background transparent for embeds.
+- Give the SVG a `<title>` and `<desc>` that describe its flow.
 
 ## Draw the real mechanism
 
-1. Read the code before drawing. For the engine, read `src/engine/` and the Architecture page. Draw only components, names, and directions you can point to in source.
-2. Use the identifiers from the code as labels (`CaptureSource`, `InputBackend`) and put the mechanism in the gray second line (`XDamage, MIT-SHM`).
-3. Draw one arrow per real data path. Label arrows that cross a boundary with the route or protocol (`/stream`).
-4. Group components by where they run: an outer dashed container for a machine, a nested panel for a process. Put the client outside.
-5. Mark the entry point of the flow with the highlighted circle node. Use it once.
-6. Lay it out for the 720px docs column at 1:1 scale (see style.md) and keep it to 12 nodes or fewer. Move detail to the page text.
+Draw for the page's reader. Show what they see, do, and how the flow connects. Use plain English labels; omit code identifiers, protocols, endpoints, codecs, and library names unless the page is for contributors. Use at most 5-7 nodes in an overview diagram and move extra detail to the page text. Use the solid borders, Geist tokens, spacing, type, icons, arrows, and labels in [references/style.md](references/style.md) and [references/template.html](references/template.html).
+
+Use orthogonal connectors only, and never rotate text. Align nodes on shared rows and columns. Size the viewBox to the content with 16–24px margins and no large empty areas. For separately labeled directions between the same nodes, use parallel lines 16px apart with one label above and one below. A shared label can use one bidirectional line.
 
 ## Embed it
 
 ```mdx
-<Diagram name="architecture" title="Relay architecture" aspectRatio="720 / 448" />
+<Diagram name="architecture" title="Relay architecture" aspectRatio="720 / 288" />
 ```
 
-`aspectRatio` is the SVG `viewBox` width and height. The component passes the site theme to the iframe.
+Set `aspectRatio` to the SVG `viewBox` width and height. The component passes the site theme to the diagram.
 
 ## Text version
 
-Keep a text version of the flow next to the diagram on the page, such as a short list or code block with the same components and order. Readers of the `.md` route and screen readers depend on it.
+Add a short text flow beside the diagram. Keep the same nodes, order, and arrow labels so it works without the image and for screen readers.
 
 ## Check it
 
-1. In `docs/`, run `pnpm dev`.
-2. Open `/diagrams/<name>/index.html` and `/diagrams/<name>/index.html?theme=light` at 1440x900. Look for clipped text, overlapping labels, arrows that miss their node, and unreadable gray text.
-3. Open the docs page and check the diagram in both site themes.
-4. Run `pnpm build` in `docs/`.
-5. Stop the dev server and close the browser session.
+Check both themes and confirm the embedded page stays transparent. At the 720px viewBox width, verify that text fits inside nodes, labels do not touch lines or each other, arrows stop 4-6px before node edges, and spacing follows the 8px grid.

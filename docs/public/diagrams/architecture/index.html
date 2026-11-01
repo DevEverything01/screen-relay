@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Relay architecture</title>
+<title>How relay works</title>
 <script>
   var t = new URLSearchParams(location.search).get("theme");
   if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
@@ -12,147 +12,110 @@
 <style>
   :root {
     color-scheme: dark;
-    --bg: #000;
-    --panel: #0a0a0a;
-    --node: #111;
-    --border: #5c5c5c;
-    --fg: #ededed;
-    --muted: #8f8f8f;
-    --line: #8f8f8f;
-    --line-strong: #ededed;
-    --hl-fill: #0a2a5e;
-    --hl-ring: #1e5fd6;
-    --hl-icon: #cfe0ff;
+    --ds-background-100: oklch(0 0 0);
+    --ds-background-200: oklch(0.027 0 0);
+    --ds-gray-100: oklch(0.218 0 0);
+    --ds-gray-400: oklch(0.301 0 0);
+    --ds-gray-600: oklch(0.623 0 0);
+    --ds-gray-900: oklch(0.706 0 0);
+    --ds-gray-1000: oklch(0.946 0 0);
+    --ds-blue-700: oklch(57.61% 0.2321 258.23);
   }
   @media (prefers-color-scheme: light) {
     :root:not([data-theme]) {
       color-scheme: light;
-      --bg: #fff; --panel: #fafafa; --node: #fff; --border: #b8b8b8;
-      --fg: #171717; --muted: #666; --line: #7a7a7a; --line-strong: #171717;
-      --hl-fill: #dbe8ff; --hl-ring: #2563eb; --hl-icon: #1d4ed8;
+      --ds-background-100: oklch(1 0 0);
+      --ds-background-200: oklch(0.984 0 0);
+      --ds-gray-100: oklch(0.961 0 0);
+      --ds-gray-400: oklch(0.937 0 0);
+      --ds-gray-600: oklch(0.732 0 0);
+      --ds-gray-900: oklch(0.42 0 0);
+      --ds-gray-1000: oklch(0.205 0 0);
+      --ds-blue-700: oklch(57.61% 0.2508 258.23);
     }
   }
   :root[data-theme="light"] {
     color-scheme: light;
-    --bg: #fff; --panel: #fafafa; --node: #fff; --border: #b8b8b8;
-    --fg: #171717; --muted: #666; --line: #7a7a7a; --line-strong: #171717;
-    --hl-fill: #dbe8ff; --hl-ring: #2563eb; --hl-icon: #1d4ed8;
+    --ds-background-100: oklch(1 0 0);
+    --ds-background-200: oklch(0.984 0 0);
+    --ds-gray-100: oklch(0.961 0 0);
+    --ds-gray-400: oklch(0.937 0 0);
+    --ds-gray-600: oklch(0.732 0 0);
+    --ds-gray-900: oklch(0.42 0 0);
+    --ds-gray-1000: oklch(0.205 0 0);
+    --ds-blue-700: oklch(57.61% 0.2508 258.23);
   }
   html, body { margin: 0; background: transparent; }
-  :root[data-top], :root[data-top] body { background: var(--bg); }
+  :root[data-top], :root[data-top] body { background: var(--ds-background-100); }
   svg { display: block; width: 100%; height: auto; font-family: Geist, "Geist Sans", system-ui, -apple-system, "Segoe UI", sans-serif; }
-  .box { fill: var(--panel); stroke: var(--border); stroke-width: 1; stroke-dasharray: 4 4; vector-effect: non-scaling-stroke; }
-  .node { fill: var(--node); }
-  .label { fill: var(--fg); font-size: 15px; text-anchor: middle; }
-  .sub { fill: var(--muted); font-size: 11.5px; text-anchor: middle; }
-  .head { fill: var(--fg); font-size: 16px; font-weight: 500; }
-  .tag { fill: var(--muted); font-size: 12.5px; text-anchor: middle; }
-  .wire { fill: none; stroke: var(--line); stroke-width: 1; vector-effect: non-scaling-stroke; marker-end: url(#arrow); }
-  .wire.strong { stroke: var(--line-strong); }
-  .icon { fill: none; stroke: var(--muted); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
-  .icon.fg { stroke: var(--fg); }
-  .hl { fill: var(--hl-fill); stroke: var(--hl-ring); stroke-width: 1; vector-effect: non-scaling-stroke; }
-  .hl-icon { fill: none; stroke: var(--hl-icon); stroke-width: 1.2; vector-effect: non-scaling-stroke; }
-  #arrow path { fill: none; stroke: var(--line); stroke-width: 1; stroke-linecap: round; stroke-linejoin: round; }
+  .box { fill: var(--ds-background-200); stroke: var(--ds-gray-400); stroke-width: 1; vector-effect: non-scaling-stroke; }
+  .node { fill: var(--ds-gray-100); }
+  .engine { stroke: var(--ds-blue-700); }
+  .label { fill: var(--ds-gray-1000); font-size: 14px; font-weight: 500; }
+  .sub { fill: var(--ds-gray-900); font-size: 13px; }
+  .head { fill: var(--ds-gray-900); font-size: 13px; font-weight: 500; }
+  .tag { fill: var(--ds-gray-900); font-size: 12px; }
+  .wire { fill: none; stroke: var(--ds-gray-600); stroke-width: 1; vector-effect: non-scaling-stroke; marker-end: url(#arrow); }
+  .both { marker-start: url(#arrow); }
+  .icon { fill: none; stroke: var(--ds-gray-900); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  #arrow path { fill: none; stroke: var(--ds-gray-600); stroke-width: 1; stroke-linecap: round; stroke-linejoin: round; }
 </style>
 </head>
 <body>
-<svg viewBox="0 0 720 480" role="img" aria-labelledby="t d">
-  <title id="t">Relay architecture</title>
-  <desc id="d">Inside a Linux VM, an X11 display such as Xvfb feeds X11 capture (MIT-SHM, XDamage, XFixes). Headless sway or an attached Wayland compositor feeds Wayland capture (wlr-screencopy). Both feed H.264 encoding, flow control, and WebSocket /stream. The viewer sends input over /stream; agents use /input (HTTP) or /control (WebSocket). The engine validates input and sends it through XTest for X11 or a virtual keyboard and virtual pointer v2 for Wayland. Only one input owner is active at a time.</desc>
+<svg viewBox="0 0 720 288" role="img" aria-labelledby="t d">
+  <title id="t">How relay works</title>
+  <desc id="d">Inside a Linux VM, the X11 or Wayland desktop sends its screen to the relay engine. The engine streams video to the browser and receives mouse and keyboard input. An agent uses the CLI, SDK, or HTTP API to get screenshots and send input through the engine.</desc>
   <defs>
-    <marker id="arrow" viewBox="0 0 8 8" refX="6" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
-      <path d="M1.5 1.5 L5.5 4 L1.5 6.5"/>
+    <marker id="arrow" viewBox="0 0 8 8" refX="6" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
+      <path d="M2 1.5 L6 4 L2 6.5"/>
     </marker>
   </defs>
 
-  <rect class="box" x="8" y="8" width="704" height="336" rx="8" style="fill:none"/>
-  <g transform="translate(28 26)">
-    <rect class="icon fg" x="1" y="1" width="16" height="6" rx="1.5"/>
-    <rect class="icon fg" x="1" y="11" width="16" height="6" rx="1.5"/>
-    <circle cx="5" cy="4" r=".6" class="icon fg"/>
-    <circle cx="5" cy="14" r=".6" class="icon fg"/>
+  <rect class="box" x="16" y="16" width="424" height="136" rx="12"/>
+  <text class="head" x="40" y="40">Linux VM</text>
+
+  <rect class="box node" x="40" y="56" width="144" height="72" rx="6"/>
+  <g class="icon" transform="translate(56 70)">
+    <rect x="1.5" y="2" width="13" height="9" rx="1"/>
+    <path d="M8 11v3M5 14h6"/>
   </g>
-  <text class="head" x="56" y="40">Linux VM</text>
+  <text class="label" x="80" y="84">Desktop</text>
+  <text class="sub" x="56" y="108">X11 or Wayland</text>
 
-  <rect class="box" x="188" y="64" width="504" height="264" rx="8"/>
-  <g transform="translate(208 76)">
-    <rect class="icon" x="3" y="3" width="12" height="12" rx="2"/>
-    <rect class="icon" x="6.5" y="6.5" width="5" height="5" rx="1"/>
-    <path class="icon" d="M6 0v3M12 0v3M6 15v3M12 15v3M0 6h3M0 12h3M15 6h3M15 12h3"/>
+  <rect class="box node engine" x="240" y="56" width="176" height="72" rx="6"/>
+  <g class="icon" transform="translate(256 70)">
+    <rect x="3" y="3" width="10" height="10" rx="2"/>
+    <path d="M6 1v2m4-2v2M6 13v2m4-2v2M1 6h2m-2 4h2m10-4h2m-2 4h2M6 6h4v4H6z"/>
   </g>
-  <text class="head" x="234" y="90">engine</text>
+  <text class="label" x="280" y="84">relay engine</text>
+  <text class="sub" x="256" y="108">streams the screen</text>
 
-  <rect class="box node" x="28" y="96" width="152" height="96" rx="6"/>
-  <text class="label" x="104" y="124">Virtual display</text>
-  <text class="sub" x="104" y="141">X11: Xvfb</text>
-  <text class="sub" x="104" y="155">Wayland: headless sway</text>
-  <text class="sub" x="104" y="169">or attached compositor</text>
-
-  <rect class="box node" x="208" y="96" width="160" height="96" rx="6"/>
-  <text class="label" x="288" y="124">Capture</text>
-  <text class="sub" x="288" y="141">X11: MIT-SHM, XDamage</text>
-  <text class="sub" x="288" y="155">XFixes cursor</text>
-  <text class="sub" x="288" y="169">Wayland: wlr-screencopy</text>
-
-  <rect class="box node" x="400" y="112" width="120" height="64" rx="6"/>
-  <text class="label" x="460" y="142">Encoder</text>
-  <text class="sub" x="460" y="159">H.264</text>
-
-  <rect class="box node" x="552" y="112" width="120" height="64" rx="6"/>
-  <text class="label" x="612" y="142">Flow control</text>
-  <text class="sub" x="612" y="159">ACK credit</text>
-
-  <rect class="box node" x="552" y="228" width="120" height="64" rx="6"/>
-  <text class="label" x="612" y="258">WebSocket</text>
-  <text class="sub" x="612" y="275">stream server</text>
-
-  <rect class="box node" x="400" y="228" width="120" height="64" rx="6"/>
-  <text class="label" x="460" y="258">Input checks</text>
-  <text class="sub" x="460" y="275">validates events</text>
-
-  <rect class="box node" x="208" y="212" width="160" height="96" rx="6"/>
-  <text class="label" x="288" y="240">Input</text>
-  <text class="sub" x="288" y="257">X11: XTest</text>
-  <text class="sub" x="288" y="271">Wayland: virtual keyboard</text>
-  <text class="sub" x="288" y="285">virtual pointer v2</text>
-
-  <path class="wire" d="M186 144H202"/>
-  <path class="wire" d="M374 144H394"/>
-  <path class="wire" d="M526 144H546"/>
-  <path class="wire" d="M612 182V222"/>
-  <path class="wire" d="M546 260H526"/>
-  <path class="wire" d="M394 260H374"/>
-  <path class="wire" d="M288 314V322a14 14 0 0 1-14 14H118a14 14 0 0 1-14-14V198"/>
-
-  <path class="wire strong" d="M612 298V382"/>
-  <text class="tag" x="622" y="360" style="text-anchor:start">video</text>
-  <path class="wire" d="M564 382V298"/>
-  <text class="tag" x="556" y="360" style="text-anchor:end">input</text>
-  <text class="tag" x="588" y="360">/stream</text>
-  <path class="wire strong" d="M198 420H426a14 14 0 0 0 14-14V298"/>
-  <text class="tag" x="312" y="412">/input or /control</text>
-  <text class="tag" x="312" y="440">one input owner at a time</text>
-
-  <circle class="hl" cx="500" cy="420" r="30"/>
-  <g transform="translate(488 408)">
-    <circle class="hl-icon" cx="12" cy="12" r="9"/>
-    <ellipse class="hl-icon" cx="12" cy="12" rx="4" ry="9"/>
-    <path class="hl-icon" d="M3 12h18"/>
+  <rect class="box node" x="544" y="56" width="160" height="72" rx="6"/>
+  <g class="icon" transform="translate(560 70)">
+    <circle cx="8" cy="8" r="6.5"/>
+    <path d="M1.5 8h13M8 1.5c2 2 3 4.1 3 6.5s-1 4.5-3 6.5C6 12.5 5 10.4 5 8s1-4.5 3-6.5z"/>
   </g>
+  <text class="label" x="584" y="84">Browser</text>
+  <text class="sub" x="560" y="108">watch and control</text>
 
-  <rect class="box node" x="548" y="388" width="152" height="64" rx="6"/>
-  <text class="label" x="624" y="418">Browser viewer</text>
-  <text class="sub" x="624" y="435">VideoDecoder → canvas</text>
-
-  <rect class="box node" x="40" y="388" width="152" height="64" rx="6"/>
-  <g transform="translate(54 406)">
-    <circle class="icon" cx="14" cy="14" r="13"/>
-    <circle class="icon" cx="14" cy="11" r="3.5"/>
-    <path class="icon" d="M7.5 22.5c.8-3.6 3.4-5 6.5-5s5.7 1.4 6.5 5"/>
+  <rect class="box node" x="240" y="200" width="176" height="72" rx="6"/>
+  <g class="icon" transform="translate(256 214)">
+    <rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/>
+    <path d="m4.5 6 2 2-2 2M8.5 10h3"/>
   </g>
-  <text class="label" x="104" y="418" style="text-anchor:start">Agent</text>
-  <text class="sub" x="104" y="435" style="text-anchor:start">relay CLI/SDK</text>
+  <text class="label" x="280" y="228">Your agent</text>
+  <text class="sub" x="256" y="252">CLI, SDK, or HTTP</text>
+
+  <path class="wire" d="M188 92H236"/>
+  <text class="tag" x="212" y="84" text-anchor="middle">screen</text>
+
+  <path class="wire" d="M420 84H540"/>
+  <text class="tag" x="492" y="76" text-anchor="middle">video</text>
+  <path class="wire" d="M540 100H420"/>
+  <text class="tag" x="492" y="118" text-anchor="middle">clicks and keys</text>
+
+  <path class="wire both" d="M328 132V196"/>
+  <text class="tag" x="340" y="182">screenshots and input</text>
 </svg>
 </body>
 </html>
