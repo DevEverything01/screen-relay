@@ -54,7 +54,7 @@ Start relay with the output name. Replace `OUTPUT` with the name you found, such
 relay up -d --backend wayland --display "$WAYLAND_DISPLAY" --output OUTPUT
 ```
 
-Omit `--output OUTPUT` to use the first output. `--output` works only with the Wayland backend. On x11, `relay up` fails.
+A `--display` without a colon, such as `wayland-1`, selects the Wayland backend on its own. Omit `--output OUTPUT` to use the first output. `--output` works only with the Wayland backend. On x11, `relay up` fails.
 
 ## Limits
 

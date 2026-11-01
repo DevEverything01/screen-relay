@@ -31,9 +31,9 @@ relay up [-d] [--name N] [--config FILE] [--port N] [--desktop xfce|none|CMD] [-
 | `--config FILE` | `$RELAY_CONFIG`, else `${XDG_CONFIG_HOME:-~/.config}/relay/config.yaml` when it exists | YAML config file. Flags beat the file. See [Configuration](/docs/configuration). |
 | `--port N` | `8080` | Listen port. Env: `RELAY_PORT`. |
 | `--desktop` | `xfce` (x11) or `foot` (wayland); `none` with `--display` | `xfce`, `none` (no desktop), or a command such as `openbox`. Runs under `dbus-run-session` when it is installed. Env: `RELAY_DESKTOP`. |
-| `--display DISPLAY` | new display | Attach to an existing display. On x11, an X display such as `:0`, using your `XAUTHORITY`. On wayland, a Wayland socket name such as `wayland-1`, which needs `XDG_RUNTIME_DIR`. relay never stops or changes a display it did not start. It uses that display's size. |
-| `--backend x11\|wayland` | `x11` when the engine has it, else `wayland` | Display server to run the desktop on. Env: `RELAY_BACKEND`. See [Wayland](/docs/wayland). |
-| `--output NAME` | first output | Wayland output to capture, by name. Wayland only: `up` fails on x11. For a screen larger than 1920x1080, see [Wayland](/docs/wayland) to create a headless output. |
+| `--display DISPLAY` | new display | Attach to an existing X display (:0) or Wayland socket (wayland-1). relay never stops or changes a display it did not start, and it uses that display's size. On x11, it uses your `XAUTHORITY`. On wayland, it needs `XDG_RUNTIME_DIR`. |
+| `--backend x11\|wayland` | `x11` when the engine has it, else `wayland` | Use the x11 or wayland backend; defaults to x11 when the engine has it, else wayland. A `--display` without a colon selects wayland. Env: `RELAY_BACKEND`. See [Wayland](/docs/wayland). |
+| `--output NAME` | first output | Capture this Wayland output, by name. Wayland only: `up` fails on x11. For a screen larger than 1920x1080, see [Wayland](/docs/wayland) to create a headless output. |
 | `--public URL` | off | Public HTTPS origin. Binds `0.0.0.0` unless `--bind` is set, generates a token, and allows that origin. It expects a TLS proxy in front unless `--tls-cert` is given. See [Remote access](/docs/remote-access). Env: `RELAY_PUBLIC`. |
 | `--tls-cert F`, `--tls-key F` | off | Serve TLS directly. Both are required together. Env: `RELAY_TLS_CERT`, `RELAY_TLS_KEY`. |
 | `--bind ADDR` | `127.0.0.1` | Listen address. Any other address generates a token. Env: `RELAY_BIND`. |

@@ -7,11 +7,11 @@ Start with `relay doctor`; it prints a fix command for every failing check. Read
 | Symptom | Cause | Fix |
 | --- | --- | --- |
 | `relay: command not found` | `<prefix>/bin` (default `~/.local/bin`) is not on `PATH`. | `export PATH="$HOME/.local/bin:$PATH"`. |
-| `component_failed` from `up`, or `status` shows `failed` | A component exited during startup or after ready. The session stops. | Read `data.component`, then `relay logs <component>`. For `-d`, also `supervisor.log` in the state directory. |
+| `component_failed` from `up`, or `status` shows `failed` | A component exited during startup or after ready. The session stops. | Read `data.component`, then `relay logs <component>`. For `-d`, also read `supervisor.log` in the directory named by `session.logs` in `relay status --json`. |
 | `timeout` from `up` | The engine or desktop was not ready within `--timeout` (default 30 s). | Read the log tail in the error; raise `--timeout` on a slow machine. |
 | `already_running` | A session with that name is running. | `relay down --name NAME`, or use another `--name` and `--port`. |
 | Engine log says `Cannot listen on 127.0.0.1:8080` | Another process owns the port. | `relay up --port 8081`, or stop the old session. |
-| `busy` | A viewer or SDK session holds control, or a screenshot is already running. | Close the other controller, then retry. Screenshots still work. A long `type` may have stopped partway; `data.applied` says how far. |
+| `busy` | A viewer or SDK session holds control, or a screenshot is already running. | See One controller in `relay skills get core`. Screenshots still work. A long `type` may have stopped partway; `data.applied` says how far. |
 | `unauthorized` | Missing or wrong token. | Pass `--token-file FILE` or set `RELAY_TOKEN_FILE`; open the viewer from its `#token=` link. |
 | `forbidden` | `Host` or `Origin` was rejected. | Use the `--public` URL, or connect through loopback. |
 | `unreachable` with `Connection refused.` | Nothing is listening on the address. | Check the port; for a local session run `relay up -d`. |
@@ -27,3 +27,13 @@ Start with `relay doctor`; it prints a fix command for every failing check. Read
 | Blank viewer page or WebCodecs error | The browser lacks H.264 WebCodecs, or the page is not a secure context. | Use a current Chrome, Edge or Safari over `https://` or `http://127.0.0.1`. |
 | Viewer cannot connect through a proxy | The proxy drops WebSocket upgrades or rewrites headers. | Forward `/stream`, `/control`, `/input` and the rest without a path prefix, and keep `Host`, `Origin` and `Authorization`. |
 | `Cannot open display` with `--display` | Missing `XAUTHORITY` for that display. | Export the session's `XAUTHORITY`; never use `xhost +`. |
+
+## Doctor checks that need a manual step
+
+`relay doctor` prints the fix for each failing check. These checks need more than a package install:
+
+| Check | Cause | Fix |
+| --- | --- | --- |
+| `libx264` on Ubuntu | The x264 package is in the `universe` component. | Rerun `./install.sh`. It adds `universe` to `/etc/apt/sources.list.d/ubuntu.sources` and updates apt. If that file does not exist, enable `universe` in your apt sources, run `sudo apt-get update`, then rerun `./install.sh`. |
+| `libx264` on Fedora | x264 comes from RPM Fusion Free, which the installer stops on when it is not enabled. | Run `sudo dnf -y install https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm`, then rerun `./install.sh`. |
+| `icon decoding` with `bubblewrap failed` | Image loaders sandbox themselves with `bwrap`, which needs unprivileged user namespaces. | Allow them for `bwrap`, with an AppArmor profile or `kernel.unprivileged_userns_clone=1`, then run `relay doctor` again. relay does not turn the sandbox off. |

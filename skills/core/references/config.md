@@ -20,7 +20,7 @@ The published reference is at https://relay.labs.vercel.dev/docs/configuration.
 | `backend` | `x11` when the engine has it, else `wayland` | `x11` or `wayland`; `--backend` overrides it | `RELAY_BACKEND` |
 | `desktop` | `xfce` (x11) or `foot` (wayland) | `xfce`, `none`, or a desktop command; defaults to `none` with `--display` | `RELAY_DESKTOP` |
 
-Example (sets `xfce`; omit `desktop` to use the default):
+Example:
 
 ```yaml
 display:
@@ -35,7 +35,6 @@ server:
   port: 8080
 keyboard:
   layout: us
-desktop: xfce
 ```
 
 There is no live reload or resize. Run `relay down`, edit the file, then `relay up -d`. `--display` ignores `display.resolution` and uses the existing display's size; `up` warns about this. Client commands use `RELAY_URL` and `RELAY_TOKEN_FILE` instead of the config file.

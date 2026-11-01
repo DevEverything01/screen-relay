@@ -19,7 +19,13 @@ relay run -- <app> [args]... [--name NAME] [--restart]
 relay doctor [--config FILE]
 ```
 
-- `up` starts a display (Xvfb on X11 or sway with XWayland on Wayland) or attaches to an existing one. It starts the desktop when enabled and the engine, waits until ready, then supervises the session. Without `-d` it runs in the foreground and the first Ctrl+C stops the session (exit 130). Piped, it prints only the viewer URL. `--public` advertises an HTTPS origin and expects a TLS proxy unless `--tls-cert` is set. `--display` keeps the caller's environment. On Wayland it takes a socket name such as `wayland-1` and needs `XDG_RUNTIME_DIR`. `--backend` picks x11 or wayland (default x11 when the engine has it). `--output` picks the Wayland output to capture; it is Wayland only, and `up` fails on x11. See [Wayland](https://relay.labs.vercel.dev/docs/wayland) for setup.
+- `up` starts a display (Xvfb on X11, or sway with XWayland on Wayland) or attaches to an existing one. It then starts the desktop when enabled and the engine, waits until ready, and supervises the session.
+  - Without `-d` it runs in the foreground, and the first Ctrl+C stops the session (exit 130). Piped, it prints only the viewer URL.
+  - `--display DISPLAY`: Attach to an existing X display (:0) or Wayland socket (wayland-1). It keeps the caller's environment, and a Wayland socket needs `XDG_RUNTIME_DIR`.
+  - `--backend x11|wayland`: Use the x11 or wayland backend; defaults to x11 when the engine has it, else wayland. A `--display` without a colon, such as `wayland-1`, selects the Wayland backend on its own.
+  - `--output NAME`: Capture this Wayland output, by name. Wayland only; `up` fails on x11.
+  - `--public HTTPS_URL` advertises an HTTPS origin and expects a TLS proxy unless `--tls-cert` is set.
+  - See [Wayland](wayland.md) for setup.
 - `down` stops the session and everything it started; safe to repeat. Its JSON outcome is `stopped` or `unchanged`.
 - `logs` prints the last 200 lines of one component (`display`, `dbus`, `desktop`, `engine`, `apps`) or of every component log. `-f` follows; it cannot be combined with `--json`.
 - `run` starts an app on the session desktop and returns its pid. It shares the desktop's display and available D-Bus session bus, runtime, config, cache and X authority settings, and clears ambient capabilities. On Wayland it also sets `WAYLAND_DISPLAY`. `--restart` restarts the app until the session stops. App output goes to `relay logs apps`.
@@ -93,6 +99,6 @@ With `--json`, success is one document on stdout and stderr stays empty; failure
 
 ## Client target
 
-Client commands take `--url`, `--token-file` and `--timeout` (seconds, default 10). The target is `--url`, else `RELAY_URL`, else the ready local session named by `--name`, else `http://127.0.0.1:8080` when no session was explicitly selected. A URL is an origin only; plain HTTP is allowed only for `localhost` and `127.0.0.1`, and remote hosts need HTTPS plus a 64-character token. Redirects are refused.
+Client commands take `--url`, `--token-file` and `--timeout` (seconds, default 10). The target is `--url`, else `RELAY_URL`, else the ready local session named by `--name`, else `http://127.0.0.1:8080` when no session was explicitly selected. A URL is an origin only; plain HTTP is allowed only for `localhost` and `127.0.0.1`, and remote hosts need HTTPS plus a 64-character lowercase hex token. Redirects are refused.
 
 When a connection fails, the message names the cause: `Connection refused.`, `The host name did not resolve.`, `The request timed out.` or `The TLS certificate was rejected.` An unreachable `--url` suggests checking the address and `relay status --url <URL>`; a missing local session suggests `relay up -d`.

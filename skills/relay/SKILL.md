@@ -6,8 +6,6 @@ hidden: true
 
 # relay
 
-Relay starts a Linux desktop and provides a browser viewer and CLI controls. It lets agents inspect and operate that desktop through screenshots and input commands.
-
 ## Start here
 
 Load the current workflow from the installed CLI:
