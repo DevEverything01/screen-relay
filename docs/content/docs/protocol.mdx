@@ -143,7 +143,7 @@ A text event types one character, whatever the keyboard layout.
 - A text event never changes the held keys. Modifiers you hold, such as Shift or Ctrl, are lifted for the character and pressed again right after, so they never change what is typed.
 - Value 0x0A types the Return key and 0x09 types the Tab key, so applications see the named keys.
 - Status 2 (unsupported) means the desktop could not type the character.
-- A character the layout has is typed with its own key. A character it lacks, such as CJK on `us`, is typed through a spare key that is temporarily bound to it. The binding stays valid for at least 50 ms and until 16 newer characters need a spare. An application that stays frozen longer can miss characters typed during the freeze, because its key then reads a different character. This is a limit of X11, not of relay.
+- On X11, relay uses the layout's own key when it is available for the character. Otherwise, it uses a spare key temporarily bound to the character, such as for CJK on `us`. The binding stays valid for at least 50 ms, and relay uses up to 16 spare keys before reusing one. An application that stays frozen longer than 50 ms can miss characters typed during the freeze if their spare keys are reused. This is a limit of X11, not of relay.
 - With no spare key left at all, the character is unsupported.
 
 ## /control: agent input over WebSocket

@@ -43,7 +43,7 @@ Coordinates run from 0 to 1, measured from the top-left of the screen.
 
 | Area | Limit |
 | --- | --- |
-| Display server | X11 only. Wayland is planned. |
+| Display server | X11 or Wayland. The default is X11 when the engine includes it, otherwise Wayland. See [Wayland](/docs/wayland) for compositor requirements. |
 | Resolution | Up to 1920x1080, set in the config ([Configuration](/docs/configuration)). No live resize. |
 | Control | One input owner at a time: a browser viewer or one agent. Screenshots work at any time. |
 | Not supported | Audio, clipboard, IME, relative pointer, hardware encoding. |

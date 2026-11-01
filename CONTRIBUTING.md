@@ -9,6 +9,7 @@ This file is for people changing relay's source. For installing and using relay,
 | `src/engine/core/` | Backend-neutral pipeline: `CaptureSource`, the input controller and input backend interface, encoder, color conversion, flow control |
 | `src/engine/server/` | `main.cpp` (entry point), `config` (arguments, token and origin policy), `wire` (NSL1 encoding), `server` (session, writes, libwebsockets callback, HTTP routes), `metrics` (cgroup parsing), `screenshot` |
 | `src/engine/backends/linux/x11/` | X11 capture (XDamage, MIT-SHM, XFixes cursor) and XTest input primitives |
+| `src/engine/backends/linux/wayland/` | Wayland capture (wlr-screencopy), virtual keyboard and pointer input, Unicode keymap |
 | `src/protocol/` | Runtime-neutral wire constants and encoding, HID key table, key-combo and text parsing, origin and token rules |
 | `src/sdk/` | Node client library on top of the protocol |
 | `src/cli/` | The `relay` CLI: argument parsing, output, client commands on the SDK, host commands that supervise the display, desktop, and engine |
@@ -18,8 +19,8 @@ This file is for people changing relay's source. For installing and using relay,
 ## Pipeline
 
 ```text
-X11 display (Xvfb)
-  -> CaptureSource (XDamage, MIT-SHM)
+X11 display (Xvfb) or Wayland compositor (headless sway or attached)
+  -> CaptureSource (X11: MIT-SHM, XDamage, XFixes cursor; Wayland: wlr-screencopy)
   -> CaptureEncoder (BGRA/ARGB to NV12, x264)
   -> flow control (ACK credit)
   -> WebSocket /stream
@@ -27,7 +28,8 @@ X11 display (Xvfb)
 
 browser input over /stream
 agent or CLI/SDK input over /input (HTTP) or /control (WebSocket)
-  -> InputController -> InputBackend (XTest) -> X11 display
+  -> InputController -> InputBackend (X11: XTest; Wayland: virtual keyboard + virtual pointer v2)
+  -> selected display
 ```
 
 Only one of the viewer, `/control`, and `/input` owns input at a time.
@@ -37,14 +39,14 @@ Only one of the viewer, `/control`, and `/input` owns input at a time.
 - `CaptureSource` (`src/engine/core/capture-source.hpp`): `fd()`, `dimensions()`, `drainDamage()`, `pixelFormat()`, `capture()`. A frame is a non-owning CPU view (BGRA or ARGB), valid until the next capture. Optional `cursorSupported()` and `cursor(force)`.
 - `InputBackend` (`src/engine/core/input.hpp`): platform primitives only: `nativeKey(usage)`, `pressKey`, `releaseKey`, `typeText(codepoint)`, `pressButton`, `releaseButton`, `move`, `scroll`, `resetLocks`, `fence(mark)`, `pending`, `cancel`, `flush`, `dimensions`, `name`. A backend may queue its work on its own thread. `pending` counts the events still queued, and the service thread refuses a batch that would take the queue past 1024 events. `fence` completes a caller's `InputFence` after everything posted before it. `cancel` drops queued text and moves as not applied while keeping key and button releases, and reports how many records were dropped.
 - `InputController` (`src/engine/core/input.hpp`): owns one `InputBackend`, validates each `InputEvent`, maps normalized pointer coordinates to pixels, dedupes held keys and buttons by native key id, and releases everything on `releaseAll`. `resetLocks` turns Caps Lock off when a new input session starts. It forwards `fence` and `cancel` to the backend and returns `InputStatus`: `invalid` for a rejected event, `unsupported` when the backend has no native key for a usage or cannot type a codepoint.
-- `InputQueue` (`src/engine/core/input.hpp`): the backend work queue. It counts one protocol record as one queued unit however many platform jobs that record posts, so admission, `pending`, and cancelled-record counts share one unit. `cancel` drops queued text and moves and leaves each fence it covered in worker order, so the worker completes it as not applied only after its own `XSync`.
+- `InputQueue` (`src/engine/core/input.hpp`): the backend work queue. It counts one protocol record as one queued unit however many platform jobs that record posts, so admission, `pending`, and cancelled-record counts share one unit. `cancel` drops queued text and moves and leaves each fence it covered in worker order, so the worker completes it as not applied after the backend's fence.
 - `CaptureEncoder` takes a `CaptureSourceFactory`, so tests can inject a source with no X11.
 - The worker requires a valid fd. Core enforces the source size limits once, in the capture worker and on the input backend's dimensions at startup: width 320 to 1920 and height 240 to 1080, both even. The image stride must be between width x 4 and width x 8 bytes.
 
 ## Threads and ownership
 
 - The service thread owns libwebsockets, the `InputController`, flow-control state, and all socket writes. On Linux it sets `TCP_NODELAY` and `TCP_NOTSENT_LOWAT` on the stream socket.
-- On Linux, input work runs on a thread that owns the input X connection. The service thread only queues events, so it never waits for a slow character. The `/input` and `/control` replies are written when that thread completes the batch's fence, which waits for the X server to process the batch. That gives clients backpressure and keeps `applied` true.
+- On Linux, input work runs on a thread that owns the backend connection. The service thread only queues events, so it never waits for a slow character. The `/input` and `/control` replies follow a backend fence (XSync on X11 and a Wayland roundtrip on Wayland), which gives clients backpressure and keeps `applied` true.
 - Shutdown destroys the input controller and joins its thread before the libwebsockets context is destroyed. The thread wakes the service thread through a shared context holder that is cleared first.
 - The capture worker owns its `CaptureSource`, a reusable YUV frame, and the x264 encoder. It publishes owning `EncodedFrame` vectors to a bounded queue and wakes the service thread with `lws_cancel_service`.
 - A separate screenshot worker owns its own `CaptureSource`.
@@ -90,16 +92,15 @@ Color: little-endian BGRA and big-endian ARGB convert to NV12 with limited-range
 ## Adding a backend
 
 1. Create `src/engine/backends/<os>/<name>/` implementing `initializeNativeBackend`, `makeCaptureSource`, and `makeInputBackend`.
-2. Add `BACKEND_DIR_<name>` (folder) and `BACKEND_PKGS_<name>` (pkg-config modules) to the `Makefile`.
-3. Build with `make BACKENDS=<name>` (default `x11`, folder `linux/x11`); quote a space-separated list to build multiple backends.
-4. Implement capture and the input primitives only: map a HID usage to a native key, press and release a native key or button, type a Unicode codepoint, move, scroll, reset locks, flush, `dimensions`, and `name`. Core owns protocol validation, coordinate mapping, held input, and the size limits.
-5. `src/engine/core/` and `src/engine/server/` must not include backend headers.
-
-A Wayland backend must also handle portal authorization and revocation, negotiated format and dimensions, the notification fd, frame ownership, and separately authorized input. It must turn permission denial and session closure into explicit failures and release held input. The CPU-view interface may need revising. No Wayland code exists.
+2. Add the backend name to `AVAILABLE_BACKENDS`, then add `BACKEND_DIR_<name>` and `BACKEND_PKGS_<name>` to the `Makefile`. The current values are `x11` and `wayland`.
+3. Add a guarded entry to the `backends` array in `src/engine/server/backend.cpp`. The `Makefile` adds `-DRELAY_BACKEND_<name>` for each selected backend. The first compiled entry is the default, so keep X11 first when both backends are built.
+4. Build with `make BACKENDS=<name>`. The default is `x11`; quote a space-separated list to build multiple backends, such as `make BACKENDS="x11 wayland"`.
+5. For Wayland protocols, vendor their XML under `src/engine/backends/linux/wayland/protocols/` and add each protocol name to `WAYLAND_PROTOCOLS` in the `Makefile`. The Wayland build uses `wayland-scanner` to generate client headers and private protocol code under `build/protocols/`.
+6. Implement capture and the input primitives only: map a HID usage to a native key, press and release a native key or button, type a Unicode codepoint, move, scroll, reset locks, flush, `dimensions`, and `name`. Core owns protocol validation, coordinate mapping, held input, and the size limits. `src/engine/core/` and `src/engine/server/` must not include backend headers.
 
 ## Build and test
 
-The engine is C++17. It needs `libx264`, `libwebsockets` with TLS, and `libx11`, `libxext`, `libxdamage`, `libxfixes`, and `libxtst`. It does not link FFmpeg. `install.sh` installs these on every distribution it supports. The package names for each family are in `packages.tsv`, the only place they are listed.
+The engine is C++17. Its shared pkg-config dependencies are `x264`, `libwebsockets` with TLS, and `zlib`. X11 adds `x11`, `xext`, `xdamage`, `xfixes`, and `xtst`; Wayland adds `wayland-client`, `xkbcommon`, and `wayland-scanner`. The engine does not link FFmpeg. `install.sh --backend` selects the compiled backends and installs matching packages; it accepts `x11`, `wayland`, or `all` and defaults to `x11`. The package names for each family are in `packages.tsv`, the only place they are listed.
 
 ```sh
 make                 # builds relay-engine

@@ -5,23 +5,20 @@ description: What happens between the desktop on the VM and the browser, how the
 
 After reading this page you know what relay does with each frame of your desktop, why the picture gets softer on a slow link and sharper when you stop moving, and which limits to plan around.
 
-<Diagram name="architecture" title="Relay architecture: the capture and encode pipeline in a Linux VM, the browser viewer, and the input path" aspectRatio="720 / 448" />
+<Diagram name="architecture" title="Relay architecture: the capture and encode pipeline in a Linux VM, the browser viewer, and the input path" aspectRatio="720 / 480" />
 
 The same flow in text:
 
 ```text
-virtual display
-  -> capture of changed regions
-  -> H.264 encoding
-  -> adaptive flow control
-  -> WebSocket /stream
-  -> browser viewer (decode, draw)
+X11: Xvfb -> MIT-SHM/XDamage/XFixes capture
+Wayland: headless sway or attached compositor -> wlr-screencopy capture
+Both -> H.264 encoding -> adaptive flow control -> WebSocket /stream -> browser viewer
 
 viewer input over /stream (same WebSocket as the video)
 agent or relay CLI/SDK input over /input (HTTP) or /control (WebSocket)
   -> input checks
-  -> input injection
-  -> virtual display
+  -> XTest (X11) or virtual keyboard + virtual pointer v2 (Wayland)
+  -> display
 ```
 
 Only one of the viewer, `/control`, and `/input` owns input at a time.
@@ -30,7 +27,7 @@ Only one of the viewer, `/control`, and `/input` owns input at a time.
 
 | Where | What runs |
 | --- | --- |
-| VM | The virtual display, the desktop and its apps, and the engine. The engine captures, encodes, streams, and applies input. `relay up` starts all three. |
+| VM | The selected display, the desktop and its apps when enabled, and the engine. The engine captures, encodes, streams, and applies input. |
 | Browser | The viewer. It decodes the video, draws it on a canvas, and sends your keyboard and mouse back. |
 | Anywhere else | Agents and the `relay` client commands, which talk to the engine over HTTP and WebSocket. See [Remote access](/docs/remote-access) for how to reach a VM from another machine. |
 
@@ -38,11 +35,11 @@ All the heavy work, capturing and encoding, happens on the VM. The browser only 
 
 ## From the desktop to the browser
 
-1. **Virtual display.** `relay up` starts an X11 display with no monitor attached and runs the desktop on it. The default size is 1280x720; you can set it in [Configuration](/docs/configuration). It can also attach to a display that already exists.
-2. **Capture only what changed.** The display reports which regions changed. A still desktop costs almost nothing: nothing is captured or sent until something moves. A fresh screenshot does not depend on the stream, so `relay screenshot` works with or without a viewer.
+1. **Virtual display.** If no backend is configured, `relay up` uses X11 when the engine includes it, otherwise Wayland. It starts a virtual display or attaches to an existing X11 display or Wayland compositor. Relay-managed displays default to 1280x720; set their size in [Configuration](/docs/configuration). See [Wayland](/docs/wayland) for compositor setup and output selection.
+2. **Capture only what changed.** The display reports which regions changed. When the desktop is still, relay refines the last frame rather than streaming every frame. A fresh screenshot does not depend on the stream, so `relay screenshot` works with or without a viewer.
 3. **Encode to H.264.** Changed frames are converted and compressed for low delay: no look-ahead and no reordering, so a frame leaves the VM as soon as it is encoded. The first frame of every connection, and any recovery after a failure, is a full picture the viewer can start from.
 4. **Adapt to the network.** See [the next section](#adapting-to-the-network).
-5. **Stream.** Frames travel over one WebSocket, `/stream`. The mouse cursor is sent as a separate small image, so it moves without waiting for the video.
+5. **Stream.** Frames travel over one WebSocket, `/stream`. On X11, the mouse cursor is sent as a separate small image, so it moves without waiting for the video. See [Wayland](/docs/wayland#limits) for cursor behavior.
 6. **Decode and draw.** The viewer decodes each frame in order and draws it on a canvas, at most once per display refresh. It then tells the engine the frame is done. A tab that is hidden pauses the stream, and returning to it reconnects with a fresh picture.
 
 The picture uses 4:2:0 chroma, as most video does. Fine colored text can look slightly softer than the screen it came from.
@@ -80,10 +77,9 @@ Typed text goes through the keyboard layout of the display (`us` by default). Ch
 
 | Limit | What it means |
 | --- | --- |
-| Resolution | Even width from 320 to 1920 and even height from 240 to 1080. Larger desktops are not supported. |
+| Resolution | Width must be even and 320 to 1920; height must be even and 240 to 1080. See [Wayland](/docs/wayland) for output selection. |
 | Latency on slow links | The picture is as fresh as the link allows. Near 200 ms of delay the stream can lower its quality repeatedly. Move the VM closer, or lower `stream.bitrate.max`. |
-| X11 only | Relay captures and controls an X11 display. Wayland is not supported today. |
-| Video only | No audio, clipboard sync, or live resize. Change the size in the configuration and restart the session. |
+| Video only | No audio, clipboard sync, or live resize. Change the configured size of a relay-managed display or select another Wayland output, then restart relay. |
 | Browser | Needs H.264 decoding in the browser (WebCodecs): current Chrome, Edge, or Safari. |
 | Colored text | 4:2:0 video softens fine colored text. |
 | Failure | If capture or encoding fails repeatedly, the engine exits and the session ends. `relay logs` shows why. |

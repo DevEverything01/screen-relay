@@ -6,7 +6,7 @@ allowed-tools: Bash(relay:*)
 
 # Relay core workflow
 
-Relay runs a Linux X11 desktop and gives you a browser viewer plus CLI control. This skill ships with the CLI, so every command below matches the installed version.
+Relay runs a Linux desktop on X11 or Wayland and gives you a browser viewer plus CLI control. This skill ships with the CLI, so every command below matches the installed version.
 
 ## Where commands run
 
@@ -162,7 +162,8 @@ Only one controller sends input at a time: a browser viewer, an SDK control sess
 | `server.public` | none | HTTPS origin advertised to browsers. `RELAY_PUBLIC` |
 | `server.tls_cert`, `server.tls_key` | none | Serve TLS natively; set both. `RELAY_TLS_CERT`, `RELAY_TLS_KEY` |
 | `keyboard.layout` | `us` | Remote layout used by text input. `RELAY_KEYBOARD_LAYOUT` |
-| `desktop` | `xfce` | `xfce`, `none`, or a desktop command. `RELAY_DESKTOP` |
+| `backend` | `x11` when the engine has it, else `wayland` | `x11` or `wayland`. `RELAY_BACKEND` |
+| `desktop` | `xfce` (x11) or `foot` (wayland) | `xfce`, `none`, or a desktop command. `RELAY_DESKTOP` |
 
 There is no live reload or resize: `relay down`, edit the file, then `relay up -d`.
 

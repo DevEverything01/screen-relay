@@ -10,7 +10,8 @@ Run these on the Linux machine that shows the desktop. `up`, `down` and `run` fa
 
 ```sh
 relay up [-d] [--name NAME] [--config FILE] [--port PORT] [--desktop xfce|none|COMMAND]
-         [--display :N] [--public HTTPS_URL] [--tls-cert FILE --tls-key FILE]
+         [--display DISPLAY] [--backend x11|wayland] [--output NAME]
+         [--public HTTPS_URL] [--tls-cert FILE --tls-key FILE]
          [--bind ADDRESS] [--timeout SECONDS]
 relay down [--name NAME]
 relay logs [component] [--name NAME] [-f|--follow]
@@ -18,11 +19,11 @@ relay run -- <app> [args]... [--name NAME] [--restart]
 relay doctor
 ```
 
-- `up` starts Xvfb, the desktop and the engine, waits until ready, then supervises. Without `-d` it runs in the foreground and the first Ctrl+C stops the session (exit 130). Piped, it prints only the viewer URL. `--public` advertises an HTTPS origin and expects a TLS proxy unless `--tls-cert` is set. `--display` attaches to an existing display and keeps the caller's environment.
+- `up` starts a display (Xvfb on X11 or sway with XWayland on Wayland) or attaches to an existing one. It starts the desktop when enabled and the engine, waits until ready, then supervises the session. Without `-d` it runs in the foreground and the first Ctrl+C stops the session (exit 130). Piped, it prints only the viewer URL. `--public` advertises an HTTPS origin and expects a TLS proxy unless `--tls-cert` is set. `--display` keeps the caller's environment. On Wayland it takes a socket name such as `wayland-1` and needs `XDG_RUNTIME_DIR`. `--backend` picks x11 or wayland (default x11 when the engine has it). `--output` picks the Wayland output to capture. See [Wayland](https://relay.labs.vercel.dev/docs/wayland) for setup.
 - `down` stops the session and everything it started; safe to repeat. Its JSON outcome is `stopped` or `unchanged`.
 - `logs` prints the last 200 lines of one component (`display`, `dbus`, `desktop`, `engine`, `apps`) or of every component log. `-f` follows; it cannot be combined with `--json`.
-- `run` starts an app on the session desktop and returns its pid. It shares the desktop's display, D-Bus session bus, runtime, config and cache directories, and X authority, and clears ambient capabilities. `--restart` restarts the app until the session stops. App output goes to `relay logs apps`.
-- `doctor` checks the machine it runs on and prints a fix command for each problem. Off Linux it reports the platform check as failed.
+- `run` starts an app on the session desktop and returns its pid. It shares the desktop's display and available D-Bus session bus, runtime, config, cache and X authority settings, and clears ambient capabilities. On Wayland it also sets `WAYLAND_DISPLAY`. `--restart` restarts the app until the session stops. App output goes to `relay logs apps`.
+- `doctor` checks the machine it runs on and prints a fix command for each problem. Off Linux it reports the platform check as failed. It uses `RELAY_BACKEND`, then the config file's `backend` key, then the engine's default. Use `RELAY_BACKEND=wayland relay doctor` for a Wayland setup.
 
 ## Client commands
 

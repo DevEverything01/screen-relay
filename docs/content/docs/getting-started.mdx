@@ -17,9 +17,9 @@ This guide takes you from a Linux VM to a desktop you can see in a browser and c
 
 On the VM, from a clone of the repository:
 
-<Callout title="Fedora needs RPM Fusion">
-  relay gets the x264 library from RPM Fusion Free on Fedora. If that repository
-  is not enabled, the installer prints this command and stops. Run it, then run
+<Callout title="x264 on Fedora">
+  On Fedora, RPM Fusion Free provides the x264 library relay needs. If the x264 package
+  is unavailable, the installer prints this command and stops. Run it, then run
   `./install.sh` again:
 
   ```sh
@@ -34,7 +34,7 @@ export PATH="$HOME/.local/bin:$PATH"
 
 The installer installs the system packages relay needs, builds relay, puts the `relay` command in `~/.local/bin`, and finishes by running `relay doctor`. It exits with an error if a check fails, and it is safe to run again. Add the `export` line to your shell profile to keep it. If `~/.local/bin` is not on `PATH`, the installer prints `Not on PATH; add it with: export PATH="<prefix>/bin:$PATH"`.
 
-Options: `--prefix DIR` installs somewhere else, `--no-deps` skips package installation, `--no-desktop` skips the desktop packages, and `--client-only` installs only the CLI (see [step 6](#6-control-it-from-your-laptop)).
+Options: `--prefix DIR` installs somewhere else, `--no-deps` skips package installation, `--no-desktop` skips the XFCE packages, and `--client-only` installs only the CLI (see [step 6](#6-control-it-from-your-laptop)).
 
 ## 2. Start a session
 

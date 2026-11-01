@@ -57,16 +57,16 @@
 </style>
 </head>
 <body>
-<svg viewBox="0 0 720 448" role="img" aria-labelledby="t d">
+<svg viewBox="0 0 720 480" role="img" aria-labelledby="t d">
   <title id="t">Relay architecture</title>
-  <desc id="d">Inside a Linux VM, the X11 display (Xvfb) feeds capture of changed regions, then the H.264 encoder, then flow control (ACK credit), then the WebSocket /stream. The browser viewer (VideoDecoder to canvas) receives video and sends its input over the same /stream WebSocket. An agent or the relay CLI and SDK sends input over /input (HTTP) or /control (WebSocket). Input from either source reaches the input checks, and only one of them owns input at a time. Checked input is injected (XTest) and feeds back into the X11 display.</desc>
+  <desc id="d">Inside a Linux VM, an X11 display such as Xvfb feeds X11 capture (MIT-SHM, XDamage, XFixes). Headless sway or an attached Wayland compositor feeds Wayland capture (wlr-screencopy). Both feed H.264 encoding, flow control, and WebSocket /stream. The viewer sends input over /stream; agents use /input (HTTP) or /control (WebSocket). The engine validates input and sends it through XTest for X11 or a virtual keyboard and virtual pointer v2 for Wayland. Only one input owner is active at a time.</desc>
   <defs>
     <marker id="arrow" viewBox="0 0 8 8" refX="6" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
       <path d="M1.5 1.5 L5.5 4 L1.5 6.5"/>
     </marker>
   </defs>
 
-  <rect class="box" x="8" y="8" width="704" height="328" rx="8" style="fill:none"/>
+  <rect class="box" x="8" y="8" width="704" height="336" rx="8" style="fill:none"/>
   <g transform="translate(28 26)">
     <rect class="icon fg" x="1" y="1" width="16" height="6" rx="1.5"/>
     <rect class="icon fg" x="1" y="11" width="16" height="6" rx="1.5"/>
@@ -75,78 +75,84 @@
   </g>
   <text class="head" x="56" y="40">Linux VM</text>
 
-  <rect class="box" x="200" y="64" width="492" height="244" rx="8"/>
-  <g transform="translate(220 76)">
+  <rect class="box" x="188" y="64" width="524" height="264" rx="8"/>
+  <g transform="translate(208 76)">
     <rect class="icon" x="3" y="3" width="12" height="12" rx="2"/>
     <rect class="icon" x="6.5" y="6.5" width="5" height="5" rx="1"/>
     <path class="icon" d="M6 0v3M12 0v3M6 15v3M12 15v3M0 6h3M0 12h3M15 6h3M15 12h3"/>
   </g>
-  <text class="head" x="246" y="90">engine</text>
+  <text class="head" x="234" y="90">engine</text>
 
-  <rect class="box node" x="40" y="116" width="120" height="64" rx="6"/>
-  <text class="label" x="100" y="146">X11 display</text>
-  <text class="sub" x="100" y="163">Xvfb</text>
+  <rect class="box node" x="20" y="96" width="160" height="96" rx="6"/>
+  <text class="label" x="100" y="124">Virtual display</text>
+  <text class="sub" x="100" y="141">X11: Xvfb</text>
+  <text class="sub" x="100" y="155">Wayland: headless sway</text>
+  <text class="sub" x="100" y="169">or attached compositor</text>
 
-  <rect class="box node" x="220" y="116" width="120" height="64" rx="6"/>
-  <text class="label" x="280" y="146">Capture</text>
-  <text class="sub" x="280" y="163">changed regions only</text>
+  <rect class="box node" x="208" y="96" width="160" height="96" rx="6"/>
+  <text class="label" x="288" y="124">Capture</text>
+  <text class="sub" x="288" y="141">X11: MIT-SHM, XDamage</text>
+  <text class="sub" x="288" y="155">XFixes cursor</text>
+  <text class="sub" x="288" y="169">Wayland: wlr-screencopy</text>
 
-  <rect class="box node" x="380" y="116" width="120" height="64" rx="6"/>
-  <text class="label" x="440" y="146">Encoder</text>
-  <text class="sub" x="440" y="163">H.264</text>
+  <rect class="box node" x="408" y="112" width="120" height="64" rx="6"/>
+  <text class="label" x="468" y="142">Encoder</text>
+  <text class="sub" x="468" y="159">H.264</text>
 
-  <rect class="box node" x="540" y="116" width="120" height="64" rx="6"/>
-  <text class="label" x="600" y="146">Flow control</text>
-  <text class="sub" x="600" y="163">ACK credit</text>
+  <rect class="box node" x="568" y="112" width="120" height="64" rx="6"/>
+  <text class="label" x="628" y="142">Flow control</text>
+  <text class="sub" x="628" y="159">ACK credit</text>
 
-  <rect class="box node" x="540" y="224" width="120" height="64" rx="6"/>
-  <text class="label" x="600" y="254">WebSocket</text>
-  <text class="sub" x="600" y="271">stream server</text>
+  <rect class="box node" x="568" y="228" width="120" height="64" rx="6"/>
+  <text class="label" x="628" y="258">WebSocket</text>
+  <text class="sub" x="628" y="275">stream server</text>
 
-  <rect class="box node" x="380" y="224" width="120" height="64" rx="6"/>
-  <text class="label" x="440" y="254">Input checks</text>
-  <text class="sub" x="440" y="271">validates events</text>
+  <rect class="box node" x="408" y="228" width="120" height="64" rx="6"/>
+  <text class="label" x="468" y="258">Input checks</text>
+  <text class="sub" x="468" y="275">validates events</text>
 
-  <rect class="box node" x="220" y="224" width="120" height="64" rx="6"/>
-  <text class="label" x="280" y="254">Injection</text>
-  <text class="sub" x="280" y="271">XTest</text>
+  <rect class="box node" x="208" y="212" width="160" height="96" rx="6"/>
+  <text class="label" x="288" y="240">Input</text>
+  <text class="sub" x="288" y="257">X11: XTest</text>
+  <text class="sub" x="288" y="271">Wayland: virtual keyboard</text>
+  <text class="sub" x="288" y="285">virtual pointer v2</text>
 
-  <path class="wire" d="M166 148H214"/>
-  <path class="wire" d="M346 148H374"/>
-  <path class="wire" d="M506 148H534"/>
-  <path class="wire" d="M600 186V218"/>
-  <path class="wire" d="M534 256H506"/>
-  <path class="wire" d="M374 256H346"/>
-  <path class="wire" d="M214 256H114a14 14 0 0 1-14-14V186"/>
+  <path class="wire" d="M186 144H202"/>
+  <path class="wire" d="M374 144H402"/>
+  <path class="wire" d="M534 144H562"/>
+  <path class="wire" d="M628 182V222"/>
+  <path class="wire" d="M562 260H534"/>
+  <path class="wire" d="M402 260H374"/>
+  <path class="wire" d="M288 314V322a14 14 0 0 1-14 14H118a14 14 0 0 1-14-14V198"/>
 
-  <path class="wire strong" d="M633 294V366"/>
-  <text class="tag" x="641" y="356" style="text-anchor:start">video</text>
-  <path class="wire" d="M567 366V294"/>
-  <text class="tag" x="559" y="356" style="text-anchor:end">input</text>
-  <text class="tag" x="600" y="356">/stream</text>
-  <path class="wire strong" d="M198 404H426a14 14 0 0 0 14-14V294"/>
-  <text class="tag" x="312" y="396">/input or /control</text>
-  <text class="tag" x="312" y="424">one input owner at a time</text>
+  <path class="wire strong" d="M628 298V382"/>
+  <text class="tag" x="638" y="360" style="text-anchor:start">video</text>
+  <path class="wire" d="M580 382V298"/>
+  <text class="tag" x="572" y="360" style="text-anchor:end">input</text>
+  <text class="tag" x="604" y="360">/stream</text>
+  <path class="wire strong" d="M198 420H426a14 14 0 0 0 14-14V298"/>
+  <text class="tag" x="312" y="412">/input or /control</text>
+  <text class="tag" x="312" y="440">one input owner at a time</text>
 
-  <circle class="hl" cx="500" cy="404" r="30"/>
-  <g transform="translate(488 392)">
+  <circle class="hl" cx="500" cy="420" r="30"/>
+  <g transform="translate(488 408)">
     <circle class="hl-icon" cx="12" cy="12" r="9"/>
     <ellipse class="hl-icon" cx="12" cy="12" rx="4" ry="9"/>
     <path class="hl-icon" d="M3 12h18"/>
   </g>
 
-  <rect class="box node" x="548" y="372" width="152" height="64" rx="6"/>
-  <text class="label" x="624" y="402">Browser viewer</text>
-  <text class="sub" x="624" y="419">VideoDecoder → canvas</text>
+  <rect class="box node" x="548" y="388" width="152" height="64" rx="6"/>
+  <text class="label" x="624" y="418">Browser viewer</text>
+  <text class="sub" x="624" y="435">VideoDecoder → canvas</text>
 
-  <rect class="box node" x="40" y="372" width="152" height="64" rx="6"/>
-  <g transform="translate(54 390)">
+  <rect class="box node" x="40" y="388" width="152" height="64" rx="6"/>
+  <g transform="translate(54 406)">
     <circle class="icon" cx="14" cy="14" r="13"/>
     <circle class="icon" cx="14" cy="11" r="3.5"/>
     <path class="icon" d="M7.5 22.5c.8-3.6 3.4-5 6.5-5s5.7 1.4 6.5 5"/>
   </g>
-  <text class="label" x="104" y="402" style="text-anchor:start">Agent</text>
-  <text class="sub" x="104" y="419" style="text-anchor:start">relay CLI/SDK</text>
+  <text class="label" x="104" y="418" style="text-anchor:start">Agent</text>
+  <text class="sub" x="104" y="435" style="text-anchor:start">relay CLI/SDK</text>
 </svg>
 </body>
 </html>

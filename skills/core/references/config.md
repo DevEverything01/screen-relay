@@ -17,9 +17,10 @@ The published reference is at https://relay.labs.vercel.dev/docs/configuration.
 | `server.tls_cert` | none | Certificate file; `server.tls_key` must be set too | `RELAY_TLS_CERT` |
 | `server.tls_key` | none | Private key file | `RELAY_TLS_KEY` |
 | `keyboard.layout` | `us` | Comma-separated XKB layout such as `fr,us` | `RELAY_KEYBOARD_LAYOUT` |
-| `desktop` | `xfce` | `xfce`, `none`, or a desktop command; defaults to `none` with `--display` | `RELAY_DESKTOP` |
+| `backend` | `x11` when the engine has it, else `wayland` | `x11` or `wayland`; `--backend` overrides it | `RELAY_BACKEND` |
+| `desktop` | `xfce` (x11) or `foot` (wayland) | `xfce`, `none`, or a desktop command; defaults to `none` with `--display` | `RELAY_DESKTOP` |
 
-Example:
+Example (sets `xfce`; omit `desktop` to use the default):
 
 ```yaml
 display:
