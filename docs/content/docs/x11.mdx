@@ -1,0 +1,53 @@
+---
+title: X11
+description: Start an X11 desktop or attach to an existing display.
+---
+
+X11 is relay's default display server. Relay starts a virtual X display with the XFCE desktop, on every distribution it installs on. Relay calls this the backend: choose it with `--backend x11`.
+
+## Install
+
+From a [repository clone](/docs/getting-started#1-install-relay), run:
+
+```sh
+./install.sh
+```
+
+Use `./install.sh --backend all` to install both backends. Reinstalling at the same prefix keeps the backends already in the engine. If `relay` is not on your `PATH`, run `export PATH="$HOME/.local/bin:$PATH"` for the default install prefix.
+
+## Start a desktop
+
+```sh
+relay up -d --backend x11
+```
+
+Relay starts XFCE by default. Use `--desktop none` to start without a desktop, or `--desktop COMMAND` to start another command. The display uses `display.resolution` from your [configuration](/docs/configuration), or `1280x720` by default.
+
+To open the viewer, follow [Getting started](/docs/getting-started#3-open-the-viewer).
+
+## Attach to an existing display
+
+```sh
+relay up -d --backend x11 --display :0
+```
+
+Replace `:0` with your display number. Relay inherits `XAUTHORITY` from your environment, uses the existing display size, and starts no desktop by default. Stopping relay leaves the display running.
+
+If the engine reports `opening X display failed`, check the display number and set `XAUTHORITY` to the X session's authority file. Do not run `xhost +`.
+
+## Check the machine
+
+```sh
+relay doctor
+```
+
+If your configuration or `RELAY_BACKEND` selects Wayland, run `RELAY_BACKEND=x11 relay doctor` instead. The checks cover:
+
+- The engine, required libraries, and default port.
+- `Xvfb`, `xauth`, `xprop`, `xwininfo`, `xdpyinfo`, `setxkbmap`, and required X extensions.
+- XFCE, D-Bus, and icon decoding.
+
+## Limits
+
+- The display must be 320 to 1920 pixels wide and 240 to 1080 pixels high, with even dimensions. To resize it, change `display.resolution` and restart relay. For an attached display, resize it separately before restarting relay.
+- `--output` is available only with [Wayland](/docs/wayland).

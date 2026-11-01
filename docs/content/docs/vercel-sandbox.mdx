@@ -1,0 +1,121 @@
+---
+title: Vercel Sandbox
+description: Run relay in a Vercel Sandbox and open the desktop in your browser.
+---
+
+Run relay in a Vercel Sandbox, publish port 8080, and open the desktop in your browser. The sandbox is the VM that runs the desktop.
+
+## With the Sandbox CLI
+
+1. Install the [Sandbox CLI](https://vercel.com/docs/vercel-sandbox/cli-reference) and sign in:
+
+   ```sh
+   npm install -g sandbox
+   sandbox login
+   ```
+
+2. Create a sandbox and publish port 8080:
+
+   ```sh
+   sandbox create --name relay --timeout 45m -p 8080
+   ```
+
+   The command prints a URL like `https://sb-xxxx.vercel.run`. Replace that example URL in the commands below with your URL. Hobby plans cap the sandbox timeout at 45 minutes. On plans that allow longer runtimes, `sandbox extend relay 30m` adds 30 minutes.
+
+3. From your clone of relay, copy it into the sandbox and install it:
+
+   ```sh
+   git archive --format=tar.gz -o relay.tgz HEAD
+   sandbox cp relay.tgz relay:/tmp/relay.tgz
+   sandbox exec relay sh -c 'mkdir -p ~/relay && tar -xzf /tmp/relay.tgz -C ~/relay && cd ~/relay && ./install.sh'
+   ```
+
+   Installation takes a few minutes. The sandbox runs Ubuntu 26.04 on x86_64 as the `ubuntu` user, which has passwordless sudo.
+
+4. Start relay using your public URL:
+
+   ```sh
+   sandbox exec relay sh -c '$HOME/.local/bin/relay up -d --public https://sb-xxxx.vercel.run'
+   ```
+
+   Open the printed viewer link in your browser. It includes `#token=` and grants access to the desktop, so keep it secret.
+
+   For Wayland, add `--backend wayland` to both `./install.sh` and `relay up`. See [Wayland](/docs/wayland).
+
+5. Take a screenshot inside the sandbox:
+
+   ```sh
+   sandbox exec relay sh -c '$HOME/.local/bin/relay screenshot /tmp/screen.png'
+   ```
+
+   The PNG is saved inside the sandbox. To control the desktop from your laptop, [install the relay CLI](/docs/remote-access) and save the token from the viewer link in a local file:
+
+   ```sh
+   relay screenshot screen.png --url https://sb-xxxx.vercel.run --token-file ./token
+   ```
+
+   See [Tokens](/docs/remote-access#tokens) and the [Node SDK options](/docs/sdk#options) for remote access.
+
+6. When finished, remove the sandbox and its sessions:
+
+   ```sh
+   sandbox rm relay
+   ```
+
+   Existing snapshots are kept.
+
+Agents can load these instructions with `relay skills get vercel-sandbox`.
+
+## With the Sandbox SDK
+
+1. In a Node.js 24 project with the [Vercel CLI](https://vercel.com/docs/cli) installed, install the Sandbox SDK and authenticate:
+
+   ```sh
+   npm install @vercel/sandbox
+   vercel link
+   vercel env pull
+   ```
+
+   Add a `GITHUB_TOKEN` with read access to the relay repository to `.env.local`. The sandbox clones relay with it.
+
+2. Save this as `relay-sandbox.mjs`:
+
+   ```js
+   import { Sandbox } from '@vercel/sandbox';
+
+   const sandbox = await Sandbox.create({
+     name: 'relay-sdk',
+     source: {
+       type: 'git',
+       url: 'https://github.com/vercel-labs/relay.git',
+       username: 'x-access-token',
+       password: process.env.GITHUB_TOKEN,
+     },
+     ports: [8080],
+     timeout: 45 * 60 * 1000,
+   });
+
+   const install = await sandbox.runCommand({
+     cmd: 'sh',
+     args: ['-c', './install.sh'],
+     stdout: process.stdout,
+     stderr: process.stderr,
+   });
+   if (install.exitCode !== 0) throw new Error('Relay installation failed');
+
+   const start = await sandbox.runCommand({
+     cmd: 'sh',
+     args: ['-c', '$HOME/.local/bin/relay up -d --public "$1"', 'sh', sandbox.domain(8080)],
+     stdout: process.stdout,
+     stderr: process.stderr,
+   });
+   if (start.exitCode !== 0) throw new Error('Relay failed to start');
+   ```
+
+3. Run it:
+
+   ```sh
+   node --env-file=.env.local relay-sandbox.mjs
+   ```
+
+   After installation, the script prints the viewer link. Open it in your browser and keep it secret. When finished, remove the sandbox with `sandbox rm relay-sdk` or use [`sandbox.delete()`](https://vercel.com/docs/sandbox/sdk-reference#sandbox.delete) in your application. Removal keeps existing snapshots.

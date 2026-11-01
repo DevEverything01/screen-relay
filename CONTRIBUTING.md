@@ -2,6 +2,8 @@
 
 This file is for people changing relay's source. For installing and using relay, read the [documentation](https://relay.labs.vercel.dev/docs). The wire format is documented there too, under "API and protocol".
 
+For the wire format, see [Relay wire protocol](PROTOCOL.md).
+
 ## Source layout
 
 | Path | Contents |

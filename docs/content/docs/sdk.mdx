@@ -1,164 +1,127 @@
 ---
 title: SDK
-description: Control a relay desktop from Node with one-shot HTTP calls or a persistent control session.
+description: Control a relay desktop from Node.
 ---
 
-The SDK is a Node library with no runtime dependencies, for Node 26 or newer. Use it to take screenshots and send input from your own code. For the command line, see the [CLI reference](/docs/cli).
+Use Node 26 or newer to send input and take screenshots. Start a desktop on the same machine with [relay up -d](/docs/getting-started#2-start-a-session).
 
 ## Install and import
 
-Build the package from the repository and install it from the local path:
+Clone the [relay repository](/docs/getting-started#1-install-relay), then build and install it in your Node project:
 
 ```sh
 (cd /absolute/path/to/this/repo && npm install && npm run build)
 npm install /absolute/path/to/this/repo
 ```
 
+### One-shot calls
+
+Close the viewer, then click and save a screenshot:
+
 ```js
-import { createClient, connect, RelayError } from 'relay';
+import { createClient } from 'relay';
+import { writeFile } from 'node:fs/promises';
+const desktop = createClient();
+await desktop.click(0.5, 0.5);
+await writeFile('screen.png', await desktop.screenshot());
 ```
 
 ## Two ways to connect
 
-| | `createClient(opts)` | `connect(opts)` |
-| --- | --- | --- |
-| Transport | One HTTP request per call. Stateless. | One WebSocket control session. |
-| Use it for | One-shot actions: click, type, screenshot. | Many events in a row with an acknowledgement for each. |
-| Input owner | Only while sending a batch. | Holds input until you call `close()`. |
-| Returns | A client with `status`, `capabilities`, `screenshot`, `click`, `move`, `scroll`, `key`, `type`, `input`. | A session with `input`, `screenshot`, `capabilities`, `status`, `close`, `surface`. |
-
-### One-shot calls
-
-```js
-const desktop = createClient({ url: 'http://127.0.0.1:8080' });
-await desktop.click(0.5, 0.5);
-await desktop.key('ctrl+l');
-await desktop.type('Hello, 世界');
-const png = await desktop.screenshot();
-```
+Use `createClient(options)` for one-shot actions such as `click` and `type`. Use `await connect(options)` to hold a WebSocket control session and send individual input events until `close()`.
 
 ### A control session
 
+Close the session to release input:
+
 ```js
-const desktop = await connect({ url: 'http://127.0.0.1:8080' });
+import { connect } from 'relay';
+
+const desktop = await connect();
 try {
   await desktop.input({ type: 'pointerMove', x: 0.5, y: 0.5 });
-  await desktop.screenshot('screen.png');
 } finally {
   desktop.close();
 }
 ```
 
-`connect` resolves once the engine reports the screen size, available as `desktop.surface` (`{ width, height }`). Closing or losing the connection releases held keys and buttons. Input is never replayed on reconnect.
+The session exposes `surface: { width, height }` and allows 32 pending input requests. An acknowledgement timeout closes the session. Input is not replayed after disconnecting, and an acknowledgement does not guarantee the application reacted.
 
-## Options
+## One input owner at a time
 
-`createClient` and the standalone functions take `{ url, timeout, token, ca, connect, signal }`. `connect` takes the same options except `ca` and `connect`, which it rejects with `invalid_option`.
-
-| Option | Rule |
-| --- | --- |
-| `url` | Default `http://127.0.0.1:8080`. Origin only: no path, credentials, query, or fragment. Plain HTTP only for `localhost` and `127.0.0.1`. Other hosts need HTTPS. |
-| `token` | 64 lowercase hex characters. Required for remote hosts. See [Tokens](/docs/remote-access#tokens). |
-| `timeout` | Milliseconds per request. Default 10000. |
-| `ca` | Certificate file trusted for HTTPS requests, without a hostname check. Used for a local session's own certificate. |
-| `connect` | Address to dial instead of the URL host, with the URL host kept as the `Host` header. Used for a session bound to one interface. |
-| `signal` | `AbortSignal` that cancels requests and control sessions. |
-
-Redirects are not followed.
+A viewer, control session, or CLI can own input. Close the viewer or session before sending client input, or it returns `busy`. A control connection can return `unreachable` when input is held. Status, capabilities, and screenshots do not require input control.
 
 ## Methods
 
-Coordinates are fractions from 0 to 1, from the top-left. Input methods resolve to `{ events: number }`, the count of events applied.
+Coordinates are fractions from `0` to `1`, measured from the top-left. Client input methods return `{ events: number }`.
 
-| Method | Behavior |
+| Method | Result or action |
 | --- | --- |
-| `click(x, y, { button }?)` | Presses and releases `left` (default), `middle`, or `right`. |
-| `move(x, y)` | Moves the pointer. |
-| `scroll(x, y, { dx, dy }?)` | Moves, then scrolls by integer wheel notches. Positive `dy` scrolls down; positive `dx` scrolls right. At least one must be nonzero. |
-| `key(...combos)` | Presses physical key combinations, such as `ctrl+l`, `enter`, or `cmd+shift+t`. `cmd` and `meta` alias `super`. |
-| `type(text)` | Sends one text event per Unicode scalar value using the remote keyboard layout. Empty text sends nothing. |
-| `input(events)` | Sends a nonempty array of raw [input events](#input-events). |
-| `capabilities()` | Backend, screen size, `fps`, `max_input_batch`, and supported features. |
-| `status()` | Transport metrics. Resource counters are `null` when unavailable. |
-| `screenshot()` | PNG bytes. Works while a viewer is connected. |
+| `click(x, y, { button }?)` | Click with `left` (default), `middle`, or `right`. |
+| `move(x, y)` | Move the pointer. |
+| `scroll(x, y, { dx, dy }?)` | Scroll by integer notches after moving. Positive `dx` is right, positive `dy` is down; at least one must be nonzero. |
+| `key(...combos)` | Press physical keys, such as `ctrl+l`; `cmd` and `meta` alias `super`. |
+| `type(text)` | Send one event per Unicode scalar using the remote keyboard layout. Empty text sends nothing. |
+| `input(events)` | Send a nonempty array of [input events](#input-events). |
+| `capabilities()` | Backend, screen size, `fps`, `max_input_batch`, and features. |
+| `status()` | Transport metrics; unavailable resource counters are `null`. |
+| `screenshot()` | PNG bytes, without the viewer's cursor overlay. |
 
-```js
-await desktop.click(0.25, 0.75, { button: 'right' });
-await desktop.scroll(0.5, 0.5, { dy: 3 });
-await desktop.key('ctrl+a', 'ctrl+c');
-await desktop.input([{ type: 'keyDown', key: 4 }, { type: 'keyUp', key: 4 }]);
-const { width, height, max_input_batch } = await desktop.capabilities();
-const metrics = await desktop.status();
-```
+`capabilities(options)`, `status(options)`, and `screenshot(options, path?)` are also standalone exports. The latter returns PNG bytes and writes them to `path` if provided.
 
-`capabilities`, `status`, and `screenshot` are also exported as standalone functions that take the options first. `screenshot(opts, path?)` returns the PNG bytes and also writes them to `path` when given. None of them needs input control.
-
-The client reads `max_input_batch` from capabilities and checks every batch before it sends any input. Key combinations stay together within a batch, and a group larger than the server limit is rejected. The engine releases held input at each batch boundary, so raw events that hold a key across batches do not keep it held. Batches run in order and are never retried, so if a later batch fails, earlier events may already have taken effect.
+Input batches contain at most `max_input_batch` events, up to 256. A key combination or scroll must fit in one batch. Held keys and buttons are released at each boundary. Batches run in order and are not retried; await each call to keep actions in order.
 
 ### Session methods
 
-A session from `connect` differs from the client in three ways:
-
-- `input(event)` sends one raw event and waits for its acknowledgement. It resolves with no value. At most 32 requests can be pending; more reject with `busy`. An acknowledgement that times out closes the session and rejects the remaining requests. A resolved `input` means the server accepted the event, not that the application reacted.
-- `screenshot(path?)` returns the PNG bytes and writes them to `path` when given.
-- `close()` ends the session and releases held keys and buttons.
+| Method | Result or action |
+| --- | --- |
+| `input(event)` | Send one [input event](#input-events) and wait for acknowledgement. Returns no value. |
+| `screenshot(path?)` | PNG bytes; writes them to `path` if provided. |
+| `capabilities()`, `status()` | Same as the client methods. |
+| `close()` | Close the session and release held keys and buttons. |
 
 ## Input events
 
 | Type | Fields |
 | --- | --- |
-| `keyDown`, `keyUp` | `key`: USB HID usage (0 to 231) |
-| `pointerMove` | `x`, `y` in 0 to 1 |
-| `buttonDown`, `buttonUp` | `button` 1 to 3, `x`, `y` |
-| `wheel` | `axis` `"vertical"` or `"horizontal"`, `delta` multiple of 120 within +-1200, `x`, `y` |
-| `releaseAll` | none |
-| `text` | `codepoint`: Unicode scalar value from 1 to 0x10FFFF, excluding surrogates |
+| `keyDown`, `keyUp` | `key`: USB HID usage from 0 to 231. |
+| `pointerMove` | `x`, `y`: coordinates from 0 to 1. |
+| `buttonDown`, `buttonUp` | `button`: 1 for left, 2 for middle, 3 for right; `x`, `y`. |
+| `wheel` | `axis`: `vertical` or `horizontal`; `delta`: a multiple of 120 from -1200 to 1200; `x`, `y`. |
+| `releaseAll` | No fields. |
+| `text` | `codepoint`: Unicode scalar from 1 to 0x10FFFF, excluding surrogates. |
 
-## One input owner at a time
+Optional `buttons` (0 to 31) and `modifiers` (0 to 255) default to 0. Both must be 0 for `text` and `releaseAll`.
 
-Only one input owner can send input at once: a browser viewer, an SDK control session, or the CLI. While a viewer or a `connect` session holds input, or the input queue is full, HTTP input from `createClient` fails with `busy` and nothing is applied. Status, capabilities, and screenshots keep working. Do not retry in a loop; wait for the other owner to close, then retry once.
+## Options
+
+Pass these options to `createClient`, standalone functions, or `connect`. Control sessions reject nonempty `ca` or `connect` with `invalid_option`.
+
+| Option | Meaning |
+| --- | --- |
+| `url` | Origin only; default `http://127.0.0.1:8080`. HTTP only for `localhost` and `127.0.0.1`; HTTPS elsewhere. No credentials, path, query, or fragment. |
+| `token` | 64 lowercase hexadecimal characters. Required for remote hosts. See [Tokens](/docs/remote-access#tokens). |
+| `timeout` | Integer from 1 to 2147483647 milliseconds; default 10000. Per HTTP request, control connection, and input acknowledgement. |
+| `ca` | Certificate file for HTTPS. Verifies the certificate but skips the hostname check. |
+| `connect` | Address to dial instead of the URL host; the URL host remains the `Host` header. |
+| `signal` | `AbortSignal` that cancels requests or the control session. |
+
+Redirects are not followed. The engine closes screenshot requests after 5 seconds; screenshots larger than 8 MiB are rejected.
 
 ## Errors
 
-Failures reject with a `RelayError`. Match `error.reason`, the same snake_case code the CLI prints, rather than the message.
+Match `RelayError.reason`, not the message. `createClient` can throw during option validation; async calls reject. Errors also expose `code`, `message`, `class`, `exitCode`, `status`, and optional `hint`, `data`, and `next`. See [error reasons](/docs/cli#error-reasons).
 
-| Property | Meaning |
+| Reason | Cause and action |
 | --- | --- |
-| `reason` | Stable snake_case code, such as `busy` or `unauthorized`. Full list in [CLI error reasons](/docs/cli#error-reasons). |
-| `code` | Coarser code: `INVALID_ARGUMENT`, `NOT_FOUND`, `UNSUPPORTED`, `NETWORK_ERROR`, `DISCONNECTED`, `PROTOCOL_ERROR`, `TIMEOUT`, `BUSY`, `UNAUTHORIZED`, `HTTP_ERROR`, `IO_ERROR`, `CONFIG_ERROR`, `INTERNAL`, or `CANCELED`. |
-| `message` | A human sentence. |
-| `class`, `exitCode`, `status` | Error group, the exit code the CLI would use, and `error` or `action_required`. |
-| `hint`, `data`, `next` | Optional recovery text, context, and suggested commands. |
-| `applied` | On input errors after earlier batches: events already applied. Also in `data.applied`. |
+| `busy` | Another input owner, a full input queue, 32 pending session requests, or another screenshot. Wait for it to finish before retrying. |
+| `unauthorized`, `forbidden` | The engine rejected the token, host, or origin. Check the connection settings. |
+| `unreachable`, `timeout` | Check the URL, network, and TLS certificate. Increase `timeout` if needed. |
+| `disconnected` | The control session closed or was lost. Connect again. |
+| `invalid_input`, `invalid_option` | Check the URL, token, input, and options. |
+| `unsupported_input` | The backend cannot apply the event or type the character. Change the input or keyboard layout. |
+| `component_failed` | The engine could not complete the request. For screenshots, check `relay logs engine` and [Wayland requirements](/docs/wayland#compositors). |
+| `canceled` | The `signal` aborted the request or session. Use a fresh signal to retry. |
+| `protocol_error`, `io_error` | The response was invalid or too large, or a local certificate or screenshot file could not be read or written. |
 
-Common reasons from the SDK:
-
-| Reason | Cause |
-| --- | --- |
-| `busy` | Another input owner holds control, the input queue is full, or 32 session requests are pending. |
-| `unauthorized`, `forbidden` | The token is missing or wrong, or the engine rejected the host or origin. |
-| `unreachable` | Cannot connect. The message is one of `Connection refused.`, `The host name did not resolve.`, `The TLS certificate was rejected.`, or `The connection failed.` A failed WebSocket handshake is also `unreachable`. |
-| `timeout` | No reply within `timeout`: `The request timed out.` |
-| `disconnected` | The control session closed or was lost. |
-| `invalid_input` | A bad coordinate, button, key combo, event, or empty input. |
-| `unsupported_input` | The backend cannot produce a character or apply the event. |
-| `component_failed` | A failed screenshot returns this reason with the message `The engine could not take a screenshot. Read the engine log with relay logs engine.` On Wayland, a compositor without `wlr-screencopy` (such as GNOME or KDE) is the usual cause. |
-| `canceled` | The `signal` aborted the call. |
-| `protocol_error`, `io_error` | An invalid engine response, or a failed local file read or write. |
-
-A failure never shows a raw `fetch failed`. When a long `type` or `input` call fails partway, `error.applied` counts the events the engine confirmed. It is exact when the engine answered with the error (`busy`, or an invalid or unsupported event): resend only the events after `applied`. When the reply was lost (`timeout`, `unreachable`, `disconnected`, or `io_error`), the last batch may or may not have reached the desktop, so take a screenshot and check what was typed before you resend anything.
-
-```js
-try {
-  await desktop.type('hello');
-} catch (error) {
-  if (error instanceof RelayError && error.reason === 'busy') {
-    console.log(`stopped after ${error.applied} events`);
-  } else throw error;
-}
-```
-
-## Notes
-
-- Screenshots capture the display. They do not include the viewer's cursor overlay.
-- Wire details are in [Protocol](/docs/protocol).
+When an input request fails, `error.data?.applied` counts confirmed events. Some validation and protocol errors do not include it. If a reply was lost or invalid, the last batch may also have been applied: check a screenshot before retrying. Otherwise, resend only the events after the confirmed count.
