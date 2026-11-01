@@ -5,7 +5,12 @@ deps=1
 client=0
 backend=x11
 prefix=${PREFIX:-"$HOME/.local"}
-usage='Usage: ./install.sh [--prefix DIR] [--backend x11|wayland|all] [--no-desktop] [--no-deps] [--client-only]'
+usage='Usage: ./install.sh [--prefix DIR] [--backend x11|wayland|all] [--no-desktop] [--no-deps] [--client-only]
+  --prefix DIR               Install under DIR. Default: $PREFIX, else ~/.local.
+  --backend x11|wayland|all  Backend to install. Default: x11; wayland installs sway, XWayland and foot; all installs both.
+  --no-desktop               Skip the XFCE packages. Default: install them.
+  --no-deps                  Skip package installation. Default: install them.
+  --client-only              Install the CLI only. Default: install the engine too.'
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --no-desktop) desktop=0 ;;
@@ -244,3 +249,12 @@ printf '\nInstalled: %s/bin/relay (engine: %s/bin/relay-engine)\n' "$prefix" "$p
 on_path
 printf '\n'
 RELAY_BACKEND=$doctor_backend "$prefix/bin/relay" doctor
+case ":$PATH:" in
+  *":$prefix/bin:"*) start=relay ;;
+  *) start="$prefix/bin/relay" ;;
+esac
+case "$doctor_backend" in
+  wayland) start="$start up -d --backend wayland" ;;
+  *) start="$start up -d" ;;
+esac
+printf '\nStart a session: %s\n' "$start"
