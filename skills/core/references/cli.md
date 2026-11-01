@@ -16,14 +16,14 @@ relay up [-d] [--name NAME] [--config FILE] [--port PORT] [--desktop xfce|none|C
 relay down [--name NAME]
 relay logs [component] [--name NAME] [-f|--follow]
 relay run -- <app> [args]... [--name NAME] [--restart]
-relay doctor
+relay doctor [--config FILE]
 ```
 
-- `up` starts a display (Xvfb on X11 or sway with XWayland on Wayland) or attaches to an existing one. It starts the desktop when enabled and the engine, waits until ready, then supervises the session. Without `-d` it runs in the foreground and the first Ctrl+C stops the session (exit 130). Piped, it prints only the viewer URL. `--public` advertises an HTTPS origin and expects a TLS proxy unless `--tls-cert` is set. `--display` keeps the caller's environment. On Wayland it takes a socket name such as `wayland-1` and needs `XDG_RUNTIME_DIR`. `--backend` picks x11 or wayland (default x11 when the engine has it). `--output` picks the Wayland output to capture. See [Wayland](https://relay.labs.vercel.dev/docs/wayland) for setup.
+- `up` starts a display (Xvfb on X11 or sway with XWayland on Wayland) or attaches to an existing one. It starts the desktop when enabled and the engine, waits until ready, then supervises the session. Without `-d` it runs in the foreground and the first Ctrl+C stops the session (exit 130). Piped, it prints only the viewer URL. `--public` advertises an HTTPS origin and expects a TLS proxy unless `--tls-cert` is set. `--display` keeps the caller's environment. On Wayland it takes a socket name such as `wayland-1` and needs `XDG_RUNTIME_DIR`. `--backend` picks x11 or wayland (default x11 when the engine has it). `--output` picks the Wayland output to capture; it is Wayland only, and `up` fails on x11. See [Wayland](https://relay.labs.vercel.dev/docs/wayland) for setup.
 - `down` stops the session and everything it started; safe to repeat. Its JSON outcome is `stopped` or `unchanged`.
 - `logs` prints the last 200 lines of one component (`display`, `dbus`, `desktop`, `engine`, `apps`) or of every component log. `-f` follows; it cannot be combined with `--json`.
 - `run` starts an app on the session desktop and returns its pid. It shares the desktop's display and available D-Bus session bus, runtime, config, cache and X authority settings, and clears ambient capabilities. On Wayland it also sets `WAYLAND_DISPLAY`. `--restart` restarts the app until the session stops. App output goes to `relay logs apps`.
-- `doctor` checks the machine it runs on and prints a fix command for each problem. Off Linux it reports the platform check as failed. It uses `RELAY_BACKEND`, then the config file's `backend` key, then the engine's default. Use `RELAY_BACKEND=wayland relay doctor` for a Wayland setup.
+- `doctor` checks the machine it runs on and prints a fix command for each problem. Off Linux it reports the platform check as failed. It uses `RELAY_BACKEND`, then the config file's `backend` key (from `--config FILE` or the default config), then the engine's default. Use `RELAY_BACKEND=wayland relay doctor` for a Wayland setup.
 
 ## Client commands
 
@@ -43,6 +43,10 @@ relay input --stdin
 ```
 
 - `status` with no URL reads the local session and exits 0 for any existing session. With `--url` (or `RELAY_URL`) it queries a remote engine. A missing session is `not_running`, exit 1.
+- `status --json` puts the session under `session`. These fields name the display server:
+  - `backend`: `x11` or `wayland`.
+  - `waylandDisplay`: the Wayland socket, such as `wayland-1`. Wayland only.
+  - `runtimeDir`: the runtime directory of the sway session. Wayland only, when relay starts sway. `down` deletes it.
 - Coordinates are fractions of the screen from `0` to `1`, from the top-left.
 - `screenshot` writes `screen.png` by default; `-` writes PNG bytes to stdout (not with `--json`).
 - `click` defaults to the left button. `move` only moves the pointer.

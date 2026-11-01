@@ -3,7 +3,7 @@ title: Wayland
 description: Start a Wayland desktop or attach relay to an existing compositor.
 ---
 
-Run relay with sway, labwc, Hyprland (including Omarchy), river, wayfire, or niri. The compositor must support `wlr-screencopy` version 3 with XRGB8888 or ARGB8888 shared-memory frames, the virtual keyboard protocol, and virtual pointer version 2. GNOME and KDE are not supported.
+Relay is tested with sway and labwc. Hyprland (including Omarchy), river, wayfire, and niri offer the same protocols, so they should work, but they have not been tested. The compositor must support `wlr-screencopy` version 3 with XRGB8888 or ARGB8888 shared-memory frames, the virtual keyboard protocol, and virtual pointer version 2. GNOME and KDE are not supported.
 
 ## Install
 
@@ -54,7 +54,7 @@ Start relay with the output name. Replace `OUTPUT` with the name you found, such
 relay up -d --backend wayland --display "$WAYLAND_DISPLAY" --output OUTPUT
 ```
 
-Omit `--output OUTPUT` to use the first output.
+Omit `--output OUTPUT` to use the first output. `--output` works only with the Wayland backend. On x11, `relay up` fails.
 
 ## Limits
 

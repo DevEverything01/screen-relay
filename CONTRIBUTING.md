@@ -100,7 +100,7 @@ Color: little-endian BGRA and big-endian ARGB convert to NV12 with limited-range
 
 ## Build and test
 
-The engine is C++17. Its shared pkg-config dependencies are `x264`, `libwebsockets` with TLS, and `zlib`. X11 adds `x11`, `xext`, `xdamage`, `xfixes`, and `xtst`; Wayland adds `wayland-client`, `xkbcommon`, and `wayland-scanner`. The engine does not link FFmpeg. `install.sh --backend` selects the compiled backends and installs matching packages; it accepts `x11`, `wayland`, or `all` and defaults to `x11`. The package names for each family are in `packages.tsv`, the only place they are listed.
+The engine is C++17. Its shared pkg-config dependencies are `x264`, `libwebsockets` with TLS, and `zlib`. X11 adds `x11`, `xext`, `xdamage`, `xfixes`, and `xtst`; Wayland adds `wayland-client`, `xkbcommon`, and `wayland-scanner`. The engine does not link FFmpeg. `install.sh --backend` selects the compiled backends and installs matching packages; it accepts `x11`, `wayland`, or `all` and defaults to `x11`. `install.sh` and `relay doctor` read the package names for each family from `packages.tsv`.
 
 ```sh
 make                 # builds relay-engine

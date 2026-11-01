@@ -40,7 +40,7 @@ Fix: run them on the Linux VM. On your Mac, install the CLI with `./install.sh -
 
 ### `missing_dependency`, or `relay doctor` reports a failed check
 
-A program relay needs is missing or not on `PATH`: `Xvfb`, `xauth`, `xprop`, `xwininfo`, or `xdpyinfo` on x11, `sway`, `Xwayland`, or `foot` on wayland, or the engine. A failed check makes `doctor` exit with status 1, and a `warn` check does not.
+A program relay needs is missing or not on `PATH`: `Xvfb`, `xauth`, `xprop`, `xwininfo`, or `xdpyinfo` on x11, `sway`, `Xwayland`, `swaymsg`, or `foot` on wayland, or the engine. A failed check makes `doctor` exit with status 1, and a `warn` check does not.
 
 Fix: run the fix command that `doctor` prints next to the failed check. On a supported distribution, re-run `./install.sh` with the `--backend` you use (`x11` by default), and it installs everything. On other distributions, install the packages by hand and use `--no-deps`.
 

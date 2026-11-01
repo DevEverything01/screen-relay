@@ -33,7 +33,7 @@ relay up [-d] [--name N] [--config FILE] [--port N] [--desktop xfce|none|CMD] [-
 | `--desktop` | `xfce` (x11) or `foot` (wayland); `none` with `--display` | `xfce`, `none` (no desktop), or a command such as `openbox`. Runs under `dbus-run-session` when it is installed. Env: `RELAY_DESKTOP`. |
 | `--display DISPLAY` | new display | Attach to an existing display. On x11, an X display such as `:0`, using your `XAUTHORITY`. On wayland, a Wayland socket name such as `wayland-1`, which needs `XDG_RUNTIME_DIR`. relay never stops or changes a display it did not start. It uses that display's size. |
 | `--backend x11\|wayland` | `x11` when the engine has it, else `wayland` | Display server to run the desktop on. Env: `RELAY_BACKEND`. See [Wayland](/docs/wayland). |
-| `--output NAME` | first output | Wayland output to capture, by name. For a screen larger than 1920x1080, see [Wayland](/docs/wayland) to create a headless output. |
+| `--output NAME` | first output | Wayland output to capture, by name. Wayland only: `up` fails on x11. For a screen larger than 1920x1080, see [Wayland](/docs/wayland) to create a headless output. |
 | `--public URL` | off | Public HTTPS origin. Binds `0.0.0.0` unless `--bind` is set, generates a token, and allows that origin. It expects a TLS proxy in front unless `--tls-cert` is given. See [Remote access](/docs/remote-access). Env: `RELAY_PUBLIC`. |
 | `--tls-cert F`, `--tls-key F` | off | Serve TLS directly. Both are required together. Env: `RELAY_TLS_CERT`, `RELAY_TLS_KEY`. |
 | `--bind ADDR` | `127.0.0.1` | Listen address. Any other address generates a token. Env: `RELAY_BIND`. |
@@ -162,15 +162,15 @@ $ relay run -- mousepad notes.txt
 
 ### doctor
 
-Checks this machine and prints the fix command for each problem. Takes only the [global options](#global-options).
+Checks this machine and prints the fix command for each problem. Takes `--config FILE` and the [global options](#global-options).
 
 ```sh
-relay doctor
+relay doctor [--config FILE]
 ```
 
 Exits 1 if any check fails; `warn` does not fail. `--json` prints `{"checks":[...],"summary":{...}}`. Each check has `name`, `status` (`ok`, `warn`, or `fail`), `detail`, and `fix`.
 
-The backend comes from `RELAY_BACKEND`, then the config file's `backend` key, then the engine default (X11 when the engine includes it, Wayland otherwise). `--backend` does not apply here, so check a Wayland setup with `RELAY_BACKEND=wayland relay doctor`.
+The backend comes from `RELAY_BACKEND`, then the config file's `backend` key (read from `--config FILE`, or the default config file), then the engine default (X11 when the engine includes it, Wayland otherwise). `--backend` does not apply here, so check a Wayland setup with `RELAY_BACKEND=wayland relay doctor`.
 
 | Check | What it looks at |
 | --- | --- |
@@ -182,7 +182,7 @@ The backend comes from `RELAY_BACKEND`, then the config file's `backend` key, th
 | `engine` | `relay-engine` is found and runs. |
 | `libx264` | The x264 library is installed. |
 | `Xvfb`, `xauth`, `xprop`, `xwininfo`, `xdpyinfo` | Programs are on `PATH` (x11). |
-| `sway`, `Xwayland`, `foot` | Programs are on `PATH` (wayland). |
+| `sway`, `Xwayland`, `swaymsg`, `foot` | Programs are on `PATH` (wayland). |
 | `setxkbmap` | Program is on `PATH` (x11); relay uses it when the keyboard layout is not `us`. |
 | `dbus-run-session` | Present (warn only). |
 | `xfce4-session` | Present (warn only, x11 only). |
