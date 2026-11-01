@@ -1,10 +1,8 @@
 #include "backends/linux/wayland/keymap.hpp"
 #include <xkbcommon/xkbcommon.h>
-#include <algorithm>
 #include <cassert>
 #include <cstdint>
 #include <cstdlib>
-#include <cstring>
 #include <iostream>
 #include <set>
 #include <stdexcept>
@@ -27,27 +25,30 @@ bool types(const std::string& text, uint32_t keycode, xkb_keysym_t symbol) {
   return found;
 }
 
-/** Evdev keycodes the keymap leaves unbound under a short name, capped at the spare keys a Keymap takes. */
-std::vector<uint32_t> spareKeycodes(const std::string& text) {
+bool hasSymbols(const std::string& text, uint32_t keycode) {
   xkb_context* context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
   assert(context);
   xkb_keymap* keymap = xkb_keymap_new_from_string(context, text.c_str(), XKB_KEYMAP_FORMAT_TEXT_V1,
                                                   XKB_KEYMAP_COMPILE_NO_FLAGS);
   assert(keymap);
-  std::vector<uint32_t> keycodes;
-  for (uint32_t code = 9; code <= 255 && keycodes.size() < relay::wayland::spareSlots; ++code) {
-    const char* name = xkb_keymap_key_get_name(keymap, code);
-    if (!name || std::strlen(name) > 4) continue;
-    bool bound = false;
-    const xkb_layout_index_t layouts = xkb_keymap_num_layouts_for_key(keymap, code);
-    for (xkb_layout_index_t layout = 0; layout < layouts && !bound; ++layout)
-      bound = xkb_keymap_num_levels_for_key(keymap, code, layout) > 0;
-    if (!bound) keycodes.push_back(code - 8);
+  const xkb_keycode_t xkbKeycode = keycode + 8;
+  bool found = false;
+  const xkb_layout_index_t layouts = xkb_keymap_num_layouts_for_key(keymap, xkbKeycode);
+  for (xkb_layout_index_t layout = 0; layout < layouts && !found; ++layout) {
+    const xkb_level_index_t levels = xkb_keymap_num_levels_for_key(keymap, xkbKeycode, layout);
+    for (xkb_level_index_t level = 0; level < levels; ++level) {
+      const xkb_keysym_t* symbols = nullptr;
+      if (xkb_keymap_key_get_syms_by_level(keymap, xkbKeycode, layout, level, &symbols) > 0) {
+        found = true;
+        break;
+      }
+    }
   }
   xkb_keymap_unref(keymap);
   xkb_context_unref(context);
-  return keycodes;
+  return found;
 }
+
 }  // namespace
 
 int main() {
@@ -72,9 +73,6 @@ int main() {
   assert(keymap.assign(0xe9, changed) == eacute);
   assert(!changed && keymap.text() == assigned);
 
-  const std::vector<uint32_t> spares = spareKeycodes(base);
-  assert(!spares.empty());
-
   relay::wayland::Keymap plain(base);
   const std::string plainText = plain.text();
   assert(plain.assign('a', changed) == 30);
@@ -82,27 +80,41 @@ int main() {
   for (const char character : std::string("hello world"))
     assert(plain.assign(uint8_t(character), changed) != 0 && !changed);
   assert(plain.text() == plainText);
-  const uint32_t upper = plain.assign('A', changed);
+  relay::wayland::Keymap spareProbe(base);
+  const uint32_t upper = spareProbe.assign('A', changed);
   assert(upper != 0 && changed);
-  assert(std::find(spares.begin(), spares.end(), upper) != spares.end());
+  assert(!hasSymbols(base, upper));
+  assert(plain.assign('A', changed) == upper && changed);
   assert(types(plain.text(), upper, xkb_utf32_to_keysym('A')));
+  const uint32_t probeEuro = spareProbe.assign(0x20ac, changed);
+  assert(probeEuro != 0 && changed);
+  assert(!hasSymbols(base, probeEuro));
   const uint32_t plainEuro = plain.assign(0x20ac, changed);
-  assert(plainEuro != 0 && changed);
-  assert(std::find(spares.begin(), spares.end(), plainEuro) != spares.end());
+  assert(plainEuro == probeEuro && changed);
   assert(types(plain.text(), plainEuro, xkb_utf32_to_keysym(0x20ac)));
 
   relay::wayland::Keymap full(base);
+  relay::wayland::Keymap keycodeProbe(base);
   std::vector<uint32_t> keycodes;
-  for (size_t slot = 0; slot < spares.size(); ++slot) {
-    const uint32_t keycode = full.assign(0x100 + uint32_t(slot), changed);
+  std::set<uint32_t> assignedKeycodes;
+  uint32_t overflow = 0;
+  for (size_t slot = 0; slot <= relay::wayland::spareSlots; ++slot) {
+    const uint32_t codepoint = 0x100 + uint32_t(slot);
+    const xkb_keysym_t symbol = xkb_utf32_to_keysym(codepoint);
+    const uint32_t keycode = keycodeProbe.assign(codepoint, changed);
     assert(keycode != 0 && changed);
-    assert(std::find(spares.begin(), spares.end(), keycode) != spares.end());
+    assert(!hasSymbols(base, keycode));
+    assert(full.assign(codepoint, changed) == keycode && changed);
+    if (!assignedKeycodes.insert(keycode).second) {
+      assert(keycode == keycodes.front());
+      overflow = codepoint;
+      break;
+    }
+    assert(types(full.text(), keycode, symbol));
     keycodes.push_back(keycode);
   }
   assert(std::set<uint32_t>(keycodes.begin(), keycodes.end()).size() == keycodes.size());
-  const uint32_t overflow = 0x100 + uint32_t(spares.size());
-  assert(full.assign(overflow, changed) == keycodes.front());
-  assert(changed);
+  assert(overflow != 0);
   assert(types(full.text(), keycodes.front(), xkb_utf32_to_keysym(overflow)));
   for (size_t slot = 1; slot < keycodes.size(); ++slot)
     assert(types(full.text(), keycodes[slot], xkb_utf32_to_keysym(0x100 + uint32_t(slot))));

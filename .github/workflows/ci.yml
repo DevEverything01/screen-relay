@@ -31,8 +31,17 @@ jobs:
           sudo apt-get install -y --no-install-recommends build-essential pkg-config \
             libx11-dev libxext-dev libxdamage-dev libxfixes-dev libxtst-dev \
             libx264-dev libwebsockets-dev libavcodec-dev libavutil-dev libswscale-dev
+      - name: Install Wayland build dependencies
+        if: matrix.runner == 'ubuntu-24.04'
+        run: sudo apt-get install -y --no-install-recommends libwayland-dev libwayland-bin wayland-protocols libxkbcommon-dev
+      - run: make -j"$(nproc)" BACKENDS="x11 wayland" relay-engine
+        if: matrix.runner == 'ubuntu-24.04'
       - run: make -j"$(nproc)" relay-engine
+        if: matrix.runner == 'ubuntu-24.04-arm'
+      - run: make BACKENDS="x11 wayland" test
+        if: matrix.runner == 'ubuntu-24.04'
       - run: make test
+        if: matrix.runner == 'ubuntu-24.04-arm'
 
   node:
     name: SDK and CLI

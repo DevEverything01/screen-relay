@@ -1,12 +1,11 @@
 #include "backends/linux/wayland/keymap.hpp"
-#include <xkbcommon/xkbcommon.h>
+#include "backends/linux/wayland/wayland.hpp"
 #include <cstdlib>
 #include <cstring>
 #include <stdexcept>
 
 namespace relay::wayland {
 namespace {
-void require(bool ok, const char* message) { if (!ok) throw std::runtime_error(message); }
 /** XKB text v1 carries names of at most four characters; the serializer renames longer ones, so a spare key needs a short name. */
 bool shortName(const char* name) { return name && std::strlen(name) <= 4; }
 /** Whether any layout gives keycode a level, so the base keymap already spends that keycode. */
@@ -37,53 +36,39 @@ std::string keysymName(uint32_t symbol) {
 }
 
 std::string defaultKeymap() {
-  xkb_context* context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
-  if (!context) throw std::runtime_error("libxkbcommon context unavailable");
+  XkbContext context(xkb_context_new(XKB_CONTEXT_NO_FLAGS));
+  require(bool(context), "libxkbcommon context unavailable");
   const xkb_rule_names names{};
-  xkb_keymap* keymap = xkb_keymap_new_from_names(context, &names, XKB_KEYMAP_COMPILE_NO_FLAGS);
-  if (!keymap) {
-    xkb_context_unref(context);
-    throw std::runtime_error("libxkbcommon cannot compile the default keymap; check the XKB_DEFAULT_* variables");
-  }
-  char* text = xkb_keymap_get_as_string(keymap, XKB_KEYMAP_FORMAT_TEXT_V1);
+  XkbKeymap keymap(xkb_keymap_new_from_names(context.get(), &names, XKB_KEYMAP_COMPILE_NO_FLAGS));
+  require(bool(keymap), "libxkbcommon cannot compile the default keymap; check the XKB_DEFAULT_* variables");
+  char* text = xkb_keymap_get_as_string(keymap.get(), XKB_KEYMAP_FORMAT_TEXT_V1);
   std::string result = text ? text : "";
   std::free(text);
-  xkb_keymap_unref(keymap);
-  xkb_context_unref(context);
   if (result.empty()) throw std::runtime_error("libxkbcommon cannot serialize the default keymap");
   return result;
 }
 
 Keymap::Keymap(const std::string& base) {
-  xkb_context* context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
-  if (!context) throw std::runtime_error("libxkbcommon context unavailable");
-  xkb_keymap* keymap = xkb_keymap_new_from_string(context, base.c_str(), XKB_KEYMAP_FORMAT_TEXT_V1,
-                                                  XKB_KEYMAP_COMPILE_NO_FLAGS);
-  if (!keymap) {
-    xkb_context_unref(context);
-    throw std::runtime_error("libxkbcommon cannot compile the keymap text");
-  }
-  char* text = xkb_keymap_get_as_string(keymap, XKB_KEYMAP_FORMAT_TEXT_V1);
-  if (!text) {
-    xkb_keymap_unref(keymap);
-    xkb_context_unref(context);
-    throw std::runtime_error("libxkbcommon cannot serialize the keymap");
-  }
+  XkbContext context(xkb_context_new(XKB_CONTEXT_NO_FLAGS));
+  require(bool(context), "libxkbcommon context unavailable");
+  XkbKeymap keymap(xkb_keymap_new_from_string(context.get(), base.c_str(), XKB_KEYMAP_FORMAT_TEXT_V1,
+                                              XKB_KEYMAP_COMPILE_NO_FLAGS));
+  require(bool(keymap), "libxkbcommon cannot compile the keymap text");
+  char* text = xkb_keymap_get_as_string(keymap.get(), XKB_KEYMAP_FORMAT_TEXT_V1);
+  require(text, "libxkbcommon cannot serialize the keymap");
   original = text;
   std::free(text);
   for (uint32_t keycode = 9; keycode <= 255; ++keycode) {
     const xkb_keysym_t* symbols = nullptr;
-    if (xkb_keymap_key_get_syms_by_level(keymap, keycode, 0, 0, &symbols) != 1) continue;
+    if (xkb_keymap_key_get_syms_by_level(keymap.get(), keycode, 0, 0, &symbols) != 1) continue;
     direct.emplace(symbols[0], keycode - 8);
   }
   for (uint32_t keycode = 9; keycode <= 255 && slots.size() < spareSlots; ++keycode) {
-    if (hasSymbols(keymap, keycode)) continue;
-    const char* name = xkb_keymap_key_get_name(keymap, keycode);
+    if (hasSymbols(keymap.get(), keycode)) continue;
+    const char* name = xkb_keymap_key_get_name(keymap.get(), keycode);
     if (!shortName(name)) continue;
     slots.push_back(Slot{keycode - 8, name, 0, 0, 0});
   }
-  xkb_keymap_unref(keymap);
-  xkb_context_unref(context);
   insertAt = symbolsEnd(original);
   current = original;
 }

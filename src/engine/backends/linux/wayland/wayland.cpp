@@ -54,8 +54,6 @@ void global(void* data, wl_registry* registry, uint32_t name, const char* interf
   if (state->outputListenerFailed) return;
   if (std::strcmp(interface, wl_shm_interface.name) == 0 && !connection.shm) {
     connection.shm = static_cast<wl_shm*>(wl_registry_bind(registry, name, &wl_shm_interface, std::min(version, 1u)));
-  } else if (std::strcmp(interface, wl_seat_interface.name) == 0 && !connection.seat) {
-    connection.seat = static_cast<wl_seat*>(wl_registry_bind(registry, name, &wl_seat_interface, std::min(version, 1u)));
   } else if (std::strcmp(interface, wl_output_interface.name) == 0) {
     auto output = std::make_unique<OutputInfo>();
     output->version = version;
@@ -148,7 +146,6 @@ void Connection::cleanup() {
   if (virtualPointerManager) zwlr_virtual_pointer_manager_v1_destroy(virtualPointerManager);
   if (virtualKeyboardManager) zwp_virtual_keyboard_manager_v1_destroy(virtualKeyboardManager);
   if (screencopyManager) zwlr_screencopy_manager_v1_destroy(screencopyManager);
-  if (seat) wl_seat_destroy(seat);
   if (shm) wl_shm_destroy(shm);
   if (registry_) wl_registry_destroy(registry_);
   outputInfo_.reset();
@@ -156,7 +153,6 @@ void Connection::cleanup() {
   virtualPointerManager = nullptr;
   virtualKeyboardManager = nullptr;
   screencopyManager = nullptr;
-  seat = nullptr;
   shm = nullptr;
   registry_ = nullptr;
   output = nullptr;

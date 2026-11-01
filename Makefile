@@ -1,5 +1,6 @@
 CXX ?= g++
 BACKENDS ?= x11
+HAS_WAYLAND = $(filter wayland,$(BACKENDS))
 AVAILABLE_BACKENDS = x11 wayland
 BACKEND_PKGS_x11 = x11 xext xdamage xfixes xtst
 BACKEND_DIR_x11 = linux/x11
@@ -27,7 +28,7 @@ ENGINE_SRCS = $(CORE_SRCS) $(wildcard src/engine/server/*.cpp) $(BACKEND_SRCS)
 HEADERS = $(wildcard src/engine/*/*.hpp src/engine/backends/linux/*.hpp) $(foreach dir,$(BACKEND_DIRS),$(wildcard src/engine/backends/$(dir)/*.hpp))
 
 WAYLAND_PROTOCOLS = wlr-screencopy-unstable-v1 wlr-virtual-pointer-unstable-v1 virtual-keyboard-unstable-v1
-ifeq ($(filter wayland,$(BACKENDS)),wayland)
+ifeq ($(HAS_WAYLAND),wayland)
 WAYLAND_SCANNER = $(shell pkg-config --variable=wayland_scanner wayland-scanner)
 WAYLAND_PROTOCOL_HEADERS = $(addprefix build/protocols/,$(addsuffix -client-protocol.h,$(WAYLAND_PROTOCOLS)))
 WAYLAND_PROTOCOL_SOURCES = $(addprefix build/protocols/,$(addsuffix -protocol.c,$(WAYLAND_PROTOCOLS)))
@@ -105,19 +106,19 @@ build/test-viewer/viewer.js:
 
 build/server-test: tests/unit/server-test.cpp $(SERVER_TEST_SRCS) $(HEADERS) $(WAYLAND_PROTOCOL_HEADERS) $(WAYLAND_PROTOCOL_OBJECTS) build/test-viewer/viewer.js build/backends
 	mkdir -p build
-	$(CXX) -Isrc/engine $(BACKEND_CPPFLAGS) $(if $(filter wayland,$(BACKENDS)),-Ibuild/protocols) $(shell pkg-config --cflags $(BACKEND_PKGS) libwebsockets) $(CXXFLAGS) tests/unit/server-test.cpp $(SERVER_TEST_SRCS) $(WAYLAND_PROTOCOL_OBJECTS) -o $@ $(shell pkg-config --libs $(BACKEND_PKGS) libwebsockets)
+	$(CXX) -Isrc/engine $(BACKEND_CPPFLAGS) $(if $(HAS_WAYLAND),-Ibuild/protocols) $(shell pkg-config --cflags $(BACKEND_PKGS) libwebsockets) $(CXXFLAGS) tests/unit/server-test.cpp $(SERVER_TEST_SRCS) $(WAYLAND_PROTOCOL_OBJECTS) -o $@ $(shell pkg-config --libs $(BACKEND_PKGS) libwebsockets)
 
 test-server: build/server-test
 	./build/server-test
 
 build/keymap-test: tests/unit/keymap-test.cpp src/engine/backends/linux/wayland/keymap.cpp
 	mkdir -p build
-	$(CXX) -Isrc/engine $(CXXFLAGS) $(shell pkg-config --cflags xkbcommon) $^ -o $@ $(shell pkg-config --libs xkbcommon)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(shell pkg-config --cflags xkbcommon) $^ -o $@ $(shell pkg-config --libs xkbcommon)
 
 test-keymap: build/keymap-test
 	./build/keymap-test
 
-test: test-color test-flow test-input test-backend test-server $(if $(filter wayland,$(BACKENDS)),test-keymap)
+test: test-color test-flow test-input test-backend test-server $(if $(HAS_WAYLAND),test-keymap)
 
 clean:
 	rm -rf build relay-engine

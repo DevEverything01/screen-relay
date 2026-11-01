@@ -19,10 +19,6 @@ namespace relay::wayland {
 namespace {
 constexpr size_t max_damage_rects = 64;
 
-void require(bool ok, const char* message) {
-  if (!ok) throw std::runtime_error(message);
-}
-
 void checkSize(int width, int height) {
   try {
     requireSurfaceSize(width, height);
@@ -32,11 +28,6 @@ void checkSize(int width, int height) {
       "hyprctl output create headless <name>) and select it with --output");
   }
 }
-
-struct FileDescriptor {
-  int value = -1;
-  ~FileDescriptor() { if (value >= 0) close(value); }
-};
 
 struct Buffer {
   wl_buffer* proxy = nullptr;
@@ -53,14 +44,14 @@ struct Buffer {
   void init(wl_shm* shm, uint32_t offeredFormat, int offeredWidth, int offeredHeight, int offeredStride) {
     format = offeredFormat; width = offeredWidth; height = offeredHeight; stride = offeredStride;
     size = size_t(stride) * size_t(height);
-    FileDescriptor fd{memfd_create("relay-wayland-capture", MFD_CLOEXEC)};
-    require(fd.value >= 0, "creating Wayland shared memory failed");
-    require(ftruncate(fd.value, static_cast<off_t>(size)) == 0, "sizing Wayland shared memory failed");
-    void* mapping = mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd.value, 0);
+    FileDescriptor fd = createMemfd("relay-wayland-capture");
+    require(fd.get() >= 0, "creating Wayland shared memory failed");
+    require(ftruncate(fd.get(), static_cast<off_t>(size)) == 0, "sizing Wayland shared memory failed");
+    void* mapping = mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd.get(), 0);
     require(mapping != MAP_FAILED, "mapping Wayland shared memory failed");
     data = static_cast<uint8_t*>(mapping);
     std::unique_ptr<wl_shm_pool, decltype(&wl_shm_pool_destroy)> pool(
-      wl_shm_create_pool(shm, fd.value, static_cast<int32_t>(size)), &wl_shm_pool_destroy);
+      wl_shm_create_pool(shm, fd.get(), static_cast<int32_t>(size)), &wl_shm_pool_destroy);
     require(bool(pool), "creating Wayland shared memory pool failed");
     proxy = wl_shm_pool_create_buffer(pool.get(), 0, width, height, stride, format);
     require(proxy, "creating Wayland shared memory buffer failed");

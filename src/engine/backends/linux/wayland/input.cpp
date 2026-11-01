@@ -1,16 +1,11 @@
-#ifndef _GNU_SOURCE
-#define _GNU_SOURCE
-#endif
 #include "backends/linux/keycodes.hpp"
 #include "backends/linux/wayland/keymap.hpp"
 #include "backends/linux/wayland/wayland.hpp"
 #include "core/input.hpp"
 #include <linux/input-event-codes.h>
-#include <linux/memfd.h>
 #include <poll.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
-#include <sys/syscall.h>
 #include <unistd.h>
 #include <xkbcommon/xkbcommon.h>
 #include <algorithm>
@@ -36,28 +31,13 @@ using Keyboard = std::unique_ptr<wl_keyboard, decltype(&wl_keyboard_destroy)>;
 using Registry = std::unique_ptr<wl_registry, decltype(&wl_registry_destroy)>;
 using VirtualKeyboard = std::unique_ptr<zwp_virtual_keyboard_v1, decltype(&zwp_virtual_keyboard_v1_destroy)>;
 using VirtualPointer = std::unique_ptr<zwlr_virtual_pointer_v1, decltype(&zwlr_virtual_pointer_v1_destroy)>;
-using XkbContext = std::unique_ptr<xkb_context, decltype(&xkb_context_unref)>;
-using XkbKeymap = std::unique_ptr<xkb_keymap, decltype(&xkb_keymap_unref)>;
-using XkbState = std::unique_ptr<xkb_state, decltype(&xkb_state_unref)>;
-
-class FileDescriptor {
- public:
-  explicit FileDescriptor(int fd = -1) : fd_(fd) {}
-  ~FileDescriptor() { if (fd_ >= 0) ::close(fd_); }
-  FileDescriptor(const FileDescriptor&) = delete;
-  FileDescriptor& operator=(const FileDescriptor&) = delete;
-  int get() const { return fd_; }
-
- private:
-  int fd_;
-};
 
 class Mapping {
  public:
   Mapping(int fd, size_t size) : size_(size), data_(::mmap(nullptr, size, PROT_READ, MAP_PRIVATE, fd, 0)) {
     if (data_ == MAP_FAILED) throw std::runtime_error("Cannot map the Wayland keyboard keymap");
   }
-  ~Mapping() { if (data_ != MAP_FAILED) ::munmap(data_, size_); }
+  ~Mapping() { ::munmap(data_, size_); }
   Mapping(const Mapping&) = delete;
   Mapping& operator=(const Mapping&) = delete;
   const char* data() const { return static_cast<const char*>(data_); }
@@ -147,7 +127,7 @@ std::set<uint32_t> findModifierKeys(xkb_keymap* keymap) {
   const auto modifiers = xkb_keymap_num_mods(keymap);
   for (xkb_keycode_t key = xkb_keymap_min_keycode(keymap); key <= xkb_keymap_max_keycode(keymap); ++key) {
     if (key < 8) continue;
-    XkbState state(xkb_state_new(keymap), xkb_state_unref);
+    XkbState state(xkb_state_new(keymap));
     if (!state) throw std::runtime_error("Cannot create XKB state to identify modifiers");
     bool modifier = false;
     for (const auto direction : {XKB_KEY_DOWN, XKB_KEY_UP}) {
@@ -173,8 +153,8 @@ bool flushDisplay(wl_display* display) {
     if (fd < 0) return false;
     pollfd writable{fd, POLLOUT, 0};
     int ready;
-    do { ready = ::poll(&writable, 1, -1); } while (ready < 0 && errno == EINTR);
-    if (ready < 0 || (writable.revents & (POLLERR | POLLHUP | POLLNVAL))) return false;
+    do { ready = ::poll(&writable, 1, 5000); } while (ready < 0 && errno == EINTR);
+    if (ready <= 0 || (writable.revents & (POLLERR | POLLHUP | POLLNVAL))) return false;
   }
 }
 }
@@ -224,9 +204,7 @@ class WaylandInput final : public InputBackend {
   bool typeText(uint32_t codepoint) override {
     {
       std::lock_guard<std::mutex> lock(mutex_);
-      if (stopping_ || workerFailed_ || !probeKeymap_) return false;
-      bool changed = false;
-      if (!probeKeymap_->assign(codepoint, changed)) return false;
+      if (stopping_ || workerFailed_ || !xkb_utf32_to_keysym(codepoint)) return false;
       InputJob job{InputJob::Kind::text};
       job.codepoint = codepoint;
       queue_.post(std::move(job));
@@ -300,11 +278,9 @@ class WaylandInput final : public InputBackend {
   Seat seat_{nullptr, wl_seat_destroy};
   VirtualKeyboard keyboard_{nullptr, zwp_virtual_keyboard_v1_destroy};
   VirtualPointer pointer_{nullptr, zwlr_virtual_pointer_v1_destroy};
-  XkbContext xkbContext_{nullptr, xkb_context_unref};
-  XkbKeymap xkbKeymap_{nullptr, xkb_keymap_unref};
-  XkbState xkbState_{nullptr, xkb_state_unref};
+  XkbContext xkbContext_;
+  XkbState xkbState_;
   std::unique_ptr<Keymap> keymap_;
-  std::unique_ptr<Keymap> probeKeymap_;
   SeatWatch seatWatch_;
   std::set<uint32_t> held_;
   std::set<uint32_t> modifierKeys_;
@@ -343,7 +319,6 @@ class WaylandInput final : public InputBackend {
     bindSeat();
     const std::string base = seatWatch_.hasKeyboard ? currentSeatKeymap() : defaultKeymap();
     keymap_ = std::make_unique<Keymap>(base);
-    probeKeymap_ = std::make_unique<Keymap>(base);
     xkbContext_.reset(xkb_context_new(XKB_CONTEXT_NO_FLAGS));
     if (!xkbContext_) throw std::runtime_error("libxkbcommon context unavailable");
     keyboard_.reset(zwp_virtual_keyboard_manager_v1_create_virtual_keyboard(
@@ -390,10 +365,9 @@ class WaylandInput final : public InputBackend {
   void uploadKeymap(const std::string& text) {
     XkbKeymap nextKeymap(xkb_keymap_new_from_string(xkbContext_.get(), text.c_str(),
                                                      XKB_KEYMAP_FORMAT_TEXT_V1,
-                                                     XKB_KEYMAP_COMPILE_NO_FLAGS),
-                         xkb_keymap_unref);
+                                                     XKB_KEYMAP_COMPILE_NO_FLAGS));
     if (!nextKeymap) throw std::runtime_error("libxkbcommon cannot compile the uploaded keymap");
-    XkbState nextState(xkb_state_new(nextKeymap.get()), xkb_state_unref);
+    XkbState nextState(xkb_state_new(nextKeymap.get()));
     if (!nextState) throw std::runtime_error("libxkbcommon cannot create state for the uploaded keymap");
     Masks previous;
     const bool hadState = bool(xkbState_);
@@ -417,7 +391,7 @@ class WaylandInput final : public InputBackend {
     contents.push_back('\0');
     if (contents.size() > std::numeric_limits<uint32_t>::max())
       throw std::runtime_error("Wayland keyboard keymap is too large");
-    FileDescriptor fd(static_cast<int>(syscall(SYS_memfd_create, "relay-keymap", MFD_CLOEXEC)));
+    auto fd = createMemfd("relay-keymap");
     if (fd.get() < 0) throw std::runtime_error("Cannot create Wayland keyboard keymap memfd");
     size_t written = 0;
     while (written < contents.size()) {
@@ -429,7 +403,6 @@ class WaylandInput final : public InputBackend {
     zwp_virtual_keyboard_v1_keymap(keyboard_.get(), WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1,
                                    fd.get(), uint32_t(contents.size()));
     xkbState_ = std::move(nextState);
-    xkbKeymap_ = std::move(nextKeymap);
     sendModifiers();
   }
 
@@ -509,11 +482,11 @@ class WaylandInput final : public InputBackend {
         return flushDisplay(connection_->display);
       case InputJob::Kind::fence:
         if (job.fence) {
-          const bool reached = wl_display_roundtrip(connection_->display) >= 0;
-          job.fence->complete(reached && !previouslyFailed && job.dropped == 0, job.dropped);
+          const bool reached = !previouslyFailed && wl_display_roundtrip(connection_->display) >= 0;
+          job.fence->complete(reached && job.dropped == 0, job.dropped);
           return reached;
         }
-        return wl_display_roundtrip(connection_->display) >= 0;
+        return !previouslyFailed && wl_display_roundtrip(connection_->display) >= 0;
     }
     return true;
   }
@@ -523,31 +496,26 @@ class WaylandInput final : public InputBackend {
     keyboard_.reset();
     seat_.reset();
     xkbState_.reset();
-    xkbKeymap_.reset();
     xkbContext_.reset();
     connection_.reset();
   }
 
   void run() {
+    std::exception_ptr error;
     try {
       initialize();
     } catch (...) {
-      const auto error = std::current_exception();
+      error = std::current_exception();
       cleanup();
-      {
-        std::lock_guard<std::mutex> lock(mutex_);
-        startupError_ = error;
-        startupDone_ = true;
-        stopping_ = true;
-      }
-      wake_.notify_all();
-      return;
     }
     {
       std::lock_guard<std::mutex> lock(mutex_);
+      startupError_ = error;
       startupDone_ = true;
+      if (error) stopping_ = true;
     }
     wake_.notify_all();
+    if (error) return;
     bool failed = false;
     std::unique_lock<std::mutex> lock(mutex_);
     for (;;) {
@@ -555,10 +523,7 @@ class WaylandInput final : public InputBackend {
       if (stopping_) {
         queue_.cancel();
       }
-      if (queue_.empty()) {
-        if (stopping_) break;
-        continue;
-      }
+      if (queue_.empty()) break;
       const InputJob job = queue_.take();
       lock.unlock();
       bool success = false;
