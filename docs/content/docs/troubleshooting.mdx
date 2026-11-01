@@ -1,199 +1,77 @@
 ---
 title: Troubleshooting
-description: Find your symptom, see its cause, and apply the fix, starting with relay doctor and the session logs.
+description: Find and fix common relay problems.
 ---
 
-Start with `relay doctor` on the VM. It checks the machine and prints a fix command for each problem. Then read the logs of the component that failed:
+Find session problems on the VM:
 
 ```sh
-relay logs engine
-relay logs desktop
+relay doctor
+relay logs
 ```
 
-The components are `display`, `dbus`, `desktop`, `engine`, and `apps`. Add `--follow` to keep printing new lines. Each error has a `reason`, listed in the [CLI reference](/docs/cli#error-reasons), and `--json` prints it in a machine-readable form.
+Follow the fixes from `doctor`. For a named session, add `--name NAME` to `relay logs`. Run `relay logs engine --follow` to follow a component. See the [CLI reference](/docs/cli#error-reasons) for error reasons.
+
+Stopping a session also stops the processes it started. Save your work before running `relay down`.
 
 ## Install and setup
 
-### `relay: command not found` after install
-
-The command is in `~/.local/bin`, which a fresh shell often does not have on `PATH`. The installer prints a `Not on PATH` line when this happens.
-
-Fix: run `export PATH="$HOME/.local/bin:$PATH"` and add it to your shell profile, or run `~/.local/bin/relay` directly.
-
-### The installer fails on an unsupported distribution
-
-Automatic dependency installation covers Debian, Ubuntu, Fedora, Arch Linux, and Alpine. On any other distribution the installer exits and names these. It also needs root or passwordless `sudo`.
-
-Fix: install the equivalent packages yourself, then run `./install.sh --no-deps`. On such a distribution, `--client-only` needs `--no-deps` too.
-
-### The installer stops and asks for RPM Fusion on Fedora
-
-On Fedora, RPM Fusion Free provides the x264 library relay needs. The installer checks whether the x264 package is available before it installs packages, and prints the command to enable the repository if it is not.
-
-Fix: run the printed command, then run `./install.sh` again. The command is also in [Getting started](/docs/getting-started).
-
-### `unsupported_platform`: "Host commands run on Linux only"
-
-You ran `up`, `down`, or `run` on a machine that is not Linux, such as a Mac. `relay doctor` on that machine fails its `platform` check for the same reason. These commands start the desktop, so they run only on the VM.
-
-Fix: run them on the Linux VM. On your Mac, install the CLI with `./install.sh --client-only` and use the client commands (`status`, `screenshot`, `click`, `move`, `scroll`, `key`, `type`, `input`) with `--url` and a token. See [Remote access](/docs/remote-access#control-a-session-from-your-laptop).
-
-### `missing_dependency`, or `relay doctor` reports a failed check
-
-A program relay needs is missing or not on `PATH`: `Xvfb`, `xauth`, `xprop`, `xwininfo`, or `xdpyinfo` on x11, `sway`, `Xwayland`, `swaymsg`, or `foot` on wayland, or the engine. A failed check makes `doctor` exit with status 1, and a `warn` check does not.
-
-Fix: run the fix command that `doctor` prints next to the failed check. On a supported distribution, re-run `./install.sh` with the `--backend` you use (`x11` by default), and it installs everything. On other distributions, install the packages by hand and use `--no-deps`.
-
-### XFCE exits right after start on Ubuntu 26.04 with an icon error
-
-Newer image libraries decode pictures through `glycin-loaders`, which a minimal install can skip. Without it, XFCE aborts with a `default_icon_at_size` assertion. The `icon decoding` check in `relay doctor` catches this.
-
-Fix: re-run `./install.sh`, or run `sudo apt-get install glycin-loaders`.
+| Symptom | Cause and fix |
+| --- | --- |
+| `relay: command not found` | Run `export PATH="$HOME/.local/bin:$PATH"` and add it to your shell profile, or run `~/.local/bin/relay`. |
+| The installer rejects the distribution or needs privileges | Automatic dependency installation needs a [supported distribution](/docs/getting-started) and root or passwordless `sudo`. Otherwise, install dependencies yourself and run `./install.sh --no-deps`, or `./install.sh --client-only --no-deps` for the client alone. |
+| The Fedora installer asks for RPM Fusion | Run the printed command, then rerun `./install.sh`. |
+| `unsupported_platform` | Run `up`, `down`, and `run` on the VM. On your laptop, install with `./install.sh --client-only` and use the [client commands](/docs/remote-access). |
+| `missing_dependency` or a failed doctor check | Run the suggested fix. To reinstall Wayland dependencies, run `./install.sh --backend wayland`. |
+| XFCE exits with a `default_icon_at_size` assertion on Ubuntu 26.04 | Install the icon loader with `sudo apt-get install glycin-loaders`, or rerun `./install.sh`. |
 
 ## Starting a session
 
-### `already_running`
+| Symptom | Cause and fix |
+| --- | --- |
+| `already_running` | Stop the existing session with `relay down --name NAME`, replacing `NAME` with its name, or start another with a different `--name` and `--port`. |
+| `Cannot listen on 127.0.0.1:8080` in the engine log | The port is in use. Choose a free port, for example `relay up --port 8081`, or stop the session using it. |
+| `component_failed` or `status` shows `failed` | Run `relay logs`, or `relay logs COMPONENT` for the component named in the error. For a background session, also check `supervisor.log` in the [state directory](/docs/cli#state-directory). |
+| `timeout` while the engine or desktop starts | The default readiness timeout is 30 seconds. Check the error's log tail, then try `relay up --timeout 90` on a slow VM. This does not extend the display startup timeout. |
+| `invalid_config` | Correct the file and key named in the error. See [Configuration](/docs/configuration). |
+| `opening X display failed` with `--display` | Check the display number and set `XAUTHORITY` to the X session's authority file. Do not run `xhost +`. |
 
-A session with that name is running.
+## Viewer and streaming
 
-Fix: `relay down --name NAME`, or start the new one with another `--name` and `--port`.
+| Symptom | Cause and fix |
+| --- | --- |
+| WebCodecs unavailable or a decoder error | Check the viewer status. Use a browser with H.264 WebCodecs and open the viewer over `https://` or `http://127.0.0.1`. |
+| The viewer cannot connect through a proxy | Forward WebSocket upgrades, preserve `Host` and `Origin`, and use the `--public` URL. See [Remote access](/docs/remote-access). |
+| The picture is too small or blurry | Under **Scaling**, choose **Actual size** or **Sharp pixels**. To resize the desktop, set `display.resolution` and restart. With `--display`, relay uses the existing screen size. See [Configuration](/docs/configuration). |
+| `resources_available: false` | Relay cannot read valid cgroup v2 counters. Ensure `/sys/fs/cgroup/cpu.stat`, `/sys/fs/cgroup/memory.current`, and `/sys/fs/cgroup/memory.stat` are readable. Streaming is unaffected. |
 
-### `port_in_use`, or `Cannot listen on 127.0.0.1:8080` in the engine log
+## Input
 
-Another session or process holds the port.
+| Symptom | Cause and fix |
+| --- | --- |
+| `busy` from input (HTTP 409) | Another viewer or controller owns input, or the input queue is full. Close the other owner or wait for input to finish, then retry. If present, `data.applied` counts events already applied. Screenshots remain available. |
+| `busy` from `screenshot` (HTTP 503) | Another screenshot is running. Retry after it finishes. |
+| Text has the wrong case | Local and desktop Caps Lock states can differ. Reload the viewer and press Caps Lock to set the desired state. Local Caps Lock does not affect `relay type`. |
+| Characters are wrong or `unsupported_input` | Set `keyboard.layout` and restart. With `--display`, change the existing desktop's layout instead. Use `relay type` for text and `relay key` for shortcuts. See [Configuration](/docs/configuration). |
+| Mac Command shortcuts behave differently | Open **Send keys** and turn off **Use ⌘ as Ctrl** to send Command as Super instead of Ctrl. |
 
-Fix: `relay up --port 8081`, or `relay down` the session that holds it.
+## Remote access
 
-### `component_failed`, or `status` shows `failed`
-
-The display, desktop, or engine exited during startup or later. The whole session stops. The error names the component, its exit code, and the end of its log.
-
-Fix: read `relay logs COMPONENT`. For a background session started with `-d`, also read `supervisor.log` in the session's state directory (`~/.local/state/relay/<name>/`).
-
-### `timeout` from `up`
-
-The desktop or engine was not ready within `--timeout` (30 seconds by default).
-
-Fix: read the log tail in the error. On a slow machine, raise it, for example `relay up --timeout 90`.
-
-### `invalid_config`, or a setting is rejected
-
-A value in the config file is wrong, or a key is unknown. The message names the file and the key.
-
-Fix: correct the key. Allowed values are in [Configuration](/docs/configuration).
-
-### `Cannot open display` with `--display`
-
-Relay cannot read the X authority for that display.
-
-Fix: export that session's `XAUTHORITY`. Never run `xhost +`.
+| Symptom | Cause and fix |
+| --- | --- |
+| `unauthorized` (HTTP 401) | The token is missing or wrong. Run `relay status --show-token` on the VM and update the file used by `--token-file` or `RELAY_TOKEN_FILE`. For the viewer, open the link printed by `relay up`. Restarting a session generates a new token when required. |
+| `forbidden` (HTTP 403) | The `Host` or `Origin` is not allowed. Connect through `127.0.0.1`, `localhost`, or the `--public` URL. Configure the proxy to preserve both headers. |
+| `invalid_input` about a URL or plain HTTP | Use an HTTPS origin without a path, query, or credentials, and pass a token for remote hosts. Plain HTTP works only for `localhost` and `127.0.0.1`; use an [SSH tunnel](/docs/remote-access) if needed. |
+| `unreachable` | Check the URL and run `relay status` on the VM. If the certificate was rejected, use one the client trusts. |
 
 ## Wayland
 
 ### Engine exits with a missing Wayland protocol
 
-When you attach with `--display`, the compositor lacks a protocol relay needs: `zwlr_screencopy_manager_v1` (version 3), `zwp_virtual_keyboard_manager_v1`, or `zwlr_virtual_pointer_manager_v1` (version 2). The engine log names the protocol, and `up` fails with `component_failed` for `engine`.
+The compositor lacks a required protocol, causing `component_failed` for the engine. Attach to a supported compositor listed in [Wayland](/docs/wayland).
 
-Fix: attach to a compositor that offers them. See [Wayland](/docs/wayland) for supported compositors.
-
-### `Unsupported root size` when attaching
-
-The output is smaller than 320x240, larger than 1920x1080, or has an odd width or height. The engine log shows `Unsupported root size WIDTHxHEIGHT`, and `up` fails with `component_failed` for `engine`.
-
-Fix: create a headless output of a supported size, and pass its name with `--output`. See [Wayland](/docs/wayland#attach-to-your-desktop) for the sway and Hyprland commands.
-
-### `XDG_RUNTIME_DIR is required` with `--display`
-
-Attaching to a Wayland display needs the compositor's runtime directory, and your shell does not set `XDG_RUNTIME_DIR`. `up` exits with `missing_input` before it starts anything.
-
-Fix: export the compositor's runtime directory, which is often `/run/user/$(id -u)`: `export XDG_RUNTIME_DIR=/run/user/$(id -u)`.
-
-### `component_failed` for `display`, or `timeout` while sway starts
-
-Without `--display`, `up --backend wayland` starts sway. It fails with `component_failed` when sway exits. It fails with `timeout` when sway does not report its Wayland and XWayland displays within 15 seconds.
-
-Fix: run `RELAY_BACKEND=wayland relay doctor` to check `sway`, `Xwayland`, and `foot`. Then read `relay logs display`.
-
-## Viewer
-
-### Blank page, "WebCodecs", or a decoder error
-
-The browser lacks H.264 WebCodecs, or the page is not a secure context.
-
-Fix: use current Chrome, Edge, or Safari, over `https://` or `http://127.0.0.1`.
-
-### The viewer cannot connect through a proxy
-
-The proxy drops WebSocket upgrades, changes `Host` or `Origin`, or the `--public` URL does not match the address you open.
-
-Fix: see [Remote access](/docs/remote-access#behind-a-tls-proxy).
-
-### The picture is the wrong size, or too small
-
-The desktop has a fixed size, set when the session starts. The viewer scales it to fit your window.
-
-Fix: open the viewer's scaling panel and choose **Actual size** to see it at 1:1, or **Sharp pixels** to avoid blur when scaled. To change the desktop size, set `display.resolution` and restart the session. There is no live resize. See [Configuration](/docs/configuration#displayresolution). With `--display`, relay uses the size of that existing screen instead.
-
-## Input
-
-### `busy` (HTTP 409)
-
-Only one input owner can send input at a time: the browser viewer, or one agent using `/control`. Another owner is connected, or the input queue is full.
-
-Fix: close the other viewer tab or agent session, then retry. Screenshots are not affected. A long `type` or `key` can stop partway when another owner takes over. The JSON error's `data.applied` says how many events went through.
-
-### `busy` from `screenshot` (HTTP 503)
-
-A screenshot is already running. Only one runs at a time.
-
-Fix: retry.
-
-### Typed text comes out in the wrong case
-
-Caps Lock can differ between your computer and the desktop. Relay turns Caps Lock off on the desktop when a viewer or agent connects, and the viewer copies your local Caps Lock state as you type.
-
-Fix: reload the viewer, then press Caps Lock on your keyboard to match the state you want. `relay type` is not affected by your local Caps Lock.
-
-### Characters are wrong or missing
-
-`relay type` produces characters through the desktop's keyboard layout. `relay key` presses physical keys, so key combinations follow the layout too. A character the layout lacks may fail with `unsupported_input`.
-
-Fix: set `keyboard.layout` to the layout you need and restart the session (see [Configuration](/docs/configuration#keyboardlayout)). Use `relay type` for text and `relay key` for shortcuts.
-
-### Cmd shortcuts do not work in the viewer on a Mac
-
-The viewer maps your Command key to Ctrl by default on macOS, so Cmd+C sends Ctrl+C.
-
-Fix: open the viewer's key panel and toggle **Use ⌘ as Ctrl** off to send Command as Super.
-
-## Tokens and origins
-
-### `unauthorized` (HTTP 401)
-
-The token is missing or wrong.
-
-Fix: pass `--token-file` or set `RELAY_TOKEN_FILE`, and open the viewer from the link with `#token=`. A new `relay up` makes a new token, so copy it again after a restart. From a host to a container, see [Docker](/docs/docker#control-from-the-host).
-
-### `forbidden` (HTTP 403)
-
-The `Host` or `Origin` of the request is not loopback or the `--public` URL.
-
-Fix: connect through `127.0.0.1` or `localhost`, or through the `--public` URL with a proxy that keeps `Host` and `Origin` unchanged.
-
-### `invalid_input` about a URL or plain HTTP
-
-Client commands accept an origin only (no path, query, or credentials), and they refuse plain HTTP to anything but `localhost` and `127.0.0.1`.
-
-Fix: use an `https://` URL, or tunnel and use `http://127.0.0.1`.
-
-### `unreachable`
-
-The client could not connect. The message says why: `Connection refused.`, `The host name did not resolve.`, or `The TLS certificate was rejected.`
-
-Fix: check the URL and that the session is running (`relay status` on the VM). For a rejected certificate, use one your client trusts.
-
-## Other
-
-### Metrics show `resources_available: false`
-
-The VM has no cgroup v2 counters. This is harmless and streaming is unaffected.
+| Symptom | Cause and fix |
+| --- | --- |
+| `Unsupported root size` when attaching | The output must be 320 to 1920 pixels wide and 240 to 1080 pixels high, with even dimensions. Create a supported headless output and pass its name with `--output`; see [Wayland](/docs/wayland). |
+| `missing_input`: `XDG_RUNTIME_DIR is required` with `--display` | Set the compositor's runtime directory, for example `export XDG_RUNTIME_DIR=/run/user/$(id -u)`. |
+| `component_failed` for `display` or `timeout` while sway starts | Sway exited or did not report its Wayland and XWayland displays within 15 seconds. Run `RELAY_BACKEND=wayland relay doctor`, then `relay logs display`. |

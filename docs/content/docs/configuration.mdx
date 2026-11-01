@@ -1,13 +1,25 @@
 ---
 title: Configuration
-description: Every relay setting, what it does, its default and allowed values, and how the file, flags, and environment variables combine.
+description: Set relay's display, stream, server, keyboard, backend, and desktop options with a YAML file, flags, or environment variables.
 ---
 
-You can change how relay starts with an optional YAML file on the VM. Every key is optional. Without a file, relay uses the defaults.
+Change how `relay up` starts a session with an optional YAML file on the VM. Every key is optional. A flag beats its environment variable, which beats the file, which beats the default.
+
+## Where the file lives
+
+`relay up` uses the first source that matches:
+
+| Order | Source |
+| --- | --- |
+| 1 | `--config FILE` |
+| 2 | `RELAY_CONFIG` |
+| 3 | `${XDG_CONFIG_HOME:-~/.config}/relay/config.yaml`, when it exists |
+
+If `--config` or `RELAY_CONFIG` names a file that does not exist, `relay up` fails. Only `relay up` reads the file. The viewer and the client commands do not.
 
 ## Default configuration
 
-Copy this file to `~/.config/relay/config.yaml` on the VM. Its values are the defaults for a new X11 display. `desktop` and `backend` are commented out because their defaults depend on the backend; remove the `#` to set one. Leave `desktop` commented to use the backend's default, or to get `none` with `--display`. Change the values you need and leave the rest.
+Copy this file to `~/.config/relay/config.yaml` and change the values you need. The values are the defaults for a new X11 display. `desktop` and `backend` are commented out because their defaults depend on the backend; remove the `#` to set one.
 
 ```yaml title="~/.config/relay/config.yaml"
 # relay settings. Every key is optional; the values below are the defaults.
@@ -45,8 +57,6 @@ keyboard:
 # backend: x11
 ```
 
-The commented `server` keys have no fixed default. `server.bind` is `127.0.0.1`, or `0.0.0.0` when `server.public` is set, and `server.public`, `server.tls_cert`, and `server.tls_key` stay unset until you add them. Remove the `#` from a line to set it.
-
 To create the file from the terminal:
 
 ```bash title="Terminal"
@@ -54,216 +64,31 @@ mkdir -p ~/.config/relay
 nano ~/.config/relay/config.yaml
 ```
 
-## Display
+## Keys
 
-### display.resolution
+| Key | Default | Allowed values | Flag | Environment variable |
+| --- | --- | --- | --- | --- |
+| `display.resolution` | `1280x720` | The desktop size as `WIDTHxHEIGHT`, both even. Width 320 to 1920, height 240 to 1080. Ignored with `--display`, which uses the existing screen's size. | None | `RELAY_RESOLUTION` |
+| `stream.fps` | `60` | Whole number from 10 to 60 | None | `RELAY_FPS` |
+| `stream.bitrate.min` | `1M` | 250000 to 100000000, as a whole number or with a `k` (thousand) or `M` (million) suffix. No higher than `start`. | None | `RELAY_BITRATE_MIN` |
+| `stream.bitrate.start` | `8M` | Same values as `min`. The stream adjusts between `min` and `max` from here. | None | `RELAY_BITRATE_START` |
+| `stream.bitrate.max` | `40M` | Same values as `min`. No lower than `start`. | None | `RELAY_BITRATE_MAX` |
+| `server.port` | `8080` | 1 to 65535 | `--port` | `RELAY_PORT` |
+| `server.bind` | `127.0.0.1`, or `0.0.0.0` when `server.public` is set | An address on the VM. Any other address makes relay generate a token. | `--bind` | `RELAY_BIND` |
+| `server.public` | unset | HTTPS origin with no path, query, or credentials, such as `https://desktop.example.com`. The engine accepts only this origin. | `--public` | `RELAY_PUBLIC` |
+| `server.tls_cert` | unset | Path to a certificate file. Set with `tls_key`. | `--tls-cert` | `RELAY_TLS_CERT` |
+| `server.tls_key` | unset | Path to the private key file. Set with `tls_cert`. | `--tls-key` | `RELAY_TLS_KEY` |
+| `keyboard.layout` | `us` | A layout name such as `de` or `fr`, or a comma-separated list such as `us,de`, using letters, digits, `_`, and `-`. On X11 it needs `setxkbmap`, which `relay doctor` checks. | None | `RELAY_KEYBOARD_LAYOUT` |
+| `backend` | `x11` when the engine includes it, else `wayland` | `x11` or `wayland`. See [Wayland](/docs/wayland) for what the Wayland backend needs. | `--backend` | `RELAY_BACKEND` |
+| `desktop` | `xfce` on X11, `foot` on Wayland, or `none` with `--display` | `xfce`, `none`, or a command. Use `none` for a bare screen, or a command to run your own window manager. | `--desktop` | `RELAY_DESKTOP` |
 
-The size of the desktop relay creates, as `WIDTHxHEIGHT`. The viewer and screenshots show this size, and a larger desktop needs more CPU and bandwidth.
+`stream.bitrate` needs `min <= start <= max`, including when you change one value. `server.tls_cert` and `server.tls_key` must be set together.
 
-- Default: `1280x720`
-- Allowed: width and height both even, width 320 to 1920, height 240 to 1080
-- Change it when apps need more room, or to lower the load on a small VM.
-- With `--display :N`, relay attaches to an existing screen and uses that screen's size. It ignores this key.
-
-```yaml
-display:
-  resolution: 1600x900
-```
-
-## Stream
-
-### stream.fps
-
-Frames per second the engine sends. A lower value uses less CPU and bandwidth, and motion looks less smooth.
-
-- Default: `60`
-- Allowed: whole number from 10 to 60
-- Lower it on a small VM or a slow link. Keep 60 for smooth pointer movement.
-
-```yaml
-stream:
-  fps: 30
-```
-
-### stream.bitrate.start
-
-The bitrate the stream begins at, in bits per second. The stream adjusts between `min` and `max` from there, so the picture steps down on a slow link and recovers when the link does.
-
-- Default: `8M`
-- Allowed: 250000 to 100000000, as a whole number or with a `k` (thousand) or `M` (million) suffix. It must sit between `min` and `max`.
-- Change it when the first seconds of the stream look blurry or the link starts out congested.
-
-```yaml
-stream:
-  bitrate:
-    start: 8M
-```
-
-### stream.bitrate.min
-
-The lowest bitrate the stream drops to on a slow link. Raising it keeps the picture sharper, but a link that cannot carry it will stall.
-
-- Default: `1M`
-- Allowed: same range and suffixes as `start`, and no higher than `start`
-- Raise it when you see blocky video on a link you know is fast.
-
-```yaml
-stream:
-  bitrate:
-    min: 1M
-```
-
-### stream.bitrate.max
-
-The highest bitrate the stream climbs to. A higher cap gives a sharper picture on a fast network and uses more bandwidth.
-
-- Default: `40M`
-- Allowed: same range and suffixes as `start`, and no lower than `start`
-- Raise it on a fast network for a sharper picture. Lower it to cap bandwidth use.
-
-```yaml
-stream:
-  bitrate:
-    max: 40M
-```
-
-Set `min`, `start`, and `max` so that `min <= start <= max`. Any order that breaks this is an error, including when you change only one of the three.
-
-## Server
-
-### server.port
-
-The port the engine listens on. The viewer link and every client command use it.
-
-- Default: `8080`
-- Allowed: 1 to 65535
-- Change it when another process uses 8080, or to run a second session next to the first.
-
-```yaml
-server:
-  port: 8081
-```
-
-### server.bind
-
-The address the engine listens on. The default accepts connections from the VM only. Any other address makes relay generate a token.
-
-- Default: `127.0.0.1`, or `0.0.0.0` when `server.public` is set
-- Allowed: an address on the VM
-- Change it to listen on a specific network interface. In a container, publish the port to the host loopback. See [Docker](/docs/docker).
-
-```yaml
-server:
-  bind: 0.0.0.0
-```
-
-### server.public
-
-The HTTPS address people use to reach the session from outside, for example behind a TLS proxy. Setting it generates a token and makes the engine accept only that origin. The viewer link `up` prints uses it.
-
-- Default: unset
-- Allowed: an HTTPS origin with no path, query, or credentials, such as `https://desktop.example.com`
-- Set it whenever the session is reachable through a gateway, proxy, or tunnel. See [Remote access](/docs/remote-access).
-
-```yaml
-server:
-  public: https://desktop.example.com
-```
-
-### server.tls_cert and server.tls_key
-
-A certificate and its private key. With both set, the engine serves HTTPS itself, so you need no proxy to terminate TLS.
-
-- Default: unset
-- Allowed: paths to the certificate file and the private key file. Set both or neither.
-- Use them when clients connect straight to the VM. The certificate must be one your clients trust and must match the `server.public` hostname.
-
-```yaml
-server:
-  tls_cert: /etc/relay/fullchain.pem
-  tls_key: /etc/relay/key.pem
-```
-
-## Keyboard
-
-### keyboard.layout
-
-The keyboard layout of the desktop relay creates. `relay type` types text using this layout, and `key` combinations follow it.
-
-- Default: `us`
-- Allowed: a layout name such as `de` or `fr`, or a comma-separated list such as `us,de`, using letters, digits, `_`, and `-`
-- Linux only. On x11 it needs `setxkbmap`, which `relay doctor` checks.
-- Change it when the apps or text you type expect another layout.
-
-```yaml
-keyboard:
-  layout: de
-```
-
-## Backend
-
-### backend
-
-The display server the desktop runs on. See [Wayland](/docs/wayland) for what the Wayland backend needs.
-
-- Default: `x11` when the engine has it, else `wayland`
-- Allowed: `x11` or `wayland`
-- `--backend` on `relay up` overrides this key.
-
-```yaml
-backend: wayland
-```
-
-## Desktop
-
-### desktop
-
-What relay starts as the desktop session.
-
-- Default: `xfce` on x11, `foot` on wayland, or `none` when you attach with `--display`
-- Allowed: `xfce`, `none`, or a command
-- Linux only.
-- Use `none` to get a bare screen with no desktop, or a command to run your own window manager or session.
-
-```yaml
-desktop: none
-```
-
-## Where the file lives
-
-`relay up` looks for the file in this order and uses the first match:
-
-| Order | Source |
-| --- | --- |
-| 1 | `relay up --config FILE` |
-| 2 | `$RELAY_CONFIG` |
-| 3 | `${XDG_CONFIG_HOME:-~/.config}/relay/config.yaml`, when it exists |
-
-If `--config` or `RELAY_CONFIG` names a file that does not exist, `relay up` fails. The default path is used only when the file is there. Only `relay up` reads the file. The viewer and the client commands do not.
-
-## How settings combine
-
-A flag beats its environment variable, which beats the file, which beats the default. For example, `relay up --port 9000` uses 9000 even when the file sets another port.
-
-| Key | Flag | Environment variable |
-| --- | --- | --- |
-| `display.resolution` | none | `RELAY_RESOLUTION` |
-| `stream.fps` | none | `RELAY_FPS` |
-| `stream.bitrate.min` | none | `RELAY_BITRATE_MIN` |
-| `stream.bitrate.start` | none | `RELAY_BITRATE_START` |
-| `stream.bitrate.max` | none | `RELAY_BITRATE_MAX` |
-| `server.port` | `--port` | `RELAY_PORT` |
-| `server.bind` | `--bind` | `RELAY_BIND` |
-| `server.public` | `--public` | `RELAY_PUBLIC` |
-| `server.tls_cert` | `--tls-cert` | `RELAY_TLS_CERT` |
-| `server.tls_key` | `--tls-key` | `RELAY_TLS_KEY` |
-| `keyboard.layout` | none | `RELAY_KEYBOARD_LAYOUT` |
-| `backend` | `--backend` | `RELAY_BACKEND` |
-| `desktop` | `--desktop` | `RELAY_DESKTOP` |
+To reach the session from outside the VM, set `server.public` or serve it through a TLS proxy. In a container, publish the port to the host loopback. See [Remote access](/docs/remote-access) and [Docker](/docs/docker).
 
 ## Bad values
 
-`relay up` refuses to start and names the file and the key when a value is wrong. It does not fall back to a default. Unknown keys, values of the wrong type, and values outside the allowed range are all errors. An invalid value from a flag or environment variable fails the same way.
+`relay up` refuses to start and names the file and key when a value is wrong. It does not fall back to a default. Unknown keys, wrong types, and values outside the allowed range are all errors, and a bad value from a flag or environment variable fails the same way.
 
 ## Apply changes
 

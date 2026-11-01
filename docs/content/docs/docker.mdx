@@ -1,70 +1,43 @@
 ---
 title: Docker
-description: Build and run the relay image, publish its port, and control the container from the host.
+description: Build the relay image, run it, and open the desktop in a browser.
 ---
 
-Run relay in a container when you do not want to install it on the host. The repository's `Dockerfile` builds an image from `debian:trixie-slim` that holds a full relay install. The container runs as the non-root user `relay`, and it starts `relay up` in the foreground, listening on `0.0.0.0` inside the container.
+Run relay in a container instead of installing it on the host. The image includes relay, its dependencies, and a desktop, and starts `relay up --bind 0.0.0.0` on port 8080.
 
 Build and run it from the repository root:
 
 ```sh
 docker build -t relay .
 docker run -d --name desk -p 127.0.0.1:8080:8080 relay
-docker logs desk
 ```
 
-`docker logs` shows the viewer link with the token (shortened here):
+`docker logs desk` prints the viewer link with the session token. Open it, and change the port in the link if you published a different one. Print the token again with `docker exec desk relay status --show-token`.
 
-```text
-Started default
-Viewer          http://127.0.0.1:8080/#token=<64 hex>
-Display         :0
-Resolution      1280x720 at 60 fps
-Logs            /home/relay/.local/state/relay/default
-Listening       0.0.0.0:8080; use a loopback port publish or SSH tunnel
+## What changes in a container
 
-  Stop it (or press Ctrl-C):
-    relay down
-```
-
-Open the viewer link. If you publish a different host port, change the port in the link. To print the token again, run `docker exec desk relay status --show-token`.
-
-`docker run` needs no extra flags, and the default 64 MB `/dev/shm` is enough. The image already includes an init process, so `--init` is not needed. `docker stop` shuts the session down cleanly.
-
-## Bind and publish
-
-| Side | Address | Why |
-| --- | --- | --- |
-| Container | `0.0.0.0:8080` | The published port must reach the engine. A non-loopback bind always generates a token. |
-| Host | `-p 127.0.0.1:8080:8080` | Publish on host loopback only. |
-
-The engine accepts only a loopback `Host` (`127.0.0.1` or `localhost`) unless it runs with `--public`, and the viewer uses the link's token only on `https://` or loopback pages. So `-p 8080:8080` does not make the desktop usable from the network; it only exposes the port. For remote use, put a TLS proxy in front (see [Remote access](/docs/remote-access)). Arguments after the image name are added to `relay up`:
-
-```sh
-docker run -d --name desk -p 127.0.0.1:8080:8080 relay --public https://desk.example.com
-```
-
-To run as root, add `--user root`. State then lives in `/root/.local/state/relay/`.
+- Publish to host loopback only. Publishing the port on another interface does not make the desktop usable from there, because relay accepts loopback requests only. For remote use, pass `--public` behind a TLS proxy. See [Remote access](/docs/remote-access).
+- You do not need `--init`: the image runs an init process, and `docker stop desk` stops the session cleanly.
+- Arguments after the image name go to `relay up`, such as `--public`.
+- To run as root, add `--user root`. Session state then lives in `/root/.local/state/relay/`.
+- To change resolution, frame rate, or another setting, mount `config.yaml` at `/home/relay/.config/relay/config.yaml`. See [Configuration](/docs/configuration) for the keys.
 
 ## Control from the host
 
-Inside the container, client commands find the session on their own:
+Client commands inside the container find the session on their own:
 
 ```sh
 docker exec desk relay screenshot - > screen.png
 docker exec desk relay click 0.5 0.5
 ```
 
-The CLI on the host needs the URL and the token, because the container's `0.0.0.0` bind generated one. Setting only `RELAY_URL` fails with `unauthorized`.
+The host CLI needs the URL and the token, because the container's `0.0.0.0` bind creates one.
 
 ```sh
 docker exec desk sh -c 'cat ~/.local/state/relay/default/token' > token
 export RELAY_URL=http://127.0.0.1:8080
 export RELAY_TOKEN_FILE=$PWD/token
 relay status
-relay screenshot screen.png
 ```
 
-Install the CLI on the host with `./install.sh --client-only`. A new container generates a new token, so copy it again after a restart.
-
-To change resolution, frame rate, or other settings, mount a config file and point `--config` at it. See [Configuration](/docs/configuration).
+Setting only `RELAY_URL` fails with `unauthorized`. Install the host CLI with `./install.sh --client-only`. A new container has a new token, so copy it again after a restart.

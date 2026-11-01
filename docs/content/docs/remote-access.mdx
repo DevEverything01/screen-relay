@@ -1,46 +1,42 @@
 ---
 title: Remote access
-description: Reach a session through an SSH tunnel, a TLS proxy, or native TLS, manage its token, and control it from another machine.
+description: Open the viewer or control a session from another machine with an SSH tunnel, a public HTTPS URL, or native TLS.
 ---
 
-By default a session listens on `127.0.0.1` and needs no token, so only the VM can reach it. This page covers the three ways to reach it from elsewhere, how the token works, and how to control a remote session from the CLI.
+A session listens on `127.0.0.1:8080` with no token, so only the VM can reach it. To open the viewer or run client commands from another machine, follow one of the paths below. Anyone with a session's token can see and control its desktop. There is one token per session and no user identity.
 
-Anyone who holds a session's token can see and control its desktop. There is one token per session and no user identity.
+## Choose a path
 
-## Choose a method
-
-| Method | Use it when | Token |
+| Path | Use it when | Token |
 | --- | --- | --- |
-| SSH tunnel | You have SSH access to the VM and it is for you alone. | Not needed |
-| TLS proxy | A gateway such as a cloud sandbox port, nginx, Caddy, or a tunnel gives you an HTTPS address. | Generated |
-| Native TLS | Clients connect straight to the VM and you have a certificate. | Generated |
+| SSH tunnel | You have SSH access to the VM. | None |
+| Behind a TLS proxy | A cloud sandbox port, nginx, Caddy, or a tunnel forwards to the VM. | Required |
+| Native TLS | Clients connect straight to the VM and you have a certificate. | Required |
 
 ## SSH tunnel
 
-Run this on your laptop:
+Run this on your machine:
 
 ```sh
 ssh -N -L 8080:127.0.0.1:8080 user@your-vm
 ```
 
-Open `http://127.0.0.1:8080`. The session stays on loopback, so no token is needed.
+Open `http://127.0.0.1:8080`. The session stays on loopback, so nothing needs a token.
 
 ## Behind a TLS proxy
-
-Use this for any gateway that ends HTTPS and forwards to the VM.
 
 ```sh
 relay up -d --public https://desktop.example.com
 ```
 
-`--public` makes the session listen on `0.0.0.0` (unless you also pass `--bind`), generates a token, and accepts only that origin. Without `--tls-cert` the engine serves plain HTTP and expects the proxy to terminate TLS, so `up` prints a `TLS proxy` row naming the forwarding target. Run it only where the proxy is the only thing that can reach the port. The viewer link `up` prints carries the token in its `#token=` fragment.
+`--public` takes a bare HTTPS origin. It makes the session listen on `0.0.0.0` unless you pass `--bind`, creates a token, and accepts requests only for that origin. `up` prints a `TLS proxy` row naming the forwarding target.
 
-The proxy must:
+Without `--tls-cert` the engine serves plain HTTP and the proxy ends TLS, so the proxy must be the only thing that can reach the port. It must:
 
-- forward `/` (and `/index.html`), `/viewer.js`, `/stream`, `/control`, `/input`, `/screenshot.png`, `/capabilities`, and `/metrics` with no path prefix
+- forward every path with no prefix, including `/viewer.js`, `/stream`, and `/control` ([endpoints](/docs/protocol#endpoints))
 - forward WebSocket upgrades over HTTP/1.1
-- pass the `Host`, `Origin`, and `Authorization` headers and the WebSocket subprotocol header through unchanged
-- not log `Authorization` or the subprotocol header, because the token travels in both
+- pass `Host`, `Origin`, and `Authorization` through unchanged, and keep the WebSocket subprotocol header
+- keep `Authorization` and the subprotocol header out of its logs, because the token travels in both
 
 The engine ignores `X-Forwarded-*` headers.
 
@@ -50,22 +46,20 @@ The engine ignores `X-Forwarded-*` headers.
 relay up -d --tls-cert fullchain.pem --tls-key key.pem --public https://desktop.example.com
 ```
 
-The engine serves HTTPS itself, and `up` prints no TLS proxy row. Use a certificate your clients trust, with a hostname that matches the public URL. Native TLS speaks HTTP/1.1 only, so a client that negotiates HTTP/2 must fall back. Client commands on the VM trust the session's own certificate without a hostname check.
+The engine serves HTTPS itself, prints no `TLS proxy` row, and speaks HTTP/1.1 only. Use a certificate your clients trust with the public URL's hostname. Client commands on the VM accept the session's own certificate without a hostname check, so a self-signed one works there.
 
 ## Tokens
 
-- A token is 64 lowercase hex characters (256 random bits). Relay generates one when the listen address is not `127.0.0.1` or when `--public` is set. A session on loopback has none.
-- The engine refuses to start on a non-loopback address without a token.
-- The token is stored in the session's state directory in a file named `token`, readable only by its owner. `relay status --json` shows the path as `tokenFile`. The engine refuses a token file that another user owns or can read.
-- `up` prints the token once. `relay status` hides it unless you pass `--show-token`.
-- The viewer reads `#token=...` from the link, removes it from the address bar, and then connects. It uses the token only on `https://` or loopback pages. Browsers do not send the fragment to servers.
-- HTTP clients send `Authorization: Bearer TOKEN`. WebSocket clients offer the subprotocols `nsl1` and `bearer.TOKEN`. The token never goes in a request URL.
+Relay creates a 64-character lowercase hex token (256 random bits) whenever the session listens anywhere other than `127.0.0.1` or uses `--public`.
 
-Each `relay up` generates a new token. To rotate it, run `relay down` and then `relay up` again. Open connections end.
+- Relay stores the token in a `token` file in the session's state directory, readable only by its owner. `relay status --json` shows the path as `tokenFile`.
+- `relay status` hides the token unless you pass `--show-token`.
+- The viewer reads `#token=` from the link that `up` prints, removes it from the address bar, and uses it only on `https://` or loopback pages. Browsers never send the fragment to the server.
+- Each `relay up` creates a new token and ends open connections. To rotate one, run `relay down` then `relay up`.
 
 ## Control a session from your laptop
 
-Install only the CLI with `./install.sh --client-only` (any OS with Node 26 or newer). Save the token from the VM into a file with `relay status --show-token`, then:
+Install the CLI alone with `./install.sh --client-only` (any OS with Node 26 or newer). Copy the token from `relay status --show-token` into a file, then set the target once per shell:
 
 ```sh
 export RELAY_URL=https://desktop.example.com
@@ -74,14 +68,4 @@ relay status
 relay screenshot screen.png
 ```
 
-You can pass `--url` and `--token-file` on each command instead. Remote plain HTTP is refused, so use HTTPS or a tunnel to `http://127.0.0.1`. Redirects are not followed. See the [CLI reference](/docs/cli#client-target) for the full rules.
-
-## What the engine rejects
-
-| Request | Result |
-| --- | --- |
-| Wrong or missing token | HTTP 401, or a rejected WebSocket handshake |
-| `Host` that is not loopback or the public URL's host | HTTP 403 |
-| Browser `Origin` that is not loopback (with a loopback `Host`) or the public URL | HTTP 403 |
-
-[Troubleshooting](/docs/troubleshooting) lists the matching errors and their fixes.
+Pass `--url` and `--token-file` per command instead. Use HTTPS for any remote host; plain HTTP works only for `localhost` or `127.0.0.1`, and redirects are not followed. The [CLI reference](/docs/cli#client-target) has the URL rules, and in Node you pass the same URL and token to `createClient` ([SDK options](/docs/sdk#options)).

@@ -1,76 +1,69 @@
 ---
 title: Getting started
-description: Install relay on a Linux VM, start a session, open the viewer, and control the desktop from the VM and from your laptop.
+description: Start a Linux desktop and control it from a browser or the CLI.
 ---
 
-This guide takes you from a Linux VM to a desktop you can see in a browser and control from the command line, first on the VM and then from your laptop.
+Start a desktop on a Linux VM, open it in your browser, and control it with relay.
 
 ## Prerequisites
 
-- A Linux VM to run the desktop. A container or sandbox works too.
-- A supported distribution for automatic dependency installation: Debian 13, Ubuntu 24.04 or 26.04, Fedora 44, Arch Linux (including Manjaro and Omarchy), or Alpine 3.24. On another distribution, install the dependencies yourself and pass `--no-deps` to the installer.
-- Root or passwordless `sudo`, so the installer can install packages.
-- Node 26 or newer. If it is missing, the installer downloads the pinned version.
-- A browser with H.264 WebCodecs for the viewer: current Chrome, Edge, or Safari.
+- A Linux VM, container, or sandbox with Git and root or passwordless `sudo`.
+- Debian, Ubuntu, Fedora, Arch Linux, or Alpine for automatic dependency installation. On another distribution, install the dependencies yourself and add `--no-deps` to the install command.
+- SSH access to the VM from your laptop.
+- A browser with H.264 WebCodecs, such as current Chrome, Edge, or Safari.
 
 ## 1. Install relay
 
-On the VM, from a clone of the repository:
-
-<Callout title="x264 on Fedora">
-  On Fedora, RPM Fusion Free provides the x264 library relay needs. If the x264 package
-  is unavailable, the installer prints this command and stops. Run it, then run
-  `./install.sh` again:
-
-  ```sh
-  sudo dnf -y install https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm
-  ```
-</Callout>
+On the VM, clone the repository and run the installer:
 
 ```sh
-./install.sh
+git clone https://github.com/vercel-labs/relay.git
+cd relay
+./install.sh --prefix "$HOME/.local"
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-The installer installs the system packages relay needs, builds relay, installs `relay` to `~/.local/bin`, and runs `relay doctor`. It exits with an error if a check fails, and it is safe to run again. Add the `export` line to your shell profile to keep it. If `~/.local/bin` is not on `PATH`, the installer prints `Not on PATH; add it with: export PATH="<prefix>/bin:$PATH"`.
+The installer installs the dependencies, builds and installs relay, and runs `relay doctor`. It exits with an error if a check fails. Add the `export` line to your shell profile to keep relay on your `PATH`. The installer needs Node 26 or newer and npm; on Linux x64 and arm64, it downloads its pinned version if needed.
 
-Options:
+On Fedora, if the installer asks for RPM Fusion Free, run the printed command and retry. For a user with `sudo`, the command is:
 
-- `--prefix DIR` installs somewhere else.
-- `--backend x11|wayland|all` picks the backend to install and build. Default `x11`; `wayland` installs sway, XWayland, and foot; `all` installs both. Reinstalling keeps existing engine backends; to remove one, delete `<prefix>/lib/relay/relay-engine` and reinstall the backend you want. See [Wayland](/docs/wayland).
-- `--no-deps` skips package installation.
-- `--no-desktop` skips the XFCE packages.
-- `--client-only` installs only the CLI (see [step 6](#6-control-it-from-your-laptop)).
+```sh
+sudo dnf -y install https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm
+```
+
+For Wayland or Docker, see [Wayland](/docs/wayland) or [Docker](/docs/docker). The [CLI reference](/docs/cli) lists all installer options.
 
 ## 2. Start a session
+
+On the VM, run:
 
 ```sh
 relay up -d
 ```
 
-`up` starts a virtual display (1280x720 at 60 fps by default), the desktop, and the engine. It waits until the desktop is ready, then prints a viewer link. With `-d` the command returns once the session is ready. Without it, `up` stays in the foreground and the first Ctrl+C stops the session.
-
-Each session has a name, `default` unless you pass `--name`. To run a second session, give it another `--name` and `--port`.
+Relay starts the desktop and prints a viewer link when it is ready. By default, the session is named `default` and the desktop is 1280x720 at 60 fps. See [Configuration](/docs/configuration) to change the resolution or frame rate, or [Troubleshooting](/docs/troubleshooting) if startup fails.
 
 ## 3. Open the viewer
 
-The engine listens on `http://127.0.0.1:8080` and is reachable only from the VM. From your laptop, forward the port over SSH:
+The default session listens on `127.0.0.1:8080` on the VM. From your laptop, forward the port over SSH, replacing `user@your-vm` with your login and VM address:
 
 ```sh
 ssh -N -L 8080:127.0.0.1:8080 user@your-vm
 ```
 
-Open the viewer link that `up` printed. On a loopback listener there is no token. If the link has a `#token=` part, treat the whole link as a secret. The viewer removes the token from the address bar before it connects.
+Leave the tunnel running and open the viewer link printed by `relay up`. You should see the desktop. The default loopback session needs no token. If a link contains `#token=`, keep the whole link secret.
 
-<Callout title="Secure context">
-  The viewer needs a secure context: `https://` or `http://127.0.0.1`. A blank
-  page or a WebCodecs error usually means the browser lacks H.264 WebCodecs or
-  the page is not in a secure context.
-</Callout>
+Use HTTPS or `http://127.0.0.1` for the viewer's secure context. See [Remote access](/docs/remote-access) for other ways to connect.
 
 ## 4. Control it from the VM
 
-On the VM, client commands find the session on their own:
+On the VM, start a terminal on the default X11 desktop:
+
+```sh
+relay run -- xfce4-terminal
+```
+
+The command prints the process ID. Wait for the terminal to appear in the viewer, then close the viewer tab before sending input. Only one controller can send input at a time, and another gets `busy`.
 
 ```sh
 relay screenshot screen.png
@@ -80,72 +73,22 @@ relay key Enter
 relay screenshot after.png
 ```
 
-- Coordinates are fractions from 0 to 1, measured from the top-left.
-- `type` sends text using the desktop's keyboard layout.
-- `key` presses physical combinations such as `ctrl+l` or `alt+Tab`.
-- A successful input command means the engine applied the events. Take another screenshot to confirm the app reacted.
-- While a viewer is open, input commands fail with `busy` because the viewer owns input. Screenshots still work. Close the viewer tab to hand control back.
+The click is at the center of the screen. If the terminal is elsewhere, replace `0.5 0.5` with a point inside it; coordinates are fractions from 0 to 1 measured from the top-left. Reopen the viewer to check for `hello`. The screenshots are saved on the VM.
 
-Start an app on the desktop with `relay run`:
+Ask an agent on the VM to run:
 
 ```sh
-relay run -- xterm
+relay skills get core
 ```
 
-`run` prints the app's process ID right away, and the window appears a moment later. Read its output with `relay logs apps`. Apps stop with `relay down`.
+This prints the agent workflow for screenshots and input. See [Agent skills](/docs/agent-skills) for more.
 
-Check or stop the session:
+## 5. Stop the session
+
+On the VM, run:
 
 ```sh
-relay status
 relay down
 ```
 
-`status` succeeds for any existing session, including a stopped or failed one. `down` stops the session and everything it started, and it is safe to run twice.
-
-## 5. Make the session reachable
-
-To control a session from another machine, the engine must listen beyond the VM and require a token. The common setup puts HTTPS in front of it:
-
-```sh
-relay up -d --public https://desktop.example.com
-```
-
-This generates a token and prints a viewer link that includes it. The [Remote access](/docs/remote-access) page covers TLS proxies, native TLS, and tokens.
-
-## 6. Control it from your laptop
-
-On the laptop, install only the CLI. This works on any OS with Node 26 or newer:
-
-```sh
-./install.sh --client-only
-```
-
-Copy the token from the VM into a file on the laptop:
-
-```sh
-relay status --show-token
-```
-
-Then point the CLI at the session:
-
-```sh
-export RELAY_URL=https://desktop.example.com
-export RELAY_TOKEN_FILE=./token
-relay status
-relay screenshot screen.png
-relay click 0.5 0.5
-```
-
-You can pass `--url` and `--token-file` on each command instead. Remote plain HTTP is refused, so use HTTPS or an SSH tunnel to `http://127.0.0.1`.
-
-## Use Docker instead
-
-If you would rather not install on the host, run relay in a container. See [Docker](/docs/docker).
-
-## Next steps
-
-- [CLI reference](/docs/cli): every command, option, output, and error.
-- [Configuration](/docs/configuration): resolution, frame rate, bitrate, port, and desktop.
-- [Agent skills](/docs/agent-skills): the workflow for agents.
-- [Troubleshooting](/docs/troubleshooting): what to do when something fails.
+Relay confirms the session has stopped. This also stops apps started with `relay run`.
