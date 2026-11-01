@@ -75,6 +75,52 @@ jobs:
       - run: ./install.sh
       - run: PATH="$HOME/.local/bin:$PATH" tests/smoke.sh
 
+  smoke-wayland:
+    name: Install and smoke test (Wayland spawn)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: ./install.sh --backend wayland
+      - run: PATH="$HOME/.local/bin:$PATH" RELAY_BACKEND=wayland tests/smoke.sh
+
+  smoke-wayland-attach:
+    name: Install and smoke test (Wayland attach)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: ./install.sh --backend wayland
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends labwc
+      - name: Smoke test against labwc
+        run: |
+          set -eu
+          runtime=$(mktemp -d)
+          export XDG_RUNTIME_DIR=$runtime
+          WLR_BACKENDS=headless WLR_RENDERER=pixman WLR_HEADLESS_OUTPUTS=1 labwc > "$runtime/labwc.log" 2>&1 &
+          socket=''
+          x11=''
+          for _ in $(seq 100); do
+            socket=$(find "$runtime" -maxdepth 1 -type s -name 'wayland-*' -print -quit)
+            x11=$(find /tmp/.X11-unix -maxdepth 1 -type s -name 'X*' -print -quit 2>/dev/null || true)
+            if [ -n "$socket" ] && [ -n "$x11" ]; then break; fi
+            sleep 0.2
+          done
+          if [ -z "$socket" ] || [ -z "$x11" ]; then cat "$runtime/labwc.log"; exit 1; fi
+          PATH="$HOME/.local/bin:$PATH" DISPLAY=":${x11##*/X}" RELAY_BACKEND=wayland RELAY_DISPLAY="${socket##*/}" tests/smoke.sh
+
   install:
     name: Install (${{ matrix.image }})
     runs-on: ubuntu-24.04
@@ -94,4 +140,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - run: docker run --rm -v "$PWD:/src" -w /src "${{ matrix.image }}" sh -c '${{ matrix.setup }} ./install.sh --prefix /usr/local && relay-engine --help'
+      - run: >-
+          docker run --rm -v "$PWD:/src" -w /src "${{ matrix.image }}"
+          sh -c '${{ matrix.setup }} ./install.sh --prefix /usr/local && relay-engine --help && ./install.sh --backend all --no-desktop --prefix /usr/local && relay-engine --help'
