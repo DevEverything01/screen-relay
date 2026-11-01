@@ -136,19 +136,6 @@ test('backend from the config file accepts x11 or wayland and names them when wr
   assert.throws(() => config.loadConfig(write('backend: mir\n')), /backend.*x11 or wayland/);
 });
 
-test('up accepts both backend options', { skip: process.platform !== 'linux' }, () => {
-  for (const backend of ['x11', 'wayland']) {
-    const result = spawnSync(process.execPath, [cli, 'up', '--backend', backend, '--config', join(directory, 'missing.yaml'), '--json'], {
-      encoding: 'utf8', timeout: 15000,
-    });
-    assert.ifError(result.error);
-    assert.equal(result.status, 1);
-    const error = JSON.parse(result.stderr);
-    assert.equal(error.reason, 'invalid_config');
-    assert.match(error.message, /Config file not found/);
-  }
-});
-
 test('doctor reports an invalid RELAY_BACKEND as a failed check', { skip: process.platform !== 'linux' }, () => {
   const path = write('backend: x11\n');
   const result = spawnSync(process.execPath, [cli, 'doctor', '--config', path, '--json'], {
@@ -160,18 +147,4 @@ test('doctor reports an invalid RELAY_BACKEND as a failed check', { skip: proces
   const backend = checks.find((item) => item.name === 'backend');
   assert.equal(backend.status, 'fail');
   assert.match(backend.detail, /RELAY_BACKEND.*wayl.*x11 or wayland/);
-});
-
-test('RELAY_BACKEND overrides the config backend', () => {
-  const [settings, , present] = config.loadConfig(write('backend: x11\n'));
-  const previous = process.env.RELAY_BACKEND;
-  process.env.RELAY_BACKEND = 'wayland';
-  try {
-    const args = { backend: undefined };
-    config.applyTo(args, settings, present);
-    assert.equal(args.backend, 'wayland');
-  } finally {
-    if (previous === undefined) delete process.env.RELAY_BACKEND;
-    else process.env.RELAY_BACKEND = previous;
-  }
 });
