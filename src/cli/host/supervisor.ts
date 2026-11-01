@@ -3,9 +3,15 @@ import { accessSync, closeSync, constants, fchmodSync, mkdirSync, mkdtempSync, o
 import { join, resolve } from 'node:path';
 import type { Readable } from 'node:stream';
 import { createClient } from '../../sdk/index.js';
+import { BACKENDS, backendValue } from '../config.js';
 import { Failure, nextFor, sessionCommand } from '../output.js';
 import { HostArgs, LAUNCHER_DIR, run, spawnCleared, which } from './common.js';
 import { identity, SessionData, tail, writeSession } from './state.js';
+
+export const BACKEND_PROGRAMS = {
+  x11: ['Xvfb', 'xauth', 'xprop', 'xwininfo', 'xdpyinfo', 'setxkbmap'],
+  wayland: ['sway', 'Xwayland', 'swaymsg', 'foot'],
+};
 
 export const HINTS: Record<string, string> = {
   display: 'Check Xvfb and /tmp/.X11-unix with `relay doctor`.',
@@ -207,6 +213,55 @@ export class Session {
     }
   }
 
+  async startWaylandDisplay(layout: string): Promise<string | null> {
+    this.env.XKB_DEFAULT_LAYOUT = layout;
+    if (this.args.display) {
+      this.env.XDG_RUNTIME_DIR = process.env.XDG_RUNTIME_DIR;
+      this.env.WAYLAND_DISPLAY = this.args.display;
+      return null;
+    }
+    this.env.LANG ??= 'C.UTF-8';
+    this.runtimeDir = mkdtempSync('/tmp/relay-');
+    this.env.XDG_RUNTIME_DIR = this.runtimeDir;
+    delete this.env.DISPLAY;
+    delete this.env.WAYLAND_DISPLAY;
+    delete this.env.SWAYSOCK;
+    delete this.env.XAUTHORITY;
+    this.save({ backend: 'wayland', runtimeDir: this.runtimeDir });
+    const config = join(this.dir, 'sway.conf');
+    const displayFile = join(this.dir, 'wayland-display');
+    writeFileSync(config, `output * mode --custom ${this.args.resolution}@60Hz\nxwayland force\n`);
+    writeFileSync(displayFile, '');
+    const child = this.spawn('display', ['sway', '-c', config], {
+      env: { ...this.env, WLR_BACKENDS: 'headless', WLR_RENDERER: 'pixman', WLR_HEADLESS_OUTPUTS: '1' },
+    });
+    try {
+      await waitSpawn(child);
+    } catch (error) {
+      throw this.failure('display', 'component_failed', `Cannot start display: ${String(error)}`);
+    }
+    const deadline = Date.now() + 15000;
+    while (!this.env.WAYLAND_DISPLAY || !this.env.SWAYSOCK) {
+      this.checkChildren();
+      const sockets = readdirSync(this.runtimeDir, { withFileTypes: true }).filter((entry) => entry.isSocket()).map((entry) => entry.name);
+      this.env.WAYLAND_DISPLAY = sockets.find((name) => /^wayland-\d+$/.test(name));
+      const swaySocket = sockets.find((name) => /^sway-ipc\.\d+\.\d+\.sock$/.test(name));
+      if (swaySocket) this.env.SWAYSOCK = join(this.runtimeDir, swaySocket);
+      if (this.env.WAYLAND_DISPLAY && this.env.SWAYSOCK) break;
+      if (Date.now() > deadline) throw this.failure('display', 'timeout', 'Sway did not report a Wayland display');
+      await sleep(200);
+    }
+    while (!this.env.DISPLAY) {
+      this.checkChildren();
+      spawnSync('swaymsg', ['exec', 'echo $DISPLAY > "$RELAY_SESSION/wayland-display"'], { env: this.env, stdio: 'ignore', timeout: 1000 });
+      this.env.DISPLAY = readFileSync(displayFile, 'utf8').trim() || undefined;
+      if (this.env.DISPLAY) break;
+      if (Date.now() > deadline) throw this.failure('display', 'timeout', 'Sway did not report an XWayland display');
+      await sleep(200);
+    }
+    return this.args.resolution;
+  }
+
   async start(): Promise<Record<string, unknown>> {
     this.args.signal?.throwIfAborted();
     const runtime = join(this.dir, 'runtime');
@@ -216,6 +271,9 @@ export class Session {
       ? { ...process.env, RELAY_SESSION: this.dir }
       : desktopEnv(this.dir);
     const backend = resolveBackend(this.args.backend);
+    if (backend === 'x11' && this.args.output !== undefined) {
+      throw new Failure('invalid_input', '--output is only supported with the Wayland backend', 'Use --backend wayland with --output, or remove --output for X11.');
+    }
     if (backend === 'wayland' && this.args.display && !process.env.XDG_RUNTIME_DIR) {
       throw new Failure('missing_input', 'XDG_RUNTIME_DIR is required to attach to a Wayland display', 'Run `export XDG_RUNTIME_DIR=/run/user/$(id -u)` if that is the compositor\'s runtime directory.');
     }
@@ -225,7 +283,7 @@ export class Session {
     let desktopCommand = desktop === 'xfce' ? ['xfce4-session'] : desktop === 'none' ? [] : splitCommand(desktop);
     const layout = this.args.keyboardLayout ?? 'us';
     const needed = backend === 'wayland'
-      ? [...(this.args.display ? [] : ['sway', 'Xwayland', 'swaymsg']), ...(desktopCommand.length ? [desktopCommand[0]] : [])]
+      ? [...(this.args.display ? [] : BACKEND_PROGRAMS.wayland.filter((program) => program !== 'foot')), ...(desktopCommand.length ? [desktopCommand[0]] : [])]
       : [...(this.args.display ? [] : ['Xvfb', 'xauth']), ...(desktopCommand.length ? ['xprop', 'xwininfo', desktopCommand[0]] : []), ...(!this.args.display && layout !== 'us' ? ['setxkbmap'] : [])];
     const missing = needed.filter((program) => !which(program));
     const ownBus = Boolean(desktopCommand.length && !this.args.display && which('dbus-daemon'));
@@ -234,52 +292,7 @@ export class Session {
     if (missing.length) throw new Failure('missing_dependency', `Missing ${missing.join(', ')}`, 'Run ./install.sh, or check with `relay doctor`.');
     let resolution: string | null;
     if (backend === 'wayland') {
-      this.env.XKB_DEFAULT_LAYOUT = layout;
-      if (this.args.display) {
-        this.env.XDG_RUNTIME_DIR = process.env.XDG_RUNTIME_DIR;
-        this.env.WAYLAND_DISPLAY = this.args.display;
-        resolution = null;
-      } else {
-        this.runtimeDir = mkdtempSync('/tmp/relay-');
-        this.env.XDG_RUNTIME_DIR = this.runtimeDir;
-        delete this.env.DISPLAY;
-        delete this.env.WAYLAND_DISPLAY;
-        delete this.env.SWAYSOCK;
-        delete this.env.XAUTHORITY;
-        this.save({ backend, runtimeDir: this.runtimeDir });
-        const config = join(this.dir, 'sway.conf');
-        const displayFile = join(this.dir, 'wayland-display');
-        writeFileSync(config, `output * mode --custom ${this.args.resolution}@60Hz\nxwayland force\n`);
-        writeFileSync(displayFile, '');
-        const child = this.spawn('display', ['sway', '-c', config], {
-          env: { ...this.env, WLR_BACKENDS: 'headless', WLR_RENDERER: 'pixman', WLR_HEADLESS_OUTPUTS: '1' },
-        });
-        try {
-          await waitSpawn(child);
-        } catch (error) {
-          throw this.failure('display', 'component_failed', `Cannot start display: ${String(error)}`);
-        }
-        const deadline = Date.now() + 15000;
-        while (!this.env.WAYLAND_DISPLAY || !this.env.SWAYSOCK) {
-          this.checkChildren();
-          const sockets = readdirSync(this.runtimeDir, { withFileTypes: true }).filter((entry) => entry.isSocket()).map((entry) => entry.name);
-          this.env.WAYLAND_DISPLAY = sockets.find((name) => /^wayland-\d+$/.test(name));
-          const swaySocket = sockets.find((name) => /^sway-ipc\.\d+\.\d+\.sock$/.test(name));
-          if (swaySocket) this.env.SWAYSOCK = join(this.runtimeDir, swaySocket);
-          if (this.env.WAYLAND_DISPLAY && this.env.SWAYSOCK) break;
-          if (Date.now() > deadline) throw this.failure('display', 'timeout', 'Sway did not report a Wayland display');
-          await sleep(200);
-        }
-        while (!this.env.DISPLAY) {
-          this.checkChildren();
-          spawnSync('swaymsg', ['exec', 'echo $DISPLAY > "$RELAY_SESSION/wayland-display"'], { env: this.env, stdio: 'ignore', timeout: 1000 });
-          this.env.DISPLAY = readFileSync(displayFile, 'utf8').trim() || undefined;
-          if (this.env.DISPLAY) break;
-          if (Date.now() > deadline) throw this.failure('display', 'timeout', 'Sway did not report an XWayland display');
-          await sleep(200);
-        }
-        resolution = this.args.resolution;
-      }
+      resolution = await this.startWaylandDisplay(layout);
     } else if (this.args.display) {
       this.env.DISPLAY = this.args.display;
       resolution = displaySize(this.env);
@@ -350,10 +363,15 @@ export class Session {
       try {
         const message = JSON.parse(line);
         if (message.ready === true && message.pid === pid) {
-          const image = await createClient({
+          const image = Buffer.from(await createClient({
             url: where.url, token: where.token ?? undefined, ca: where.caFile ?? undefined, connect: where.connect ?? undefined, timeout: 3000, signal: this.args.signal,
-          }).screenshot();
-          return Buffer.from(image).subarray(0, 8).equals(PNG);
+          }).screenshot());
+          if (!image.subarray(0, 8).equals(PNG)) return false;
+          if (this.args.display) {
+            if (image.length < 24) return false;
+            this.save({ resolution: `${image.readUInt32BE(16)}x${image.readUInt32BE(20)}` });
+          }
+          return true;
         }
       } catch {}
     }
@@ -448,8 +466,8 @@ export function findEngine(): string | null {
 }
 
 /** Picks the backend for relay up and relay doctor: the explicit value, else x11 when the engine has it, else wayland. */
-export function resolveBackend(explicit: string | undefined): 'x11' | 'wayland' {
-  if (explicit !== undefined) return explicit as 'x11' | 'wayland';
+export function resolveBackend(explicit: string | undefined): (typeof BACKENDS)[number] {
+  if (explicit !== undefined) return backendValue(explicit, 'RELAY_BACKEND');
   const engine = findEngine();
   if (!engine) return 'x11';
   const compiled = /^Compiled backends: (.+)$/m.exec(run([engine, '--help']).stdout)?.[1];

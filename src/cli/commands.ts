@@ -1,4 +1,5 @@
 import { cmdClick, cmdInput, cmdKey, cmdMove, cmdScreenshot, cmdScroll, cmdType } from './client.js';
+import { BACKENDS } from './config.js';
 import { cmdDoctor } from './host/doctor.js';
 import { cmdDown, cmdLogs, cmdRun, cmdStatus, cmdUp, COMPONENTS } from './host/session_commands.js';
 import type { Failure } from './output.js';
@@ -47,6 +48,7 @@ export const globalOptions: Parameter[] = [
   { name: 'name', type: 'string', valueHint: '<NAME>', summary: 'Select the session', default: 'default', validate: (value) => /^[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}$/.test(String(value)) },
 ];
 const timeout: Parameter = { name: 'timeout', type: 'number', valueHint: '<DURATION>', summary: 'Wait this many seconds', default: 10, validate: (value) => Number(value) > 0 };
+const configOption: Parameter = { name: 'config', type: 'string', valueHint: '<FILE>', summary: 'Load the YAML config', environment: 'RELAY_CONFIG' };
 const client: Parameter[] = [
   { name: 'url', type: 'string', valueHint: '<URL>', summary: 'Use this engine origin', environment: 'RELAY_URL' },
   { name: 'token-file', type: 'string', valueHint: '<FILE>', summary: 'Read the token from this file', environment: 'RELAY_TOKEN_FILE' },
@@ -64,11 +66,11 @@ export const commands: Record<string, Command> = {
     summary: 'Start a display, desktop and engine', group: 'Session', runsOn: 'vm', arguments: [],
     options: [
       { name: 'detach', short: 'd', type: 'boolean', summary: 'Run in the background', default: false },
-      { name: 'config', type: 'string', valueHint: '<FILE>', summary: 'Load the YAML config', environment: 'RELAY_CONFIG' },
+      configOption,
       { name: 'port', type: 'number', valueHint: '<PORT>', summary: 'Listen on this port', environment: 'RELAY_PORT', default: 8080, deferredDefault: true, validate: (value) => Number.isInteger(value) && Number(value) >= 1 && Number(value) <= 65535 },
-      { name: 'desktop', type: 'string', valueHint: '<COMMAND>', summary: 'Start xfce, none, or a desktop command', environment: 'RELAY_DESKTOP', default: 'xfce', deferredDefault: true },
+      { name: 'desktop', type: 'string', valueHint: '<COMMAND>', summary: 'Start xfce, none, or a desktop command; defaults to xfce on x11, foot on wayland, or none when attaching', environment: 'RELAY_DESKTOP' },
       { name: 'display', type: 'string', valueHint: '<DISPLAY>', summary: 'Attach to an existing X display' },
-      { name: 'backend', type: 'string', valueHint: '<BACKEND>', summary: 'Use the x11 or wayland backend; defaults to x11 when the engine has it', environment: 'RELAY_BACKEND', acceptedValues: ['x11', 'wayland'] },
+      { name: 'backend', type: 'string', valueHint: '<BACKEND>', summary: 'Use the x11 or wayland backend; defaults to x11 when the engine has it', environment: 'RELAY_BACKEND', acceptedValues: BACKENDS },
       { name: 'output', type: 'string', valueHint: '<NAME>', summary: 'Select this Wayland output when attaching' },
       { name: 'public', type: 'string', valueHint: '<URL>', summary: 'Advertise this HTTPS origin', environment: 'RELAY_PUBLIC', validate: (value) => /^https:\/\/[^/?#@\\\s]+$/.test(String(value)) },
       { name: 'tls-cert', type: 'string', valueHint: '<FILE>', summary: 'Serve TLS with this certificate', environment: 'RELAY_TLS_CERT' },
@@ -96,7 +98,7 @@ export const commands: Record<string, Command> = {
     resultSchema: { app: { pid: 'number', command: 'string[]' }, outcome: 'started' },
     run: cmdRun,
   },
-  doctor: { summary: 'Check this machine and show fixes', group: 'Machine', runsOn: 'vm', arguments: [], options: [], examples: example('Check host dependencies', 'relay doctor'), notes: [], resultSchema: { checks: 'array', summary: 'object' }, run: cmdDoctor },
+  doctor: { summary: 'Check this machine and show fixes', group: 'Machine', runsOn: 'vm', arguments: [], options: [configOption], examples: example('Check host dependencies', 'relay doctor'), notes: [], resultSchema: { checks: 'array', summary: 'object' }, run: cmdDoctor },
   screenshot: { summary: 'Save a PNG of the screen', group: 'Control', runsOn: 'client', arguments: [{ name: 'file', type: 'string', valueHint: 'file', summary: 'Destination path, or - for PNG stdout', default: 'screen.png' }], options: client, examples: example('Save the current screen', 'relay screenshot screen.png'), notes: ['Use - to write PNG bytes to stdout. This cannot be combined with --json.'], resultSchema: { screenshot: { path: 'string', width: 'number', height: 'number', bytes: 'number' }, outcome: 'saved' }, validate: (args) => args.file === '-' && args.json ? 'PNG stdout cannot be combined with --json' : undefined, run: cmdScreenshot },
   click: { summary: 'Click at screen coordinates', group: 'Control', runsOn: 'client', arguments: coordinates, options: [...client, { name: 'button', type: 'string', valueHint: '<BUTTON>', summary: 'Select the mouse button', default: 'left', acceptedValues: ['left', 'middle', 'right'] }], examples: example('Click the center', 'relay click 0.5 0.5'), notes: coordinateNotes, resultSchema: inputResult, run: cmdClick },
   move: { summary: 'Move the pointer to screen coordinates', group: 'Control', runsOn: 'client', arguments: coordinates, options: client, examples: example('Move to the center', 'relay move 0.5 0.5'), notes: coordinateNotes, resultSchema: inputResult, run: cmdMove },

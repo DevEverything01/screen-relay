@@ -11,7 +11,7 @@ import { DEFAULT_PORT, clearedCommand, isLinux, run, spawnCleared, which } from 
 import type { HostArgs } from './common.js';
 import { detectFamily, installCommand, packagesFor, type Family } from './packages.js';
 import { stateDir } from './state.js';
-import { findEngine, resolveBackend, startXvfb, xQuery } from './supervisor.js';
+import { BACKEND_PROGRAMS, findEngine, resolveBackend, startXvfb, xQuery } from './supervisor.js';
 
 const TINY_SVG = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>');
 function crc32(data: Buffer): number {
@@ -99,8 +99,14 @@ export async function cmdDoctor(args: HostArgs): Promise<number> {
     const packageHint = (names: string[]) => family
       ? installCommand(family, packagesFor(family, names), sudo)
       : `Install ${names.join(' ')} with your system package manager.`;
-    const [settings, , present] = loadConfig();
-    const backend = resolveBackend(process.env.RELAY_BACKEND ?? (present.has('backend') ? settings.backend : undefined));
+    let configuredBackend: string | undefined;
+    try {
+      configuredBackend = loadConfig(typeof args.config === 'string' && args.config ? args.config : undefined)[0].backend;
+    } catch (error) {
+      if (!(error instanceof Failure)) throw error;
+      check('config', false, error.message, error.hint);
+    }
+    const backend = resolveBackend(process.env.RELAY_BACKEND ?? configuredBackend);
     const x11 = backend === 'x11';
     check('user', true, root ? 'root' : `uid ${process.getuid?.() ?? -1}`);
     check('node', Number(process.versions.node.split('.')[0]) >= 26, process.versions.node, './install.sh');
@@ -123,11 +129,11 @@ export async function cmdDoctor(args: HostArgs): Promise<number> {
         ? `Enable RPM Fusion Free with ${rpmFusionCommand}, then install with ${packageHint(['x264-dev'])}`
         : packageHint(['x264-dev']);
     check('libx264', Boolean(x264), x264 ?? 'not found', x264Hint);
-    for (const program of x11 ? ['Xvfb', 'xauth', 'xprop', 'xwininfo', 'xdpyinfo', 'setxkbmap'] : ['sway', 'Xwayland', 'foot']) {
-      check(program, Boolean(which(program)), which(program) ?? 'not found', packageHint([program]));
+    for (const program of BACKEND_PROGRAMS[backend]) {
+      check(program, Boolean(which(program)), which(program) ?? 'not found', packageHint([program === 'swaymsg' ? 'sway' : program]));
     }
-    check('dbus-run-session', Boolean(which('dbus-run-session')), which('dbus-run-session') ?? 'not found', packageHint(['dbus-run-session']), 'warn');
     if (x11) {
+      check('dbus-run-session', Boolean(which('dbus-run-session')), which('dbus-run-session') ?? 'not found', packageHint(['dbus-run-session']), 'warn');
       const xfcePackages = ['xfce4-session', 'xfwm4', 'xfce4-panel', 'xfdesktop'];
       check('xfce4-session', Boolean(which('xfce4-session')), which('xfce4-session') ?? 'not found (use --desktop none)', `./install.sh (or ${packageHint(xfcePackages)})`, 'warn');
       let socketUsable = false;
@@ -172,41 +178,43 @@ export async function cmdDoctor(args: HostArgs): Promise<number> {
     }
     const capLine = readFileSync('/proc/self/status', 'utf8').split(/\r?\n/).find((line) => line.startsWith('CapAmb:'))?.split(/\s+/)[1] ?? '0';
     check('ambient caps', BigInt(`0x${capLine}`) === 0n, capLine === '0' ? 'none' : `${capLine}: apps that inherit them crash on icons`, 'Start apps with `relay run -- APP`, which clears them; the desktop and its menus already do.', 'warn');
-    const library = findLibrary('gdk_pixbuf-2.0');
-    const tool = iconTool();
-    const gdkPixbufHint = family === 'apt' ? './install.sh' : packageHint(['gdk-pixbuf-bin']);
-    if (!library) check('icon decoding', false, 'gdk-pixbuf not installed (desktop not installed)', gdkPixbufHint, 'warn');
-    else if (!tool) check('icon decoding', false, `gdk-pixbuf tools not installed (${Object.keys(ICON_TOOLS).join(' or ')})`, gdkPixbufHint, 'warn');
-    else {
-      let [ok, message] = iconProbe(tool, '.png', tinyPng());
-      let kind = 'PNG';
-      if (ok) { [ok, message] = iconProbe(tool, '.svg', TINY_SVG); kind = 'SVG'; }
-      const defaultFix = 'See the detail; read `relay logs desktop` after a failed start.';
-      let aptGlycinMissing = false;
-      if (!ok && family === 'apt') {
-        const glycinPackage = packagesFor(family, ['glycin-loaders'])[0];
-        aptGlycinMissing = run(['apt-cache', 'show', glycinPackage]).status === 0 && run(['dpkg', '-s', glycinPackage]).status !== 0;
-      }
-      let bubblewrapNeedsUserNamespaces = false;
-      if (!ok && !aptGlycinMissing && which('bwrap')) {
-        const command = clearedCommand(['bwrap', '--ro-bind', '/', '/', '--unshare-user', 'true']);
-        const sandbox = spawnSync(command[0], command.slice(1), { encoding: 'utf8' });
-        if (sandbox.status !== 0) {
-          message += `; bubblewrap failed: ${sandbox.stderr?.trim() ?? ''}`;
-          bubblewrapNeedsUserNamespaces = true;
+    if (x11) {
+      const library = findLibrary('gdk_pixbuf-2.0');
+      const tool = iconTool();
+      const gdkPixbufHint = family === 'apt' ? './install.sh' : packageHint(['gdk-pixbuf-bin']);
+      if (!library) check('icon decoding', false, 'gdk-pixbuf not installed (desktop not installed)', gdkPixbufHint, 'warn');
+      else if (!tool) check('icon decoding', false, `gdk-pixbuf tools not installed (${Object.keys(ICON_TOOLS).join(' or ')})`, gdkPixbufHint, 'warn');
+      else {
+        let [ok, message] = iconProbe(tool, '.png', tinyPng());
+        let kind = 'PNG';
+        if (ok) { [ok, message] = iconProbe(tool, '.svg', TINY_SVG); kind = 'SVG'; }
+        const defaultFix = 'See the detail; read `relay logs desktop` after a failed start.';
+        let aptGlycinMissing = false;
+        if (!ok && family === 'apt') {
+          const glycinPackage = packagesFor(family, ['glycin-loaders'])[0];
+          aptGlycinMissing = run(['apt-cache', 'show', glycinPackage]).status === 0 && run(['dpkg', '-s', glycinPackage]).status !== 0;
         }
+        let bubblewrapNeedsUserNamespaces = false;
+        if (!ok && !aptGlycinMissing && which('bwrap')) {
+          const command = clearedCommand(['bwrap', '--ro-bind', '/', '/', '--unshare-user', 'true']);
+          const sandbox = spawnSync(command[0], command.slice(1), { encoding: 'utf8' });
+          if (sandbox.status !== 0) {
+            message += `; bubblewrap failed: ${sandbox.stderr?.trim() ?? ''}`;
+            bubblewrapNeedsUserNamespaces = true;
+          }
+        }
+        let fix: string;
+        if (aptGlycinMissing) {
+          fix = packageHint(['glycin-loaders']);
+        } else if (bubblewrapNeedsUserNamespaces) {
+          fix = 'Image loaders sandbox with bubblewrap, which needs unprivileged user namespaces: allow them for bwrap (AppArmor profile or kernel.unprivileged_userns_clone=1). relay never disables sandboxing.';
+        } else if (!ok && family !== 'apt' && kind === 'SVG') {
+          fix = packageHint(['glycin-loaders']);
+        } else {
+          fix = defaultFix;
+        }
+        check('icon decoding', ok, ok ? 'gdk-pixbuf decodes PNG and SVG' : `${kind}: ${message}`, fix, kind === 'SVG' ? 'warn' : 'fail');
       }
-      let fix: string;
-      if (aptGlycinMissing) {
-        fix = packageHint(['glycin-loaders']);
-      } else if (bubblewrapNeedsUserNamespaces) {
-        fix = 'Image loaders sandbox with bubblewrap, which needs unprivileged user namespaces: allow them for bwrap (AppArmor profile or kernel.unprivileged_userns_clone=1). relay never disables sandboxing.';
-      } else if (!ok && family !== 'apt' && kind === 'SVG') {
-        fix = packageHint(['glycin-loaders']);
-      } else {
-        fix = defaultFix;
-      }
-      check('icon decoding', ok, ok ? 'gdk-pixbuf decodes PNG and SVG' : `${kind}: ${message}`, fix, kind === 'SVG' ? 'warn' : 'fail');
     }
   }
   const failed = checks.some((item) => item.status === 'fail');

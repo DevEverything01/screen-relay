@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { after, test } from 'node:test';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -6,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { buildSync } from 'esbuild';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
+const cli = join(root, 'dist/cli/relay.mjs');
 const entryPoint = join(root, 'src/cli/config.ts');
 const directory = mkdtempSync(join(root, '.cli-config-test-'));
 after(() => rmSync(directory, { recursive: true, force: true }));
@@ -128,8 +130,36 @@ test('defaults keyboard layout to us and validates its allowed characters', () =
 });
 
 test('backend from the config file accepts x11 or wayland and names them when wrong', () => {
-  assert.equal(config.loadConfig(write('backend: wayland\n'))[0].backend, 'wayland');
+  for (const backend of ['x11', 'wayland']) {
+    assert.equal(config.loadConfig(write(`backend: ${backend}\n`))[0].backend, backend);
+  }
   assert.throws(() => config.loadConfig(write('backend: mir\n')), /backend.*x11 or wayland/);
+});
+
+test('up accepts both backend options', { skip: process.platform !== 'linux' }, () => {
+  for (const backend of ['x11', 'wayland']) {
+    const result = spawnSync(process.execPath, [cli, 'up', '--backend', backend, '--config', join(directory, 'missing.yaml'), '--json'], {
+      encoding: 'utf8', timeout: 15000,
+    });
+    assert.ifError(result.error);
+    assert.equal(result.status, 1);
+    const error = JSON.parse(result.stderr);
+    assert.equal(error.reason, 'invalid_config');
+    assert.match(error.message, /Config file not found/);
+  }
+});
+
+test('doctor rejects an invalid RELAY_BACKEND', { skip: process.platform !== 'linux' }, () => {
+  const path = write('backend: x11\n');
+  const result = spawnSync(process.execPath, [cli, 'doctor', '--config', path, '--json'], {
+    encoding: 'utf8', timeout: 15000, env: { ...process.env, RELAY_BACKEND: 'wayl' },
+  });
+  assert.ifError(result.error);
+  assert.equal(result.status, 2);
+  assert.equal(result.stdout, '');
+  const error = JSON.parse(result.stderr);
+  assert.equal(error.reason, 'invalid_input');
+  assert.match(error.message, /RELAY_BACKEND.*wayl.*x11 or wayland/);
 });
 
 test('RELAY_BACKEND overrides the config backend', () => {

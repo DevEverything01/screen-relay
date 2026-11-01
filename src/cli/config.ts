@@ -5,6 +5,8 @@ import { inspect, TextDecoder } from 'node:util';
 import { parseDocument } from 'yaml';
 import { Failure } from './output.js';
 
+export const BACKENDS = ['x11', 'wayland'] as const;
+
 export type ConfigSettings = {
   display: { resolution: string };
   stream: { fps: number; bitrate: { min: number; start: number; max: number } };
@@ -119,6 +121,13 @@ function textValue(value: unknown, path: string): string {
   return value;
 }
 
+export function backendValue(value: unknown, path: string): (typeof BACKENDS)[number] {
+  const text = textValue(value, path);
+  const backend = BACKENDS.find((candidate) => candidate === text);
+  if (!backend) wrong(path, value, BACKENDS.join(' or '));
+  return backend;
+}
+
 function resolution(value: unknown, path: string): string {
   if (typeof value !== 'string') wrong(path, value, 'WIDTHxHEIGHT such as 1280x720');
   const match = RESOLUTION.exec(value.trim());
@@ -200,11 +209,7 @@ const validators: Record<string, (value: unknown, path: string) => unknown> = {
     }
     return layout;
   },
-  backend: (value, path) => {
-    const backend = textValue(value, path);
-    if (backend !== 'x11' && backend !== 'wayland') wrong(path, value, 'x11 or wayland');
-    return backend;
-  },
+  backend: backendValue,
 };
 
 export function loadConfig(path?: string): [ConfigSettings, string | null, Set<string>] {
