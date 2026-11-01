@@ -28,6 +28,9 @@ ENGINE_SRCS = $(CORE_SRCS) $(wildcard src/engine/server/*.cpp) $(BACKEND_SRCS)
 HEADERS = $(wildcard src/engine/*/*.hpp src/engine/backends/linux/*.hpp) $(foreach dir,$(BACKEND_DIRS),$(wildcard src/engine/backends/$(dir)/*.hpp))
 
 WAYLAND_PROTOCOLS = wlr-screencopy-unstable-v1 wlr-virtual-pointer-unstable-v1 virtual-keyboard-unstable-v1
+.PHONY: all install test test-color test-flow test-input test-backend test-server test-keymap clean FORCE
+all: relay-engine
+
 ifeq ($(HAS_WAYLAND),wayland)
 WAYLAND_SCANNER = $(shell pkg-config --variable=wayland_scanner wayland-scanner)
 WAYLAND_PROTOCOL_HEADERS = $(addprefix build/protocols/,$(addsuffix -client-protocol.h,$(WAYLAND_PROTOCOLS)))
@@ -50,8 +53,6 @@ $(ENGINE_SRCS): $(WAYLAND_PROTOCOL_HEADERS)
 endif
 
 PREFIX ?= /usr/local
-.PHONY: all install test test-color test-flow test-input test-backend test-server test-keymap clean FORCE
-all: relay-engine
 
 install: relay-engine
 	@test -f dist/viewer/viewer.js || { echo 'Run npm run build first (dist/viewer is missing).' >&2; exit 1; }
