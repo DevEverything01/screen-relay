@@ -106,7 +106,15 @@ export async function cmdDoctor(args: HostArgs): Promise<number> {
       if (!(error instanceof Failure)) throw error;
       check('config', false, error.message, error.hint);
     }
-    const backend = resolveBackend(process.env.RELAY_BACKEND ?? configuredBackend);
+    const requestedBackend = process.env.RELAY_BACKEND ?? configuredBackend;
+    let backend: 'x11' | 'wayland';
+    try {
+      backend = resolveBackend(requestedBackend);
+    } catch (error) {
+      if (!(error instanceof Failure)) throw error;
+      check('backend', false, error.message, error.hint);
+      backend = requestedBackend === 'x11' || requestedBackend === 'wayland' ? requestedBackend : 'x11';
+    }
     const x11 = backend === 'x11';
     check('user', true, root ? 'root' : `uid ${process.getuid?.() ?? -1}`);
     check('node', Number(process.versions.node.split('.')[0]) >= 26, process.versions.node, './install.sh');

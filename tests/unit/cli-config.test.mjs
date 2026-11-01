@@ -149,17 +149,17 @@ test('up accepts both backend options', { skip: process.platform !== 'linux' }, 
   }
 });
 
-test('doctor rejects an invalid RELAY_BACKEND', { skip: process.platform !== 'linux' }, () => {
+test('doctor reports an invalid RELAY_BACKEND as a failed check', { skip: process.platform !== 'linux' }, () => {
   const path = write('backend: x11\n');
   const result = spawnSync(process.execPath, [cli, 'doctor', '--config', path, '--json'], {
     encoding: 'utf8', timeout: 15000, env: { ...process.env, RELAY_BACKEND: 'wayl' },
   });
   assert.ifError(result.error);
-  assert.equal(result.status, 2);
-  assert.equal(result.stdout, '');
-  const error = JSON.parse(result.stderr);
-  assert.equal(error.reason, 'invalid_input');
-  assert.match(error.message, /RELAY_BACKEND.*wayl.*x11 or wayland/);
+  assert.equal(result.status, 1);
+  const { checks } = JSON.parse(result.stdout);
+  const backend = checks.find((item) => item.name === 'backend');
+  assert.equal(backend.status, 'fail');
+  assert.match(backend.detail, /RELAY_BACKEND.*wayl.*x11 or wayland/);
 });
 
 test('RELAY_BACKEND overrides the config backend', () => {

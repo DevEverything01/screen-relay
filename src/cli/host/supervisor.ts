@@ -270,7 +270,7 @@ export class Session {
     this.env = this.args.display
       ? { ...process.env, RELAY_SESSION: this.dir }
       : desktopEnv(this.dir);
-    const backend = resolveBackend(this.args.backend);
+    const backend = resolveBackend(this.args.backend, this.args.display);
     if (backend === 'x11' && this.args.output !== undefined) {
       throw new Failure('invalid_input', '--output is only supported with the Wayland backend', 'Use --backend wayland with --output, or remove --output for X11.');
     }
@@ -289,7 +289,7 @@ export class Session {
     const ownBus = Boolean(desktopCommand.length && !this.args.display && which('dbus-daemon'));
     if (desktopCommand.length && !this.args.display && !ownBus && which('dbus-run-session')) desktopCommand = ['dbus-run-session', '--', ...desktopCommand];
     else if (desktop === 'xfce' && !this.args.display && !ownBus) missing.push('dbus-run-session');
-    if (missing.length) throw new Failure('missing_dependency', `Missing ${missing.join(', ')}`, 'Run ./install.sh, or check with `relay doctor`.');
+    if (missing.length) throw new Failure('missing_dependency', `Missing ${missing.join(', ')}`, backend === 'wayland' ? 'Run `./install.sh --backend wayland`, or check with `RELAY_BACKEND=wayland relay doctor`.' : 'Run ./install.sh, or check with `relay doctor`.');
     let resolution: string | null;
     if (backend === 'wayland') {
       resolution = await this.startWaylandDisplay(layout);
@@ -351,7 +351,7 @@ export class Session {
     const url = this.data.url as string;
     return {
       ready: true, name: this.args.name, url, viewer: token ? `${url}/#token=${token}` : url,
-      token, display: this.env.DISPLAY, xauthority: this.env.XAUTHORITY ?? null, logs: this.dir,
+      token, display: this.env.DISPLAY, ...(backend === 'wayland' ? { waylandDisplay: this.env.WAYLAND_DISPLAY } : {}), xauthority: this.env.XAUTHORITY ?? null, logs: this.dir,
       pid: process.pid, enginePid: engineChild.pid, bind, port: this.args.port, public: Boolean(this.args.public),
       resolution: this.data.resolution, fps: this.args.fps,
     };
@@ -465,13 +465,20 @@ export function findEngine(): string | null {
   return which('relay-engine') ?? null;
 }
 
-/** Picks the backend for relay up and relay doctor: the explicit value, else x11 when the engine has it, else wayland. */
-export function resolveBackend(explicit: string | undefined): (typeof BACKENDS)[number] {
-  if (explicit !== undefined) return backendValue(explicit, 'RELAY_BACKEND');
+/** Picks the explicit backend, else wayland for a --display without a colon, else x11 when the engine has it or its backends are unknown, else wayland. Throws when the engine reports it was built without the selected backend. */
+export function resolveBackend(explicit: string | undefined, display?: string): (typeof BACKENDS)[number] {
+  const requested = explicit !== undefined ? backendValue(explicit, 'RELAY_BACKEND') : display !== undefined && !display.includes(':') ? 'wayland' : undefined;
+  if (requested === 'x11' && display !== undefined && !display.includes(':')) {
+    throw new Failure('invalid_input', `${display} is a Wayland socket, not an X display`, `Run \`relay up --backend wayland --display ${display}\``);
+  }
   const engine = findEngine();
-  if (!engine) return 'x11';
-  const compiled = /^Compiled backends: (.+)$/m.exec(run([engine, '--help']).stdout)?.[1];
-  return !compiled || compiled.split(', ').includes('x11') ? 'x11' : 'wayland';
+  const compiled = engine ? /^Compiled backends: (.+)$/m.exec(run([engine, '--help']).stdout)?.[1] : undefined;
+  const available = compiled?.split(', ');
+  const backend = requested ?? (!available || available.includes('x11') ? 'x11' : 'wayland');
+  if (available && !available.includes(backend)) {
+    throw new Failure('missing_dependency', `relay-engine was built without the ${backend} backend (compiled: ${compiled})`, `Run \`./install.sh --backend ${backend}\` or \`./install.sh --backend all\``);
+  }
+  return backend;
 }
 
 export function splitCommand(value: string): string[] {
