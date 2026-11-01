@@ -1,10 +1,10 @@
 import { spawnSync, type ChildProcess, type SpawnOptions } from 'node:child_process';
-import { accessSync, closeSync, constants, fchmodSync, mkdirSync, openSync, rmSync, writeFileSync } from 'node:fs';
+import { accessSync, closeSync, constants, fchmodSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { Readable } from 'node:stream';
 import { createClient } from '../../sdk/index.js';
 import { Failure, nextFor, sessionCommand } from '../output.js';
-import { HostArgs, LAUNCHER_DIR, spawnCleared, which } from './common.js';
+import { HostArgs, LAUNCHER_DIR, run, spawnCleared, which } from './common.js';
 import { identity, SessionData, tail, writeSession } from './state.js';
 
 export const HINTS: Record<string, string> = {
@@ -134,6 +134,7 @@ export class Session {
   readonly children = new Map<string, ChildProcess>();
   readonly logs: number[] = [];
   readonly errors = new Map<string, Error>();
+  runtimeDir?: string;
   env: NodeJS.ProcessEnv = {};
   data: SessionData;
 
@@ -176,7 +177,8 @@ export class Session {
   failure(name: string, code: string, message: string): Failure {
     const recovery = code === 'component_failed' || code === 'timeout'
       ? { next: nextFor(sessionCommand(`logs ${name}`, this.args.name)), label: 'Read the logs' } : {};
-    return new Failure(code, message, HINTS[name] ?? '', { component: name, log: tail(join(this.dir, `${name}.log`)), logs: this.dir }, recovery);
+    const hint = name === 'display' && this.data.backend === 'wayland' ? 'Check sway with `relay doctor`.' : HINTS[name] ?? '';
+    return new Failure(code, message, hint, { component: name, log: tail(join(this.dir, `${name}.log`)), logs: this.dir }, recovery);
   }
 
   checkChildren(): void {
@@ -213,19 +215,72 @@ export class Session {
     this.env = this.args.display
       ? { ...process.env, RELAY_SESSION: this.dir }
       : desktopEnv(this.dir);
+    const backend = resolveBackend(this.args.backend);
+    if (backend === 'wayland' && this.args.display && !process.env.XDG_RUNTIME_DIR) {
+      throw new Failure('missing_input', 'XDG_RUNTIME_DIR is required to attach to a Wayland display', 'Run `export XDG_RUNTIME_DIR=/run/user/$(id -u)` if that is the compositor\'s runtime directory.');
+    }
     const engine = findEngine();
     if (!engine) throw new Failure('missing_dependency', 'relay-engine not found', 'Run ./install.sh first.', { component: 'engine' });
-    const desktop = this.args.desktop || (this.args.display ? 'none' : 'xfce');
+    const desktop = this.args.desktop || (this.args.display ? 'none' : backend === 'wayland' ? 'foot' : 'xfce');
     let desktopCommand = desktop === 'xfce' ? ['xfce4-session'] : desktop === 'none' ? [] : splitCommand(desktop);
     const layout = this.args.keyboardLayout ?? 'us';
-    const needed = [...(this.args.display ? [] : ['Xvfb', 'xauth']), ...(desktopCommand.length ? ['xprop', 'xwininfo', desktopCommand[0]] : []), ...(!this.args.display && layout !== 'us' ? ['setxkbmap'] : [])];
+    const needed = backend === 'wayland'
+      ? [...(this.args.display ? [] : ['sway', 'Xwayland', 'swaymsg']), ...(desktopCommand.length ? [desktopCommand[0]] : [])]
+      : [...(this.args.display ? [] : ['Xvfb', 'xauth']), ...(desktopCommand.length ? ['xprop', 'xwininfo', desktopCommand[0]] : []), ...(!this.args.display && layout !== 'us' ? ['setxkbmap'] : [])];
     const missing = needed.filter((program) => !which(program));
     const ownBus = Boolean(desktopCommand.length && !this.args.display && which('dbus-daemon'));
     if (desktopCommand.length && !this.args.display && !ownBus && which('dbus-run-session')) desktopCommand = ['dbus-run-session', '--', ...desktopCommand];
     else if (desktop === 'xfce' && !this.args.display && !ownBus) missing.push('dbus-run-session');
     if (missing.length) throw new Failure('missing_dependency', `Missing ${missing.join(', ')}`, 'Run ./install.sh, or check with `relay doctor`.');
     let resolution: string | null;
-    if (this.args.display) {
+    if (backend === 'wayland') {
+      this.env.XKB_DEFAULT_LAYOUT = layout;
+      if (this.args.display) {
+        this.env.XDG_RUNTIME_DIR = process.env.XDG_RUNTIME_DIR;
+        this.env.WAYLAND_DISPLAY = this.args.display;
+        resolution = null;
+      } else {
+        this.runtimeDir = mkdtempSync('/tmp/relay-');
+        this.env.XDG_RUNTIME_DIR = this.runtimeDir;
+        delete this.env.DISPLAY;
+        delete this.env.WAYLAND_DISPLAY;
+        delete this.env.SWAYSOCK;
+        delete this.env.XAUTHORITY;
+        this.save({ backend, runtimeDir: this.runtimeDir });
+        const config = join(this.dir, 'sway.conf');
+        const displayFile = join(this.dir, 'wayland-display');
+        writeFileSync(config, `output * mode --custom ${this.args.resolution}@60Hz\nxwayland force\n`);
+        writeFileSync(displayFile, '');
+        const child = this.spawn('display', ['sway', '-c', config], {
+          env: { ...this.env, WLR_BACKENDS: 'headless', WLR_RENDERER: 'pixman', WLR_HEADLESS_OUTPUTS: '1' },
+        });
+        try {
+          await waitSpawn(child);
+        } catch (error) {
+          throw this.failure('display', 'component_failed', `Cannot start display: ${String(error)}`);
+        }
+        const deadline = Date.now() + 15000;
+        while (!this.env.WAYLAND_DISPLAY || !this.env.SWAYSOCK) {
+          this.checkChildren();
+          const sockets = readdirSync(this.runtimeDir, { withFileTypes: true }).filter((entry) => entry.isSocket()).map((entry) => entry.name);
+          this.env.WAYLAND_DISPLAY = sockets.find((name) => /^wayland-\d+$/.test(name));
+          const swaySocket = sockets.find((name) => /^sway-ipc\.\d+\.\d+\.sock$/.test(name));
+          if (swaySocket) this.env.SWAYSOCK = join(this.runtimeDir, swaySocket);
+          if (this.env.WAYLAND_DISPLAY && this.env.SWAYSOCK) break;
+          if (Date.now() > deadline) throw this.failure('display', 'timeout', 'Sway did not report a Wayland display');
+          await sleep(200);
+        }
+        while (!this.env.DISPLAY) {
+          this.checkChildren();
+          spawnSync('swaymsg', ['exec', 'echo $DISPLAY > "$RELAY_SESSION/wayland-display"'], { env: this.env, stdio: 'ignore', timeout: 1000 });
+          this.env.DISPLAY = readFileSync(displayFile, 'utf8').trim() || undefined;
+          if (this.env.DISPLAY) break;
+          if (Date.now() > deadline) throw this.failure('display', 'timeout', 'Sway did not report an XWayland display');
+          await sleep(200);
+        }
+        resolution = this.args.resolution;
+      }
+    } else if (this.args.display) {
       this.env.DISPLAY = this.args.display;
       resolution = displaySize(this.env);
     } else {
@@ -253,11 +308,13 @@ export class Session {
       const value = this.env[key];
       if (value) environment[key] = value;
     }
-    this.save({ display: this.env.DISPLAY, xauthority: this.env.XAUTHORITY ?? null, ownsDisplay: !this.args.display, desktop, environment, resolution, fps: this.args.fps });
+    this.save({ backend, ...(backend === 'wayland' ? { waylandDisplay: this.env.WAYLAND_DISPLAY } : {}), display: this.env.DISPLAY, xauthority: this.env.XAUTHORITY ?? null, ownsDisplay: !this.args.display, desktop, environment, resolution, fps: this.args.fps });
     if (desktopCommand.length) await waitSpawn(this.spawn('desktop', desktopCommand));
     const bind = this.args.bind || (this.args.public ? '0.0.0.0' : '127.0.0.1');
     let token: string | null = null;
     const engineCommand = [engine, '--bind', bind, '--port', String(this.args.port), '--fps', String(this.args.fps), '--bitrate-min', String(this.args.bitrateMin), '--bitrate-start', String(this.args.bitrateStart), '--bitrate-max', String(this.args.bitrateMax)];
+    engineCommand.push('--backend', backend);
+    if (this.args.output) engineCommand.push('--output', this.args.output);
     if (bind !== '127.0.0.1' || this.args.public) {
       token = (await import('node:crypto')).randomBytes(32).toString('hex');
       const tokenFile = join(this.dir, 'token');
@@ -304,6 +361,16 @@ export class Session {
   }
 
   desktopReady(desktop: string): boolean {
+    if (this.data.backend === 'wayland') {
+      if (this.args.display) return true;
+      try {
+        const tree = JSON.parse(xQuery(this.env, 'swaymsg', '-t', 'get_tree', '-r'));
+        const hasWindow = (node: any): boolean => Boolean(node.shell || node.app_id || node.window || [...(node.nodes ?? []), ...(node.floating_nodes ?? [])].some(hasWindow));
+        return hasWindow(tree);
+      } catch {
+        return false;
+      }
+    }
     if (desktop === 'xfce') return (xQuery(this.env, 'xprop', '-root', '_NET_SUPPORTING_WM_CHECK', '_NET_CLIENT_LIST').match(/window id # 0x/g) ?? []).length >= 2;
     const match = /(\d+) child/.exec(xQuery(this.env, 'xwininfo', '-root', '-children'));
     return Boolean(match && Number(match[1]) > 0);
@@ -350,6 +417,7 @@ export class Session {
       }
     }
     await import('./state.js').then(({ sweep }) => sweep(this.dir));
+    if (this.runtimeDir) rmSync(this.runtimeDir, { recursive: true, force: true });
     for (const fd of this.logs) {
       try { closeSync(fd); } catch {}
     }
@@ -377,6 +445,15 @@ export function findEngine(): string | null {
     } catch {}
   }
   return which('relay-engine') ?? null;
+}
+
+/** Picks the backend for relay up and relay doctor: the explicit value, else x11 when the engine has it, else wayland. */
+export function resolveBackend(explicit: string | undefined): 'x11' | 'wayland' {
+  if (explicit !== undefined) return explicit as 'x11' | 'wayland';
+  const engine = findEngine();
+  if (!engine) return 'x11';
+  const compiled = /^Compiled backends: (.+)$/m.exec(run([engine, '--help']).stdout)?.[1];
+  return !compiled || compiled.split(', ').includes('x11') ? 'x11' : 'wayland';
 }
 
 export function splitCommand(value: string): string[] {

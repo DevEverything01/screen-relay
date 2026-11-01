@@ -18,10 +18,17 @@ const state = await import(pathToFileURL(bundlePath).href);
 const supervisorBundle = buildSync({ entryPoints: [join(root, 'src/cli/host/supervisor.ts')], bundle: true, platform: 'node', format: 'esm', banner: nodeBanner, write: false });
 const supervisorPath = join(directory, 'supervisor.mjs');
 writeFileSync(supervisorPath, supervisorBundle.outputFiles[0].contents);
-const { splitCommand } = await import(pathToFileURL(supervisorPath).href);
+const { Session, splitCommand } = await import(pathToFileURL(supervisorPath).href);
 
 test('desktop command parsing preserves quoted empty arguments', () => {
   assert.deepEqual(splitCommand('my-desktop --profile "" --fullscreen'), ['my-desktop', '--profile', '', '--fullscreen']);
+});
+
+test('attached Wayland desktops skip sway readiness probing', () => {
+  const session = Object.create(Session.prototype);
+  session.args = { display: 'wayland-0' };
+  session.data = { backend: 'wayland' };
+  assert.equal(session.desktopReady('labwc'), true);
 });
 
 test('session sweep does not match a longer RELAY_SESSION value', { skip: !existsSync('/proc/self/environ') }, async () => {

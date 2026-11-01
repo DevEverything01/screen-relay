@@ -126,3 +126,22 @@ test('defaults keyboard layout to us and validates its allowed characters', () =
   assert.throws(() => config.loadConfig(write('keyboard:\n  layout: fr!\n')), /keyboard\.layout/);
   assert.throws(() => config.loadConfig(write('keyboard:\n  layout: 7\n')), /keyboard\.layout.*a string/);
 });
+
+test('backend from the config file accepts x11 or wayland and names them when wrong', () => {
+  assert.equal(config.loadConfig(write('backend: wayland\n'))[0].backend, 'wayland');
+  assert.throws(() => config.loadConfig(write('backend: mir\n')), /backend.*x11 or wayland/);
+});
+
+test('RELAY_BACKEND overrides the config backend', () => {
+  const [settings, , present] = config.loadConfig(write('backend: x11\n'));
+  const previous = process.env.RELAY_BACKEND;
+  process.env.RELAY_BACKEND = 'wayland';
+  try {
+    const args = { backend: undefined };
+    config.applyTo(args, settings, present);
+    assert.equal(args.backend, 'wayland');
+  } finally {
+    if (previous === undefined) delete process.env.RELAY_BACKEND;
+    else process.env.RELAY_BACKEND = previous;
+  }
+});

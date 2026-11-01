@@ -68,6 +68,8 @@ export const commands: Record<string, Command> = {
       { name: 'port', type: 'number', valueHint: '<PORT>', summary: 'Listen on this port', environment: 'RELAY_PORT', default: 8080, deferredDefault: true, validate: (value) => Number.isInteger(value) && Number(value) >= 1 && Number(value) <= 65535 },
       { name: 'desktop', type: 'string', valueHint: '<COMMAND>', summary: 'Start xfce, none, or a desktop command', environment: 'RELAY_DESKTOP', default: 'xfce', deferredDefault: true },
       { name: 'display', type: 'string', valueHint: '<DISPLAY>', summary: 'Attach to an existing X display' },
+      { name: 'backend', type: 'string', valueHint: '<BACKEND>', summary: 'Use the x11 or wayland backend; defaults to x11 when the engine has it', environment: 'RELAY_BACKEND', acceptedValues: ['x11', 'wayland'] },
+      { name: 'output', type: 'string', valueHint: '<NAME>', summary: 'Select this Wayland output when attaching' },
       { name: 'public', type: 'string', valueHint: '<URL>', summary: 'Advertise this HTTPS origin', environment: 'RELAY_PUBLIC', validate: (value) => /^https:\/\/[^/?#@\\\s]+$/.test(String(value)) },
       { name: 'tls-cert', type: 'string', valueHint: '<FILE>', summary: 'Serve TLS with this certificate', environment: 'RELAY_TLS_CERT' },
       { name: 'tls-key', type: 'string', valueHint: '<FILE>', summary: 'Read the TLS private key', environment: 'RELAY_TLS_KEY' },

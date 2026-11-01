@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { Readable } from 'node:stream';
@@ -16,6 +16,13 @@ import { startWatcher } from './watcher.js';
 export { COMPONENTS };
 
 type Args = HostArgs & Record<string, any>;
+
+async function reapSession(directory: string, session: Record<string, any> | null, signal?: AbortSignal): Promise<void> {
+  await reap(directory, session, signal);
+  if (session?.backend === 'wayland' && typeof session.runtimeDir === 'string' && /^\/tmp\/relay-[a-zA-Z0-9]{6}$/.test(session.runtimeDir)) {
+    rmSync(session.runtimeDir, { recursive: true, force: true });
+  }
+}
 
 export async function cmdUp(args: Args): Promise<number> {
   requireLinux();
@@ -55,7 +62,7 @@ export async function cmdUp(args: Args): Promise<number> {
       if (error instanceof Failure) report({ error: error.payload() });
       throw error;
     }
-    await reap(directory, readSession(args.name));
+    await reapSession(directory, readSession(args.name));
     session = new Session({
       ...args,
       port,
@@ -158,7 +165,7 @@ export async function cmdDown(args: Args): Promise<number> {
       try {
         session = readSession(args.name) ?? {};
         if (JSON.stringify(session.supervisor) === JSON.stringify(supervisor)) {
-          await reap(directory, session, args.signal);
+          await reapSession(directory, session, args.signal);
           if (['starting', 'ready'].includes(session.state)) writeSession(directory, { ...session, state: 'stopped', stopped: Date.now() / 1000 });
         }
       } finally { await held.close(); }
@@ -228,6 +235,9 @@ export async function cmdRun(args: Args): Promise<number> {
     ? { ...process.env, RELAY_SESSION: directory }
     : { ...desktopEnv(directory), ...(session.environment ?? {}) };
   env.DISPLAY = session.display;
+  const runtimeDir = session.runtimeDir ?? (session.waylandDisplay ? session.environment?.XDG_RUNTIME_DIR : undefined);
+  if (runtimeDir) env.XDG_RUNTIME_DIR = runtimeDir;
+  if (session.waylandDisplay) env.WAYLAND_DISPLAY = session.waylandDisplay;
   if (session.xauthority) env.XAUTHORITY = session.xauthority;
   const path = join(directory, 'apps.log');
   const log = openSync(path, 'a', 0o600);

@@ -28,3 +28,6 @@ keyboard:
 
 # Linux only. xfce, none, or a command. Default: xfce, or none with --display.
 desktop: xfce
+
+# x11 or wayland. Default: x11 when the engine has it, else wayland.
+# backend: x11

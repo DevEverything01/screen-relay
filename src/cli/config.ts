@@ -11,6 +11,7 @@ export type ConfigSettings = {
   server: { port: number; bind: string; public: string | null; tls_cert: string | null; tls_key: string | null };
   keyboard: { layout: string };
   desktop: string;
+  backend?: string;
 };
 
 type Mapping = Record<string, unknown>;
@@ -22,7 +23,7 @@ const SECTIONS: Record<ConfigSection, readonly string[]> = {
   server: ['port', 'bind', 'public', 'tls_cert', 'tls_key'],
   keyboard: ['layout'],
 };
-const ROOT_KEYS = ['display', 'stream', 'server', 'keyboard', 'desktop'];
+const ROOT_KEYS = ['display', 'stream', 'server', 'keyboard', 'desktop', 'backend'];
 const BITRATE_KEYS = ['min', 'start', 'max'];
 const RESOLUTION = /^([0-9]+)x([0-9]+)$/;
 const BITRATE = /^([0-9]+)([kM]?)$/;
@@ -199,6 +200,11 @@ const validators: Record<string, (value: unknown, path: string) => unknown> = {
     }
     return layout;
   },
+  backend: (value, path) => {
+    const backend = textValue(value, path);
+    if (backend !== 'x11' && backend !== 'wayland') wrong(path, value, 'x11 or wayland');
+    return backend;
+  },
 };
 
 export function loadConfig(path?: string): [ConfigSettings, string | null, Set<string>] {
@@ -249,6 +255,7 @@ function applyConfig(settings: ConfigSettings, data: Mapping, present: Set<strin
     collect(errors, () => { settings.desktop = textValue(data.desktop, 'desktop'); });
     present.add('desktop');
   }
+  if (Object.hasOwn(data, 'backend')) collect(errors, () => { settings.backend = validators.backend(data.backend, 'backend') as string; });
 }
 
 export function applyTo(args: Record<string, unknown>, settings: ConfigSettings, present: Set<string>): void {
@@ -259,6 +266,7 @@ export function applyTo(args: Record<string, unknown>, settings: ConfigSettings,
     ['tls-cert', 'RELAY_TLS_CERT', 'server.tls_cert', settings.server.tls_cert],
     ['tls-key', 'RELAY_TLS_KEY', 'server.tls_key', settings.server.tls_key],
     ['desktop', 'RELAY_DESKTOP', 'desktop', present.has('desktop') ? settings.desktop : undefined],
+    ['backend', 'RELAY_BACKEND', 'backend', settings.backend],
     ['resolution', 'RELAY_RESOLUTION', 'display.resolution', settings.display.resolution],
     ['fps', 'RELAY_FPS', 'stream.fps', settings.stream.fps],
     ['bitrateMin', 'RELAY_BITRATE_MIN', 'stream.bitrate.min', settings.stream.bitrate.min],
