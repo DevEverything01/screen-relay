@@ -100,11 +100,36 @@ xterm -T relay-smoke -geometry 60x8+200+150 \
   -e sh -c "printf '\\033[?1000h'; exec cat > '$work/typed'" > "$work/xterm.log" 2>&1 &
 xterm_pid=$!
 geometry=''
-for _ in $(seq 50); do
-  geometry=$(xwininfo -name relay-smoke 2>/dev/null) && break
+settled=''
+last=''
+previous=''
+stable=0
+for _ in $(seq 75); do
+  geometry=$(xwininfo -name relay-smoke 2>/dev/null) || geometry=''
+  set --
+  if [ -n "$geometry" ]; then
+    set -- $(printf '%s\n' "$geometry" | awk '/Absolute upper-left X/{x=$NF} /Absolute upper-left Y/{y=$NF} /Width:/{w=$NF} /Height:/{h=$NF}
+      END{printf "%s %s %s %s", x, y, w, h}')
+  fi
+  if [ "$#" -eq 4 ]; then
+    last="$1 $2 $3 $4"
+    if [ "$3" -gt 1 ] && [ "$4" -gt 1 ]; then
+      if [ "$last" = "$previous" ]; then
+        stable=$((stable + 1))
+      else
+        previous=$last
+        stable=1
+      fi
+      if [ "$stable" -ge 3 ]; then
+        settled=$geometry
+        break
+      fi
+    fi
+  fi
   sleep 0.2
 done
-[ -n "$geometry" ] || fail "xterm window did not appear: $(cat "$work/xterm.log")"
+[ -n "$settled" ] || fail "xterm window did not settle at a placed geometry: ${last:-$(cat "$work/xterm.log")}"
+geometry=$settled
 set -- $(printf '%s\n' "$geometry" | awk '/Absolute upper-left X/{x=$NF} /Absolute upper-left Y/{y=$NF} /Width:/{w=$NF} /Height:/{h=$NF}
   END{printf "%.4f %.4f", (x+w/2)/1280, (y+h/2)/720}')
 step "click $1 $2, type, key Enter"
