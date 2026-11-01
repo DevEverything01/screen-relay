@@ -4,7 +4,7 @@ Relay streams a Linux desktop to a browser and lets people and agents control it
 
 ## Quickstart
 
-On a Debian or Ubuntu VM, from a clone of this repository:
+On a Debian, Ubuntu, Fedora, Arch, or Alpine VM, from a clone of this repository:
 
 ```sh
 ./install.sh

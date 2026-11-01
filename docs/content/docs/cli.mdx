@@ -172,7 +172,7 @@ Exits 1 if any check fails; `warn` does not fail. `--json` prints `{"checks":[..
 | `platform` | Linux. Off Linux this is the only check, and it fails. |
 | `user` | Root or the UID (information only). |
 | `node` | Node 26 or newer. |
-| `setpriv` | `util-linux`, used to start apps without ambient capabilities. |
+| `setpriv` | Program is on `PATH`; used to start apps without ambient capabilities. |
 | `home`, `state dir` | `HOME` and the state directory are writable. |
 | `engine` | `relay-engine` is found and runs. |
 | `libx264` | The x264 library is installed. |
@@ -183,6 +183,8 @@ Exits 1 if any check fails; `warn` does not fail. `--json` prints `{"checks":[..
 | `port` | `127.0.0.1:8080` is free (warn only). |
 | `X extensions` | A scratch Xvfb offers XTEST, DAMAGE, XFIXES, and MIT-SHM. |
 | `ambient caps` | Inherited ambient capabilities. `up` and `run` clear them; GTK apps started from another shell with them set crash on icons. |
+
+Each failed check's `fix` shows the install command for your distribution (apt, dnf, pacman, or apk). On an unrecognized distribution, it lists the package names instead.
 | `icon decoding` | gdk-pixbuf decodes a PNG and an SVG under your user with ambient capabilities cleared. On failure it suggests `glycin-loaders` or reports blocked user namespaces for bubblewrap. Warn only when gdk-pixbuf is not installed. |
 
 ## Client commands
@@ -551,10 +553,14 @@ Each session keeps its files in `${XDG_STATE_HOME:-~/.local/state}/relay/<name>/
 | --- | --- |
 | `--prefix DIR` | Absolute install location. Default `$PREFIX`, else `~/.local`. |
 | `--no-desktop` | Skip XFCE and the other desktop packages. |
-| `--no-deps` | Skip apt. Dependencies must already be present. |
+| `--no-deps` | Skip package installation. Dependencies must already be present. |
 | `--client-only` | Install only the CLI, for example on a laptop. Works off Linux. |
 
-Apt needs root or passwordless sudo. On apt systems it installs the build tools, the X11 libraries, `libx264`, `libwebsockets`, `xvfb`, `xauth`, `x11-utils`, `x11-xkb-utils`, `util-linux` (for `setpriv`), and with the desktop: D-Bus, XFCE (`xfce4-session`, `xfwm4`, `xfce4-panel`, `xfdesktop4`, `xfce4-settings`, `thunar`, `xfce4-terminal`), and `glycin-loaders` when the distribution has it. It uses the system `node` when it is 26 or newer; otherwise it downloads the version pinned in `.node-version` from `https://nodejs.org/dist/`, checks it against that release's `SHASUMS256.txt`, and unpacks it in `<prefix>/lib/relay/node`. It runs `npm ci` and `npm run build` with that Node. It is safe to re-run.
+Automatic dependencies need root or passwordless sudo. The installer reads `ID` and `ID_LIKE` from `/etc/os-release` to pick a package manager: apt for Debian and Ubuntu, dnf for Fedora, pacman for Arch Linux (including Manjaro and Omarchy), and apk for Alpine. On any other distribution it exits and names the supported ones.
+
+On Debian and Ubuntu it installs the build tools, the X11 libraries, `libx264`, `libwebsockets`, `xvfb`, `xauth`, `x11-utils`, `x11-xkb-utils`, `util-linux` (for `setpriv`), and with the desktop: D-Bus, XFCE (`xfce4-session`, `xfwm4`, `xfce4-panel`, `xfdesktop4`, `xfce4-settings`, `thunar`, `xfce4-terminal`), and `glycin-loaders` when the distribution has it. Fedora, Arch and Alpine install the equivalent packages under their own names. On Ubuntu, if `libx264` is not available, it adds the universe component to the Components lines in `/etc/apt/sources.list.d/ubuntu.sources` and runs `apt-get update`. It stops only when that file does not exist. On Fedora, it stops when RPM Fusion Free is not enabled (see [Getting started](/docs/getting-started)). On Arch Linux it runs a full upgrade (`pacman -Syu`) before it installs anything.
+
+It uses the system `node` when it is 26 or newer; otherwise it downloads the version pinned in `.node-version` from `https://nodejs.org/dist/`. On Alpine, which uses musl, it downloads from `https://unofficial-builds.nodejs.org/` instead. It checks the archive against that release's `SHASUMS256.txt` and unpacks it in `<prefix>/lib/relay/node`. It runs `npm ci` and `npm run build` with that Node. It is safe to re-run.
 
 It installs the CLI as `<prefix>/lib/relay/relay.mjs` with a `<prefix>/bin/relay` launcher that prefers `<prefix>/lib/relay/node`, the engine, and the built viewer in `<prefix>/lib/relay/` (the engine is linked as `<prefix>/bin/relay-engine`). When `<prefix>/bin` is not on `PATH` it prints:
 

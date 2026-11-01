@@ -20,11 +20,17 @@ The command is in `~/.local/bin`, which a fresh shell often does not have on `PA
 
 Fix: run `export PATH="$HOME/.local/bin:$PATH"` and add it to your shell profile, or run `~/.local/bin/relay` directly.
 
-### The installer fails on a non-apt distribution
+### The installer fails on an unsupported distribution
 
-Automatic dependency installation needs apt (Debian or Ubuntu). It also needs root or passwordless `sudo`.
+Automatic dependency installation covers Debian, Ubuntu, Fedora, Arch Linux, and Alpine. On any other distribution the installer exits and names these. It also needs root or passwordless `sudo`.
 
-Fix: install the equivalent packages yourself, then run `./install.sh --no-deps`.
+Fix: install the equivalent packages yourself, then run `./install.sh --no-deps`. On such a distribution, `--client-only` needs `--no-deps` too.
+
+### The installer stops and asks for RPM Fusion on Fedora
+
+relay needs the x264 library, which Fedora gets from RPM Fusion Free. The installer checks for it before it installs packages, and it prints the command that enables the repository.
+
+Fix: run the printed command, then run `./install.sh` again. The command is also in [Getting started](/docs/getting-started).
 
 ### `unsupported_platform`: "Host commands run on Linux only"
 
@@ -36,7 +42,7 @@ Fix: run them on the Linux VM. On your Mac, install the CLI with `./install.sh -
 
 A program relay needs, such as `Xvfb`, `xauth`, `xprop`, `xwininfo`, `xdpyinfo`, or the engine, is missing or not on `PATH`. A failed check makes `doctor` exit with status 1, and a `warn` check does not.
 
-Fix: run the fix command that `doctor` prints next to the failed check. On Debian or Ubuntu, re-running `./install.sh` installs everything. On other distributions, install the packages by hand and use `--no-deps`.
+Fix: run the fix command that `doctor` prints next to the failed check. On a supported distribution, re-running `./install.sh` installs everything. On other distributions, install the packages by hand and use `--no-deps`.
 
 ### XFCE exits right after start on Ubuntu 26.04 with an icon error
 

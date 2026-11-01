@@ -99,7 +99,7 @@ A Wayland backend must also handle portal authorization and revocation, negotiat
 
 ## Build and test
 
-The engine is C++17. It needs `libx264`, `libwebsockets` with TLS, and `libx11`, `libxext`, `libxdamage`, `libxfixes`, and `libxtst`. It does not link FFmpeg.
+The engine is C++17. It needs `libx264`, `libwebsockets` with TLS, and `libx11`, `libxext`, `libxdamage`, `libxfixes`, and `libxtst`. It does not link FFmpeg. `install.sh` installs these on every distribution it supports. The package names for each family are in `packages.tsv`, the only place they are listed.
 
 ```sh
 make                 # builds relay-engine
