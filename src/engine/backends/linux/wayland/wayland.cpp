@@ -1,5 +1,6 @@
 #include "wayland.hpp"
 #include <algorithm>
+#include <cstdlib>
 #include <cstring>
 #include <stdexcept>
 
@@ -93,7 +94,11 @@ std::string availableOutputs(const std::vector<std::unique_ptr<OutputInfo>>& out
 
 Connection::Connection() {
   display = wl_display_connect(nullptr);
-  if (!display) throw std::runtime_error("Cannot connect to Wayland display using WAYLAND_DISPLAY");
+  if (!display) {
+    const char* name = std::getenv("WAYLAND_DISPLAY");
+    throw std::runtime_error("Cannot connect to Wayland display '" + std::string(name ? name : "wayland-0") +
+                             "'; check WAYLAND_DISPLAY and XDG_RUNTIME_DIR");
+  }
   try {
     initialize();
   } catch (...) {
