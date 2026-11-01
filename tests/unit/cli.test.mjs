@@ -140,6 +140,14 @@ test('human help lists up under the VM section and click under the client sectio
   assert.doesNotMatch(client, /^ {4}up /m);
 });
 
+test('human help shows command notes before the examples', () => {
+  const result = help('0', ['up', '--help']);
+  assert.ifError(result.error);
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /\n\nNotes:\n\n {4}Without --detach, Ctrl\+C stops the session\.\n/);
+  assert.ok(result.stdout.indexOf('Notes:') < result.stdout.indexOf('Examples:'));
+});
+
 test('RELAY_AGENT=1 help keeps the agent block as plain text', () => {
   const result = help('1');
   assert.ifError(result.error);

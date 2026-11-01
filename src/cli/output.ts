@@ -43,7 +43,9 @@ export function printNext(args: OutputOptions, benefit: string, command: string)
 }
 
 export function formatReady(info: Record<string, any>, args: Record<string, any>, background = false): string {
-  const lines = [receipt('Started', info.name, args), row('Viewer', info.viewer, args), row('Display', info.display, args)];
+  const lines = [receipt('Started', info.name, args), row('Viewer', info.viewer, args)];
+  if (info.display) lines.push(row('Display', info.display, args));
+  if (info.waylandDisplay) lines.push(row('Wayland display', info.waylandDisplay, args));
   if (info.resolution) lines.push(row('Resolution', `${info.resolution}${info.fps ? ` at ${info.fps} fps` : ''}`, args));
   lines.push(row('Logs', info.logs, args));
   if (info.public) {

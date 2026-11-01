@@ -20,10 +20,10 @@ export function unknownToken(kind: string, token: string, choices: string[], com
   return usageFailure(`Unknown ${kind} '${token}'.${closest && closest.distance <= 2 ? ` Did you mean '${closest.choice}'?` : ''}`, command, kind === 'command' ? 'unknown_command' : 'invalid_option');
 }
 
-function valueFor(parameter: Parameter, raw: unknown, command: string): unknown {
+function valueFor(parameter: Parameter, raw: unknown, command: string, fromEnvironment = false): unknown {
   const value = parameter.type === 'number' ? Number(raw) : raw;
   if ((parameter.type === 'number' && (String(raw).trim() === '' || !Number.isFinite(value))) || (parameter.acceptedValues && !parameter.acceptedValues.includes(String(value))) || (parameter.validate && !parameter.validate(value))) {
-    throw usageFailure(`Invalid ${parameter.name}: '${String(raw)}'.${parameter.acceptedValues ? ` Expected ${parameter.acceptedValues.join(', ')}.` : ''}`, command);
+    throw usageFailure(`Invalid ${fromEnvironment ? parameter.environment : parameter.name}: '${String(raw)}'.${parameter.acceptedValues ? ` Expected ${parameter.acceptedValues.join(', ')}.` : ''}`, command);
   }
   return value;
 }
@@ -82,7 +82,8 @@ export function parseCommand(argv: string[], environment: NodeJS.ProcessEnv = pr
       if (parameter.required) throw usageFailure(`Missing argument ${parameter.valueHint ?? parameter.name}.`, name, parameter.missingReason ?? 'missing_input');
       continue;
     }
-    args[parameter.name] = Array.isArray(raw) ? raw.map((item) => valueFor(parameter, item, name)) : valueFor(parameter, raw, name);
+    const fromEnvironment = args[parameter.name] === undefined && environmentValue !== undefined;
+    args[parameter.name] = Array.isArray(raw) ? raw.map((item) => valueFor(parameter, item, name, fromEnvironment)) : valueFor(parameter, raw, name, fromEnvironment);
   }
   const problem = command.validate?.(args);
   if (problem) throw problem instanceof Failure ? problem : usageFailure(problem, name);

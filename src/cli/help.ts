@@ -218,6 +218,7 @@ function humanHelp(name: string, args: OutputOptions): string {
   } else {
     lines.push(style.dim(command.summary), style.dim(location[command.runsOn]));
     if (command.options.length) lines.push('', style.dim('Options:'), '', ...optionRows(command.options, style));
+    if (command.notes.length) lines.push('', style.dim('Notes:'), '', ...command.notes.flatMap((note) => wrapWords(note, width - 4).map((line) => style.dim(`    ${line}`))));
     if (command.subcommands?.length) {
       lines.push('', style.dim('Commands:'), '');
       lines.push(...cellRows(command.subcommands.map((subcommand) => ({ label: subcommand.name, args: '', text: subcommand.summary })), style));
