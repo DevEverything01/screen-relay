@@ -142,7 +142,7 @@ Common reasons from the SDK:
 | `disconnected` | The control session closed or was lost. |
 | `invalid_input` | A bad coordinate, button, key combo, event, or empty input. |
 | `unsupported_input` | The backend cannot produce a character or apply the event. |
-| `component_failed` | On Wayland, a compositor without `wlr-screencopy` (such as GNOME or KDE) makes `screenshot()` fail with this reason and message: `The engine could not take a screenshot. On Wayland the compositor must support wlr-screencopy.` |
+| `component_failed` | A failed screenshot returns this reason with the message `The engine could not take a screenshot. Read the engine log with relay logs engine.` On Wayland, a compositor without `wlr-screencopy` (such as GNOME or KDE) is the usual cause. |
 | `canceled` | The `signal` aborted the call. |
 | `protocol_error`, `io_error` | An invalid engine response, or a failed local file read or write. |
 

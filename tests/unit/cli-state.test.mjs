@@ -27,6 +27,7 @@ test('backend follows the display unless explicitly selected', () => {
     assert.equal(resolveBackend(undefined, 'wayland-1'), 'wayland');
     assert.equal(resolveBackend(undefined, ':0'), 'x11');
     assert.throws(() => resolveBackend('x11', 'wayland-1'), { reason: 'invalid_input' });
+    assert.throws(() => resolveBackend('wayland', ':0'), { reason: 'invalid_input' });
     writeFileSync(engine, "#!/bin/sh\nprintf '%s\\n' 'Compiled backends: x11'\n");
     assert.throws(() => resolveBackend(undefined, 'wayland-1'), { reason: 'missing_dependency' });
   } finally {

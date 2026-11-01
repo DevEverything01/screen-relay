@@ -183,7 +183,7 @@ export class Session {
   failure(name: string, code: string, message: string): Failure {
     const recovery = code === 'component_failed' || code === 'timeout'
       ? { next: nextFor(sessionCommand(`logs ${name}`, this.args.name)), label: 'Read the logs' } : {};
-    const hint = name === 'display' && this.data.backend === 'wayland' ? 'Check sway with `relay doctor`.' : HINTS[name] ?? '';
+    const hint = name === 'display' && this.data.backend === 'wayland' ? 'Read `relay logs display`, then run `RELAY_BACKEND=wayland relay doctor`.' : HINTS[name] ?? '';
     return new Failure(code, message, hint, { component: name, log: tail(join(this.dir, `${name}.log`)), logs: this.dir }, recovery);
   }
 
@@ -469,7 +469,10 @@ export function findEngine(): string | null {
 export function resolveBackend(explicit: string | undefined, display?: string): (typeof BACKENDS)[number] {
   const requested = explicit !== undefined ? backendValue(explicit, 'RELAY_BACKEND') : display !== undefined && !display.includes(':') ? 'wayland' : undefined;
   if (requested === 'x11' && display !== undefined && !display.includes(':')) {
-    throw new Failure('invalid_input', `${display} is a Wayland socket, not an X display`, `Run \`relay up --backend wayland --display ${display}\``);
+    throw new Failure('invalid_input', `${display} is a Wayland socket, not an X display`, `Run \`relay up -d --backend wayland --display ${display}\``);
+  }
+  if (requested === 'wayland' && display !== undefined && display.includes(':')) {
+    throw new Failure('invalid_input', `${display} is an X display, not a Wayland socket`, `Run \`relay up -d --backend x11 --display ${display}\``);
   }
   const engine = findEngine();
   const compiled = engine ? /^Compiled backends: (.+)$/m.exec(run([engine, '--help']).stdout)?.[1] : undefined;

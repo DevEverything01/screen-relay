@@ -2,7 +2,7 @@ import { cmdClick, cmdInput, cmdKey, cmdMove, cmdScreenshot, cmdScroll, cmdType 
 import { BACKENDS } from './config.js';
 import { cmdDoctor } from './host/doctor.js';
 import { cmdDown, cmdLogs, cmdRun, cmdStatus, cmdUp, COMPONENTS } from './host/session_commands.js';
-import type { Failure } from './output.js';
+import { Failure } from './output.js';
 import { cmdSkills, unknownAction } from './skills.js';
 
 export type Args = Record<string, unknown> & { command: string; json: boolean; name: string; signal?: AbortSignal };
@@ -85,6 +85,7 @@ export const commands: Record<string, Command> = {
     ],
     notes: ['Without --detach, Ctrl+C stops the session.', '--display uses the existing display size and defaults to no desktop.', 'Flags override config values. RELAY_CONFIG selects the config file.', 'Config-only settings and their variables: display.resolution (RELAY_RESOLUTION), stream.fps (RELAY_FPS), stream.bitrate.* (RELAY_BITRATE_MIN, RELAY_BITRATE_START, RELAY_BITRATE_MAX), keyboard.layout (RELAY_KEYBOARD_LAYOUT).'],
     resultSchema: { session: 'object', outcome: 'started' },
+    validate: (args) => args.display === '' ? new Failure('invalid_input', '--display is empty', 'Set WAYLAND_DISPLAY or DISPLAY, or drop --display to start a new desktop.') : undefined,
     run: cmdUp,
   },
   down: { summary: 'Stop a session', group: 'Session', runsOn: 'vm', arguments: [], options: [], examples: example('Stop the default session', 'relay down'), notes: ['Safe to repeat.'], resultSchema: { session: 'object', outcome: ['stopped', 'unchanged'] }, run: cmdDown },
