@@ -29,4 +29,7 @@ constexpr int hidKeycode(uint16_t hid) {
     default: return 0;
   }
 }
+static_assert(hidKeycode(4) == 30 && hidKeycode(11) == 35 && hidKeycode(39) == 11 && hidKeycode(68) == 87 &&
+              hidKeycode(69) == 88 && hidKeycode(70) == 99 && hidKeycode(115) == 194 && hidKeycode(225) == 42 &&
+              hidKeycode(3) == 0);
 }

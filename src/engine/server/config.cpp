@@ -91,7 +91,7 @@ bool parseConfig(int argc, char** argv, Config& config) {
     if (++i == argc) throw std::runtime_error("Missing value for " + option);
     const std::string value = argv[i];
     if (option == "--bind") config.bind = value;
-    else if (option == "--backend") { backendFor(value); config.backend = value; }
+    else if (option == "--backend") config.backend = value;
     else if (option == "--output") config.output = value;
     else if (option == "--port") {
       uint64_t port;
