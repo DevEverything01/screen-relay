@@ -5,12 +5,13 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createServer } from 'node:net';
 import { deflateSync } from 'node:zlib';
+import { loadConfig } from '../config.js';
 import { emit, Failure, formatDoctor } from '../output.js';
 import { DEFAULT_PORT, clearedCommand, isLinux, run, spawnCleared, which } from './common.js';
 import type { HostArgs } from './common.js';
 import { detectFamily, installCommand, packagesFor, type Family } from './packages.js';
 import { stateDir } from './state.js';
-import { findEngine, startXvfb, xQuery } from './supervisor.js';
+import { findEngine, resolveBackend, startXvfb, xQuery } from './supervisor.js';
 
 const TINY_SVG = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>');
 function crc32(data: Buffer): number {
@@ -98,6 +99,9 @@ export async function cmdDoctor(args: HostArgs): Promise<number> {
     const packageHint = (names: string[]) => family
       ? installCommand(family, packagesFor(family, names), sudo)
       : `Install ${names.join(' ')} with your system package manager.`;
+    const [settings, , present] = loadConfig();
+    const backend = resolveBackend(process.env.RELAY_BACKEND ?? (present.has('backend') ? settings.backend : undefined));
+    const x11 = backend === 'x11';
     check('user', true, root ? 'root' : `uid ${process.getuid?.() ?? -1}`);
     check('node', Number(process.versions.node.split('.')[0]) >= 26, process.versions.node, './install.sh');
     check('setpriv', Boolean(which('setpriv')), which('setpriv') ?? 'not found', packageHint(['setpriv']));
@@ -119,27 +123,29 @@ export async function cmdDoctor(args: HostArgs): Promise<number> {
         ? `Enable RPM Fusion Free with ${rpmFusionCommand}, then install with ${packageHint(['x264-dev'])}`
         : packageHint(['x264-dev']);
     check('libx264', Boolean(x264), x264 ?? 'not found', x264Hint);
-    for (const program of ['Xvfb', 'xauth', 'xprop', 'xwininfo', 'xdpyinfo', 'setxkbmap']) {
+    for (const program of x11 ? ['Xvfb', 'xauth', 'xprop', 'xwininfo', 'xdpyinfo', 'setxkbmap'] : ['sway', 'Xwayland', 'foot']) {
       check(program, Boolean(which(program)), which(program) ?? 'not found', packageHint([program]));
     }
     check('dbus-run-session', Boolean(which('dbus-run-session')), which('dbus-run-session') ?? 'not found', packageHint(['dbus-run-session']), 'warn');
-    const xfcePackages = ['xfce4-session', 'xfwm4', 'xfce4-panel', 'xfdesktop'];
-    check('xfce4-session', Boolean(which('xfce4-session')), which('xfce4-session') ?? 'not found (use --desktop none)', `./install.sh (or ${packageHint(xfcePackages)})`, 'warn');
-    let socketUsable = false;
-    try {
-      const info = statSync('/tmp/.X11-unix');
-      socketUsable = (info.mode & 0o1777) === 0o1777 || info.uid === process.getuid?.();
-    } catch {
-      try { accessSync('/tmp', constants.W_OK); socketUsable = true; } catch {}
+    if (x11) {
+      const xfcePackages = ['xfce4-session', 'xfwm4', 'xfce4-panel', 'xfdesktop'];
+      check('xfce4-session', Boolean(which('xfce4-session')), which('xfce4-session') ?? 'not found (use --desktop none)', `./install.sh (or ${packageHint(xfcePackages)})`, 'warn');
+      let socketUsable = false;
+      try {
+        const info = statSync('/tmp/.X11-unix');
+        socketUsable = (info.mode & 0o1777) === 0o1777 || info.uid === process.getuid?.();
+      } catch {
+        try { accessSync('/tmp', constants.W_OK); socketUsable = true; } catch {}
+      }
+      check('/tmp/.X11-unix', socketUsable, socketUsable ? 'usable' : 'not writable for Xvfb', `${sudo}mkdir -p /tmp/.X11-unix && ${sudo}chmod 1777 /tmp/.X11-unix`);
     }
-    check('/tmp/.X11-unix', socketUsable, socketUsable ? 'usable' : 'not writable for Xvfb', `${sudo}mkdir -p /tmp/.X11-unix && ${sudo}chmod 1777 /tmp/.X11-unix`);
     const free = await new Promise<boolean>((resolve) => {
       const server = createServer();
       server.once('error', () => resolve(false));
       server.listen(DEFAULT_PORT, '127.0.0.1', () => server.close(() => resolve(true)));
     });
     check('port', free, `127.0.0.1:${DEFAULT_PORT} ${free ? 'free' : 'in use'}`, `relay up --port ${DEFAULT_PORT + 1}`, 'warn');
-    if (which('Xvfb') && which('xauth') && which('xdpyinfo')) {
+    if (x11 && which('Xvfb') && which('xauth') && which('xdpyinfo')) {
       const scratch = mkdtempSync(join(tmpdir(), 'relay-doctor-'));
       const auth = join(scratch, 'auth');
       const children: ChildProcess[] = [];

@@ -3,13 +3,15 @@ set -eu
 desktop=1
 deps=1
 client=0
+backend=x11
 prefix=${PREFIX:-"$HOME/.local"}
-usage='Usage: ./install.sh [--prefix DIR] [--no-desktop] [--no-deps] [--client-only]'
+usage='Usage: ./install.sh [--prefix DIR] [--backend x11|wayland|all] [--no-desktop] [--no-deps] [--client-only]'
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --no-desktop) desktop=0 ;;
     --no-deps) deps=0 ;;
     --client-only) client=1 ;;
+    --backend) shift; backend=${1:?--backend requires x11, wayland or all} ;;
     --prefix) shift; prefix=${1:?--prefix requires a directory} ;;
     --help) echo "$usage"; exit 0 ;;
     *) echo "Unknown option: $1" >&2; echo "$usage" >&2; exit 2 ;;
@@ -17,6 +19,11 @@ while [ "$#" -gt 0 ]; do
   shift
 done
 case "$prefix" in /*) ;; *) echo '--prefix must be absolute' >&2; exit 2 ;; esac
+case "$backend" in
+  x11|wayland) backends=$backend; doctor_backend=$backend ;;
+  all) backends='x11 wayland'; doctor_backend=x11 ;;
+  *) echo '--backend must be x11, wayland or all' >&2; exit 2 ;;
+esac
 cd "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 
 elevate=''
@@ -77,6 +84,11 @@ if [ "$deps" = 1 ] && [ "$(uname -s)" = Linux ]; then
   optional_packages=''
   node_packages=''
   x264_package=''
+  case "$backend" in
+    x11) groups='core x11 xfce' ;;
+    wayland) groups='core wayland' ;;
+    all) groups='core x11 wayland xfce' ;;
+  esac
   while IFS="$(printf '\t')" read -r group logical apt_package dnf_package pacman_package apk_package; do
     case "$group" in ''|\#*) continue ;; esac
     case "$family" in
@@ -86,6 +98,7 @@ if [ "$deps" = 1 ] && [ "$(uname -s)" = Linux ]; then
       apk) package=$apk_package ;;
     esac
     [ "$package" != - ] || continue
+    case " $groups " in *" $group "*) ;; *) continue ;; esac
     if [ "$family" = dnf ] && [ "$logical" = curl ] && command -v curl >/dev/null 2>&1; then continue; fi
     case "$group:$logical" in
       core:x264-dev) x264_package=$package ;;
@@ -93,7 +106,6 @@ if [ "$deps" = 1 ] && [ "$(uname -s)" = Linux ]; then
         node_packages="$node_packages $package" ;;
     esac
     case "$group" in
-      core|x11) packages="$packages $package" ;;
       xfce)
         [ "$desktop" = 1 ] || continue
         case "$family:$logical" in
@@ -101,6 +113,7 @@ if [ "$deps" = 1 ] && [ "$(uname -s)" = Linux ]; then
             optional_packages="$optional_packages $package"; continue ;;
         esac
         packages="$packages $package" ;;
+      *) packages="$packages $package" ;;
     esac
   done < packages.tsv
 
@@ -228,10 +241,10 @@ if [ "$client" = 1 ]; then
   exit 0
 fi
 [ "$(uname -s)" = Linux ] || { echo 'The engine builds on Linux only; use --client-only on this machine.' >&2; exit 1; }
-make -j2
-make install PREFIX="$prefix"
+make -j2 BACKENDS="$backends"
+make install PREFIX="$prefix" BACKENDS="$backends"
 install_cli
 printf '\nInstalled: %s/bin/relay (engine: %s/bin/relay-engine)\n' "$prefix" "$prefix"
 on_path
 printf '\n'
-"$prefix/bin/relay" doctor
+RELAY_BACKEND=$doctor_backend "$prefix/bin/relay" doctor
