@@ -3,13 +3,11 @@ title: Overview
 description: Relay streams a Linux desktop to a browser and lets people and agents control it from a CLI, a Node SDK, or an HTTP API.
 ---
 
-Relay streams a Linux desktop to your browser. You open a link to see the screen and use it with your mouse and keyboard. A program, such as an AI agent, can take screenshots and send clicks, keys, and text to the same desktop from the `relay` command line, a Node SDK, or an HTTP and WebSocket API.
-
-Relay runs the desktop on a Linux VM, container, or sandbox. It is for operators who want to use that desktop from a browser, and for agent builders who need a program to control graphical apps.
+Relay streams a Linux desktop to your browser. Open the link it prints to see the screen and use it with your mouse and keyboard. An agent can also control the same desktop from the `relay` command line, a Node SDK, or an HTTP and WebSocket API, taking screenshots and sending clicks, keys, and text. Relay runs the desktop on a Linux VM, container, or sandbox.
 
 ## Quickstart
 
-On the VM, from a clone of the repository:
+On a Linux VM with Git and root or passwordless `sudo`, from a clone of the repository:
 
 ```sh
 ./install.sh
@@ -17,33 +15,53 @@ export PATH="$HOME/.local/bin:$PATH"
 relay up
 ```
 
-`relay up` starts the display, the desktop, and the engine that streams the screen, then prints a viewer link. Open the link in a browser with H.264 WebCodecs, such as current Chrome, Edge, or Safari. Without `-d`, `up` stays in the foreground and Ctrl+C stops the session.
+`relay up` starts the display, the desktop, and the engine, then prints a viewer link. Open it in a browser with H.264 WebCodecs, such as current Chrome, Edge, or Safari. Without `-d`, `up` stays in the foreground and Ctrl+C stops the session.
+
+## How it works
+
+<Diagram name="architecture" title="Relay architecture: the capture and encode pipeline in a Linux VM, the browser viewer, and the input path" aspectRatio="720 / 480" />
+
+The same flow in text:
+
+```text
+Linux VM
+  display -> capture -> H.264 encode -> /stream WebSocket -> browser viewer
+
+viewer input over /stream
+agent input over /input (HTTP) or /control (WebSocket)
+  -> input checks -> keyboard and mouse input -> display
+```
+
+The VM runs a display and a desktop. The engine on the VM captures the screen, encodes it as H.264 video, and streams it to the viewer in the browser. The viewer, or an agent over HTTP or WebSocket, sends input back, and the engine applies it as keyboard and mouse input. Only one client can send input at a time. The stream lowers its bitrate on a slow link.
 
 ## Limits
 
 | Area | Limit |
 | --- | --- |
 | Display server | X11 or Wayland. `relay up` uses X11 when the engine includes it, otherwise Wayland. See [Wayland](/docs/wayland) for compositor requirements. |
-| Resolution | Up to 1920x1080, set in the config ([Configuration](/docs/configuration)). A change applies when the session starts. |
+| Resolution | Up to 1920x1080, set in [Configuration](/docs/configuration). A change applies when the session starts. |
 | Control | One input owner at a time: a viewer or one agent. Screenshots work at any time. |
 | Not supported | Audio, clipboard, IME, relative pointer, and hardware encoding. |
 | Auth | One shared token per session; a session on loopback has none. No separate user identities. |
 | Install | The engine installs on Linux only. Automatic dependencies cover Debian, Ubuntu, Fedora, Arch Linux, and Alpine. `--client-only` installs the CLI on any OS with Node 26 or newer. |
+| Failure | Three capture failures in a row end the session. `relay logs` shows why. |
 
 ## Status
 
 <Callout title="Experimental">
   CI installs and checks relay on Debian 13, Ubuntu 24.04 and 26.04, Fedora 44,
   Arch Linux, and Alpine 3.24. Relay also ran end to end in a Vercel Sandbox on
-  Ubuntu 26.04 (x86_64) and was tested in Docker on Debian 13 (arm64). It has not
-  been tested over wide-area links or in long runs.
+  Ubuntu 26.04 (x86_64) and in Docker on Debian 13 (arm64). It has not been
+  tested over wide-area links or in long runs.
 </Callout>
 
 ## Next steps
 
-- [Getting started](/docs/getting-started): install relay, open the viewer, and control the desktop.
+- [Getting started](/docs/getting-started): install relay and open the viewer.
+- [X11](/docs/x11): start an X11 desktop or attach to a display.
 - [Wayland](/docs/wayland): attach to a compositor or capture one output.
 - [CLI reference](/docs/cli): every command, option, output, and error.
 - [SDK](/docs/sdk): control a session from Node.
+- [HTTP API](/docs/protocol): endpoints, input events, and the wire format.
 - [Agent skills](/docs/agent-skills): give an agent a workflow to follow.
 - [Remote access](/docs/remote-access): tunnels, TLS, and tokens.

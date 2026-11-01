@@ -1,0 +1,70 @@
+# Relay wire protocol
+
+Use this reference when writing your own viewer or client.
+
+## Input records
+
+`POST /input` accepts 1 to 256 consecutive 16-byte records, not JSON. Send `Content-Length` and omit the 20-byte WebSocket header. All multibyte fields are big-endian. Set unused fields to zero.
+
+| Offset | Size | Field | Value |
+| ---: | ---: | --- | --- |
+| 0 | 1 byte | Type | Event type from the table below. |
+| 1 | 1 byte | Reserved | Zero. |
+| 2 | 2 bytes | Code | Key, button, or wheel axis. |
+| 4 | 4 bytes | Value | Signed wheel delta or Unicode scalar. |
+| 8, 10 | 2 bytes each | X, Y | Coordinates from 0 to 65535 across the desktop. |
+| 12 | 2 bytes | Button mask | Low 5 bits only. |
+| 14 | 2 bytes | Modifier mask | Low 8 bits only. |
+
+| Type | Event | Fields |
+| ---: | --- | --- |
+| 1, 2 | Key down, key up | Code is a HID usage from 0 to 231. Keys are physical; the desktop layout determines the character. |
+| 3 | Pointer move | X and Y are the target position. |
+| 4, 5 | Button down, button up | Code is 1 to 3; X and Y are the target position. |
+| 6 | Wheel | Code is 0 for vertical or 1 for horizontal; value is a multiple of 120 from -1200 to 1200. X and Y are the target position. |
+| 7 | Release all | Code, value, and both masks must be zero. |
+| 8 | Text | Value is one Unicode scalar from 1 to `0x10FFFF`, excluding `0xD800` to `0xDFFF`. Code and both masks must be zero. |
+
+Text events type a character without changing held keys. Held modifiers are lifted and restored around the character. Values `0x0A` and `0x09` type Return and Tab. X11 uses up to 16 spare keys for characters absent from the layout; Wayland uses up to 32. On X11, those characters can be missed if an application freezes for over 50 ms and spare keys are reused. On X11, an absent character is unsupported if no spare key is available.
+
+The server processes records in order and stops at the first record rejected during validation or enqueueing. A successful response reports the number of records applied, for example `{"applied":1}`. The response waits for the desktop to apply them; it does not guarantee the application reacted. Keys and buttons held by a batch are released when it ends or fails. Masks do not press or release keys or buttons: send explicit down and up events.
+
+`POST /input` rejects a batch if the pending input plus the batch exceeds 1024 events. On an input error with `index`, records before that index were applied. A `busy` error can include `applied`, the number of records queued minus those dropped; a backend failure can make this count overstate applied input, and dropped records need not be consecutive. Do not use `applied` as a retry offset; check the desktop before retrying.
+
+## WebSocket protocol
+
+| Connection | Rule |
+| --- | --- |
+| `/stream` | Receives video and, when supported, cursor messages. Sends ACKs and input. Requires an `Origin`. |
+| `/control` | Receives a control-ready message, then sends input and receives one response per request. Up to 32 replies can be queued. |
+| Both | Use the `nsl1` subprotocol and binary messages. One WebSocket message contains one protocol message. Only one `/stream` or `/control` connection is allowed; either blocks `POST /input`. |
+
+When the session has a token, offer both `nsl1` and `bearer.TOKEN` as subprotocols; the server selects `nsl1`. Do not put the token in a request URL.
+
+| Header offset | Size | Field |
+| ---: | ---: | --- |
+| 0 | 4 bytes | ASCII `NSL1`. |
+| 4 | 1 byte | Version: `1`. |
+| 5 | 1 byte | Message type from the table below. |
+| 6 | 2 bytes | Flags: zero except frame bit 0, which marks a keyframe. |
+| 8 | 4 bytes | Nonzero generation, incremented for each connection. |
+| 12 | 4 bytes | Sequence; meaning depends on message type. |
+| 16 | 4 bytes | Payload length in bytes. |
+
+| Type | Direction | Payload and sequence |
+| ---: | --- | --- |
+| 1 | Server to `/stream` | Width and height (2 bytes each), capture time in microseconds (8 bytes), and an H.264 Annex B access unit. Sequence starts at 1 and increases per frame. The first and recovery frames are keyframes with SPS and PPS. |
+| 2 | `/stream` to server | Empty payload. ACK each frame in order after drawing it or dropping it for a newer frame; use its generation and sequence. Only the oldest outstanding frame earns credit. |
+| 3 | Client to either endpoint | One 16-byte input record. Sequence is zero on `/stream` or a nonzero request ID on `/control`. |
+| 4 | Server to `/control` | Desktop width and height, 2 bytes each. Sequence is zero. |
+| 5 | Server to `/control` | One status byte: 0 accepted, 1 invalid, 2 unsupported. Sequence echoes the request ID. A status of 0 does not report a later backend failure. |
+| 6 | Server to `/stream` | Width, height, hotspot X, and hotspot Y (2 bytes each), followed by straight-alpha RGBA pixels row by row. Sequence is zero. No ACK is needed. |
+
+| Rule | Detail |
+| --- | --- |
+| Encoding | All integers are unsigned big-endian except the signed input value. Reject malformed messages and unknown types or versions. |
+| Flow control | At most 8 frames and 8 MiB can be in flight. With frames outstanding, the stream closes after about 3 seconds without ACK progress or when the oldest frame reaches 3 seconds. |
+| Frame size | An access unit is at most 8 MiB; the complete message is at most 8,388,640 bytes. Decode frames in order. |
+| Counters | Reconnect when the frame sequence reaches 4294967295. If the generation reaches that value, restart the session before connecting again. |
+| Cursor | At most 256 by 256 pixels, with the hotspot inside the image. Eight zero bytes restore the local arrow; a transparent image hides the cursor. The cursor does not follow pointer jumps made by the desktop. |
+| Disconnect | Held input is released. Reconnecting does not replay requests. |

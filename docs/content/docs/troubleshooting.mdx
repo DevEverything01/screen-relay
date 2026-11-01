@@ -22,7 +22,7 @@ Stopping a session also stops the processes it started. Save your work before ru
 | The installer rejects the distribution or needs privileges | Automatic dependency installation needs a [supported distribution](/docs/getting-started) and root or passwordless `sudo`. Otherwise, install dependencies yourself and run `./install.sh --no-deps`, or `./install.sh --client-only --no-deps` for the client alone. |
 | The Fedora installer asks for RPM Fusion | Run the printed command, then rerun `./install.sh`. |
 | `unsupported_platform` | Run `up`, `down`, and `run` on the VM. On your laptop, install with `./install.sh --client-only` and use the [client commands](/docs/remote-access). |
-| `missing_dependency` or a failed doctor check | Run the suggested fix. To reinstall Wayland dependencies, run `./install.sh --backend wayland`. |
+| `missing_dependency` or a failed doctor check | Run the suggested fix. See [X11](/docs/x11) or [Wayland](/docs/wayland) for backend checks. |
 | XFCE exits with a `default_icon_at_size` assertion on Ubuntu 26.04 | Install the icon loader with `sudo apt-get install glycin-loaders`, or rerun `./install.sh`. |
 
 ## Starting a session
@@ -34,7 +34,7 @@ Stopping a session also stops the processes it started. Save your work before ru
 | `component_failed` or `status` shows `failed` | Run `relay logs`, or `relay logs COMPONENT` for the component named in the error. For a background session, also check `supervisor.log` in the [state directory](/docs/cli#state-directory). |
 | `timeout` while the engine or desktop starts | The default readiness timeout is 30 seconds. Check the error's log tail, then try `relay up --timeout 90` on a slow VM. This does not extend the display startup timeout. |
 | `invalid_config` | Correct the file and key named in the error. See [Configuration](/docs/configuration). |
-| `opening X display failed` with `--display` | Check the display number and set `XAUTHORITY` to the X session's authority file. Do not run `xhost +`. |
+| `opening X display failed` with `--display` | Check the display number and `XAUTHORITY`; see [X11](/docs/x11#attach-to-an-existing-display). |
 
 ## Viewer and streaming
 
@@ -72,6 +72,6 @@ The compositor lacks a required protocol, causing `component_failed` for the eng
 
 | Symptom | Cause and fix |
 | --- | --- |
-| `Unsupported root size` when attaching | The output must be 320 to 1920 pixels wide and 240 to 1080 pixels high, with even dimensions. Create a supported headless output and pass its name with `--output`; see [Wayland](/docs/wayland). |
-| `missing_input`: `XDG_RUNTIME_DIR is required` with `--display` | Set the compositor's runtime directory, for example `export XDG_RUNTIME_DIR=/run/user/$(id -u)`. |
+| `Unsupported root size` when attaching | Create a supported headless output and pass its name with `--output`; see [Wayland](/docs/wayland#attach-to-an-existing-display). |
+| `missing_input`: `XDG_RUNTIME_DIR is required` with `--display` | Set the compositor's runtime directory; see [Wayland](/docs/wayland#attach-to-an-existing-display). |
 | `component_failed` for `display` or `timeout` while sway starts | Sway exited or did not report its Wayland and XWayland displays within 15 seconds. Run `RELAY_BACKEND=wayland relay doctor`, then `relay logs display`. |

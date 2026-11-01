@@ -79,8 +79,8 @@ nano ~/.config/relay/config.yaml
 | `server.tls_cert` | unset | Path to a certificate file. Set with `tls_key`. | `--tls-cert` | `RELAY_TLS_CERT` |
 | `server.tls_key` | unset | Path to the private key file. Set with `tls_cert`. | `--tls-key` | `RELAY_TLS_KEY` |
 | `keyboard.layout` | `us` | A layout name such as `de` or `fr`, or a comma-separated list such as `us,de`, using letters, digits, `_`, and `-`. On X11 it needs `setxkbmap`, which `relay doctor` checks. | None | `RELAY_KEYBOARD_LAYOUT` |
-| `backend` | `x11` when the engine includes it, else `wayland` | `x11` or `wayland`. See [Wayland](/docs/wayland) for what the Wayland backend needs. | `--backend` | `RELAY_BACKEND` |
-| `desktop` | `xfce` on X11, `foot` on Wayland, or `none` with `--display` | `xfce`, `none`, or a command. Use `none` for a bare screen, or a command to run your own window manager. | `--desktop` | `RELAY_DESKTOP` |
+| `backend` | `x11` when the engine includes it, else `wayland` | `x11` or `wayland`. See [X11](/docs/x11) and [Wayland](/docs/wayland). | `--backend` | `RELAY_BACKEND` |
+| `desktop` | `xfce` on X11, `foot` on Wayland, or `none` with `--display` | `xfce`, `none`, or a command. See [X11](/docs/x11) and [Wayland](/docs/wayland). | `--desktop` | `RELAY_DESKTOP` |
 
 `stream.bitrate` needs `min <= start <= max`, including when you change one value. `server.tls_cert` and `server.tls_key` must be set together.
 

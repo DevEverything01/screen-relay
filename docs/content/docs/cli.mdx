@@ -22,13 +22,15 @@ Starts a desktop session and waits for it to be ready.
 relay up -d --name demo --port 8084
 ```
 
+For backend-specific usage, see [X11](/docs/x11) and [Wayland](/docs/wayland).
+
 | Option | Meaning |
 | --- | --- |
 | `-d`, `--detach` | Run in the background. Otherwise, Ctrl+C stops the session. |
 | `--config FILE` | YAML config. Default: `RELAY_CONFIG`, then `${XDG_CONFIG_HOME:-~/.config}/relay/config.yaml` if present. |
 | `--port N` | Listen port, 1–65535. Default `8080`. |
-| `--desktop CMD` | `xfce`, `none`, or a desktop command. Default `xfce` on X11, `foot` on Wayland, or `none` when attaching to a display. |
-| `--display DISPLAY` | Attach to an existing display at its size. X11 uses `XAUTHORITY`; Wayland requires `XDG_RUNTIME_DIR`. |
+| `--desktop CMD` | `xfce`, `none`, or a command. Default: `xfce` on X11, `foot` on Wayland, or `none` when attaching. |
+| `--display DISPLAY` | Attach to an existing display at its size. |
 | `--backend x11\|wayland` | Default `x11` when available, else `wayland`. Without a configured backend, a display without a colon selects Wayland. |
 | `--output NAME` | Wayland output. Default: first output. Not valid on X11. |
 | `--public URL` | HTTPS origin. Generates a token. Requires a TLS proxy unless direct TLS is configured. |
@@ -367,6 +369,6 @@ Install from a repository clone. See [Getting started](/docs/getting-started) fo
 
 Automatic dependencies require root or passwordless sudo and support Debian, Ubuntu, Fedora, Arch, and Alpine. Elsewhere, install dependencies and use `--no-deps`. On Linux, `--client-only` can install Node-related packages unless `--no-deps` is set. On Arch, package installation runs `pacman -Syu`.
 
-For a full install with `--no-deps`, install build tools, `setpriv`, development libraries for x264, libwebsockets, zlib, and X11 or Wayland, and the display and desktop tools. X11 uses `Xvfb`, `xauth`, `xprop`, `xwininfo`, and `xdpyinfo`; Wayland uses `sway`, `Xwayland`, and `foot`.
+For a full install with `--no-deps`, install build tools, `setpriv`, development libraries for x264, libwebsockets, zlib, and X11 or Wayland, and the tools listed under [X11](/docs/x11#check-the-machine) or [Wayland](/docs/wayland#check-the-machine).
 
 The installer uses Node 26 or newer with npm, or downloads a pinned release using curl or wget. It installs the CLI under `<prefix>/bin`; a full install runs `relay doctor` and fails on a failed check. Add `<prefix>/bin` to `PATH` if needed.

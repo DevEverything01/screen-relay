@@ -5,17 +5,18 @@
   "pages": [
     "index",
     "getting-started",
+    "---Display servers---",
+    "x11",
     "wayland",
     "---Reference---",
     "cli",
     "configuration",
-    "remote-access",
-    "docker",
-    "agent-skills",
     "sdk",
     "protocol",
-    "---Under the hood---",
-    "architecture",
+    "agent-skills",
+    "---Guides---",
+    "remote-access",
+    "docker",
     "---Help---",
     "troubleshooting"
   ]
