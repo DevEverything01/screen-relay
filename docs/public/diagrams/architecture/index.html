@@ -75,7 +75,7 @@
   </g>
   <text class="head" x="56" y="40">Linux VM</text>
 
-  <rect class="box" x="188" y="64" width="524" height="264" rx="8"/>
+  <rect class="box" x="188" y="64" width="504" height="264" rx="8"/>
   <g transform="translate(208 76)">
     <rect class="icon" x="3" y="3" width="12" height="12" rx="2"/>
     <rect class="icon" x="6.5" y="6.5" width="5" height="5" rx="1"/>
@@ -83,11 +83,11 @@
   </g>
   <text class="head" x="234" y="90">engine</text>
 
-  <rect class="box node" x="20" y="96" width="160" height="96" rx="6"/>
-  <text class="label" x="100" y="124">Virtual display</text>
-  <text class="sub" x="100" y="141">X11: Xvfb</text>
-  <text class="sub" x="100" y="155">Wayland: headless sway</text>
-  <text class="sub" x="100" y="169">or attached compositor</text>
+  <rect class="box node" x="28" y="96" width="152" height="96" rx="6"/>
+  <text class="label" x="104" y="124">Virtual display</text>
+  <text class="sub" x="104" y="141">X11: Xvfb</text>
+  <text class="sub" x="104" y="155">Wayland: headless sway</text>
+  <text class="sub" x="104" y="169">or attached compositor</text>
 
   <rect class="box node" x="208" y="96" width="160" height="96" rx="6"/>
   <text class="label" x="288" y="124">Capture</text>
@@ -95,21 +95,21 @@
   <text class="sub" x="288" y="155">XFixes cursor</text>
   <text class="sub" x="288" y="169">Wayland: wlr-screencopy</text>
 
-  <rect class="box node" x="408" y="112" width="120" height="64" rx="6"/>
-  <text class="label" x="468" y="142">Encoder</text>
-  <text class="sub" x="468" y="159">H.264</text>
+  <rect class="box node" x="400" y="112" width="120" height="64" rx="6"/>
+  <text class="label" x="460" y="142">Encoder</text>
+  <text class="sub" x="460" y="159">H.264</text>
 
-  <rect class="box node" x="568" y="112" width="120" height="64" rx="6"/>
-  <text class="label" x="628" y="142">Flow control</text>
-  <text class="sub" x="628" y="159">ACK credit</text>
+  <rect class="box node" x="552" y="112" width="120" height="64" rx="6"/>
+  <text class="label" x="612" y="142">Flow control</text>
+  <text class="sub" x="612" y="159">ACK credit</text>
 
-  <rect class="box node" x="568" y="228" width="120" height="64" rx="6"/>
-  <text class="label" x="628" y="258">WebSocket</text>
-  <text class="sub" x="628" y="275">stream server</text>
+  <rect class="box node" x="552" y="228" width="120" height="64" rx="6"/>
+  <text class="label" x="612" y="258">WebSocket</text>
+  <text class="sub" x="612" y="275">stream server</text>
 
-  <rect class="box node" x="408" y="228" width="120" height="64" rx="6"/>
-  <text class="label" x="468" y="258">Input checks</text>
-  <text class="sub" x="468" y="275">validates events</text>
+  <rect class="box node" x="400" y="228" width="120" height="64" rx="6"/>
+  <text class="label" x="460" y="258">Input checks</text>
+  <text class="sub" x="460" y="275">validates events</text>
 
   <rect class="box node" x="208" y="212" width="160" height="96" rx="6"/>
   <text class="label" x="288" y="240">Input</text>
@@ -118,18 +118,18 @@
   <text class="sub" x="288" y="285">virtual pointer v2</text>
 
   <path class="wire" d="M186 144H202"/>
-  <path class="wire" d="M374 144H402"/>
-  <path class="wire" d="M534 144H562"/>
-  <path class="wire" d="M628 182V222"/>
-  <path class="wire" d="M562 260H534"/>
-  <path class="wire" d="M402 260H374"/>
+  <path class="wire" d="M374 144H394"/>
+  <path class="wire" d="M526 144H546"/>
+  <path class="wire" d="M612 182V222"/>
+  <path class="wire" d="M546 260H526"/>
+  <path class="wire" d="M394 260H374"/>
   <path class="wire" d="M288 314V322a14 14 0 0 1-14 14H118a14 14 0 0 1-14-14V198"/>
 
-  <path class="wire strong" d="M628 298V382"/>
-  <text class="tag" x="638" y="360" style="text-anchor:start">video</text>
-  <path class="wire" d="M580 382V298"/>
-  <text class="tag" x="572" y="360" style="text-anchor:end">input</text>
-  <text class="tag" x="604" y="360">/stream</text>
+  <path class="wire strong" d="M612 298V382"/>
+  <text class="tag" x="622" y="360" style="text-anchor:start">video</text>
+  <path class="wire" d="M564 382V298"/>
+  <text class="tag" x="556" y="360" style="text-anchor:end">input</text>
+  <text class="tag" x="588" y="360">/stream</text>
   <path class="wire strong" d="M198 420H426a14 14 0 0 0 14-14V298"/>
   <text class="tag" x="312" y="412">/input or /control</text>
   <text class="tag" x="312" y="440">one input owner at a time</text>

@@ -91,7 +91,13 @@ Color: little-endian BGRA and big-endian ARGB convert to NV12 with limited-range
 
 ## Adding a backend
 
-1. Create `src/engine/backends/<os>/<name>/` implementing `initializeNativeBackend`, `makeCaptureSource`, and `makeInputBackend`.
+1. Create `src/engine/backends/<os>/<name>/` with the three functions in `namespace relay::<name>`, using the signatures declared in `src/engine/server/backend.cpp`:
+
+   ```cpp
+   bool initializeNativeBackend(const std::string& output);
+   std::unique_ptr<CaptureSource> makeCaptureSource();
+   std::unique_ptr<InputBackend> makeInputBackend();
+   ```
 2. Add the backend name to `AVAILABLE_BACKENDS`, then add `BACKEND_DIR_<name>` and `BACKEND_PKGS_<name>` to the `Makefile`. The current values are `x11` and `wayland`.
 3. Add a guarded entry to the `backends` array in `src/engine/server/backend.cpp`. The `Makefile` adds `-DRELAY_BACKEND_<name>` for each selected backend. The first compiled entry is the default, so keep X11 first when both backends are built.
 4. Build with `make BACKENDS=<name>`. The default is `x11`; quote a space-separated list to build multiple backends, such as `make BACKENDS="x11 wayland"`.

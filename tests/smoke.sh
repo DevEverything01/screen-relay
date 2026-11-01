@@ -23,6 +23,13 @@ fail() {
   exit 1
 }
 
+step 'engine backends'
+engine=$(command -v relay-engine || true)
+[ -n "$engine" ] || fail 'relay-engine is not on PATH; run ./install.sh'
+"$engine" --help > "$work/engine-help" 2> "$work/stderr" || fail "relay-engine --help: $(cat "$work/stderr")"
+grep -q '^Compiled backends: ' "$work/engine-help" ||
+  fail 'relay-engine --help printed no "Compiled backends: " line; run ./install.sh --backend all'
+
 step 'offline help and usage errors'
 "$relay" --help > "$work/help" 2> "$work/stderr" || fail 'root help'
 [ -s "$work/help" ] && [ ! -s "$work/stderr" ] || fail 'help streams'
@@ -74,6 +81,11 @@ step 'status --json'
 [ "$(field "$work/status.json" session.running session.state)" = 'true ready' ] || fail "unexpected status: $(cat "$work/status.json")"
 display=$(field "$work/status.json" session.display)
 xauthority=$(field "$work/status.json" session.xauthority)
+runtime_dir=''
+if [ "$backend" = wayland ] && [ -z "$wayland_display" ]; then
+  runtime_dir=$(field "$work/status.json" session.runtimeDir)
+  [ -d "$runtime_dir" ] || fail "status has no runtimeDir: $(cat "$work/status.json")"
+fi
 logs=$(field "$work/status.json" session.logs)
 export DISPLAY=$display
 if [ -n "$xauthority" ]; then export XAUTHORITY=$xauthority; fi
@@ -134,6 +146,9 @@ for (const options of [[], ['--restart']]) {
   for (const key of ['DBUS_SESSION_BUS_ADDRESS', 'XDG_RUNTIME_DIR', 'XDG_CONFIG_HOME', 'XDG_CACHE_HOME', 'ICEAUTHORITY']) {
     if (actual[key] !== desktop[key]) throw new Error(`${key} differs: ${actual[key]} != ${desktop[key]}`);
   }
+  if (session.backend === 'wayland' && actual.WAYLAND_DISPLAY !== session.waylandDisplay) {
+    throw new Error(`WAYLAND_DISPLAY differs: ${actual.WAYLAND_DISPLAY} != ${session.waylandDisplay}`);
+  }
   if (!options.length) continue;
   const watcher = Number(fs.readFileSync(`/proc/${app.pid}/stat`, 'utf8').split(') ')[1].split(' ')[1]);
   if (environment(watcher).RELAY_SESSION !== path.dirname(record)) throw new Error('watcher has no session marker');
@@ -169,7 +184,13 @@ step 'nothing left running'
 left=$(grep -ls "RELAY_SESSION=$logs" /proc/[0-9]*/environ 2>/dev/null || true)
 [ -z "$left" ] || fail "processes left: $left"
 if [ "$backend" = wayland ]; then
+  step 'wayland cleanup'
   kill "$xterm_pid" 2>/dev/null || true
+  if [ -n "$wayland_display" ]; then
+    [ -S "$XDG_RUNTIME_DIR/$wayland_display" ] || fail "compositor socket $XDG_RUNTIME_DIR/$wayland_display is gone after down"
+  else
+    [ ! -e "$runtime_dir" ] || fail "runtime directory $runtime_dir still exists after down"
+  fi
 else
   for _ in $(seq 25); do running "$xterm_pid" || break; sleep 0.2; done
   if running "$xterm_pid"; then fail 'xterm still running after its display stopped'; fi
