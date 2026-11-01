@@ -4,7 +4,14 @@
 namespace relay {
 #ifdef RELAY_BACKEND_x11
 namespace x11 {
-bool initializeNativeBackend();
+bool initializeNativeBackend(const std::string& output);
+std::unique_ptr<CaptureSource> makeCaptureSource();
+std::unique_ptr<InputBackend> makeInputBackend();
+}
+#endif
+#ifdef RELAY_BACKEND_wayland
+namespace wayland {
+bool initializeNativeBackend(const std::string& output);
 std::unique_ptr<CaptureSource> makeCaptureSource();
 std::unique_ptr<InputBackend> makeInputBackend();
 }
@@ -14,6 +21,9 @@ namespace {
 const Backend backends[] = {
 #ifdef RELAY_BACKEND_x11
   {"x11", x11::initializeNativeBackend, x11::makeCaptureSource, x11::makeInputBackend},
+#endif
+#ifdef RELAY_BACKEND_wayland
+  {"wayland", wayland::initializeNativeBackend, wayland::makeCaptureSource, wayland::makeInputBackend},
 #endif
 };
 }

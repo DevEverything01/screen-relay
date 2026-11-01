@@ -8,7 +8,7 @@
 namespace relay {
 struct Backend {
   const char* name;
-  bool (*initialize)();
+  bool (*initialize)(const std::string& output);
   std::unique_ptr<CaptureSource> (*capture)();
   std::unique_ptr<InputBackend> (*input)();
 };
