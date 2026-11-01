@@ -53,7 +53,7 @@ function findLibrary(name: string): string | null {
   for (const directory of ['/lib', '/usr/lib', '/usr/local/lib', '/usr/lib64']) {
     try {
       const library = readdirSync(directory, { withFileTypes: true }).find((entry) => entry.name.startsWith(prefix) && (entry.isFile() || entry.isSymbolicLink()));
-      if (library) return join(directory, library.name);
+      if (library) return library.name;
     } catch {}
   }
   return null;
@@ -94,7 +94,7 @@ export async function cmdDoctor(args: HostArgs): Promise<number> {
     const root = typeof process.getuid === 'function' && process.getuid() === 0;
     const sudo = root ? '' : 'sudo ';
     let family: Family | undefined;
-    try { family = detectFamily(readFileSync('/etc/os-release', 'utf8')); } catch { family = undefined; }
+    try { family = detectFamily(readFileSync('/etc/os-release', 'utf8')); } catch {}
     const packageHint = (names: string[]) => family
       ? installCommand(family, packagesFor(family, names), sudo)
       : `Install ${names.join(' ')} with your system package manager.`;

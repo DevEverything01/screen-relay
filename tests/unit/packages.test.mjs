@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { after, test } from 'node:test';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -19,7 +19,7 @@ const bundle = buildSync({
 });
 const bundlePath = join(directory, 'packages.mjs');
 writeFileSync(bundlePath, bundle.outputFiles[0].contents);
-const { detectFamily, packagesFor, installCommand } = await import(pathToFileURL(bundlePath).href);
+const { detectFamily, packagesFor, installCommand, rows } = await import(pathToFileURL(bundlePath).href);
 
 const osReleases = {
   debian13: 'PRETTY_NAME="Debian GNU/Linux 13 (trixie)"\nNAME="Debian GNU/Linux"\nVERSION_ID="13"\nVERSION_CODENAME=trixie\nDEBIAN_VERSION_FULL=13.0\nID=debian\n',
@@ -60,10 +60,6 @@ test('packagesFor throws on an unknown logical name', () => {
 });
 
 test('every packages.tsv row has six non-empty fields and no repeated logical name', () => {
-  const rows = readFileSync(join(root, 'packages.tsv'), 'utf8')
-    .split('\n')
-    .filter((line) => line !== '' && !line.startsWith('#'))
-    .map((line) => line.split('\t'));
   for (const row of rows) {
     assert.equal(row.length, 6, row.join(' | '));
     assert.ok(row.every((field) => field !== ''), row.join(' | '));

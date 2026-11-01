@@ -36,6 +36,9 @@ pacman_install() {
 apk_install() {
   $elevate apk add --no-cache "$@"
 }
+x264_available() {
+  LC_ALL=C apt-cache policy "$1" | grep -q 'Candidate: [^ (]'
+}
 if [ "$deps" = 1 ] && [ "$(uname -s)" = Linux ]; then
   os_id=''
   os_like=''
@@ -101,23 +104,28 @@ if [ "$deps" = 1 ] && [ "$(uname -s)" = Linux ]; then
   done < packages.tsv
 
   if [ "$client" = 0 ]; then
-    if [ "$family" = apt ] && [ "$ubuntu" = 1 ] &&
-      ! LC_ALL=C apt-cache policy "$x264_package" | grep -q 'Candidate: [^ (]'; then
+    if [ "$family" = apt ] && [ "$ubuntu" = 1 ] && ! x264_available "$x264_package"; then
       if [ ! -f /etc/apt/sources.list.d/ubuntu.sources ]; then
         echo 'Enable the Ubuntu universe component, then rerun the installer.' >&2
         exit 1
       fi
       $elevate sed -i '/^Components:/{/universe/!s/$/ universe/}' /etc/apt/sources.list.d/ubuntu.sources
       $elevate apt-get update
-      if ! LC_ALL=C apt-cache policy "$x264_package" | grep -q 'Candidate: [^ (]'; then
+      if ! x264_available "$x264_package"; then
         echo "Cannot install $x264_package after enabling Ubuntu universe." >&2
         exit 1
       fi
     fi
-    if [ "$family" = dnf ] && ! $elevate dnf -q repoquery --available "$x264_package" | grep -q .; then
-      echo 'Enable RPM Fusion Free, then rerun the installer:' >&2
-      echo "${elevate:+$elevate }dnf -y install https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-\$(rpm -E %fedora).noarch.rpm" >&2
-      exit 1
+    if [ "$family" = dnf ]; then
+      if ! x264_query=$($elevate dnf -q repoquery --available "$x264_package"); then
+        echo 'dnf could not query repositories; fix the repository configuration or network, then rerun the installer.' >&2
+        exit 1
+      fi
+      if [ -z "$x264_query" ]; then
+        echo 'Enable RPM Fusion Free, then rerun the installer:' >&2
+        echo "${elevate:+$elevate }dnf -y install https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-\$(rpm -E %fedora).noarch.rpm" >&2
+        exit 1
+      fi
     fi
     for package in $optional_packages; do
       if apt-cache show "$package" >/dev/null 2>&1; then packages="$packages $package"; fi
@@ -165,6 +173,10 @@ if ! node_ok; then
   echo "Downloading Node $node_version for $platform"
   fetch "$node_url/$archive" > "$scratch/$archive"
   fetch "$node_url/SHASUMS256.txt" > "$scratch/SHASUMS256.txt"
+  if ! grep -q " $archive\$" "$scratch/SHASUMS256.txt"; then
+    echo "Node $node_version SHASUMS256.txt has no checksum for $archive; download it from $node_url yourself and rerun this script." >&2
+    exit 1
+  fi
   (cd "$scratch" && awk -v archive="$archive" '$2 == archive { print }' SHASUMS256.txt | checksum -c -) || {
     echo "Node $node_version failed checksum verification." >&2
     exit 1

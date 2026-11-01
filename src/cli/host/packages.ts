@@ -12,7 +12,7 @@ const families = new Map<string, Family>([
 
 const columns: Record<Family, number> = { apt: 2, dnf: 3, pacman: 4, apk: 5 };
 
-const rows = table
+export const rows = table
   .split('\n')
   .filter((line) => line !== '' && !line.startsWith('#'))
   .map((line) => line.split('\t'));
@@ -33,8 +33,7 @@ export function detectFamily(osRelease: string): Family | undefined {
 
 /** Distro package names for the logical names, in table order, deduplicated. Throws on an unknown name. */
 export function packagesFor(family: Family, names: string[]): string[] {
-  const logical = rows.map((row) => row[1]);
-  const unknown = names.find((name) => !logical.includes(name));
+  const unknown = names.find((name) => !rows.some((row) => row[1] === name));
   if (unknown !== undefined) throw new Error(`unknown package name: ${unknown}`);
   const packages = new Set<string>();
   for (const row of rows.filter((entry) => names.includes(entry[1]))) {
