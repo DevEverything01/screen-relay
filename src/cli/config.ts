@@ -5,12 +5,15 @@ import { inspect, TextDecoder } from 'node:util';
 import { parseDocument } from 'yaml';
 import { Failure } from './output.js';
 
+export const BACKENDS = ['x11', 'wayland'] as const;
+
 export type ConfigSettings = {
   display: { resolution: string };
   stream: { fps: number; bitrate: { min: number; start: number; max: number } };
   server: { port: number; bind: string; public: string | null; tls_cert: string | null; tls_key: string | null };
   keyboard: { layout: string };
   desktop: string;
+  backend?: string;
 };
 
 type Mapping = Record<string, unknown>;
@@ -22,7 +25,7 @@ const SECTIONS: Record<ConfigSection, readonly string[]> = {
   server: ['port', 'bind', 'public', 'tls_cert', 'tls_key'],
   keyboard: ['layout'],
 };
-const ROOT_KEYS = ['display', 'stream', 'server', 'keyboard', 'desktop'];
+const ROOT_KEYS = ['display', 'stream', 'server', 'keyboard', 'desktop', 'backend'];
 const BITRATE_KEYS = ['min', 'start', 'max'];
 const RESOLUTION = /^([0-9]+)x([0-9]+)$/;
 const BITRATE = /^([0-9]+)([kM]?)$/;
@@ -118,6 +121,13 @@ function textValue(value: unknown, path: string): string {
   return value;
 }
 
+export function backendValue(value: unknown, path: string): (typeof BACKENDS)[number] {
+  const text = textValue(value, path);
+  const backend = BACKENDS.find((candidate) => candidate === text);
+  if (!backend) wrong(path, value, BACKENDS.join(' or '));
+  return backend;
+}
+
 function resolution(value: unknown, path: string): string {
   if (typeof value !== 'string') wrong(path, value, 'WIDTHxHEIGHT such as 1280x720');
   const match = RESOLUTION.exec(value.trim());
@@ -199,6 +209,7 @@ const validators: Record<string, (value: unknown, path: string) => unknown> = {
     }
     return layout;
   },
+  backend: backendValue,
 };
 
 export function loadConfig(path?: string): [ConfigSettings, string | null, Set<string>] {
@@ -249,6 +260,7 @@ function applyConfig(settings: ConfigSettings, data: Mapping, present: Set<strin
     collect(errors, () => { settings.desktop = textValue(data.desktop, 'desktop'); });
     present.add('desktop');
   }
+  if (Object.hasOwn(data, 'backend')) collect(errors, () => { settings.backend = validators.backend(data.backend, 'backend') as string; });
 }
 
 export function applyTo(args: Record<string, unknown>, settings: ConfigSettings, present: Set<string>): void {
@@ -259,6 +271,7 @@ export function applyTo(args: Record<string, unknown>, settings: ConfigSettings,
     ['tls-cert', 'RELAY_TLS_CERT', 'server.tls_cert', settings.server.tls_cert],
     ['tls-key', 'RELAY_TLS_KEY', 'server.tls_key', settings.server.tls_key],
     ['desktop', 'RELAY_DESKTOP', 'desktop', present.has('desktop') ? settings.desktop : undefined],
+    ['backend', 'RELAY_BACKEND', 'backend', settings.backend],
     ['resolution', 'RELAY_RESOLUTION', 'display.resolution', settings.display.resolution],
     ['fps', 'RELAY_FPS', 'stream.fps', settings.stream.fps],
     ['bitrateMin', 'RELAY_BITRATE_MIN', 'stream.bitrate.min', settings.stream.bitrate.min],

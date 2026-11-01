@@ -43,7 +43,9 @@ export function printNext(args: OutputOptions, benefit: string, command: string)
 }
 
 export function formatReady(info: Record<string, any>, args: Record<string, any>, background = false): string {
-  const lines = [receipt('Started', info.name, args), row('Viewer', info.viewer, args), row('Display', info.display, args)];
+  const lines = [receipt('Started', info.name, args), row('Viewer', info.viewer, args)];
+  if (info.display) lines.push(row('Display', info.display, args));
+  if (info.waylandDisplay) lines.push(row('Wayland display', info.waylandDisplay, args));
   if (info.resolution) lines.push(row('Resolution', `${info.resolution}${info.fps ? ` at ${info.fps} fps` : ''}`, args));
   lines.push(row('Logs', info.logs, args));
   if (info.public) {
@@ -57,8 +59,8 @@ export function formatReady(info: Record<string, any>, args: Record<string, any>
 
 export function formatStatus(name: string, session: Record<string, any>, args: OutputOptions = {}): string {
   const lines = [row('Session', name, args), row('State', session.state, args)];
-  const labels: Record<string, string> = { url: 'URL', display: 'Display', resolution: 'Resolution', fps: 'FPS', logs: 'Logs', token: 'Token' };
-  for (const key of ['url', 'display', 'resolution', 'fps', 'logs', 'token']) {
+  const labels: Record<string, string> = { url: 'URL', display: 'Display', waylandDisplay: 'Wayland display', resolution: 'Resolution', fps: 'FPS', logs: 'Logs', token: 'Token' };
+  for (const key of ['url', 'display', 'waylandDisplay', 'resolution', 'fps', 'logs', 'token']) {
     if (session[key] !== undefined) lines.push(row(labels[key], session[key], args));
   }
   if (session.error) lines.push(row('Error', session.error.message, args));

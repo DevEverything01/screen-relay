@@ -1,15 +1,17 @@
 import { spawnSync, type ChildProcess } from 'node:child_process';
-import { accessSync, constants, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { accessSync, constants, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createServer } from 'node:net';
 import { deflateSync } from 'node:zlib';
+import { loadConfig } from '../config.js';
 import { emit, Failure, formatDoctor } from '../output.js';
 import { DEFAULT_PORT, clearedCommand, isLinux, run, spawnCleared, which } from './common.js';
 import type { HostArgs } from './common.js';
+import { detectFamily, installCommand, packagesFor, type Family } from './packages.js';
 import { stateDir } from './state.js';
-import { findEngine, startXvfb, xQuery } from './supervisor.js';
+import { BACKEND_PROGRAMS, findEngine, resolveBackend, startXvfb, xQuery } from './supervisor.js';
 
 const TINY_SVG = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>');
 function crc32(data: Buffer): number {
@@ -45,9 +47,17 @@ function tinyPng(): Buffer {
 }
 
 function findLibrary(name: string): string | null {
+  const prefix = `lib${name}.so`;
   const output = run(['ldconfig', '-p']).stdout ?? '';
   const match = new RegExp(`^\\s*(lib${name}\\.so[^\\s]*)`, 'm').exec(output);
-  return match?.[1] ?? null;
+  if (match) return match[1];
+  for (const directory of ['/lib', '/usr/lib', '/usr/local/lib', '/usr/lib64']) {
+    try {
+      const library = readdirSync(directory, { withFileTypes: true }).find((entry) => entry.name.startsWith(prefix) && (entry.isFile() || entry.isSymbolicLink()));
+      if (library) return library.name;
+    } catch {}
+  }
+  return null;
 }
 
 const ICON_TOOLS: Record<string, (image: string) => string[]> = {
@@ -84,10 +94,31 @@ export async function cmdDoctor(args: HostArgs): Promise<number> {
   if (linux) {
     const root = typeof process.getuid === 'function' && process.getuid() === 0;
     const sudo = root ? '' : 'sudo ';
-    const apt = `${sudo}apt-get install -y --no-install-recommends `;
+    let family: Family | undefined;
+    try { family = detectFamily(readFileSync('/etc/os-release', 'utf8')); } catch {}
+    const packageHint = (names: string[]) => family
+      ? installCommand(family, packagesFor(family, names), sudo)
+      : `Install ${names.join(' ')} with your system package manager.`;
+    let configuredBackend: string | undefined;
+    try {
+      configuredBackend = loadConfig(typeof args.config === 'string' && args.config ? args.config : undefined)[0].backend;
+    } catch (error) {
+      if (!(error instanceof Failure)) throw error;
+      check('config', false, error.message, error.hint);
+    }
+    const requestedBackend = process.env.RELAY_BACKEND ?? configuredBackend;
+    let backend: 'x11' | 'wayland';
+    try {
+      backend = resolveBackend(requestedBackend);
+    } catch (error) {
+      if (!(error instanceof Failure)) throw error;
+      check('backend', false, error.message, error.hint);
+      backend = requestedBackend === 'x11' || requestedBackend === 'wayland' ? requestedBackend : 'x11';
+    }
+    const x11 = backend === 'x11';
     check('user', true, root ? 'root' : `uid ${process.getuid?.() ?? -1}`);
     check('node', Number(process.versions.node.split('.')[0]) >= 26, process.versions.node, './install.sh');
-    check('setpriv', Boolean(which('setpriv')), which('setpriv') ?? 'not found', `${apt}util-linux`);
+    check('setpriv', Boolean(which('setpriv')), which('setpriv') ?? 'not found', packageHint(['setpriv']));
     let homeWritable = true;
     try { accessSync(homedir(), constants.W_OK); } catch { homeWritable = false; }
     check('home', homeWritable, homedir(), 'export HOME=/path/to/a/writable/dir');
@@ -99,27 +130,36 @@ export async function cmdDoctor(args: HostArgs): Promise<number> {
     const engineRuns = Boolean(engine && run([engine, '--help']).status === 0);
     check('engine', engineRuns, engine ?? 'relay-engine not found', './install.sh');
     const x264 = findLibrary('x264');
-    check('libx264', Boolean(x264), x264 ?? 'not found', `${apt}$(apt-cache search --names-only '^libx264-[0-9]+$' | cut -d' ' -f1)`);
-    for (const [program, packageName] of [
-      ['Xvfb', 'xvfb'], ['xauth', 'xauth'], ['xprop', 'x11-utils'], ['xwininfo', 'x11-utils'], ['xdpyinfo', 'x11-utils'], ['setxkbmap', 'x11-xkb-utils'],
-    ]) check(program, Boolean(which(program)), which(program) ?? 'not found', `${apt}${packageName}`);
-    check('dbus-run-session', Boolean(which('dbus-run-session')), which('dbus-run-session') ?? 'not found', `${apt}dbus`, 'warn');
-    check('xfce4-session', Boolean(which('xfce4-session')), which('xfce4-session') ?? 'not found (use --desktop none)', `./install.sh (or ${apt}xfce4-session xfwm4 xfce4-panel xfdesktop4)`, 'warn');
-    let socketUsable = false;
-    try {
-      const info = statSync('/tmp/.X11-unix');
-      socketUsable = (info.mode & 0o1777) === 0o1777 || info.uid === process.getuid?.();
-    } catch {
-      try { accessSync('/tmp', constants.W_OK); socketUsable = true; } catch {}
+    const rpmFusionCommand = `${sudo}dnf -y install https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm`;
+    const x264Hint = family === 'apt'
+      ? installCommand(family, ["$(apt-cache search --names-only '^libx264-[0-9]+$' | cut -d' ' -f1)"], sudo)
+      : family === 'dnf'
+        ? `Enable RPM Fusion Free with ${rpmFusionCommand}, then install with ${packageHint(['x264-dev'])}`
+        : packageHint(['x264-dev']);
+    check('libx264', Boolean(x264), x264 ?? 'not found', x264Hint);
+    for (const program of BACKEND_PROGRAMS[backend]) {
+      check(program, Boolean(which(program)), which(program) ?? 'not found', packageHint([program === 'swaymsg' ? 'sway' : program]));
     }
-    check('/tmp/.X11-unix', socketUsable, socketUsable ? 'usable' : 'not writable for Xvfb', `${sudo}mkdir -p /tmp/.X11-unix && ${sudo}chmod 1777 /tmp/.X11-unix`);
+    if (x11) {
+      check('dbus-run-session', Boolean(which('dbus-run-session')), which('dbus-run-session') ?? 'not found', packageHint(['dbus-run-session']), 'warn');
+      const xfcePackages = ['xfce4-session', 'xfwm4', 'xfce4-panel', 'xfdesktop'];
+      check('xfce4-session', Boolean(which('xfce4-session')), which('xfce4-session') ?? 'not found (use --desktop none)', `./install.sh (or ${packageHint(xfcePackages)})`, 'warn');
+      let socketUsable = false;
+      try {
+        const info = statSync('/tmp/.X11-unix');
+        socketUsable = (info.mode & 0o1777) === 0o1777 || info.uid === process.getuid?.();
+      } catch {
+        try { accessSync('/tmp', constants.W_OK); socketUsable = true; } catch {}
+      }
+      check('/tmp/.X11-unix', socketUsable, socketUsable ? 'usable' : 'not writable for Xvfb', `${sudo}mkdir -p /tmp/.X11-unix && ${sudo}chmod 1777 /tmp/.X11-unix`);
+    }
     const free = await new Promise<boolean>((resolve) => {
       const server = createServer();
       server.once('error', () => resolve(false));
       server.listen(DEFAULT_PORT, '127.0.0.1', () => server.close(() => resolve(true)));
     });
     check('port', free, `127.0.0.1:${DEFAULT_PORT} ${free ? 'free' : 'in use'}`, `relay up --port ${DEFAULT_PORT + 1}`, 'warn');
-    if (which('Xvfb') && which('xauth') && which('xdpyinfo')) {
+    if (x11 && which('Xvfb') && which('xauth') && which('xdpyinfo')) {
       const scratch = mkdtempSync(join(tmpdir(), 'relay-doctor-'));
       const auth = join(scratch, 'auth');
       const children: ChildProcess[] = [];
@@ -146,25 +186,43 @@ export async function cmdDoctor(args: HostArgs): Promise<number> {
     }
     const capLine = readFileSync('/proc/self/status', 'utf8').split(/\r?\n/).find((line) => line.startsWith('CapAmb:'))?.split(/\s+/)[1] ?? '0';
     check('ambient caps', BigInt(`0x${capLine}`) === 0n, capLine === '0' ? 'none' : `${capLine}: apps that inherit them crash on icons`, 'Start apps with `relay run -- APP`, which clears them; the desktop and its menus already do.', 'warn');
-    const library = findLibrary('gdk_pixbuf-2.0');
-    const tool = iconTool();
-    if (!library) check('icon decoding', false, 'gdk-pixbuf not installed (desktop not installed)', './install.sh', 'warn');
-    else if (!tool) check('icon decoding', false, `gdk-pixbuf tools not installed (${Object.keys(ICON_TOOLS).join(' or ')})`, './install.sh', 'warn');
-    else {
-      let [ok, message] = iconProbe(tool, '.png', tinyPng());
-      let kind = 'PNG';
-      if (ok) { [ok, message] = iconProbe(tool, '.svg', TINY_SVG); kind = 'SVG'; }
-      let fix = 'See the detail; read `relay logs desktop` after a failed start.';
-      if (!ok && run(['apt-cache', 'show', 'glycin-loaders']).status === 0 && run(['dpkg', '-s', 'glycin-loaders']).status !== 0) fix = `${apt}glycin-loaders`;
-      else if (!ok && which('bwrap')) {
-        const command = clearedCommand(['bwrap', '--ro-bind', '/', '/', '--unshare-user', 'true']);
-        const sandbox = spawnSync(command[0], command.slice(1), { encoding: 'utf8' });
-        if (sandbox.status !== 0) {
-          message += `; bubblewrap failed: ${sandbox.stderr?.trim() ?? ''}`;
-          fix = 'Image loaders sandbox with bubblewrap, which needs unprivileged user namespaces: allow them for bwrap (AppArmor profile or kernel.unprivileged_userns_clone=1). relay never disables sandboxing.';
+    if (x11) {
+      const library = findLibrary('gdk_pixbuf-2.0');
+      const tool = iconTool();
+      const gdkPixbufHint = family === 'apt' ? './install.sh' : packageHint(['gdk-pixbuf-bin']);
+      if (!library) check('icon decoding', false, 'gdk-pixbuf not installed (desktop not installed)', gdkPixbufHint, 'warn');
+      else if (!tool) check('icon decoding', false, `gdk-pixbuf tools not installed (${Object.keys(ICON_TOOLS).join(' or ')})`, gdkPixbufHint, 'warn');
+      else {
+        let [ok, message] = iconProbe(tool, '.png', tinyPng());
+        let kind = 'PNG';
+        if (ok) { [ok, message] = iconProbe(tool, '.svg', TINY_SVG); kind = 'SVG'; }
+        const defaultFix = 'See the detail; read `relay logs desktop` after a failed start.';
+        let aptGlycinMissing = false;
+        if (!ok && family === 'apt') {
+          const glycinPackage = packagesFor(family, ['glycin-loaders'])[0];
+          aptGlycinMissing = run(['apt-cache', 'show', glycinPackage]).status === 0 && run(['dpkg', '-s', glycinPackage]).status !== 0;
         }
+        let bubblewrapNeedsUserNamespaces = false;
+        if (!ok && !aptGlycinMissing && which('bwrap')) {
+          const command = clearedCommand(['bwrap', '--ro-bind', '/', '/', '--unshare-user', 'true']);
+          const sandbox = spawnSync(command[0], command.slice(1), { encoding: 'utf8' });
+          if (sandbox.status !== 0) {
+            message += `; bubblewrap failed: ${sandbox.stderr?.trim() ?? ''}`;
+            bubblewrapNeedsUserNamespaces = true;
+          }
+        }
+        let fix: string;
+        if (aptGlycinMissing) {
+          fix = packageHint(['glycin-loaders']);
+        } else if (bubblewrapNeedsUserNamespaces) {
+          fix = 'Image loaders sandbox with bubblewrap, which needs unprivileged user namespaces: allow them for bwrap (AppArmor profile or kernel.unprivileged_userns_clone=1). relay never disables sandboxing.';
+        } else if (!ok && family !== 'apt' && kind === 'SVG') {
+          fix = packageHint(['glycin-loaders']);
+        } else {
+          fix = defaultFix;
+        }
+        check('icon decoding', ok, ok ? 'gdk-pixbuf decodes PNG and SVG' : `${kind}: ${message}`, fix, kind === 'SVG' ? 'warn' : 'fail');
       }
-      check('icon decoding', ok, ok ? 'gdk-pixbuf decodes PNG and SVG' : `${kind}: ${message}`, fix, kind === 'SVG' ? 'warn' : 'fail');
     }
   }
   const failed = checks.some((item) => item.status === 'fail');

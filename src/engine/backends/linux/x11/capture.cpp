@@ -190,7 +190,8 @@ class X11CaptureSource final : public CaptureSource {
   }
 };
 }
-bool initializeNativeBackend() {
+namespace x11 {
+bool initializeNativeBackend(const std::string&) {
   static std::once_flag once;
   static bool initialized = false;
   std::call_once(once, [] { initialized = XInitThreads() != 0; });
@@ -200,5 +201,6 @@ std::unique_ptr<CaptureSource> makeCaptureSource() {
   auto source = std::make_unique<X11CaptureSource>();
   source->init();
   return source;
+}
 }
 }

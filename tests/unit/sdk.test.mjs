@@ -229,7 +229,10 @@ test('HTTP error bodies distinguish screenshot contention from service failure',
     globalThis.fetch = async () => new Response('{"error":"busy"}', { status: 503 });
     await assert.rejects(capabilities(), { code: 'BUSY', reason: 'busy', class: 'conflict' });
     globalThis.fetch = async () => new Response('{"error":"screenshot_unavailable"}', { status: 503 });
-    await assert.rejects(capabilities(), { code: 'HTTP_ERROR', reason: 'component_failed', class: 'platform' });
+    await assert.rejects(capabilities(), {
+      code: 'HTTP_ERROR', reason: 'component_failed', class: 'platform',
+      message: 'The engine could not take a screenshot. Read the engine log with relay logs engine.',
+    });
   } finally { globalThis.fetch = original; }
 });
 

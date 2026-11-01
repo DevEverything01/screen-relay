@@ -18,7 +18,22 @@ const state = await import(pathToFileURL(bundlePath).href);
 const supervisorBundle = buildSync({ entryPoints: [join(root, 'src/cli/host/supervisor.ts')], bundle: true, platform: 'node', format: 'esm', banner: nodeBanner, write: false });
 const supervisorPath = join(directory, 'supervisor.mjs');
 writeFileSync(supervisorPath, supervisorBundle.outputFiles[0].contents);
-const { splitCommand } = await import(pathToFileURL(supervisorPath).href);
+const { resolveBackend, splitCommand } = await import(pathToFileURL(supervisorPath).href);
+
+test('backend follows the display unless explicitly selected', () => {
+  const engine = join(directory, 'relay-engine');
+  writeFileSync(engine, "#!/bin/sh\nprintf '%s\\n' 'Compiled backends: x11, wayland'\n", { mode: 0o755 });
+  try {
+    assert.equal(resolveBackend(undefined, 'wayland-1'), 'wayland');
+    assert.equal(resolveBackend(undefined, ':0'), 'x11');
+    assert.throws(() => resolveBackend('x11', 'wayland-1'), { reason: 'invalid_input' });
+    assert.throws(() => resolveBackend('wayland', ':0'), { reason: 'invalid_input' });
+    writeFileSync(engine, "#!/bin/sh\nprintf '%s\\n' 'Compiled backends: x11'\n");
+    assert.throws(() => resolveBackend(undefined, 'wayland-1'), { reason: 'missing_dependency' });
+  } finally {
+    rmSync(engine, { force: true });
+  }
+});
 
 test('desktop command parsing preserves quoted empty arguments', () => {
   assert.deepEqual(splitCommand('my-desktop --profile "" --fullscreen'), ['my-desktop', '--profile', '', '--fullscreen']);

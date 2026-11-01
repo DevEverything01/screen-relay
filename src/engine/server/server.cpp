@@ -1,4 +1,5 @@
 #include "server.hpp"
+#include "backend.hpp"
 #include "core/capture-source.hpp"
 #include "metrics.hpp"
 #include <algorithm>
@@ -52,7 +53,7 @@ Server::Server(Config settings) : config(std::move(settings)), capture([this](En
   pending.push_back(std::move(frame));
   lws_cancel_service(context);
   return true;
-}, CaptureSettings{config.fps, config.bitrate_min, config.bitrate_start, config.bitrate_max}, makeCaptureSource,
+}, CaptureSettings{config.fps, config.bitrate_min, config.bitrate_start, config.bitrate_max}, backendFor(config.backend).capture,
 [this](uint32_t gen, CursorImage&& cursor) {
   std::lock_guard<std::mutex> lock(mutex);
   if (!context || !generation || gen != generation) return;
@@ -310,12 +311,14 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
           s->screenshot_client = wsi; response->image_headers = false; response->offset = 0;
           lws_set_timer_usecs(wsi, 5000000); return 0;
         }
-        const std::string json = "{\"version\":1,\"backend\":\"" + std::string(s->input->name()) +
+        const std::string backend = s->input->name();
+        const std::string json = "{\"version\":1,\"backend\":\"" + backend +
             "\",\"width\":" + std::to_string(s->width) + ",\"height\":" + std::to_string(s->height) +
             ",\"fps\":" + std::to_string(s->config.fps) +
             ",\"input\":{\"keyboard\":true,\"pointer\":true,\"buttons\":true,\"wheel\":true}," +
-            "\"screenshot\":\"/screenshot.png\",\"control\":\"/control\",\"wayland\":false," +
-            "\"max_input_pending\":32,\"cursor\":" + (s->capture.stats().cursor_supported ? "true" : "false") +
+            "\"screenshot\":\"/screenshot.png\",\"control\":\"/control\",\"wayland\":" +
+            (backend == "wayland" ? "true" : "false") +
+            ",\"max_input_pending\":32,\"cursor\":" + (s->capture.stats().cursor_supported ? "true" : "false") +
             ",\"input_endpoint\":\"/input\",\"max_input_batch\":" + std::to_string(max_input_batch) +
             ",\"audio\":false,\"clipboard\":false,\"resize\":false,\"ime\":false}";
         return jsonResponse(wsi, response, HTTP_STATUS_OK, json);

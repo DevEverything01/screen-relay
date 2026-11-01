@@ -1,10 +1,11 @@
 {
   "title": "Relay documentation",
-  "description": "Stream a Linux X11 desktop to a browser and control it from a CLI or a Node SDK.",
+  "description": "Stream a Linux desktop to a browser and control it from a CLI or a Node SDK.",
   "root": true,
   "pages": [
     "index",
     "getting-started",
+    "wayland",
     "---Reference---",
     "cli",
     "configuration",

@@ -4,13 +4,23 @@ Relay streams a Linux desktop to a browser and lets people and agents control it
 
 ## Quickstart
 
-On a Debian or Ubuntu VM, from a clone of this repository:
+On a Debian, Ubuntu, Fedora, Arch, or Alpine VM, from a clone of this repository:
 
 ```sh
 ./install.sh
 export PATH="$HOME/.local/bin:$PATH"
 relay up
 ```
+
+For Wayland:
+
+```sh
+./install.sh --backend wayland
+export PATH="$HOME/.local/bin:$PATH"
+relay up -d --backend wayland
+```
+
+See the [Wayland guide](https://relay.labs.vercel.dev/docs/wayland) to attach to an existing compositor or capture one output.
 
 `relay up` prints a viewer link. Open it in a browser with H.264 WebCodecs (Chrome, Edge, or Safari). From your laptop, forward the port first:
 

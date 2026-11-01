@@ -29,8 +29,10 @@ sandbox extend <name> 1h
 
 ## Control it
 
+With the default install, the desktop is X11 with XFCE, so start a terminal with `xfce4-terminal`:
+
 ```sh
-relay run -- xterm
+relay run -- xfce4-terminal
 relay screenshot /tmp/relay.png
 relay click 0.5 0.5
 relay type "echo hello"
@@ -38,14 +40,14 @@ relay key Enter
 relay screenshot /tmp/relay-after.png
 ```
 
-Coordinates are fractions from `0` to `1`. `type` sends layout-neutral text; `key` sends physical combos (`cmd` and `meta` alias `super`). Start apps with `relay run -- APP [ARGS...]`: it shares the desktop's display, D-Bus session bus (so accessibility tools can find the app) and runtime directories, and clears ambient capabilities. Apps stop with `relay down`.
+The rules for coordinates, `type`, `key`, apps and control are in `relay skills get core`.
 
 ## Errors in the sandbox
 
 - `unreachable` with `Connection refused.`: the engine is not listening; `relay up -d`. With `The host name did not resolve.` or `The TLS certificate was rejected.`, check the edge URL and certificate, then `relay status --url https://<id>.vercel.run --token-file <FILE>`.
 - `unauthorized`: use the session's token with `--token-file FILE` or `RELAY_TOKEN_FILE`.
 - `forbidden`: `--public` does not match the URL you reached, or a proxy rewrote `Host`/`Origin`.
-- `busy`: a viewer or client already holds control; close it and retry, or keep taking screenshots.
+- `busy`: another controller holds input. See One controller in `relay skills get core`.
 - `component_failed` or `timeout` from `up`: read `data.component`, then `relay logs <component>` and `relay doctor`.
 
 Stop the desktop with `relay down` before stopping the sandbox. Load the full workflow with `relay skills get core`.

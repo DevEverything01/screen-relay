@@ -1,5 +1,5 @@
 #include "server.hpp"
-#include "core/capture-source.hpp"
+#include "backend.hpp"
 #include <csignal>
 #include <iostream>
 #include <unistd.h>
@@ -24,7 +24,8 @@ int main(int argc, char** argv) {
   try {
     if (!relay::parseConfig(argc, argv, config)) return 0;
   } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 2; }
-  if (!relay::initializeNativeBackend()) { std::cerr << "Native backend initialization failed\n"; return 1; }
+  const auto& backend = relay::backendFor(config.backend);
+  if (!backend.initialize(config.output)) { std::cerr << "Native backend initialization failed\n"; return 1; }
   std::signal(SIGINT, signalStop); std::signal(SIGTERM, signalStop);
   relay::Server s(config);
   std::string captureError;
@@ -33,7 +34,7 @@ int main(int argc, char** argv) {
     s.capture.stop(); return 1;
   }
   try {
-    s.input = std::make_unique<relay::InputController>(relay::makeInputBackend());
+    s.input = std::make_unique<relay::InputController>(backend.input());
     const auto dimensions = s.input->dimensions();
     relay::requireSurfaceSize(dimensions.first, dimensions.second);
     s.width = dimensions.first; s.height = dimensions.second;

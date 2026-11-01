@@ -1,24 +1,58 @@
 CXX ?= g++
-BACKEND ?= x11
+BACKENDS ?= x11
+HAS_WAYLAND = $(filter wayland,$(BACKENDS))
+AVAILABLE_BACKENDS = x11 wayland
 BACKEND_PKGS_x11 = x11 xext xdamage xfixes xtst
 BACKEND_DIR_x11 = linux/x11
-ifeq ($(BACKEND_PKGS_$(BACKEND)),)
-$(error Unknown BACKEND '$(BACKEND)'; available: x11)
+BACKEND_PKGS_wayland = wayland-client xkbcommon
+BACKEND_DIR_wayland = linux/wayland
+ifneq ($(filter-out $(AVAILABLE_BACKENDS),$(BACKENDS)),)
+$(error Unknown BACKENDS '$(filter-out $(AVAILABLE_BACKENDS),$(BACKENDS))'; available: $(AVAILABLE_BACKENDS))
 endif
+ifeq ($(strip $(BACKENDS)),)
+$(error BACKENDS must name at least one backend; available: $(AVAILABLE_BACKENDS))
+endif
+BACKEND_PKGS = $(sort $(foreach backend,$(BACKENDS),$(BACKEND_PKGS_$(backend))))
+BACKEND_DIRS = $(sort $(foreach backend,$(BACKENDS),$(BACKEND_DIR_$(backend))))
+BACKEND_CPPFLAGS = $(foreach backend,$(sort $(BACKENDS)),-DRELAY_BACKEND_$(backend))
 CODEC_PKGS = x264
-PKGS = $(BACKEND_PKGS_$(BACKEND)) $(CODEC_PKGS) libwebsockets zlib
-CPPFLAGS += -Isrc/engine $(shell pkg-config --cflags $(PKGS))
+PKGS = $(sort $(BACKEND_PKGS) $(CODEC_PKGS) libwebsockets zlib)
+CPPFLAGS += -Isrc/engine $(BACKEND_CPPFLAGS) $(shell pkg-config --cflags $(PKGS))
 CXXFLAGS ?= -O2
 CXXFLAGS += -std=c++17 -Wall -Wextra -Wpedantic -pthread
 LDLIBS += $(shell pkg-config --libs $(PKGS)) -pthread
 
 CORE_SRCS = $(wildcard src/engine/core/*.cpp)
-ENGINE_SRCS = $(CORE_SRCS) $(wildcard src/engine/server/*.cpp src/engine/backends/$(BACKEND_DIR_$(BACKEND))/*.cpp)
-HEADERS = $(wildcard src/engine/*/*.hpp src/engine/backends/$(BACKEND_DIR_$(BACKEND))/*.hpp)
+BACKEND_SRCS = $(foreach dir,$(BACKEND_DIRS),$(wildcard src/engine/backends/$(dir)/*.cpp))
+ENGINE_SRCS = $(CORE_SRCS) $(wildcard src/engine/server/*.cpp) $(BACKEND_SRCS)
+HEADERS = $(wildcard src/engine/*/*.hpp src/engine/backends/linux/*.hpp) $(foreach dir,$(BACKEND_DIRS),$(wildcard src/engine/backends/$(dir)/*.hpp))
+
+WAYLAND_PROTOCOLS = wlr-screencopy-unstable-v1 wlr-virtual-pointer-unstable-v1 virtual-keyboard-unstable-v1
+.PHONY: all install test test-color test-flow test-input test-backend test-server test-keymap clean FORCE
+all: relay-engine
+
+ifeq ($(HAS_WAYLAND),wayland)
+WAYLAND_SCANNER = $(shell pkg-config --variable=wayland_scanner wayland-scanner)
+WAYLAND_PROTOCOL_HEADERS = $(addprefix build/protocols/,$(addsuffix -client-protocol.h,$(WAYLAND_PROTOCOLS)))
+WAYLAND_PROTOCOL_SOURCES = $(addprefix build/protocols/,$(addsuffix -protocol.c,$(WAYLAND_PROTOCOLS)))
+WAYLAND_PROTOCOL_OBJECTS = $(addprefix build/protocols/,$(addsuffix -protocol.o,$(WAYLAND_PROTOCOLS)))
+CPPFLAGS += -Ibuild/protocols
+
+$(WAYLAND_PROTOCOL_HEADERS): build/protocols/%-client-protocol.h: src/engine/backends/linux/wayland/protocols/%.xml
+	mkdir -p $(@D)
+	$(WAYLAND_SCANNER) client-header $< $@
+
+$(WAYLAND_PROTOCOL_SOURCES): build/protocols/%-protocol.c: src/engine/backends/linux/wayland/protocols/%.xml
+	mkdir -p $(@D)
+	$(WAYLAND_SCANNER) private-code $< $@
+
+$(WAYLAND_PROTOCOL_OBJECTS): build/protocols/%-protocol.o: build/protocols/%-protocol.c build/protocols/%-client-protocol.h
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(ENGINE_SRCS): $(WAYLAND_PROTOCOL_HEADERS)
+endif
 
 PREFIX ?= /usr/local
-.PHONY: all install test test-color test-flow test-input test-backend test-server clean
-all: relay-engine
 
 install: relay-engine
 	@test -f dist/viewer/viewer.js || { echo 'Run npm run build first (dist/viewer is missing).' >&2; exit 1; }
@@ -27,8 +61,14 @@ install: relay-engine
 	install -m 0644 dist/viewer/index.html dist/viewer/viewer.js "$(DESTDIR)$(PREFIX)/lib/relay/viewer/"
 	ln -sfn ../lib/relay/relay-engine "$(DESTDIR)$(PREFIX)/bin/relay-engine"
 
-relay-engine: $(ENGINE_SRCS) $(HEADERS)
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(ENGINE_SRCS) -o $@ $(LDLIBS)
+build/backends: FORCE
+	mkdir -p build
+	@printf '%s\n' '$(strip $(BACKENDS))' | cmp -s - $@ || printf '%s\n' '$(strip $(BACKENDS))' > $@
+
+FORCE:
+
+relay-engine: $(ENGINE_SRCS) $(HEADERS) $(WAYLAND_PROTOCOL_OBJECTS) build/backends
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(ENGINE_SRCS) $(WAYLAND_PROTOCOL_OBJECTS) -o $@ $(LDLIBS)
 
 build/color-test: tests/unit/color-test.cpp src/engine/core/color.cpp src/engine/core/color.hpp
 	mkdir -p build
@@ -58,21 +98,28 @@ build/backend-source-test: tests/unit/backend-source-test.cpp $(CORE_SRCS) $(wil
 test-backend: build/backend-source-test
 	./build/backend-source-test
 
-SERVER_TEST_SRCS = src/engine/server/config.cpp src/engine/server/metrics.cpp src/engine/server/wire.cpp
+SERVER_TEST_SRCS = src/engine/server/config.cpp src/engine/server/metrics.cpp src/engine/server/wire.cpp src/engine/server/backend.cpp src/engine/core/input.cpp $(BACKEND_SRCS)
 
 build/test-viewer/viewer.js:
 	mkdir -p build/test-viewer
 	: > build/test-viewer/index.html
 	: > build/test-viewer/viewer.js
 
-build/server-test: tests/unit/server-test.cpp $(SERVER_TEST_SRCS) $(wildcard src/engine/server/*.hpp) $(wildcard src/engine/core/*.hpp) build/test-viewer/viewer.js
+build/server-test: tests/unit/server-test.cpp $(SERVER_TEST_SRCS) $(HEADERS) $(WAYLAND_PROTOCOL_HEADERS) $(WAYLAND_PROTOCOL_OBJECTS) build/test-viewer/viewer.js build/backends
 	mkdir -p build
-	$(CXX) -Isrc/engine $(shell pkg-config --cflags libwebsockets) $(CXXFLAGS) tests/unit/server-test.cpp $(SERVER_TEST_SRCS) -o $@ $(shell pkg-config --libs libwebsockets)
+	$(CXX) -Isrc/engine $(BACKEND_CPPFLAGS) $(if $(HAS_WAYLAND),-Ibuild/protocols) $(shell pkg-config --cflags $(BACKEND_PKGS) libwebsockets) $(CXXFLAGS) tests/unit/server-test.cpp $(SERVER_TEST_SRCS) $(WAYLAND_PROTOCOL_OBJECTS) -o $@ $(shell pkg-config --libs $(BACKEND_PKGS) libwebsockets)
 
 test-server: build/server-test
 	./build/server-test
 
-test: test-color test-flow test-input test-backend test-server
+build/keymap-test: tests/unit/keymap-test.cpp src/engine/backends/linux/wayland/keymap.cpp
+	mkdir -p build
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(shell pkg-config --cflags xkbcommon) $^ -o $@ $(shell pkg-config --libs xkbcommon)
+
+test-keymap: build/keymap-test
+	./build/keymap-test
+
+test: test-color test-flow test-input test-backend test-server $(if $(HAS_WAYLAND),test-keymap)
 
 clean:
 	rm -rf build relay-engine

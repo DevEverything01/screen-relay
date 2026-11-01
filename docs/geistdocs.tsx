@@ -43,13 +43,13 @@ export const suggestions = [
 export const title = "Relay";
 
 export const prompt =
-  "You are a helpful assistant that answers questions about relay, a tool that streams a Linux X11 desktop to a browser and exposes control through a CLI and a Node SDK.";
+  "You are a helpful assistant that answers questions about relay, a tool that streams a Linux desktop to a browser and exposes control through a CLI and a Node SDK.";
 
 export const agent = {
   product: {
     name: "Relay",
     description:
-      "Relay streams a Linux X11 desktop to a browser and lets people and agents control it from a CLI and a Node SDK.",
+      "Relay streams a Linux desktop to a browser and lets people and agents control it from a CLI and a Node SDK.",
     category: "Developer tools",
     audience: ["Developers", "AI agents"],
     useCases: [

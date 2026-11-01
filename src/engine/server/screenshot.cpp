@@ -1,4 +1,6 @@
 #include "screenshot.hpp"
+#include "backend.hpp"
+#include "server.hpp"
 #include "core/capture-source.hpp"
 #include <libwebsockets.h>
 #include <zlib.h>
@@ -24,8 +26,8 @@ void chunk(std::vector<uint8_t>& bytes, const char* type, const uint8_t* data, s
 struct Resources {
   std::unique_ptr<CaptureSource> source;
   int width = 0, height = 0;
-  void init() {
-    source = makeCaptureSource();
+  void init(const Backend& backend) {
+    source = backend.capture();
     require(bool(source), "screenshot source unavailable");
     const auto dimensions = source->dimensions();
     width = dimensions.first; height = dimensions.second;
@@ -83,6 +85,7 @@ void Screenshot::stop() {
   if (worker_.joinable()) worker_.join();
 }
 void Screenshot::run(lws_context* context) {
+  const auto& backend = backendFor(static_cast<Server*>(lws_context_user(context))->config.backend);
   std::unique_ptr<Resources> resources;
   for (;;) {
     { std::unique_lock<std::mutex> lock(mutex_);
@@ -93,7 +96,7 @@ void Screenshot::run(lws_context* context) {
     std::vector<uint8_t> result;
     std::string error;
     try {
-      if (!resources) { resources = std::make_unique<Resources>(); resources->init(); }
+      if (!resources) { resources = std::make_unique<Resources>(); resources->init(backend); }
       result = resources->capture();
     } catch (const std::exception& failure) { error = failure.what(); resources.reset(); }
     { std::lock_guard<std::mutex> lock(mutex_);

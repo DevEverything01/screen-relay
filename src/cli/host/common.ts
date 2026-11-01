@@ -8,7 +8,7 @@ export const DEFAULT_PORT = 8080;
 export const COMPONENTS: string[] = ['display', 'dbus', 'desktop', 'engine', 'apps'];
 export const LAUNCHER_DIR = dirname(fileURLToPath(import.meta.url));
 
-export type HostArgs = Record<string, unknown> & { command: string; json: boolean; name: string; signal?: AbortSignal };
+export type HostArgs = Record<string, unknown> & { command: string; json: boolean; name: string; backend?: string; output?: string; signal?: AbortSignal };
 
 export function isLinux(): boolean {
   return process.platform.startsWith('linux');

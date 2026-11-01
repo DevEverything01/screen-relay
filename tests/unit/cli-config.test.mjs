@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { after, test } from 'node:test';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -6,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { buildSync } from 'esbuild';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
+const cli = join(root, 'dist/cli/relay.mjs');
 const entryPoint = join(root, 'src/cli/config.ts');
 const directory = mkdtempSync(join(root, '.cli-config-test-'));
 after(() => rmSync(directory, { recursive: true, force: true }));
@@ -125,4 +127,24 @@ test('defaults keyboard layout to us and validates its allowed characters', () =
   assert.equal(config.loadConfig()[0].keyboard.layout, 'us');
   assert.throws(() => config.loadConfig(write('keyboard:\n  layout: fr!\n')), /keyboard\.layout/);
   assert.throws(() => config.loadConfig(write('keyboard:\n  layout: 7\n')), /keyboard\.layout.*a string/);
+});
+
+test('backend from the config file accepts x11 or wayland and names them when wrong', () => {
+  for (const backend of ['x11', 'wayland']) {
+    assert.equal(config.loadConfig(write(`backend: ${backend}\n`))[0].backend, backend);
+  }
+  assert.throws(() => config.loadConfig(write('backend: mir\n')), /backend.*x11 or wayland/);
+});
+
+test('doctor reports an invalid RELAY_BACKEND as a failed check', { skip: process.platform !== 'linux' }, () => {
+  const path = write('backend: x11\n');
+  const result = spawnSync(process.execPath, [cli, 'doctor', '--config', path, '--json'], {
+    encoding: 'utf8', timeout: 15000, env: { ...process.env, RELAY_BACKEND: 'wayl' },
+  });
+  assert.ifError(result.error);
+  assert.equal(result.status, 1);
+  const { checks } = JSON.parse(result.stdout);
+  const backend = checks.find((item) => item.name === 'backend');
+  assert.equal(backend.status, 'fail');
+  assert.match(backend.detail, /RELAY_BACKEND.*wayl.*x11 or wayland/);
 });

@@ -20,11 +20,17 @@ The command is in `~/.local/bin`, which a fresh shell often does not have on `PA
 
 Fix: run `export PATH="$HOME/.local/bin:$PATH"` and add it to your shell profile, or run `~/.local/bin/relay` directly.
 
-### The installer fails on a non-apt distribution
+### The installer fails on an unsupported distribution
 
-Automatic dependency installation needs apt (Debian or Ubuntu). It also needs root or passwordless `sudo`.
+Automatic dependency installation covers Debian, Ubuntu, Fedora, Arch Linux, and Alpine. On any other distribution the installer exits and names these. It also needs root or passwordless `sudo`.
 
-Fix: install the equivalent packages yourself, then run `./install.sh --no-deps`.
+Fix: install the equivalent packages yourself, then run `./install.sh --no-deps`. On such a distribution, `--client-only` needs `--no-deps` too.
+
+### The installer stops and asks for RPM Fusion on Fedora
+
+On Fedora, RPM Fusion Free provides the x264 library relay needs. The installer checks whether the x264 package is available before it installs packages, and prints the command to enable the repository if it is not.
+
+Fix: run the printed command, then run `./install.sh` again. The command is also in [Getting started](/docs/getting-started).
 
 ### `unsupported_platform`: "Host commands run on Linux only"
 
@@ -34,9 +40,9 @@ Fix: run them on the Linux VM. On your Mac, install the CLI with `./install.sh -
 
 ### `missing_dependency`, or `relay doctor` reports a failed check
 
-A program relay needs, such as `Xvfb`, `xauth`, `xprop`, `xwininfo`, `xdpyinfo`, or the engine, is missing or not on `PATH`. A failed check makes `doctor` exit with status 1, and a `warn` check does not.
+A program relay needs is missing or not on `PATH`: `Xvfb`, `xauth`, `xprop`, `xwininfo`, or `xdpyinfo` on x11, `sway`, `Xwayland`, `swaymsg`, or `foot` on wayland, or the engine. A failed check makes `doctor` exit with status 1, and a `warn` check does not.
 
-Fix: run the fix command that `doctor` prints next to the failed check. On Debian or Ubuntu, re-running `./install.sh` installs everything. On other distributions, install the packages by hand and use `--no-deps`.
+Fix: run the fix command that `doctor` prints next to the failed check. On a supported distribution, re-run `./install.sh` with the `--backend` you use (`x11` by default), and it installs everything. On other distributions, install the packages by hand and use `--no-deps`.
 
 ### XFCE exits right after start on Ubuntu 26.04 with an icon error
 
@@ -81,6 +87,32 @@ Fix: correct the key. Allowed values are in [Configuration](/docs/configuration)
 Relay cannot read the X authority for that display.
 
 Fix: export that session's `XAUTHORITY`. Never run `xhost +`.
+
+## Wayland
+
+### Engine exits with a missing Wayland protocol
+
+When you attach with `--display`, the compositor lacks a protocol relay needs: `zwlr_screencopy_manager_v1` (version 3), `zwp_virtual_keyboard_manager_v1`, or `zwlr_virtual_pointer_manager_v1` (version 2). The engine log names the protocol, and `up` fails with `component_failed` for `engine`.
+
+Fix: attach to a compositor that offers them. See [Wayland](/docs/wayland) for supported compositors.
+
+### `Unsupported root size` when attaching
+
+The output is smaller than 320x240, larger than 1920x1080, or has an odd width or height. The engine log shows `Unsupported root size WIDTHxHEIGHT`, and `up` fails with `component_failed` for `engine`.
+
+Fix: create a headless output of a supported size, and pass its name with `--output`. See [Wayland](/docs/wayland#attach-to-your-desktop) for the sway and Hyprland commands.
+
+### `XDG_RUNTIME_DIR is required` with `--display`
+
+Attaching to a Wayland display needs the compositor's runtime directory, and your shell does not set `XDG_RUNTIME_DIR`. `up` exits with `missing_input` before it starts anything.
+
+Fix: export the compositor's runtime directory, which is often `/run/user/$(id -u)`: `export XDG_RUNTIME_DIR=/run/user/$(id -u)`.
+
+### `component_failed` for `display`, or `timeout` while sway starts
+
+Without `--display`, `up --backend wayland` starts sway. It fails with `component_failed` when sway exits. It fails with `timeout` when sway does not report its Wayland and XWayland displays within 15 seconds.
+
+Fix: run `RELAY_BACKEND=wayland relay doctor` to check `sway`, `Xwayland`, and `foot`. Then read `relay logs display`.
 
 ## Viewer
 

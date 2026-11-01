@@ -19,6 +19,7 @@ const bundle = buildSync({
   external: ['yaml'],
   platform: 'node',
   format: 'esm',
+  loader: { '.tsv': 'text' },
   banner: { js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" },
   write: false,
 });
@@ -137,6 +138,14 @@ test('human help lists up under the VM section and click under the client sectio
   const client = result.stdout.slice(result.stdout.indexOf('Client commands'), result.stdout.indexOf('Other commands'));
   assert.match(client, /^ {4}click /m);
   assert.doesNotMatch(client, /^ {4}up /m);
+});
+
+test('human help shows command notes before the examples', () => {
+  const result = help('0', ['up', '--help']);
+  assert.ifError(result.error);
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /\n\nNotes:\n\n {4}Without --detach, Ctrl\+C stops the session\.\n/);
+  assert.ok(result.stdout.indexOf('Notes:') < result.stdout.indexOf('Examples:'));
 });
 
 test('RELAY_AGENT=1 help keeps the agent block as plain text', () => {

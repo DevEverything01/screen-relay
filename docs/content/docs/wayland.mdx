@@ -1,0 +1,64 @@
+---
+title: Wayland
+description: Start a Wayland desktop or attach relay to an existing compositor.
+---
+
+Relay is tested with sway and labwc. Hyprland (including Omarchy), river, wayfire, and niri offer the same protocols, so they should work, but they have not been tested. The compositor must support `wlr-screencopy` version 3 with XRGB8888 or ARGB8888 shared-memory frames, the virtual keyboard protocol, and virtual pointer version 2. GNOME and KDE are not supported.
+
+## Install
+
+On the Linux VM, from a clone of the repository:
+
+```sh
+./install.sh --backend wayland
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+This installs the Wayland backend only. To include X11 too, use `--backend all`. See [Getting started](/docs/getting-started) for prerequisites and setup.
+
+## Start a Wayland desktop
+
+Run this as a normal user:
+
+```sh
+relay up -d --backend wayland
+```
+
+By default, relay starts headless sway with XWayland and foot. It does not need a GPU. Add `--desktop none` to skip foot. To open the viewer, follow [Getting started](/docs/getting-started#3-open-the-viewer).
+
+## Attach to your desktop
+
+Run the commands in this section from a terminal in your compositor session. Relay uses your shell's `XDG_RUNTIME_DIR` to connect to the display and streams the output at its current size.
+
+If your output is outside the [size limits](#limits), create a headless output on Hyprland or sway instead.
+
+On Hyprland, including Omarchy:
+
+```sh
+hyprctl output create headless relay
+hyprctl monitors
+```
+
+On sway:
+
+```sh
+swaymsg create_output
+swaymsg -t get_outputs
+```
+
+Check the output name and size. On sway, headless output names follow `HEADLESS-N`. If needed, set a supported size in your compositor. A headless output is a separate screen, so move a window or workspace to it to see it in the viewer.
+
+Start relay with the output name. Replace `OUTPUT` with the name you found, such as `relay` on Hyprland or `HEADLESS-1` on sway:
+
+```sh
+relay up -d --backend wayland --display "$WAYLAND_DISPLAY" --output OUTPUT
+```
+
+A `--display` without a colon, such as `wayland-1`, selects the Wayland backend on its own. Omit `--output OUTPUT` to use the first output. `--output` works only with the Wayland backend. On x11, `relay up` fails.
+
+## Limits
+
+- Output width must be 320 to 1920 pixels and height 240 to 1080 pixels. Both must be even.
+- Selecting an output by name requires `wl_output` version 4.
+- The output size cannot change during a session. Restart relay to use a different size.
+- The cursor image is not streamed. The viewer shows its local arrow instead.

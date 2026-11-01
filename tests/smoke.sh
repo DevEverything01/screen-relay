@@ -3,6 +3,8 @@ set -eu
 relay=${RELAY:-relay}
 name=smoke-$$
 port=${SMOKE_PORT:-18090}
+backend=${RELAY_BACKEND:-}
+wayland_display=${RELAY_DISPLAY:-}
 work=$(mktemp -d)
 xterm_pid=''
 
@@ -20,6 +22,13 @@ fail() {
   [ -z "$xterm_pid" ] || kill "$xterm_pid" 2>/dev/null || true
   exit 1
 }
+
+step 'engine backends'
+engine=$(command -v relay-engine || true)
+[ -n "$engine" ] || fail 'relay-engine is not on PATH; run ./install.sh'
+"$engine" --help > "$work/engine-help" 2> "$work/stderr" || fail "relay-engine --help: $(cat "$work/stderr")"
+grep -q '^Compiled backends: ' "$work/engine-help" ||
+  fail 'relay-engine --help printed no "Compiled backends: " line; run ./install.sh --backend all'
 
 step 'offline help and usage errors'
 "$relay" --help > "$work/help" 2> "$work/stderr" || fail 'root help'
@@ -50,16 +59,19 @@ NODE
 step doctor
 "$relay" doctor || fail 'doctor reported failures'
 
-if ! command -v xterm >/dev/null 2>&1; then
-  step 'install xterm (test-only dependency)'
+if ! command -v xterm >/dev/null 2>&1 || ! command -v xwininfo >/dev/null 2>&1; then
+  step 'install xterm and xwininfo (test-only dependencies)'
   elevate=''
   [ "$(id -u)" = 0 ] || elevate='sudo -n'
-  { $elevate apt-get update -qq && $elevate env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends xterm >/dev/null; } ||
-    fail 'xterm is missing and could not be installed'
+  { $elevate apt-get update -qq && $elevate env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends xterm x11-utils >/dev/null; } ||
+    fail 'xterm or xwininfo is missing and could not be installed'
 fi
 
 step "up -d (session $name, port $port)"
-"$relay" up -d --name "$name" --port "$port" --json > "$work/up.json" 2> "$work/stderr" || fail "up -d: $(cat "$work/stderr")"
+set -- up -d --name "$name" --port "$port" --json
+[ -z "$backend" ] || set -- "$@" --backend "$backend"
+[ -z "$wayland_display" ] || set -- "$@" --display "$wayland_display"
+"$relay" "$@" > "$work/up.json" 2> "$work/stderr" || fail "up -d: $(cat "$work/stderr")"
 [ ! -s "$work/stderr" ] || fail 'up JSON wrote stderr'
 [ "$(field "$work/up.json" outcome session.name)" = "started $name" ] || fail 'up envelope'
 
@@ -67,8 +79,16 @@ step 'status --json'
 "$relay" status --name "$name" --json > "$work/status.json" 2> "$work/stderr" || fail 'status reports the session is not running'
 [ ! -s "$work/stderr" ] || fail 'status JSON wrote stderr'
 [ "$(field "$work/status.json" session.running session.state)" = 'true ready' ] || fail "unexpected status: $(cat "$work/status.json")"
-set -- $(field "$work/status.json" session.display session.xauthority session.logs)
-display=$1 xauthority=$2 logs=$3
+display=$(field "$work/status.json" session.display)
+xauthority=$(field "$work/status.json" session.xauthority)
+runtime_dir=''
+if [ "$backend" = wayland ] && [ -z "$wayland_display" ]; then
+  runtime_dir=$(field "$work/status.json" session.runtimeDir)
+  [ -d "$runtime_dir" ] || fail "status has no runtimeDir: $(cat "$work/status.json")"
+fi
+logs=$(field "$work/status.json" session.logs)
+export DISPLAY=$display
+if [ -n "$xauthority" ]; then export XAUTHORITY=$xauthority; fi
 
 step screenshot
 "$relay" screenshot --name "$name" --json "$work/screen.png" > "$work/screenshot.json" 2> "$work/stderr" || fail screenshot
@@ -76,12 +96,12 @@ step screenshot
 [ "$(field "$work/screenshot.json" outcome screenshot.width screenshot.height)" = 'saved 1280 720' ] || fail "screenshot is not 1280x720: $(cat "$work/screenshot.json")"
 
 step 'start xterm with mouse reporting'
-DISPLAY=$display XAUTHORITY=$xauthority xterm -T relay-smoke -geometry 60x8+200+150 \
+xterm -T relay-smoke -geometry 60x8+200+150 \
   -e sh -c "printf '\\033[?1000h'; exec cat > '$work/typed'" > "$work/xterm.log" 2>&1 &
 xterm_pid=$!
 geometry=''
 for _ in $(seq 50); do
-  geometry=$(DISPLAY=$display XAUTHORITY=$xauthority xwininfo -name relay-smoke 2>/dev/null) && break
+  geometry=$(xwininfo -name relay-smoke 2>/dev/null) && break
   sleep 0.2
 done
 [ -n "$geometry" ] || fail "xterm window did not appear: $(cat "$work/xterm.log")"
@@ -117,7 +137,7 @@ const environment = (pid) => {
   return result;
 };
 const pause = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-const desktop = environment(session.components.desktop.pid);
+const desktop = environment(session.components.desktop?.pid ?? session.supervisor.pid);
 for (const options of [[], ['--restart']]) {
   const result = JSON.parse(execFileSync(relay, ['run', '--name', name, '--json', ...options, '--', 'xterm', '-T', `${name}-restart`], { encoding: 'utf8' }));
   if (result.outcome !== 'started' || !Number.isInteger(result.app?.pid)) throw new Error('invalid run envelope');
@@ -125,6 +145,9 @@ for (const options of [[], ['--restart']]) {
   const actual = environment(app.pid);
   for (const key of ['DBUS_SESSION_BUS_ADDRESS', 'XDG_RUNTIME_DIR', 'XDG_CONFIG_HOME', 'XDG_CACHE_HOME', 'ICEAUTHORITY']) {
     if (actual[key] !== desktop[key]) throw new Error(`${key} differs: ${actual[key]} != ${desktop[key]}`);
+  }
+  if (session.backend === 'wayland' && actual.WAYLAND_DISPLAY !== session.waylandDisplay) {
+    throw new Error(`WAYLAND_DISPLAY differs: ${actual.WAYLAND_DISPLAY} != ${session.waylandDisplay}`);
   }
   if (!options.length) continue;
   const watcher = Number(fs.readFileSync(`/proc/${app.pid}/stat`, 'utf8').split(') ')[1].split(' ')[1]);
@@ -160,9 +183,19 @@ step 'nothing left running'
 [ "$(field "$work/status.json" session.running session.state)" = 'false stopped' ] || fail 'status did not report stopped'
 left=$(grep -ls "RELAY_SESSION=$logs" /proc/[0-9]*/environ 2>/dev/null || true)
 [ -z "$left" ] || fail "processes left: $left"
-for _ in $(seq 25); do running "$xterm_pid" || break; sleep 0.2; done
-if running "$xterm_pid"; then fail 'xterm still running after its display stopped'; fi
-[ ! -e "/tmp/.X11-unix/X${display#:}" ] || fail "display socket $display still exists"
+if [ "$backend" = wayland ]; then
+  step 'wayland cleanup'
+  kill "$xterm_pid" 2>/dev/null || true
+  if [ -n "$wayland_display" ]; then
+    [ -S "$XDG_RUNTIME_DIR/$wayland_display" ] || fail "compositor socket $XDG_RUNTIME_DIR/$wayland_display is gone after down"
+  else
+    [ ! -e "$runtime_dir" ] || fail "runtime directory $runtime_dir still exists after down"
+  fi
+else
+  for _ in $(seq 25); do running "$xterm_pid" || break; sleep 0.2; done
+  if running "$xterm_pid"; then fail 'xterm still running after its display stopped'; fi
+  [ ! -e "/tmp/.X11-unix/X${display#:}" ] || fail "display socket $display still exists"
+fi
 if node -e 'const s=require("net").connect(Number(process.argv[1]), "127.0.0.1"); s.on("connect", () => { s.destroy(); process.exit(0); }); s.on("error", () => process.exit(1));' "$port"; then
   fail "port $port still accepts connections"
 fi

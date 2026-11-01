@@ -54,6 +54,4 @@ class CaptureSource {
   virtual std::optional<CursorImage> cursor(bool /*force*/) { return std::nullopt; }
 };
 using CaptureSourceFactory = std::function<std::unique_ptr<CaptureSource>()>;
-bool initializeNativeBackend();
-std::unique_ptr<CaptureSource> makeCaptureSource();
 }

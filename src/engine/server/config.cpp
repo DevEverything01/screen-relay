@@ -1,4 +1,5 @@
 #include "config.hpp"
+#include "backend.hpp"
 #include <charconv>
 #include <filesystem>
 #include <fstream>
@@ -61,6 +62,7 @@ bool unsignedNumber(const std::string& text, uint64_t& value) {
 }
 bool parseConfig(int argc, char** argv, Config& config) {
   config.viewer = (std::filesystem::canonical("/proc/self/exe").parent_path() / "viewer").string();
+  if (config.backend.empty()) config.backend = defaultBackend().name;
   const auto bitrate = [](const std::string& text) {
     uint64_t value;
     if (!unsignedNumber(text, value) || value < 250000 || value > 100000000)
@@ -71,6 +73,7 @@ bool parseConfig(int argc, char** argv, Config& config) {
     const std::string option = argv[i];
     if (option == "--help") {
       std::cout << "Usage: relay-engine [--bind ADDRESS] [--port PORT] [--viewer-dir DIR]\n"
+                   "  [--backend NAME] [--output NAME]\n"
                    "  [--fps N] [--bitrate-min BPS] [--bitrate-start BPS] [--bitrate-max BPS]\n"
                    "  [--token-file FILE [--public-origin https://HOST[:PORT]]]\n"
                    "  [--tls-cert FILE --tls-key FILE | --behind-tls-proxy]\n"
@@ -79,7 +82,8 @@ bool parseConfig(int argc, char** argv, Config& config) {
                    "min <= start <= max. Non-loopback --bind needs --token-file;\n"
                    "--public-origin also needs TLS or --behind-tls-proxy.\n"
                    "Attach to DISPLAY using the caller's XAUTHORITY. Defaults: 127.0.0.1:8080, 60 fps,\n"
-                   "1000000/8000000/40000000 bps.\n";
+                   "1000000/8000000/40000000 bps.\n"
+                << "Compiled backends: " << backendNames() << '\n';
       return false;
     }
     if (option == "--behind-tls-proxy") { config.proxy = true; continue; }
@@ -87,6 +91,8 @@ bool parseConfig(int argc, char** argv, Config& config) {
     if (++i == argc) throw std::runtime_error("Missing value for " + option);
     const std::string value = argv[i];
     if (option == "--bind") config.bind = value;
+    else if (option == "--backend") config.backend = value;
+    else if (option == "--output") config.output = value;
     else if (option == "--port") {
       uint64_t port;
       if (!unsignedNumber(value, port) || !port || port > 65535) throw std::runtime_error("Invalid port");
@@ -115,6 +121,7 @@ bool parseConfig(int argc, char** argv, Config& config) {
     else if (option == "--tls-key") config.key = value;
     else throw std::runtime_error("Unknown option: " + option);
   }
+  backendFor(config.backend);
   if (config.cert.empty() != config.key.empty() || (config.proxy && !config.cert.empty()))
     throw std::runtime_error("Choose a TLS certificate/key pair or a TLS proxy");
   if (config.bitrate_min > config.bitrate_start || config.bitrate_start > config.bitrate_max)

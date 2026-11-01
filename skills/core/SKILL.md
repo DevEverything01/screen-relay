@@ -6,7 +6,41 @@ allowed-tools: Bash(relay:*)
 
 # Relay core workflow
 
-Relay runs a Linux X11 desktop and gives you a browser viewer plus CLI control. This skill ships with the CLI, so every command below matches the installed version.
+Relay runs a Linux desktop on X11 or Wayland and gives you a browser viewer plus CLI control.
+
+## Install
+
+On the Linux machine that will show the desktop, from a clone of the repository:
+
+```sh
+./install.sh
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+- `./install.sh --backend x11|wayland|all` picks the display server to install. The default is `x11`. `wayland` installs sway, XWayland, and foot; `all` installs both. Reinstalling keeps existing engine backends; to remove one, delete `<prefix>/lib/relay/relay-engine` and reinstall the backend you want.
+- `--no-deps` skips system packages, so you install the dependencies yourself. `--no-desktop` skips the XFCE desktop packages, D-Bus and fonts on x11. `--prefix DIR` installs under another absolute directory instead of `~/.local`.
+- `--client-only` installs only the CLI, for controlling a session on another machine with `--url` and a token file. It has no engine, so `up` does not work there.
+
+Automatic package installation supports Debian, Ubuntu, Fedora, Arch, and Alpine, and needs root or passwordless `sudo`. On another distribution, install the dependencies yourself and pass `--no-deps`. The installer ends by running `relay doctor`, and it is safe to run again.
+
+## Pick a backend
+
+`relay up` uses X11 unless you choose Wayland. Install the backend you need first. `relay up -d` starts a virtual X11 display with XFCE. `relay up -d --backend wayland` starts a headless sway desktop with foot:
+
+```sh
+relay up -d
+relay up -d --backend wayland
+```
+
+To show a compositor you already run, start relay from a terminal inside that session. Use the Wayland backend and the socket name from the environment:
+
+```sh
+relay up -d --backend wayland --display "$WAYLAND_DISPLAY"
+```
+
+`--display` takes an X display such as `:0` on x11, or a Wayland socket such as `wayland-1` with `--backend wayland`. A `--display` without a colon, such as `wayland-1`, selects the Wayland backend on its own. Attach mode uses the display's size and starts no desktop. For compositor setup, output names and limits, see [Wayland](references/wayland.md).
+
+The backend comes from `--backend`, then `RELAY_BACKEND`, then the config file's `backend` key, then the default. To switch backends, run `relay down` first. A session name stays in use while its session runs, so a second `up` fails with `already_running`.
 
 ## Where commands run
 
@@ -24,7 +58,7 @@ relay up -d
 relay status --json
 ```
 
-`up -d` returns once the display, desktop and engine are ready. Piped, it prints the viewer URL, including the `#token=` fragment when the session has a token; treat that URL as a secret. Without an install, run `./install.sh` first and add `~/.local/bin` to `PATH`.
+`up -d` returns once the display, desktop and engine are ready. Piped, it prints the viewer URL, including the `#token=` fragment when the session has a token; treat that URL as a secret.
 
 `status --json` prints `{"session": {...}}`. Read `session.state` (`starting`, `ready`, `stopped`, `failed`), `session.running`, `session.url`, `session.display`. An existing session exits 0 whatever its state; a missing session exits 1 with reason `not_running`.
 
@@ -40,11 +74,11 @@ relay key Enter
 relay screenshot /tmp/relay-after.png
 ```
 
-A complete run that opens a terminal, focuses it, types, and verifies:
+A complete run that opens a terminal, focuses it, types, and verifies. This uses `xfce4-terminal`, the terminal on X11; on Wayland, use `foot`:
 
 ```sh
 relay up -d
-relay run -- xterm
+relay run -- xfce4-terminal
 sleep 1
 relay screenshot /tmp/relay.png
 relay click 0.5 0.5
@@ -53,7 +87,7 @@ relay key Enter
 relay screenshot /tmp/relay-after.png
 ```
 
-- `relay run -- APP [ARGS...]` starts an app on the session desktop and returns its pid at once; the window appears a moment later. Poll `relay screenshot` until you can see it. Read app output with `relay logs apps`.
+- `relay run -- APP [ARGS...]` starts an app on the session desktop and returns its pid at once; the window appears a moment later. Poll `relay screenshot` until you can see it. Read app output with `relay logs apps`. Apps stop with `relay down`.
 - `relay screenshot [file]` writes a PNG, default `screen.png`. Pass `-` to write PNG bytes to stdout. View the file; success means the engine saved the frame, not that an app responded.
 - Click to focus a window before typing into it. A click also moves the pointer.
 - Input success means the engine applied the events, not that the application reacted. Always take another screenshot.
@@ -126,7 +160,7 @@ Exit codes: 0 success (including `status` of any existing session), 1 runtime, n
 
 | Reason | Meaning | Recovery |
 | --- | --- | --- |
-| `busy` | Another controller holds input, or a screenshot is already running. | Close the other viewer or client, then retry. Screenshots still work. |
+| `busy` | Another controller holds input, or a screenshot is already running. | See [One controller](#one-controller). Screenshots still work. |
 | `unauthorized` | Missing or wrong token. | Pass `--token-file FILE` or set `RELAY_TOKEN_FILE`; open the `#token=` viewer link. |
 | `forbidden` | The engine rejected `Host` or `Origin`. | Use the `--public` URL or loopback. |
 | `unreachable` | Cannot connect to the address, one of `Connection refused.`, `The host name did not resolve.` or `The TLS certificate was rejected.` | Check the address, then `relay status --url <URL>`. |
@@ -150,25 +184,11 @@ Only one controller sends input at a time: a browser viewer, an SDK control sess
 
 ## Config
 
-`relay up` reads `--config FILE`, then `RELAY_CONFIG`, then `~/.config/relay/config.yaml` when it exists. A flag beats its `RELAY_*` variable, which beats the file, which beats the default. An explicit invalid value fails; it never falls back.
-
-| Key | Default | Meaning |
-| --- | --- | --- |
-| `display.resolution` | `1280x720` | Even width `320..1920`, even height `240..1080`. `RELAY_RESOLUTION` |
-| `stream.fps` | `60` | `10..60`. `RELAY_FPS` |
-| `stream.bitrate.min/start/max` | `1M` / `8M` / `40M` | Bits per second, `k`/`M` suffix is 1000-based; require min <= start <= max. `RELAY_BITRATE_*` |
-| `server.port` | `8080` | Listen port. `RELAY_PORT` |
-| `server.bind` | `127.0.0.1` | Listen address. `RELAY_BIND` |
-| `server.public` | none | HTTPS origin advertised to browsers. `RELAY_PUBLIC` |
-| `server.tls_cert`, `server.tls_key` | none | Serve TLS natively; set both. `RELAY_TLS_CERT`, `RELAY_TLS_KEY` |
-| `keyboard.layout` | `us` | Remote layout used by text input. `RELAY_KEYBOARD_LAYOUT` |
-| `desktop` | `xfce` | `xfce`, `none`, or a desktop command. `RELAY_DESKTOP` |
-
-There is no live reload or resize: `relay down`, edit the file, then `relay up -d`.
+Settings come from flags, `RELAY_*` variables, or the config file at `${XDG_CONFIG_HOME:-~/.config}/relay/config.yaml`, which `relay up` reads when it exists. The keys, defaults and precedence are in [references/config.md](references/config.md).
 
 ## Troubleshooting
 
-- Start with `relay doctor`; it prints a fix command for every failing check.
+- Start with `relay doctor`. It checks the x11 backend unless `RELAY_BACKEND` or the config `backend` key says otherwise; for Wayland, run `RELAY_BACKEND=wayland relay doctor`. Each failing check prints a fix. Some fixes are manual; see [references/troubleshooting.md](references/troubleshooting.md).
 - `relay logs` prints the last 200 lines of every component log; `relay logs engine` (or `display`, `dbus`, `desktop`, `apps`) selects one. `-f` follows.
 - `component_failed` or `timeout` from `up`: read `data.component` and `data.logs`, then `relay logs <component>`.
 - Port already in use: `relay down` the old session, or use another `--port`.
@@ -181,6 +201,7 @@ There is no live reload or resize: `relay down`, edit the file, then `relay up -
 
 - `references/cli.md`: commands, options and output.
 - `references/config.md`: configuration keys and precedence.
+- `references/wayland.md`: Wayland compositors, attaching to one, and its limits.
 - `references/troubleshooting.md`: symptoms and fixes.
 - `relay skills get vercel-sandbox`: run relay inside a Vercel Sandbox.
 - https://relay.labs.vercel.dev/docs: the published documentation.

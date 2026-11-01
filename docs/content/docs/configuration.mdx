@@ -7,30 +7,42 @@ You can change how relay starts with an optional YAML file on the VM. Every key 
 
 ## Default configuration
 
-Copy this file to `~/.config/relay/config.yaml` on the VM. It sets every key to its default, so relay behaves exactly as it does with no file. Change the values you need and leave the rest.
+Copy this file to `~/.config/relay/config.yaml` on the VM. Its values are the defaults for a new X11 display. `desktop` and `backend` are commented out because their defaults depend on the backend; remove the `#` to set one. Leave `desktop` commented to use the backend's default, or to get `none` with `--display`. Change the values you need and leave the rest.
 
 ```yaml title="~/.config/relay/config.yaml"
+# relay settings. Every key is optional; the values below are the defaults.
+
 display:
+  # WIDTHxHEIGHT. Width even 320..1920, height even 240..1080.
   resolution: 1280x720
 
 stream:
+  # 10..60.
   fps: 60
+  # Bits per second, 250000..100000000. A k or M suffix is 1000-based.
+  # Require min <= start <= max.
   bitrate:
     min: 1M
     start: 8M
     max: 40M
 
 server:
+  # 1..65535.
   port: 8080
   # bind: 127.0.0.1
   # public: https://desktop.example.com
-  # tls_cert: /etc/relay/fullchain.pem
-  # tls_key: /etc/relay/key.pem
+  # tls_cert: /path/fullchain.pem
+  # tls_key: /path/key.pem
 
 keyboard:
+  # Layout name such as us, de or fr, or a comma-separated list. Linux only.
   layout: us
 
-desktop: xfce
+# Linux only. xfce, none, or a command. Default: xfce (x11) or foot (wayland), or none with --display.
+# desktop: xfce
+
+# x11 or wayland. Default: x11 when the engine has it, else wayland.
+# backend: x11
 ```
 
 The commented `server` keys have no fixed default. `server.bind` is `127.0.0.1`, or `0.0.0.0` when `server.public` is set, and `server.public`, `server.tls_cert`, and `server.tls_key` stay unset until you add them. Remove the `#` from a line to set it.
@@ -180,12 +192,26 @@ The keyboard layout of the desktop relay creates. `relay type` types text using 
 
 - Default: `us`
 - Allowed: a layout name such as `de` or `fr`, or a comma-separated list such as `us,de`, using letters, digits, `_`, and `-`
-- Linux only. It needs `setxkbmap`, which `relay doctor` checks.
+- Linux only. On x11 it needs `setxkbmap`, which `relay doctor` checks.
 - Change it when the apps or text you type expect another layout.
 
 ```yaml
 keyboard:
   layout: de
+```
+
+## Backend
+
+### backend
+
+The display server the desktop runs on. See [Wayland](/docs/wayland) for what the Wayland backend needs.
+
+- Default: `x11` when the engine has it, else `wayland`
+- Allowed: `x11` or `wayland`
+- `--backend` on `relay up` overrides this key.
+
+```yaml
+backend: wayland
 ```
 
 ## Desktop
@@ -194,7 +220,7 @@ keyboard:
 
 What relay starts as the desktop session.
 
-- Default: `xfce`, or `none` when you attach with `--display`
+- Default: `xfce` on x11, `foot` on wayland, or `none` when you attach with `--display`
 - Allowed: `xfce`, `none`, or a command
 - Linux only.
 - Use `none` to get a bare screen with no desktop, or a command to run your own window manager or session.
@@ -232,6 +258,7 @@ A flag beats its environment variable, which beats the file, which beats the def
 | `server.tls_cert` | `--tls-cert` | `RELAY_TLS_CERT` |
 | `server.tls_key` | `--tls-key` | `RELAY_TLS_KEY` |
 | `keyboard.layout` | none | `RELAY_KEYBOARD_LAYOUT` |
+| `backend` | `--backend` | `RELAY_BACKEND` |
 | `desktop` | `--desktop` | `RELAY_DESKTOP` |
 
 ## Bad values

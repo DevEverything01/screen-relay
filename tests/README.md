@@ -14,4 +14,6 @@ Run `npm test` for the TypeScript unit tests; it builds `dist/` first. `make tes
 | Smoke | `tests/smoke.sh` | An installed `relay` on Linux. It starts and stops its own session on port 18090 (`SMOKE_PORT`). |
 | Viewer end to end | `npm run test:e2e` | Docker, and Chrome or Chromium for `agent-browser` (once: `./node_modules/.bin/agent-browser install`). It runs in its own agent-browser session, builds `relay-e2e` (or uses `RELAY_E2E_IMAGE`), starts its own container, and removes the container and the browser afterwards. |
 
-The smoke test starts a session, takes a screenshot, opens `xterm` (installing it with apt when missing), clicks and types into it, checks the text arrived, starts apps with `run` and `--restart`, then stops the session and checks nothing is left running.
+The smoke test starts a session, takes a screenshot, opens `xterm` (installing it and `x11-utils` with apt when missing), clicks and types into it, checks the text arrived, starts apps with `run` and `--restart`, then stops the session and checks nothing is left running.
+
+`RELAY_BACKEND` and `RELAY_DISPLAY` reach `relay up` as `--backend` and `--display`: `RELAY_BACKEND=wayland tests/smoke.sh` spawns a Wayland session, and adding `RELAY_DISPLAY=wayland-0` attaches to that compositor instead.
