@@ -1,5 +1,5 @@
 import { spawnSync, type ChildProcess } from 'node:child_process';
-import { accessSync, constants, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { accessSync, constants, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -8,6 +8,7 @@ import { deflateSync } from 'node:zlib';
 import { emit, Failure, formatDoctor } from '../output.js';
 import { DEFAULT_PORT, clearedCommand, isLinux, run, spawnCleared, which } from './common.js';
 import type { HostArgs } from './common.js';
+import { detectFamily, installCommand, packagesFor, type Family } from './packages.js';
 import { stateDir } from './state.js';
 import { findEngine, startXvfb, xQuery } from './supervisor.js';
 
@@ -45,9 +46,17 @@ function tinyPng(): Buffer {
 }
 
 function findLibrary(name: string): string | null {
+  const prefix = `lib${name}.so`;
   const output = run(['ldconfig', '-p']).stdout ?? '';
   const match = new RegExp(`^\\s*(lib${name}\\.so[^\\s]*)`, 'm').exec(output);
-  return match?.[1] ?? null;
+  if (match) return match[1];
+  for (const directory of ['/lib', '/usr/lib', '/usr/local/lib', '/usr/lib64']) {
+    try {
+      const library = readdirSync(directory, { withFileTypes: true }).find((entry) => entry.name.startsWith(prefix) && (entry.isFile() || entry.isSymbolicLink()));
+      if (library) return join(directory, library.name);
+    } catch {}
+  }
+  return null;
 }
 
 const ICON_TOOLS: Record<string, (image: string) => string[]> = {
@@ -84,10 +93,14 @@ export async function cmdDoctor(args: HostArgs): Promise<number> {
   if (linux) {
     const root = typeof process.getuid === 'function' && process.getuid() === 0;
     const sudo = root ? '' : 'sudo ';
-    const apt = `${sudo}apt-get install -y --no-install-recommends `;
+    let family: Family | undefined;
+    try { family = detectFamily(readFileSync('/etc/os-release', 'utf8')); } catch { family = undefined; }
+    const packageHint = (names: string[]) => family
+      ? installCommand(family, packagesFor(family, names), sudo)
+      : `Install ${names.join(' ')} with your system package manager.`;
     check('user', true, root ? 'root' : `uid ${process.getuid?.() ?? -1}`);
     check('node', Number(process.versions.node.split('.')[0]) >= 26, process.versions.node, './install.sh');
-    check('setpriv', Boolean(which('setpriv')), which('setpriv') ?? 'not found', `${apt}util-linux`);
+    check('setpriv', Boolean(which('setpriv')), which('setpriv') ?? 'not found', packageHint(['setpriv']));
     let homeWritable = true;
     try { accessSync(homedir(), constants.W_OK); } catch { homeWritable = false; }
     check('home', homeWritable, homedir(), 'export HOME=/path/to/a/writable/dir');
@@ -99,12 +112,16 @@ export async function cmdDoctor(args: HostArgs): Promise<number> {
     const engineRuns = Boolean(engine && run([engine, '--help']).status === 0);
     check('engine', engineRuns, engine ?? 'relay-engine not found', './install.sh');
     const x264 = findLibrary('x264');
-    check('libx264', Boolean(x264), x264 ?? 'not found', `${apt}$(apt-cache search --names-only '^libx264-[0-9]+$' | cut -d' ' -f1)`);
-    for (const [program, packageName] of [
-      ['Xvfb', 'xvfb'], ['xauth', 'xauth'], ['xprop', 'x11-utils'], ['xwininfo', 'x11-utils'], ['xdpyinfo', 'x11-utils'], ['setxkbmap', 'x11-xkb-utils'],
-    ]) check(program, Boolean(which(program)), which(program) ?? 'not found', `${apt}${packageName}`);
-    check('dbus-run-session', Boolean(which('dbus-run-session')), which('dbus-run-session') ?? 'not found', `${apt}dbus`, 'warn');
-    check('xfce4-session', Boolean(which('xfce4-session')), which('xfce4-session') ?? 'not found (use --desktop none)', `./install.sh (or ${apt}xfce4-session xfwm4 xfce4-panel xfdesktop4)`, 'warn');
+    const x264Hint = family === 'apt'
+      ? installCommand(family, ["$(apt-cache search --names-only '^libx264-[0-9]+$' | cut -d' ' -f1)"], sudo)
+      : packageHint(['x264-dev']);
+    check('libx264', Boolean(x264), x264 ?? 'not found', x264Hint);
+    for (const program of ['Xvfb', 'xauth', 'xprop', 'xwininfo', 'xdpyinfo', 'setxkbmap']) {
+      check(program, Boolean(which(program)), which(program) ?? 'not found', packageHint([program]));
+    }
+    check('dbus-run-session', Boolean(which('dbus-run-session')), which('dbus-run-session') ?? 'not found', packageHint(['dbus-run-session']), 'warn');
+    const xfcePackages = ['xfce4-session', 'xfwm4', 'xfce4-panel', 'xfdesktop'];
+    check('xfce4-session', Boolean(which('xfce4-session')), which('xfce4-session') ?? 'not found (use --desktop none)', `./install.sh (or ${packageHint(xfcePackages)})`, 'warn');
     let socketUsable = false;
     try {
       const info = statSync('/tmp/.X11-unix');
@@ -148,21 +165,37 @@ export async function cmdDoctor(args: HostArgs): Promise<number> {
     check('ambient caps', BigInt(`0x${capLine}`) === 0n, capLine === '0' ? 'none' : `${capLine}: apps that inherit them crash on icons`, 'Start apps with `relay run -- APP`, which clears them; the desktop and its menus already do.', 'warn');
     const library = findLibrary('gdk_pixbuf-2.0');
     const tool = iconTool();
-    if (!library) check('icon decoding', false, 'gdk-pixbuf not installed (desktop not installed)', './install.sh', 'warn');
-    else if (!tool) check('icon decoding', false, `gdk-pixbuf tools not installed (${Object.keys(ICON_TOOLS).join(' or ')})`, './install.sh', 'warn');
+    const gdkPixbufHint = family === 'apt' ? './install.sh' : packageHint(['gdk-pixbuf-bin']);
+    if (!library) check('icon decoding', false, 'gdk-pixbuf not installed (desktop not installed)', gdkPixbufHint, 'warn');
+    else if (!tool) check('icon decoding', false, `gdk-pixbuf tools not installed (${Object.keys(ICON_TOOLS).join(' or ')})`, gdkPixbufHint, 'warn');
     else {
       let [ok, message] = iconProbe(tool, '.png', tinyPng());
       let kind = 'PNG';
       if (ok) { [ok, message] = iconProbe(tool, '.svg', TINY_SVG); kind = 'SVG'; }
-      let fix = 'See the detail; read `relay logs desktop` after a failed start.';
-      if (!ok && run(['apt-cache', 'show', 'glycin-loaders']).status === 0 && run(['dpkg', '-s', 'glycin-loaders']).status !== 0) fix = `${apt}glycin-loaders`;
-      else if (!ok && which('bwrap')) {
+      const defaultFix = 'See the detail; read `relay logs desktop` after a failed start.';
+      let aptGlycinMissing = false;
+      if (!ok && family === 'apt') {
+        const glycinPackage = packagesFor(family, ['glycin-loaders'])[0];
+        aptGlycinMissing = run(['apt-cache', 'show', glycinPackage]).status === 0 && run(['dpkg', '-s', glycinPackage]).status !== 0;
+      }
+      let bubblewrapNeedsUserNamespaces = false;
+      if (!ok && !aptGlycinMissing && which('bwrap')) {
         const command = clearedCommand(['bwrap', '--ro-bind', '/', '/', '--unshare-user', 'true']);
         const sandbox = spawnSync(command[0], command.slice(1), { encoding: 'utf8' });
         if (sandbox.status !== 0) {
           message += `; bubblewrap failed: ${sandbox.stderr?.trim() ?? ''}`;
-          fix = 'Image loaders sandbox with bubblewrap, which needs unprivileged user namespaces: allow them for bwrap (AppArmor profile or kernel.unprivileged_userns_clone=1). relay never disables sandboxing.';
+          bubblewrapNeedsUserNamespaces = true;
         }
+      }
+      let fix: string;
+      if (aptGlycinMissing) {
+        fix = packageHint(['glycin-loaders']);
+      } else if (bubblewrapNeedsUserNamespaces) {
+        fix = 'Image loaders sandbox with bubblewrap, which needs unprivileged user namespaces: allow them for bwrap (AppArmor profile or kernel.unprivileged_userns_clone=1). relay never disables sandboxing.';
+      } else if (!ok && family !== 'apt' && kind === 'SVG') {
+        fix = packageHint(['glycin-loaders']);
+      } else {
+        fix = defaultFix;
       }
       check('icon decoding', ok, ok ? 'gdk-pixbuf decodes PNG and SVG' : `${kind}: ${message}`, fix, kind === 'SVG' ? 'warn' : 'fail');
     }

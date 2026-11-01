@@ -19,6 +19,7 @@ const bundle = buildSync({
   external: ['yaml'],
   platform: 'node',
   format: 'esm',
+  loader: { '.tsv': 'text' },
   banner: { js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" },
   write: false,
 });
