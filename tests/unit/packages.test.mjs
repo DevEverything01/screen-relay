@@ -28,6 +28,7 @@ test('detectFamily maps os-release ID and ID_LIKE to a package family', () => {
     ['fedora44', 'ID=fedora\n', 'dnf'],
     ['alpine324', 'ID=alpine\n', 'apk'],
     ['omarchy', 'ID=omarchy\nID_LIKE=arch\n', 'pacman'],
+    ['rocky10', 'ID=rocky\nID_LIKE="rhel centos fedora"\n', undefined],
     ['gentoo', 'ID=gentoo\n', undefined],
   ];
   for (const [name, osRelease, family] of cases) {

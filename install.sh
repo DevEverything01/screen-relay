@@ -57,6 +57,7 @@ if [ "$deps" = 1 ] && [ "$(uname -s)" = Linux ]; then
   set -f
   for distro in $os_id $os_like; do
     case "$distro" in
+      rhel|rocky|almalinux|centos) break ;;
       ubuntu) family=apt; ubuntu=1; break ;;
       debian) family=apt; break ;;
       fedora) family=dnf; break ;;
@@ -159,13 +160,17 @@ if ! node_ok; then
   node_url="https://nodejs.org/dist/v$node_version"
   case "$platform" in
     linux-*)
-      for loader in /lib/ld-musl-*; do
+      glibc=0
+      for loader in /lib*/ld-linux*.so*; do
         if [ -e "$loader" ]; then
-          platform="$platform-musl"
-          node_url="https://unofficial-builds.nodejs.org/download/release/v$node_version"
+          glibc=1
           break
         fi
-      done ;;
+      done
+      if [ -e /etc/alpine-release ] || [ "$glibc" = 0 ]; then
+        platform="$platform-musl"
+        node_url="https://unofficial-builds.nodejs.org/download/release/v$node_version"
+      fi ;;
   esac
   archive="node-v$node_version-$platform.tar.gz"
   scratch=$(mktemp -d)

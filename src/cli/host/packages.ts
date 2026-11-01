@@ -12,6 +12,8 @@ const families = new Map<string, Family>([
 
 const columns: Record<Family, number> = { apt: 2, dnf: 3, pacman: 4, apk: 5 };
 
+const unsupported = ['rhel', 'rocky', 'almalinux', 'centos'];
+
 export const rows = table
   .split('\n')
   .filter((line) => line !== '' && !line.startsWith('#'))
@@ -25,6 +27,7 @@ function osReleaseWords(osRelease: string, key: string): string[] {
 /** Family from os-release text: ID first, then each ID_LIKE word. Returns undefined for an unsupported distro. */
 export function detectFamily(osRelease: string): Family | undefined {
   for (const id of [...osReleaseWords(osRelease, 'ID'), ...osReleaseWords(osRelease, 'ID_LIKE')]) {
+    if (unsupported.includes(id)) return undefined;
     const family = families.get(id);
     if (family !== undefined) return family;
   }

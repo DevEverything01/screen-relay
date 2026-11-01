@@ -112,9 +112,12 @@ export async function cmdDoctor(args: HostArgs): Promise<number> {
     const engineRuns = Boolean(engine && run([engine, '--help']).status === 0);
     check('engine', engineRuns, engine ?? 'relay-engine not found', './install.sh');
     const x264 = findLibrary('x264');
+    const rpmFusionCommand = `${sudo}dnf -y install https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm`;
     const x264Hint = family === 'apt'
       ? installCommand(family, ["$(apt-cache search --names-only '^libx264-[0-9]+$' | cut -d' ' -f1)"], sudo)
-      : packageHint(['x264-dev']);
+      : family === 'dnf'
+        ? `Enable RPM Fusion Free with ${rpmFusionCommand}, then install with ${packageHint(['x264-dev'])}`
+        : packageHint(['x264-dev']);
     check('libx264', Boolean(x264), x264 ?? 'not found', x264Hint);
     for (const program of ['Xvfb', 'xauth', 'xprop', 'xwininfo', 'xdpyinfo', 'setxkbmap']) {
       check(program, Boolean(which(program)), which(program) ?? 'not found', packageHint([program]));
