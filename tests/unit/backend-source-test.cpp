@@ -197,9 +197,75 @@ static void invalidSource(int invalid) {
   encoder.stop(); require(published == 0 && state->captures == 3,
                           "invalid source published or retried without bound");
 }
+class StripeSource final : public relay::CaptureSource {
+  std::shared_ptr<SourceState> state;
+  int width, height;
+  std::vector<uint8_t> pixels;
+ public:
+  StripeSource(std::shared_ptr<SourceState> s, int w, int h)
+      : state(std::move(s)), width(w), height(h), pixels(size_t(w) * size_t(h) * 4) {}
+  static int shade(int y) { return 40 + (y / 16) * 37 % 176; }
+  int fd() const override { return state->fd; }
+  std::pair<int, int> dimensions() const override { return {width, height}; }
+  bool drainDamage() override {
+    uint64_t value;
+    return read(state->fd, &value, sizeof(value)) == sizeof(value);
+  }
+  relay::PixelFormat pixelFormat() const override { return relay::PixelFormat::BGRA; }
+  relay::FrameView capture() override {
+    ++state->captures;
+    const bool stripes = state->red.load();
+    for (int y = 0; y < height; ++y)
+      for (int x = 0; x < width; ++x) {
+        uint8_t* p = pixels.data() + (size_t(y) * width + x) * 4;
+        p[0] = p[1] = p[2] = uint8_t(stripes ? shade(y) : 128); p[3] = 255;
+      }
+    return {pixels.data(), width * 4, width, height, relay::PixelFormat::BGRA};
+  }
+};
+static void decodedStripes(const std::vector<relay::EncodedFrame>& sequence, int width, int height) {
+  const AVCodec* codec = avcodec_find_decoder(AV_CODEC_ID_H264);
+  require(codec, "H264 decoder unavailable");
+  AVCodecContext* decoder = avcodec_alloc_context3(codec);
+  AVFrame* frame = av_frame_alloc();
+  AVPacket* packet = av_packet_alloc();
+  try {
+    require(decoder && frame && packet && avcodec_open2(decoder, codec, nullptr) >= 0, "decoder open failed");
+    for (const auto& encoded : sequence) {
+      require(av_new_packet(packet, int(encoded.annex_b.size())) >= 0, "packet allocation failed");
+      std::copy(encoded.annex_b.begin(), encoded.annex_b.end(), packet->data);
+      require(avcodec_send_packet(decoder, packet) >= 0, "decoder rejected frame");
+      require(avcodec_receive_frame(decoder, frame) >= 0, "decoder did not return the frame");
+      av_packet_unref(packet);
+    }
+    require(frame->width == width && frame->height == height, "decoded dimensions differ");
+    for (int y = 8; y < height; y += 16) {
+      const int luma = frame->data[0][size_t(y) * frame->linesize[0] + width / 2];
+      const int expected = 16 + 219 * StripeSource::shade(y) / 255;
+      require(std::abs(luma - expected) <= 6, "a band of the damaged frame decoded to the wrong shade");
+    }
+  } catch (...) {
+    av_packet_free(&packet); av_frame_free(&frame); avcodec_free_context(&decoder); throw;
+  }
+  av_packet_free(&packet); av_frame_free(&frame); avcodec_free_context(&decoder);
+}
+static void fullScreenDamage(int width, int height) {
+  auto state = std::make_shared<SourceState>(); Frames frames;
+  relay::CaptureEncoder encoder([&](relay::EncodedFrame&& f) { return frames.publish(std::move(f)); },
+      capture_settings, [state, width, height] { return std::make_unique<StripeSource>(state, width, height); });
+  std::string error; require(encoder.start(error), error.c_str()); encoder.beginSession(21);
+  const auto initial = frames.at(0);
+  encoder.acknowledge(21, 1);
+  state->red = true; state->damage();
+  const auto changed = frames.at(1);
+  require(!changed.keyframe, "full-screen damage was not encoded as a delta frame");
+  encoder.stop();
+  decodedStripes({initial, changed}, width, height);
+}
 int main() {
   try {
     healthySource(); runtimeSize(1920, 1080); runtimeSize(1366, 768);
+    fullScreenDamage(1920, 1080); fullScreenDamage(1366, 768);
     identicalDamageRefines(); invalidSource(1); invalidSource(2);
     std::puts("backend source: decoded fresh IDRs, damage, refinement, idle, shutdown and invalid frames passed");
     return 0;
