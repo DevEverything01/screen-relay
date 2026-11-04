@@ -3,8 +3,9 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { createContext, runInContext } from 'node:vm';
 
-function viewer({ devicePixelRatio = 1, storage } = {}) {
+function viewer({ devicePixelRatio = 1, storage, deferDecode = false } = {}) {
   const listeners = {}, elements = {}, sockets = [], trace = [], animationFrames = new Map();
+  const decodeQueue = [];
   let now = 0, nextAnimationFrame = 1;
   const element = () => ({
     style: { setProperty(name, value) { this[name] = value; } }, classList: { toggle() {} }, hidden: false, width: 1280, height: 720,
@@ -34,7 +35,11 @@ function viewer({ devicePixelRatio = 1, storage } = {}) {
   class Decoder {
     constructor(callbacks) { this.callbacks = callbacks; this.state = 'configured'; }
     configure() {}
-    decode(chunk) { this.callbacks.output({ timestamp: chunk.timestamp, close() { trace.push(['close', chunk.timestamp]); } }); }
+    decode(chunk) {
+      const output = () => this.callbacks.output({ timestamp: chunk.timestamp, close() { trace.push(['close', chunk.timestamp]); } });
+      if (deferDecode) decodeQueue.push(output);
+      else output();
+    }
     close() { this.state = 'closed'; }
   }
   const document = {
@@ -55,11 +60,11 @@ function viewer({ devicePixelRatio = 1, storage } = {}) {
     fetch: async () => ({ ok: false, status: 401 }), localStorage: storage,
   });
   runInContext(readFileSync('dist/viewer/viewer.js', 'utf8'), context);
-  const frame = (seq, width = 1280, height = 720) => runInContext(`(() => {
-    const data = new ArrayBuffer(40), view = new DataView(data);
+  const frame = (seq, width = 1280, height = 720, payloadLength = 8) => runInContext(`(() => {
+    const data = new ArrayBuffer(${32 + payloadLength}), view = new DataView(data);
     view.setUint32(0, 0x4e534c31); view.setUint8(4, 1); view.setUint8(5, 1);
     view.setUint16(6, ${seq === 1 ? 1 : 0}); view.setUint32(8, 1); view.setUint32(12, ${seq});
-    view.setUint32(16, 20); view.setUint16(20, ${width}); view.setUint16(22, ${height});
+    view.setUint32(16, ${12 + payloadLength}); view.setUint16(20, ${width}); view.setUint16(22, ${height});
     view.setBigUint64(24, ${seq}n); new Uint8Array(data, 32).set([0, 0, 1, 103, 66, 0, 30, 0]);
     relayViewer.socket.onmessage({ data });
   })()`, context);
@@ -70,10 +75,50 @@ function viewer({ devicePixelRatio = 1, storage } = {}) {
     animationFrames.delete(id);
     callback(now);
   };
-  return { context, document, listeners, sockets, trace, frame, tick, setTime: (time) => { now = time; } };
+  return { context, document, listeners, sockets, trace, frame, tick, setTime: (time) => { now = time; }, decodeAll: () => { while (decodeQueue.length) decodeQueue.shift()(); } };
 }
 
 const traced = (app, type) => app.trace.filter((event) => event[0] === type).map((event) => event[1]);
+
+test('a deferred decoder accepts and presents a burst larger than eight frames', () => {
+  const app = viewer({ deferDecode: true });
+  for (let sequence = 1; sequence <= 9; sequence++) app.frame(sequence);
+  assert.equal(app.context.window.nativeStats.decodeerrors, 0);
+  assert.equal(app.context.window.nativeStats.outstanding, 9);
+  assert.equal(app.context.window.nativeStats.pendingHighWater, 9);
+  app.decodeAll();
+  for (let sequence = 2; sequence <= 9; sequence++) app.tick(sequence * 16);
+  assert.equal(app.context.window.nativeStats.outstanding, 0);
+  assert.equal(app.context.window.nativeStats.decodeerrors, 0);
+  assert.deepEqual(traced(app, 'ack'), Array.from({ length: 9 }, (_, index) => index + 1));
+});
+
+test('the deferred decoder count guard matches the sender maximum', () => {
+  const app = viewer({ deferDecode: true });
+  for (let sequence = 1; sequence <= 360; sequence++) app.frame(sequence);
+  assert.equal(app.context.window.nativeStats.outstanding, 360);
+  assert.equal(app.context.window.nativeStats.decodeerrors, 0);
+  app.frame(361);
+  assert.equal(app.context.window.nativeStats.decodeerrors, 1);
+  assert.equal(app.context.window.nativeStats.outstanding, 0);
+  assert.equal(app.context.window.nativeStats.pendingBytes, 0);
+  assert.equal(app.sockets[0].events.at(-1), 'close');
+});
+
+test('the pending byte guard still rejects an oversized deferred backlog', () => {
+  const app = viewer({ deferDecode: true });
+  app.frame(1, 1280, 720, 8388608);
+  assert.equal(app.context.window.nativeStats.pendingBytes, 8388608);
+  app.frame(2);
+  assert.equal(app.context.window.nativeStats.decodeerrors, 1);
+});
+
+test('the sequence guard still rejects a gap', () => {
+  const app = viewer({ deferDecode: true });
+  app.frame(1);
+  app.frame(3);
+  assert.equal(app.context.window.nativeStats.decodeerrors, 1);
+});
 
 test('a burst of six frames draws in order across six animation frames', () => {
   const app = viewer();
