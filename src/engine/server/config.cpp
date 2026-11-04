@@ -17,6 +17,18 @@
 namespace relay {
 namespace {
 #ifdef _WIN32
+/// Reports whether an ACE only denies, audits, or labels access, so it cannot grant anyone access to the file.
+bool deniesOrAudits(BYTE type) {
+  switch (type) {
+    case ACCESS_DENIED_ACE_TYPE: case ACCESS_DENIED_OBJECT_ACE_TYPE: case ACCESS_DENIED_CALLBACK_ACE_TYPE:
+    case ACCESS_DENIED_CALLBACK_OBJECT_ACE_TYPE: case SYSTEM_AUDIT_ACE_TYPE: case SYSTEM_AUDIT_OBJECT_ACE_TYPE:
+    case SYSTEM_AUDIT_CALLBACK_ACE_TYPE: case SYSTEM_AUDIT_CALLBACK_OBJECT_ACE_TYPE: case SYSTEM_ALARM_ACE_TYPE:
+    case SYSTEM_MANDATORY_LABEL_ACE_TYPE:
+      return true;
+    default:
+      return false;
+  }
+}
 /// Reports whether only the current user, SYSTEM, and Administrators own or may open the file.
 bool privateTokenFile(const std::string& path) {
   std::error_code error;
@@ -41,9 +53,9 @@ bool privateTokenFile(const std::string& path) {
   for (DWORD index = 0; owned && index < dacl->AceCount; ++index) {
     ACE_HEADER* header = nullptr;
     if (!GetAce(dacl, index, reinterpret_cast<void**>(&header))) { owned = false; break; }
-    if (header->AceType != ACCESS_ALLOWED_ACE_TYPE) continue;
-    const PSID trustee = &reinterpret_cast<ACCESS_ALLOWED_ACE*>(header)->SidStart;
-    owned = privileged(trustee);
+    if (deniesOrAudits(header->AceType)) continue;
+    owned = header->AceType == ACCESS_ALLOWED_ACE_TYPE &&
+            privileged(&reinterpret_cast<ACCESS_ALLOWED_ACE*>(header)->SidStart);
   }
   LocalFree(descriptor);
   return owned;
