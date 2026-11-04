@@ -7,6 +7,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include "wait.hpp"
 
 namespace relay {
 constexpr int min_frame_width = 320, max_frame_width = 16384;
@@ -39,7 +40,8 @@ struct CursorImage {
 class CaptureSource {
  public:
   virtual ~CaptureSource() = default;
-  virtual int fd() const = 0;
+  /** Becomes ready when the source may have new damage; see WaitHandle. */
+  virtual WaitHandle fd() const = 0;
   /** Pixel size of every full frame this source captures. */
   virtual std::pair<int, int> dimensions() const = 0;
   virtual bool drainDamage() = 0;
