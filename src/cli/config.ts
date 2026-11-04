@@ -193,8 +193,8 @@ function checkBitrateOrder(settings: ConfigSettings): void {
 type Validator = (value: unknown, path: string) => unknown;
 const validators = {
   'display.resolution': resolution,
-  'stream.fps': (value: unknown, path: string) => integer(value, path, 10, 60),
-  'server.port': (value: unknown, path: string) => integer(value, path, 1, 65535),
+  'stream.fps': (value, path) => integer(value, path, 10, 120),
+  'server.port': (value, path) => integer(value, path, 1, 65535),
   'server.bind': textValue,
   'server.public': (value: unknown, path: string) => {
     const origin = textValue(value, path);

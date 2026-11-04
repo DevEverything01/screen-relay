@@ -29,7 +29,7 @@ display:
   resolution: 1280x720
 
 stream:
-  # 10..60.
+  # 10..120.
   fps: 60
   # Bits per second, 250000..100000000. A k or M suffix is 1000-based.
   # Require min <= start <= max.
@@ -69,7 +69,7 @@ nano ~/.config/relay/config.yaml
 | Key | Default | Allowed values | Flag | Environment variable |
 | --- | --- | --- | --- | --- |
 | `display.resolution` | `1280x720` | The desktop size as `WIDTHxHEIGHT`, both even. Width 320 to 16384, height 240 to 16384. Ignored with `--display`, which uses the existing screen's size. | None | `RELAY_RESOLUTION` |
-| `stream.fps` | `60` | Whole number from 10 to 60 | None | `RELAY_FPS` |
+| `stream.fps` | `60` | Whole number from 10 to 120 | None | `RELAY_FPS` |
 | `stream.bitrate.min` | `1M` | 250000 to 100000000, as a whole number or with a `k` (thousand) or `M` (million) suffix. No higher than `start`. | None | `RELAY_BITRATE_MIN` |
 | `stream.bitrate.start` | `8M` | Same values as `min`. The stream adjusts between `min` and `max` from here. | None | `RELAY_BITRATE_START` |
 | `stream.bitrate.max` | `40M` | Same values as `min`. No lower than `start`. | None | `RELAY_BITRATE_MAX` |

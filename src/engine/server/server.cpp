@@ -4,12 +4,14 @@
 #include "metrics.hpp"
 #include <algorithm>
 #include <chrono>
+#include <cstddef>
 #include <cstring>
 #include <iostream>
+#include <limits>
 #ifdef __linux__
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <netinet/tcp.h>
+#include <linux/tcp.h>
 #endif
 
 namespace relay {
@@ -37,10 +39,26 @@ void configureStreamSocket(lws* wsi) {
   if (fd < 0) return;
   const int enabled = 1;
   (void)setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &enabled, sizeof(enabled));
-#ifdef TCP_NOTSENT_LOWAT
-  const int notsent_lowat = 128 * 1024;
-  (void)setsockopt(fd, IPPROTO_TCP, TCP_NOTSENT_LOWAT, &notsent_lowat, sizeof(notsent_lowat));
-#endif
+}
+std::optional<FlowControl::TransportSample> streamTransportSample(lws* wsi, size_t buffered_bytes) {
+  const int fd = lws_get_socket_fd(wsi);
+  if (fd < 0) return std::nullopt;
+  tcp_info info{};
+  socklen_t length = sizeof(info);
+  if (getsockopt(fd, IPPROTO_TCP, TCP_INFO, &info, &length) ||
+      length < offsetof(tcp_info, tcpi_delivery_rate) + sizeof(info.tcpi_delivery_rate) ||
+      !info.tcpi_min_rtt || info.tcpi_min_rtt == std::numeric_limits<uint32_t>::max()) return std::nullopt;
+  FlowControl::TransportSample sample;
+  sample.min_rtt_us = info.tcpi_min_rtt;
+  sample.rtt_us = info.tcpi_rtt;
+  sample.delivery_rate_bps = std::min<uint64_t>(info.tcpi_delivery_rate, std::numeric_limits<uint64_t>::max() / 8) * 8;
+  sample.notsent_bytes = info.tcpi_notsent_bytes;
+  sample.snd_cwnd = info.tcpi_snd_cwnd;
+  sample.total_retrans = info.tcpi_total_retrans;
+  sample.app_limited = info.tcpi_delivery_rate_app_limited;
+  sample.bytes_acked = info.tcpi_bytes_acked;
+  sample.application_queued_bytes = buffered_bytes;
+  return sample;
 }
 #endif
 }  // namespace
@@ -67,6 +85,7 @@ void Server::end() {
   uint32_t old;
   { std::lock_guard<std::mutex> lock(mutex); old = generation; generation = 0; pending.clear(); pending_cursor.reset(); flow.reset(); failed = false; }
   last_write_cursor = false;
+  buffered_stream_bytes = 0; stream_notsent_lowat = 0; flow_timer_due_us = 0;
   if (old) capture.endSession(old);
   lastSequence = 0; received.clear(); replies.clear(); control_ready = controller = false; viewer = nullptr;
 }
@@ -96,11 +115,34 @@ bool Server::message() {
   return input->apply(inputEvent(b.data()+20)) != InputStatus::invalid;
 }
 void Server::updateFlow() {
-  uint32_t gen; unsigned window; uint64_t bitrate, admit_until; bool paused;
+  if (viewer && !lws_partial_buffered(viewer)) buffered_stream_bytes = 0;
+#ifdef __linux__
+  const auto sample = viewer && !controller && !config.proxy ? streamTransportSample(viewer, buffered_stream_bytes) : std::nullopt;
+#endif
+  uint32_t gen, notsent_lowat; unsigned window; uint64_t bitrate, admit_until, service_deadline; bool paused, inflight;
   { std::lock_guard<std::mutex> lock(mutex);
-    const auto now = nowUs(); flow.update(now);
-    gen = generation; window = flow.window; bitrate = flow.target_bitrate; paused = flow.paused(now);
-    admit_until = flow.frames.empty() ? 0 : flow.frames.front().captured_us + FlowControl::pause_age_us;
+    const auto now = nowUs();
+#ifdef __linux__
+    if (sample) flow.sampleTransport(*sample, now); else flow.clearTransport();
+#endif
+    flow.update(now);
+    gen = generation; window = flow.window; bitrate = flow.frameBitrate(); paused = flow.paused(now);
+    inflight = !flow.frames.empty();
+    admit_until = inflight ? flow.frames.front().captured_us + flow.admissionAgeUs() : 0;
+    notsent_lowat = flow.notsentLowat();
+    service_deadline = flow.serviceDeadlineUs(now, flow_timer_due_us);
+  }
+#ifdef __linux__
+  if (viewer && !controller && notsent_lowat != stream_notsent_lowat) {
+    const int fd = lws_get_socket_fd(viewer);
+    if (fd >= 0) (void)setsockopt(fd, IPPROTO_TCP, TCP_NOTSENT_LOWAT, &notsent_lowat, sizeof(notsent_lowat));
+    stream_notsent_lowat = notsent_lowat;
+  }
+#endif
+  if (viewer && !controller && service_deadline != flow_timer_due_us) {
+    const uint64_t now = nowUs();
+    lws_set_timer_usecs(viewer, service_deadline - std::min(service_deadline, now));
+    flow_timer_due_us = service_deadline;
   }
   // Never hold the transport mutex while calling the capture API. Publication takes it later.
   capture.setFlowControl(gen, window, bitrate, paused, admit_until);
@@ -115,15 +157,20 @@ std::string Server::metrics() {
       ",\"inflight_bytes\":" + std::to_string(flow.bytes) +
       ",\"window_frames\":" + std::to_string(flow.window) +
       ",\"target_bitrate_bps\":" + std::to_string(flow.target_bitrate) +
+      ",\"min_rtt_ms\":" + std::to_string(flow.transport.min_rtt_us / 1000.0) +
+      ",\"delivery_rate_bps\":" + std::to_string(flow.delivery_rate_bps) +
+      ",\"notsent_bytes\":" + std::to_string(flow.transport.notsent_bytes) +
+      ",\"sender_queue_ms\":" + std::to_string(flow.senderQueueUs() / 1000.0) +
+      ",\"retrans\":" + std::to_string(flow.transport.total_retrans) +
       ",\"ack_rtt_ms\":" + std::to_string(flow.ack_rtt_us / 1000.0) +
       ",\"oldest_frame_ms\":" + std::to_string(flow.oldestAge(nowUs()) / 1000.0) +
       ",\"frames_acked\":" + std::to_string(flow.acknowledged) +
       ",\"frames_encoded\":" + std::to_string(flow.encoded) +
       ",\"observed_busy_goodput_bps\":" + std::to_string(flow.goodput_bps) +
-      ",\"max_inflight_frames\":" + std::to_string(FlowControl::max_frames) +
+      ",\"max_inflight_frames\":" + std::to_string(flow.frameLimit()) +
       ",\"max_inflight_bytes\":" + std::to_string(FlowControl::max_bytes) +
       ",\"max_frame_bytes\":" + std::to_string(FlowControl::max_bytes) +
-      ",\"admission_age_ms\":" + std::to_string(FlowControl::pause_age_us / 1000) +
+      ",\"admission_age_ms\":" + std::to_string(flow.admissionAgeUs() / 1000.0) +
       ",\"no_ack_timeout_ms\":" + std::to_string(FlowControl::timeout_us / 1000) +
       ",\"max_frame_age_ms\":" + std::to_string(FlowControl::timeout_us / 1000);
 }
@@ -183,6 +230,7 @@ void Server::forgetInput(lws* wsi) {
       [wsi](const std::shared_ptr<InputReply>& reply) { return reply->wsi == wsi; }), input_replies.end());
 }
 int Server::write(lws* wsi) {
+  updateFlow();
   std::optional<EncodedFrame> frame;
   std::optional<CursorImage> cursor;
   { std::lock_guard<std::mutex> lock(mutex);
@@ -200,7 +248,9 @@ int Server::write(lws* wsi) {
     if (!cursorMessage(wire, LWS_PRE, generation, *cursor)) return -1;
     const size_t size = wire.size() - LWS_PRE;
     if (lws_write(wsi, wire.data() + LWS_PRE, size, LWS_WRITE_BINARY) != int(size)) return -1;
+    buffered_stream_bytes = lws_partial_buffered(wsi) ? size : 0;
     last_write_cursor = true;
+    updateFlow();
     { std::lock_guard<std::mutex> lock(mutex);
       if (!pending.empty() || pending_cursor) lws_callback_on_writable(wsi);
     }
@@ -211,6 +261,7 @@ int Server::write(lws* wsi) {
   if (!frameMessage(wire, LWS_PRE, generation, lastSequence, f, width, height)) return -1;
   const size_t size = wire.size() - LWS_PRE;
   if (lws_write(wsi, wire.data() + LWS_PRE, size, LWS_WRITE_BINARY) != int(size)) return -1;
+  buffered_stream_bytes = lws_partial_buffered(wsi) ? size : 0;
   width = f.width; height = f.height; lastSequence = f.sequence;
   last_write_cursor = false;
   { std::lock_guard<std::mutex> lock(mutex); if (!flow.sent(f.sequence, nowUs())) return -1; }
@@ -406,7 +457,7 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
       s->lastSequence=0; s->received.clear();
       s->input->resetLocks();
       if (s->controller) { s->control_ready = true; lws_callback_on_writable(wsi); }
-      else { s->capture.beginSession(s->generation); lws_set_timer_usecs(wsi, 100000); }
+      else { s->capture.beginSession(s->generation); s->updateFlow(); }
       return 0;
     }
     case LWS_CALLBACK_RECEIVE:
@@ -420,7 +471,10 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
       return 0;
     case LWS_CALLBACK_SERVER_WRITEABLE: return s->viewer == wsi ? (s->controller ? s->writeControl(wsi) : s->write(wsi)) : -1;
     case LWS_CALLBACK_EVENT_WAIT_CANCELLED: {
-      if (s->viewer) lws_callback_on_writable(s->viewer);
+      if (s->viewer) {
+        if (!s->controller) s->updateFlow();
+        lws_callback_on_writable(s->viewer);
+      }
       for (const auto& reply : s->readyInputs()) {
         auto* response = reply->wsi ? static_cast<HttpResponse*>(lws_wsi_user(reply->wsi)) : nullptr;
         if (!response) continue;
@@ -449,11 +503,12 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
     case LWS_CALLBACK_TIMER:
       if (s->screenshot_client == wsi) { closeScreenshot(s, wsi, static_cast<HttpResponse*>(user)); return -1; }
       if (s->viewer != wsi) return -1;
+      s->flow_timer_due_us = 0;
       if (s->timedOut()) {
         std::cerr << "Viewer flow failure, 3s frame age, or no ACK progress for 3s\n"; s->end(); return -1;
       }
       s->updateFlow();
-      lws_set_timer_usecs(wsi, 100000); return 0;
+      return 0;
     case LWS_CALLBACK_CLOSED: if (s->viewer == wsi) s->end(); return 0;
     default: return 0;
   }

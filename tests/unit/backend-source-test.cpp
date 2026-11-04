@@ -133,14 +133,27 @@ static void healthySource() {
   require(state->captures == stopped, "capture continued after shutdown");
   require(encoder.error().empty(), "healthy source produced fatal error");
 }
-static void runtimeSize(int width, int height) {
+static void runtimeSize(int width, int height, unsigned fps = 60) {
   auto state = std::make_shared<SourceState>(); Frames frames;
+  auto settings = capture_settings;
+  settings.fps = fps;
   relay::CaptureEncoder encoder([&](relay::EncodedFrame&& frame) { return frames.publish(std::move(frame)); },
-      capture_settings, [state, width, height] { return std::make_unique<CpuSource>(state, width, height); });
+      settings, [state, width, height] { return std::make_unique<CpuSource>(state, width, height); });
   std::string error; require(encoder.start(error), error.c_str()); encoder.beginSession(20);
   const auto initial = frames.at(0);
   require(initial.width == width && initial.height == height && initial.keyframe,
           "runtime source dimensions were not encoded");
+  if (fps == 120) {
+    bool level_supported = false;
+    const auto& bytes = initial.annex_b;
+    for (size_t i = 0; i + 6 < bytes.size(); ++i)
+      if (bytes[i] == 0 && bytes[i + 1] == 0 && bytes[i + 2] == 1 &&
+          (bytes[i + 3] & 31) == 7) {
+        level_supported = bytes[i + 6] >= 42;
+        break;
+      }
+    require(level_supported, "720p120 SPS level is below 4.2");
+  }
   decodedPixel(initial, false, width, height);
   encoder.acknowledge(20, 1);
   state->red = true; state->damage();
@@ -254,6 +267,7 @@ static void fullScreenDamage(int width, int height) {
 int main() {
   try {
     healthySource(); runtimeSize(1920, 1080); runtimeSize(1366, 768); runtimeSize(3840, 2160);
+    runtimeSize(1280, 720, 120);
     fullScreenDamage(1920, 1080); fullScreenDamage(1366, 768);
     identicalDamageRefines(); invalidSource(1); invalidSource(2);
     std::puts("backend source: decoded fresh IDRs, damage, refinement, idle, shutdown and invalid frames passed");

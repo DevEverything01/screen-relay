@@ -72,6 +72,36 @@ desktop: none
   assert.ok(present.has('display.resolution'));
 });
 
+test('validates the FPS range in YAML and keeps the default at 60', () => {
+  assert.equal(config.loadConfig(write('{}\n'))[0].stream.fps, 60);
+  for (const fps of [10, 60, 61, 120]) {
+    assert.equal(config.loadConfig(write(`stream:\n  fps: ${fps}\n`))[0].stream.fps, fps);
+  }
+  for (const fps of [9, 121]) {
+    assert.throws(() => config.loadConfig(write(`stream:\n  fps: ${fps}\n`)), /stream\.fps.*allowed 10\.\.120/);
+  }
+});
+
+test('validates FPS overrides from arguments and RELAY_FPS', () => {
+  const [settings, , present] = config.loadConfig(write('{}\n'));
+  const previous = process.env.RELAY_FPS;
+  try {
+    process.env.RELAY_FPS = '120';
+    const args = {};
+    config.applyTo(args, settings, present);
+    assert.equal(args.fps, 120);
+    process.env.RELAY_FPS = '121';
+    assert.throws(() => config.applyTo({}, settings, present), /RELAY_FPS.*allowed 10\.\.120/);
+    const explicit = { fps: 120 };
+    config.applyTo(explicit, settings, present);
+    assert.equal(explicit.fps, 120);
+    assert.throws(() => config.applyTo({ fps: 121 }, settings, present), /--fps.*allowed 10\.\.120/);
+  } finally {
+    if (previous === undefined) delete process.env.RELAY_FPS;
+    else process.env.RELAY_FPS = previous;
+  }
+});
+
 test('rejects unknown keys with their path and valid keys', () => {
   assert.throws(() => config.loadConfig(write('stream:\n  fsp: 30\n')), (error) => {
     assert.equal(error.reason, 'invalid_config');
