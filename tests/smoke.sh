@@ -90,6 +90,20 @@ logs=$(field "$work/status.json" session.logs)
 export DISPLAY=$display
 if [ -n "$xauthority" ]; then export XAUTHORITY=$xauthority; fi
 
+step 'HTTP connections close after the response'
+node - "$port" <<'NODE' || fail 'engine kept an HTTP connection open after its response'
+const net = require('node:net');
+const socket = net.connect(Number(process.argv[2]), '127.0.0.1');
+let response = '';
+const timer = setTimeout(() => { console.error('no close within 2 s'); process.exit(1); }, 2000);
+socket.on('connect', () => socket.write('GET /capabilities HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: keep-alive\r\n\r\n'));
+socket.on('data', (chunk) => { response += chunk; });
+socket.on('close', () => {
+  clearTimeout(timer);
+  process.exit(/^HTTP\/1\.1 200/.test(response) && /\r\nconnection: close\r\n/i.test(response) ? 0 : 1);
+});
+NODE
+
 step screenshot
 "$relay" screenshot --name "$name" --json "$work/screen.png" > "$work/screenshot.json" 2> "$work/stderr" || fail screenshot
 [ ! -s "$work/stderr" ] || fail 'screenshot JSON wrote stderr'

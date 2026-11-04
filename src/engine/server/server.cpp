@@ -227,8 +227,17 @@ int responseHeaders(lws* wsi, unsigned status, const char* mime, size_t length) 
   if (lws_add_http_common_headers(wsi, status, mime, length, &next, end) ||
       lws_add_http_header_by_name(wsi, reinterpret_cast<const unsigned char*>("cache-control:"),
                                   reinterpret_cast<const unsigned char*>("no-store"), 8, &next, end) ||
+      lws_add_http_header_by_token(wsi, WSI_TOKEN_CONNECTION,
+                                   reinterpret_cast<const unsigned char*>("close"), 5, &next, end) ||
       lws_finalize_http_header(wsi, &next, end) ||
       lws_write(wsi, start, size_t(next-start), LWS_WRITE_HTTP_HEADERS) != next-start) return -1;
+  lws_callback_on_writable(wsi); return 0;
+}
+/// Closes the HTTP connection once its response is flushed, since libwebsockets 4.1 spins on an idle
+/// keep-alive connection that the peer has half-closed.
+int completeResponse(lws* wsi, HttpResponse* response) {
+  if (!lws_partial_buffered(wsi)) return -1;
+  if (response) response->closing = true;
   lws_callback_on_writable(wsi); return 0;
 }
 int jsonResponse(lws* wsi, HttpResponse* response, unsigned status, const std::string& json) {
@@ -332,6 +341,7 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
     case LWS_CALLBACK_HTTP_WRITEABLE: {
       auto* response = static_cast<HttpResponse*>(user);
       if (!response) return -1;
+      if (response->closing) return completeResponse(wsi, response);
       if (response->input_reply) {
         if (!response->input_headers) {
           response->input_headers = true;
@@ -352,7 +362,7 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
         if (lws_write(wsi, chunk+LWS_PRE, count, final ? LWS_WRITE_HTTP_FINAL : LWS_WRITE_HTTP) != int(count)) return -1;
         response->offset += count;
         if (!final) { lws_callback_on_writable(wsi); return 0; }
-        closeScreenshot(s, wsi, response); return lws_http_transaction_completed(wsi);
+        closeScreenshot(s, wsi, response); return completeResponse(wsi, response);
       }
       if (!response->length) return 0;
       unsigned char buffer[LWS_PRE+2048];
@@ -360,7 +370,7 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
       const size_t count = response->length;
       response->length = 0;
       if (lws_write(wsi, buffer+LWS_PRE, count, LWS_WRITE_HTTP_FINAL) != int(count)) return -1;
-      return lws_http_transaction_completed(wsi);
+      return completeResponse(wsi, response);
     }
     case LWS_CALLBACK_HTTP_BODY: {
       auto* response = static_cast<HttpResponse*>(user);
@@ -374,7 +384,7 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
       return response && response->input_expected ? inputResponse(wsi, response, s) : 0;
     }
     case LWS_CALLBACK_CLOSED_HTTP: closeScreenshot(s, wsi, static_cast<HttpResponse*>(user)); s->forgetInput(wsi); return 0;
-    case LWS_CALLBACK_HTTP_FILE_COMPLETION: return lws_http_transaction_completed(wsi);
+    case LWS_CALLBACK_HTTP_FILE_COMPLETION: return completeResponse(wsi, static_cast<HttpResponse*>(user));
     case LWS_CALLBACK_FILTER_PROTOCOL_CONNECTION: {
       char uri[256] = {};
       if (lws_hdr_copy(wsi, uri, sizeof(uri), WSI_TOKEN_GET_URI) <= 0 || !user) return 1;
