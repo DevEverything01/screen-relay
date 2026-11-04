@@ -1,7 +1,7 @@
 # relay settings. Every key is optional; the values below are the defaults.
 
 display:
-  # WIDTHxHEIGHT. Width even 320..1920, height even 240..1080.
+  # WIDTHxHEIGHT. Width even 320..16384, height even 240..16384.
   resolution: 1280x720
 
 stream:

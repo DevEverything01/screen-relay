@@ -137,8 +137,8 @@ function resolution(value: unknown, path: string): string {
   if (width % 2n || height % 2n) {
     throw new Failure('invalid_input', `Invalid config value for ${path}: ${valueRepr(value)}; width and height must be even`);
   }
-  if (width < 320n || width > 1920n || height < 240n || height > 1080n) {
-    throw new Failure('invalid_input', `Invalid config value for ${path}: ${valueRepr(value)}; allowed width 320..1920, height 240..1080`);
+  if (width < 320n || width > 16384n || height < 240n || height > 16384n) {
+    throw new Failure('invalid_input', `Invalid config value for ${path}: ${valueRepr(value)}; allowed width 320..16384, height 240..16384`);
   }
   return `${width}x${height}`;
 }

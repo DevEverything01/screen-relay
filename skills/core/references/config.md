@@ -6,7 +6,7 @@ The published reference is at https://relay.labs.vercel.dev/docs/configuration.
 
 | Key | Default | Range or meaning | Environment |
 | --- | --- | --- | --- |
-| `display.resolution` | `1280x720` | `WIDTHxHEIGHT`; even width `320..1920`, even height `240..1080` | `RELAY_RESOLUTION` |
+| `display.resolution` | `1280x720` | `WIDTHxHEIGHT`; even width `320..16384`, even height `240..16384` | `RELAY_RESOLUTION` |
 | `stream.fps` | `60` | `10..120` | `RELAY_FPS` |
 | `stream.bitrate.min` | `1M` | Bits per second, `250000..100000000`; a `k` or `M` suffix is 1000-based | `RELAY_BITRATE_MIN` |
 | `stream.bitrate.start` | `8M` | As above | `RELAY_BITRATE_START` |

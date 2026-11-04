@@ -3,19 +3,15 @@
 #include "color.hpp"
 #include "flow.hpp"
 #include "capture-source.hpp"
+#include "wait.hpp"
 
 #include <cstdint>
 #include <x264.h>
-#include <sys/eventfd.h>
-#include <poll.h>
-#include <unistd.h>
 #include <algorithm>
 #include <atomic>
-#include <cerrno>
 #include <cassert>
 #include <chrono>
 #include <condition_variable>
-#include <ctime>
 #include <cstdio>
 #include <cstring>
 #include <limits>
@@ -48,15 +44,6 @@ constexpr int parallel_convert_macroblocks = 512;
 /// Slice threads that encode one frame in parallel, which cuts the time to encode a large change.
 int encoderThreads() { return int(std::clamp(std::thread::hardware_concurrency(), 1u, 4u)); }
 using Clock = std::chrono::steady_clock;
-constexpr timespec pollTimeout(int64_t nanoseconds) {
-  return {static_cast<time_t>(nanoseconds / 1000000000),
-          static_cast<long>(nanoseconds % 1000000000)};
-}
-static_assert(pollTimeout(0).tv_sec == 0 && pollTimeout(0).tv_nsec == 0);
-static_assert(pollTimeout(16666667).tv_sec == 0 &&
-              pollTimeout(16666667).tv_nsec == 16666667);
-static_assert(pollTimeout(1000000001).tv_sec == 1 &&
-              pollTimeout(1000000001).tv_nsec == 1);
 
 uint64_t ns(Clock::duration d) {
   return std::chrono::duration_cast<std::chrono::nanoseconds>(d).count();
@@ -244,7 +231,7 @@ struct CaptureEncoder::Impl {
   mutable std::mutex mutex;
   std::condition_variable ready;
   std::thread worker;
-  int wake_fd = -1;
+  Wake wake_event;
   bool stopping = false, initialized = false, running = false;
   std::string startup_error;
   std::string fatal_error;
@@ -255,15 +242,12 @@ struct CaptureEncoder::Impl {
   uint64_t revision = 0;
   bool active = false;
   CaptureStats counters;
-  void wake() {
-    const uint64_t one = 1;
-    if (wake_fd >= 0) { const auto result = write(wake_fd, &one, sizeof(one)); (void)result; }
-  }
+  void wake() { wake_event.signal(); }
   void run() {
     try {
       auto source = source_factory();
       require(bool(source), "capture source factory returned null");
-      require(source->fd() >= 0, "invalid capture source fd");
+      require(validWaitHandle(source->fd()), "invalid capture source fd");
       const auto format = source->pixelFormat();
       require(format == PixelFormat::BGRA || format == PixelFormat::ARGB, "unsupported capture pixel format");
       const auto dimensions = source->dimensions();
@@ -463,8 +447,7 @@ struct CaptureEncoder::Impl {
         }
         // A synchronous cursor read may have buffered display events in Xlib.
         if (cursor_published) continue;
-        timespec timeout{};
-        const timespec* timeout_ptr = nullptr;
+        int64_t timeout_ns = -1;
         if (admitted && (dirty || (refinement_pending && queue_empty))) {
           const auto wait_now = Clock::now();
           const int64_t wait_now_ns = ns(wait_now.time_since_epoch());
@@ -474,17 +457,9 @@ struct CaptureEncoder::Impl {
             wake_at = last_publish + refinement_pace;
           const auto remaining = std::chrono::duration_cast<std::chrono::nanoseconds>(
               wake_at - wait_now).count();
-          timeout = pollTimeout(std::max<int64_t>(0, remaining));
-          timeout_ptr = &timeout;
+          timeout_ns = std::max<int64_t>(0, remaining);
         }
-        pollfd descriptors[2] = {{source->fd(), POLLIN, 0}, {wake_fd, POLLIN, 0}};
-        const int result = ppoll(descriptors, 2, timeout_ptr, nullptr);
-        if (result < 0) {
-          if (errno == EINTR) continue;
-          throw std::runtime_error("capture ppoll failed");
-        }
-        require(!(descriptors[0].revents & (POLLERR | POLLHUP | POLLNVAL)), "capture source connection closed");
-        if (descriptors[1].revents & POLLIN) { uint64_t value; const auto n = read(wake_fd, &value, sizeof(value)); (void)n; }
+        if (wait(source->fd(), wake_event, timeout_ns).wake) wake_event.consume();
       }
     } catch (const std::exception& error) {
       std::fprintf(stderr, "capture worker stopped: %s\n", error.what());
@@ -510,14 +485,14 @@ bool CaptureEncoder::start(std::string& error) {
   std::unique_lock<std::mutex> lock(i.mutex);
   if (i.worker.joinable()) { error = "capture already started"; return false; }
   if (!i.publish) { error = "capture publish callback missing"; return false; }
-  i.wake_fd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
-  if (i.wake_fd < 0) { error = "creating capture eventfd failed"; return false; }
+  if (!i.wake_event.valid()) { error = "creating capture wake event failed"; return false; }
+  i.wake_event.consume();
   i.stopping = false;
   i.initialized = false;
   i.startup_error.clear();
   i.fatal_error.clear();
   try { i.worker = std::thread([&i] { i.run(); }); }
-  catch (const std::exception& e) { close(i.wake_fd); i.wake_fd = -1; error = e.what(); return false; }
+  catch (const std::exception& e) { error = e.what(); return false; }
   i.ready.wait(lock, [&i] { return i.initialized; });
   error = i.startup_error.empty() ? i.fatal_error : i.startup_error;
   const bool success = i.running;
@@ -583,7 +558,6 @@ void CaptureEncoder::stop() {
   }
   if (i.worker.joinable()) i.worker.join();
   std::lock_guard<std::mutex> lock(i.mutex);
-  if (i.wake_fd >= 0) { close(i.wake_fd); i.wake_fd = -1; }
   i.generation = 0;
   i.active = false;
 }

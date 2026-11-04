@@ -8,10 +8,11 @@ For the wire format, see [Relay wire protocol](PROTOCOL.md).
 
 | Path | Contents |
 | --- | --- |
-| `src/engine/core/` | Backend-neutral pipeline: `CaptureSource`, the input controller and input backend interface, encoder, color conversion, flow control |
+| `src/engine/core/` | Backend-neutral pipeline: `CaptureSource`, the input controller and input backend interface, encoder, color conversion, flow control, and the platform `wait` that blocks the capture loop |
 | `src/engine/server/` | `main.cpp` (entry point), `config` (arguments, token and origin policy), `wire` (NSL1 encoding), `server` (session, writes, libwebsockets callback, HTTP routes), `metrics` (cgroup parsing), `screenshot` |
 | `src/engine/backends/linux/x11/` | X11 capture (XDamage, MIT-SHM, XFixes cursor) and XTest input primitives |
 | `src/engine/backends/linux/wayland/` | Wayland capture (wlr-screencopy), virtual keyboard and pointer input, Unicode keymap |
+| `src/engine/backends/windows/` | Windows capture (Desktop Duplication, shared per display, mipmap downscaling) and SendInput input primitives |
 | `src/protocol/` | Runtime-neutral wire constants and encoding, HID key table, key-combo and text parsing, origin and token rules |
 | `src/sdk/` | Node client library on top of the protocol |
 | `src/cli/` | The `relay` CLI: argument parsing, output, client commands on the SDK, host commands that supervise the display, desktop, and engine |
@@ -43,7 +44,7 @@ Only one of the viewer, `/control`, and `/input` owns input at a time.
 - `InputController` (`src/engine/core/input.hpp`): owns one `InputBackend`, validates each `InputEvent`, maps normalized pointer coordinates to pixels, dedupes held keys and buttons by native key id, and releases everything on `releaseAll`. `resetLocks` turns Caps Lock off when a new input session starts. It forwards `fence` and `cancel` to the backend and returns `InputStatus`: `invalid` for a rejected event, `unsupported` when the backend has no native key for a usage or cannot type a codepoint.
 - `InputQueue` (`src/engine/core/input.hpp`): the backend work queue. It counts one protocol record as one queued unit however many platform jobs that record posts, so admission, `pending`, and cancelled-record counts share one unit. `cancel` drops queued text and moves and leaves each fence it covered in worker order, so the worker completes it as not applied after the backend's fence.
 - `CaptureEncoder` takes a `CaptureSourceFactory`, so tests can inject a source with no X11.
-- The worker requires a valid fd. Core enforces the source size limits once, in the capture worker and on the input backend's dimensions at startup: width 320 to 1920 and height 240 to 1080, both even. The image stride must be between width x 4 and width x 8 bytes.
+- The worker requires a valid fd. Core enforces the source size limits once, in the capture worker and on the input backend's dimensions at startup: width 320 to 16384 and height 240 to 16384, both even, which is the largest frame libx264 accepts. The image stride must be between width x 4 and width x 8 bytes.
 
 ## Threads and ownership
 
@@ -93,14 +94,14 @@ Color: little-endian BGRA and big-endian ARGB convert to NV12 with limited-range
 
 ## Adding a backend
 
-1. Create `src/engine/backends/<os>/<name>/` with the three functions in `namespace relay::<name>`, using the signatures declared in `src/engine/server/backend.cpp`:
+1. Create `src/engine/backends/<os>/<name>/`, or `src/engine/backends/<os>/` when the OS has one backend, with the three functions in `namespace relay::<name>`, using the signatures declared in `src/engine/server/backend.cpp`:
 
    ```cpp
    bool initializeNativeBackend(const std::string& output);
    std::unique_ptr<CaptureSource> makeCaptureSource();
    std::unique_ptr<InputBackend> makeInputBackend();
    ```
-2. Add the backend name to `AVAILABLE_BACKENDS`, then add `BACKEND_DIR_<name>` and `BACKEND_PKGS_<name>` to the `Makefile`. The current values are `x11` and `wayland`.
+2. Add the backend name to `AVAILABLE_BACKENDS`, then add `BACKEND_DIR_<name>` and `BACKEND_PKGS_<name>` to the `Makefile`. The current values are `x11`, `wayland`, and `windows`. Put system libraries that have no pkg-config file in `BACKEND_LIBS_<name>`.
 3. Add a guarded entry to the `backends` array in `src/engine/server/backend.cpp`. The `Makefile` adds `-DRELAY_BACKEND_<name>` for each selected backend. The first compiled entry is the default, so keep X11 first when both backends are built.
 4. Build with `make BACKENDS=<name>`. The default is `x11`; quote a space-separated list to build multiple backends, such as `make BACKENDS="x11 wayland"`.
 5. For Wayland protocols, vendor their XML under `src/engine/backends/linux/wayland/protocols/` and add each protocol name to `WAYLAND_PROTOCOLS` in the `Makefile`. The Wayland build uses `wayland-scanner` to generate client headers and private protocol code under `build/protocols/`.
@@ -116,6 +117,16 @@ npm ci && npm run build   # dist/cli/relay.mjs, dist/sdk/, dist/viewer/ (Node 26
 make test            # native unit tests: color, flow, input, server, backend
 npm test             # TypeScript unit tests
 ```
+
+On Windows, build with [MSYS2](https://www.msys2.org/) in the UCRT64 environment, where `make` selects the `windows` backend:
+
+```sh
+pacman -S make diffutils mingw-w64-ucrt-x86_64-{gcc,pkgconf,libwebsockets,x264,ffmpeg}
+make                 # builds relay-engine.exe
+make test            # native unit tests: color, flow, input, server, backend
+```
+
+Desktop Duplication works only in the signed-in user's desktop session. Start `relay-engine.exe` from that session, not from an SSH or service session.
 
 `make test-backend` also needs the FFmpeg 7 development libraries (`libavcodec` ABI 61, `libavutil`, `libswscale`; no FFmpeg 8-only APIs) to decode the encoder output.
 

@@ -43,6 +43,28 @@ jobs:
       - run: make test
         if: matrix.runner == 'ubuntu-24.04-arm'
 
+  windows:
+    name: Engine (Windows)
+    runs-on: windows-2025
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2.33.0
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            make diffutils
+            mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-pkgconf
+            mingw-w64-ucrt-x86_64-libwebsockets mingw-w64-ucrt-x86_64-x264 mingw-w64-ucrt-x86_64-ffmpeg
+      - run: make -j"$(nproc)" relay-engine
+      - run: make test
+
   node:
     name: SDK and CLI
     runs-on: ubuntu-24.04

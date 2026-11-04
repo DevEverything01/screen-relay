@@ -265,13 +265,11 @@ test('broken sockets do not receive or replay queued ACKs', () => {
   assert.deepEqual(app.sockets[1].events, []);
 });
 
-test('frames up to 1920x1080 are drawn and size the canvas; wider frames are rejected', () => {
+test('frames larger than 1920x1080 are drawn and size the canvas', () => {
   const app = viewer();
-  app.frame(1, 1920, 1080);
+  app.frame(1, 3840, 2160);
   const canvas = app.document.querySelector('#screen');
-  assert.deepEqual([app.context.window.nativeStats.drawn, canvas.width, canvas.height], [1, 1920, 1080]);
-  app.frame(2, 1922, 1080);
-  assert.equal(app.context.window.nativeStats.decodeerrors, 1);
+  assert.deepEqual([app.context.window.nativeStats.drawn, canvas.width, canvas.height], [1, 3840, 2160]);
 });
 
 test('actual size is one stream pixel per device pixel and follows density changes', () => {
