@@ -21,7 +21,7 @@ Start with `relay doctor`; it prints a fix command for every failing check. Read
 | `invalid_config` | A config key or value is invalid. The message names the file and key path. | Fix the file; every problem is reported at once. |
 | `missing_dependency` | A host program or the engine binary is missing. | `./install.sh` with your `--backend`, or check `relay doctor`. |
 | Engine log names a missing Wayland protocol (`zwlr_screencopy_manager_v1`, `zwp_virtual_keyboard_manager_v1` or `zwlr_virtual_pointer_manager_v1`) | The compositor from `--display` lacks it. | Attach to a supported compositor. See [Wayland](https://relay.labs.vercel.dev/docs/wayland). |
-| Engine log shows `Unsupported root size` | The attached output is outside 320x240 to 1920x1080, or has an odd side. | Create a headless output of a supported size and pass its name with `--output`. |
+| Engine log shows `Unsupported root size` | The attached output is outside 320x240 to 16384x16384, or has an odd side. | Create a headless output of a supported size and pass its name with `--output`. |
 | `missing_input` saying `XDG_RUNTIME_DIR is required` | `--display` on wayland without `XDG_RUNTIME_DIR`. | Export the compositor's runtime directory. If it is `/run/user/$(id -u)`, run `export XDG_RUNTIME_DIR=/run/user/$(id -u)`. |
 | `component_failed` or `timeout` for `display` with `--backend wayland` | sway did not start or did not report its displays. | `RELAY_BACKEND=wayland relay doctor`, then `relay logs display`. |
 | Blank viewer page or WebCodecs error | The browser lacks H.264 WebCodecs, or the page is not a secure context. | Use a current Chrome, Edge or Safari over `https://` or `http://127.0.0.1`. |

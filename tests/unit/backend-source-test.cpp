@@ -253,7 +253,7 @@ static void fullScreenDamage(int width, int height) {
 }
 int main() {
   try {
-    healthySource(); runtimeSize(1920, 1080); runtimeSize(1366, 768);
+    healthySource(); runtimeSize(1920, 1080); runtimeSize(1366, 768); runtimeSize(3840, 2160);
     fullScreenDamage(1920, 1080); fullScreenDamage(1366, 768);
     identicalDamageRefines(); invalidSource(1); invalidSource(2);
     std::puts("backend source: decoded fresh IDRs, damage, refinement, idle, shutdown and invalid frames passed");

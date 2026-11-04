@@ -266,7 +266,7 @@ function connect() {
       const width = v.getUint16(20), height = v.getUint16(22), pts = v.getBigUint64(24);
       if (
         v.getUint8(5) !== 1 || flags > 1 || !gen || !seq ||
-        !width || width > 1920 || !height || height > 1080 ||
+        !width || !height ||
         pts > BigInt(Number.MAX_SAFE_INTEGER)
       ) throw new Error('Invalid frame header');
       if (generation && gen < generation) throw new Error('Stale generation');

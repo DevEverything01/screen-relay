@@ -63,6 +63,6 @@ Doctor does not check the protocols of an existing compositor. If sway fails to 
 | GNOME, KDE | Not supported |
 
 - The compositor must provide `wlr-screencopy` version 3, `wl_shm` with XRGB8888 or ARGB8888 frames, the virtual keyboard protocol, and virtual pointer version 2.
-- The output must be 320 to 1920 pixels wide and 240 to 1080 pixels high, with even dimensions. Its size is fixed for the session; restart relay after changing it.
+- The output must be 320 to 16384 pixels wide and 240 to 16384 pixels high, with even dimensions. Its size is fixed for the session; restart relay after changing it.
 - Selecting an output by name requires `wl_output` version 4.
 - The cursor image is not streamed. The viewer shows its own arrow.

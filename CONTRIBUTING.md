@@ -44,7 +44,7 @@ Only one of the viewer, `/control`, and `/input` owns input at a time.
 - `InputController` (`src/engine/core/input.hpp`): owns one `InputBackend`, validates each `InputEvent`, maps normalized pointer coordinates to pixels, dedupes held keys and buttons by native key id, and releases everything on `releaseAll`. `resetLocks` turns Caps Lock off when a new input session starts. It forwards `fence` and `cancel` to the backend and returns `InputStatus`: `invalid` for a rejected event, `unsupported` when the backend has no native key for a usage or cannot type a codepoint.
 - `InputQueue` (`src/engine/core/input.hpp`): the backend work queue. It counts one protocol record as one queued unit however many platform jobs that record posts, so admission, `pending`, and cancelled-record counts share one unit. `cancel` drops queued text and moves and leaves each fence it covered in worker order, so the worker completes it as not applied after the backend's fence.
 - `CaptureEncoder` takes a `CaptureSourceFactory`, so tests can inject a source with no X11.
-- The worker requires a valid fd. Core enforces the source size limits once, in the capture worker and on the input backend's dimensions at startup: width 320 to 1920 and height 240 to 1080, both even. The image stride must be between width x 4 and width x 8 bytes.
+- The worker requires a valid fd. Core enforces the source size limits once, in the capture worker and on the input backend's dimensions at startup: width 320 to 16384 and height 240 to 16384, both even, which is the largest frame libx264 accepts. The image stride must be between width x 4 and width x 8 bytes.
 
 ## Threads and ownership
 

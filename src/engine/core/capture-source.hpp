@@ -10,8 +10,8 @@
 #include "wait.hpp"
 
 namespace relay {
-constexpr int min_frame_width = 320, max_frame_width = 1920;
-constexpr int min_frame_height = 240, max_frame_height = 1080;
+constexpr int min_frame_width = 320, max_frame_width = 16384;
+constexpr int min_frame_height = 240, max_frame_height = 16384;
 /** Throws unless width and height are even and inside the supported root size limits. */
 inline void requireSurfaceSize(int width, int height) {
   if (width < min_frame_width || width > max_frame_width || height < min_frame_height ||
