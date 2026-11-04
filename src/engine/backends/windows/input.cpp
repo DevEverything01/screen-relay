@@ -53,7 +53,7 @@ class WindowsInput final : public InputBackend {
   mutable std::mutex mutex;
   std::condition_variable wake;
   InputQueue queue;
-  bool stopping = false;
+  bool stopping = false, rejected = false;
   std::thread worker;
 
  public:
@@ -185,9 +185,13 @@ class WindowsInput final : public InputBackend {
         }
         break;
       case InputJob::Kind::flush: break;
-      case InputJob::Kind::fence: job.complete(); return;
+      case InputJob::Kind::fence:
+        if (rejected && job.fence) job.fence->complete(false, job.dropped);
+        else job.complete();
+        rejected = false;
+        return;
     }
-    send(inputs);
+    if (!send(inputs)) rejected = true;
   }
   void type(uint32_t codepoint, std::vector<INPUT>& inputs) {
     if (codepoint == '\n' || codepoint == '\t') {

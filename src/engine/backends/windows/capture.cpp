@@ -10,6 +10,7 @@
 #include <mutex>
 #include <optional>
 #include <stdexcept>
+#include <string>
 #include <thread>
 #include <tuple>
 #include <vector>
@@ -17,6 +18,8 @@
 namespace relay {
 namespace {
 using Microsoft::WRL::ComPtr;
+/// Damage rectangles a source holds before it treats the next capture as a full frame.
+constexpr size_t max_pending_rects = 256;
 /// Converts a duplication pointer shape to straight-alpha RGBA, box-filtered down to the stream's scale.
 CursorImage cursorImage(const DXGI_OUTDUPL_POINTER_SHAPE_INFO& info, const std::vector<uint8_t>& data, int level) {
   const bool mono = info.Type == DXGI_OUTDUPL_POINTER_SHAPE_TYPE_MONOCHROME;
@@ -74,8 +77,12 @@ class Duplicator {
     static std::weak_ptr<Duplicator> current;
     std::lock_guard<std::mutex> guard(lock);
     auto existing = current.lock();
-    if (!existing) { existing = std::make_shared<Duplicator>(); current = existing; }
+    if (!existing || existing->failed()) { existing = std::make_shared<Duplicator>(); current = existing; }
     return existing;
+  }
+  bool failed() {
+    std::lock_guard<std::mutex> lock(mutex);
+    return !failure.empty();
   }
   Duplicator() : display(windows::findOutput()) {
     level = display.level();
@@ -159,7 +166,7 @@ class Duplicator {
     windows::check(result, "duplicating the display");
   }
   void run();
-  void reconnect();
+  bool reconnect();
   void fail(const std::string& message);
   void pointer(const DXGI_OUTDUPL_FRAME_INFO& info, std::vector<uint8_t>& data);
   bool dirtyRects(const DXGI_OUTDUPL_FRAME_INFO& info, std::vector<uint8_t>& metadata, std::vector<DamageRect>& damage);
@@ -218,8 +225,8 @@ class WindowsCapture final : public CaptureSource {
   /// Called by the duplicator with the damage of each new frame.
   void damaged(const std::vector<DamageRect>& rects, bool full) {
     std::lock_guard<std::mutex> lock(mutex);
-    if (full) { pendingFull = true; pending.clear(); }
-    else if (!pendingFull) pending.insert(pending.end(), rects.begin(), rects.end());
+    if (!full && !pendingFull) pending.insert(pending.end(), rects.begin(), rects.end());
+    if (full || pending.size() > max_pending_rects) { pendingFull = true; pending.clear(); }
     SetEvent(ready);
   }
   /// Called by the duplicator when the pointer shape or visibility changes.
@@ -228,8 +235,13 @@ class WindowsCapture final : public CaptureSource {
     cursorPending = image;
     SetEvent(ready);
   }
-  /// Called by the duplicator when capture fails, so the encoder sees the error on its next capture.
-  void failed() { SetEvent(ready); }
+  /// Called by the duplicator when capture fails; the pending full frame makes the next capture throw the error.
+  void failed() {
+    std::lock_guard<std::mutex> lock(mutex);
+    pendingFull = true;
+    pending.clear();
+    SetEvent(ready);
+  }
 
  private:
   std::shared_ptr<Duplicator> duplicator;
@@ -256,7 +268,10 @@ void Duplicator::run() {
     ComPtr<IDXGIResource> resource;
     const HRESULT result = duplication ? duplication->AcquireNextFrame(100, &info, &resource) : DXGI_ERROR_ACCESS_LOST;
     if (result == DXGI_ERROR_WAIT_TIMEOUT) continue;
-    if (result == DXGI_ERROR_ACCESS_LOST || result == DXGI_ERROR_INVALID_CALL) { reconnect(); continue; }
+    if (result == DXGI_ERROR_ACCESS_LOST || result == DXGI_ERROR_INVALID_CALL) {
+      if (!reconnect()) return;
+      continue;
+    }
     try {
       windows::check(result, "capturing the display");
       std::vector<DamageRect> damage;
@@ -272,15 +287,29 @@ void Duplicator::run() {
     duplication->ReleaseFrame();
   }
 }
-void Duplicator::reconnect() {
+bool Duplicator::reconnect() {
   while (!stopping) {
     try { duplicate(); break; } catch (const std::exception&) {}
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
+  try {
+    const RECT now = windows::findOutput().bounds;
+    if (!EqualRect(&now, &display.bounds)) {
+      fail("The display changed from " + std::to_string(display.width()) + "x" + std::to_string(display.height()) + " to " +
+           std::to_string(now.right - now.left) + "x" + std::to_string(now.bottom - now.top) +
+           " or moved; restart relay to stream it");
+      return false;
+    }
+  } catch (const std::exception& error) {
+    fail(error.what());
+    return false;
+  }
   std::lock_guard<std::mutex> lock(mutex);
   for (auto* source : sources) source->damaged({}, true);
+  return true;
 }
 void Duplicator::fail(const std::string& message) {
+  duplication.Reset();
   std::lock_guard<std::mutex> lock(mutex);
   failure = message;
   arrived.notify_all();

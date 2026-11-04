@@ -30,9 +30,9 @@ Output findOutput() {
   check(CreateDXGIFactory1(IID_PPV_ARGS(&factory)), "creating the DXGI factory");
   std::string names;
   Microsoft::WRL::ComPtr<IDXGIAdapter1> adapter;
-  for (UINT a = 0; factory->EnumAdapters1(a, &adapter) != DXGI_ERROR_NOT_FOUND; ++a) {
+  for (UINT a = 0; SUCCEEDED(factory->EnumAdapters1(a, &adapter)); ++a) {
     Microsoft::WRL::ComPtr<IDXGIOutput> candidate;
-    for (UINT o = 0; adapter->EnumOutputs(o, &candidate) != DXGI_ERROR_NOT_FOUND; ++o) {
+    for (UINT o = 0; SUCCEEDED(adapter->EnumOutputs(o, &candidate)); ++o) {
       DXGI_OUTPUT_DESC desc;
       if (FAILED(candidate->GetDesc(&desc)) || !desc.AttachedToDesktop) continue;
       const std::string name = narrow(desc.DeviceName);
@@ -46,6 +46,8 @@ Output findOutput() {
       return found;
     }
   }
+  if (names.empty())
+    throw std::runtime_error("No display is attached to this session; start relay in the signed-in user's desktop session");
   throw std::runtime_error(chosen.empty() ? "No primary display is attached to the desktop"
                                           : "Display " + chosen + " not found; attached displays: " + names);
 }
