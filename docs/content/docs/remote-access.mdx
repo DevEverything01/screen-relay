@@ -29,7 +29,7 @@ Open `http://127.0.0.1:8080`. The session stays on loopback, so nothing needs a 
 relay up -d --public https://desktop.example.com
 ```
 
-`--public` takes a bare HTTPS origin. It makes the session listen on `0.0.0.0` unless you pass `--bind`, creates a token, and accepts requests only for that origin. `up` prints a `TLS proxy` row naming the forwarding target.
+`--public` takes a bare HTTPS origin. It makes the session listen on `0.0.0.0` unless you pass `--bind`, creates a token, and accepts requests only for that host. Pages and apps on any origin can connect when they send the token. `up` prints a `TLS proxy` row naming the forwarding target.
 
 Without `--tls-cert` the engine serves plain HTTP and the proxy ends TLS, so the proxy must be the only thing that can reach the port. It must:
 

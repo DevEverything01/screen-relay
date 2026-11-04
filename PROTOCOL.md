@@ -35,7 +35,7 @@ The server processes records in order and stops at the first record rejected dur
 
 | Connection | Rule |
 | --- | --- |
-| `/stream` | Receives video and, when supported, cursor messages. Sends ACKs and input. Requires an `Origin`. |
+| `/stream` | Receives video and, when supported, cursor messages. Sends ACKs and input. |
 | `/control` | Receives a control-ready message, then sends input and receives one response per request. Up to 32 replies can be queued. |
 | Both | Use the `nsl1` subprotocol and binary messages. One WebSocket message contains one protocol message. Only one `/stream` or `/control` connection is allowed; either blocks `POST /input`. |
 
