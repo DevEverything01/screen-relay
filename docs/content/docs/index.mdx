@@ -37,7 +37,7 @@ The VM runs a display and a desktop. The engine on the VM captures the screen, e
 | Area | Limit |
 | --- | --- |
 | Display server | X11 or Wayland. `relay up` uses X11 when the engine includes it, otherwise Wayland. See [Wayland](/docs/wayland) for compositor requirements. |
-| Resolution | Up to 1920x1080, set in [Configuration](/docs/configuration). A change applies when the session starts. |
+| Resolution | Up to 16384x16384, set in [Configuration](/docs/configuration). A change applies when the session starts. |
 | Control | One input owner at a time: a viewer or one agent. Screenshots work at any time. |
 | Not supported | Audio, clipboard, IME, relative pointer, and hardware encoding. |
 | Auth | One shared token per session; a session on loopback has none. No separate user identities. |

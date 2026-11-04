@@ -1,9 +1,10 @@
 #include "core/capture.hpp"
-#include "core/wait.hpp"
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libswscale/swscale.h>
 }
+#include <sys/eventfd.h>
+#include <unistd.h>
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -20,12 +21,16 @@ static void require(bool ok, const char* message) {
   if (!ok) throw std::runtime_error(message);
 }
 struct SourceState {
-  relay::Wake wake;
+  int fd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
   std::atomic<unsigned> captures{0};
   std::atomic<bool> red{false};
   int invalid = 0;
-  SourceState() { require(wake.valid(), "damage wake unavailable"); }
-  void damage() { wake.signal(); }
+  SourceState() { require(fd >= 0, "eventfd failed"); }
+  ~SourceState() { close(fd); }
+  void damage() {
+    const uint64_t one = 1;
+    require(write(fd, &one, sizeof(one)) == sizeof(one), "damage wake failed");
+  }
 };
 // This source has no display connection or native-backend factory dependency.
 class CpuSource final : public relay::CaptureSource {
@@ -35,9 +40,12 @@ class CpuSource final : public relay::CaptureSource {
  public:
   explicit CpuSource(std::shared_ptr<SourceState> s, int w = 1280, int h = 720)
       : state(std::move(s)), width(w), height(h), pixels(size_t(w) * size_t(h) * 4) {}
-  relay::WaitHandle fd() const override { return state->wake.handle(); }
+  int fd() const override { return state->fd; }
   std::pair<int, int> dimensions() const override { return {width, height}; }
-  bool drainDamage() override { return state->wake.consume(); }
+  bool drainDamage() override {
+    uint64_t value;
+    return read(state->fd, &value, sizeof(value)) == sizeof(value);
+  }
   relay::PixelFormat pixelFormat() const override { return relay::PixelFormat::BGRA; }
   relay::FrameView capture() override {
     ++state->captures;
@@ -197,9 +205,12 @@ class StripeSource final : public relay::CaptureSource {
   StripeSource(std::shared_ptr<SourceState> s, int w, int h)
       : state(std::move(s)), width(w), height(h), pixels(size_t(w) * size_t(h) * 4) {}
   static int shade(int y) { return 40 + (y / 16) * 37 % 176; }
-  relay::WaitHandle fd() const override { return state->wake.handle(); }
+  int fd() const override { return state->fd; }
   std::pair<int, int> dimensions() const override { return {width, height}; }
-  bool drainDamage() override { return state->wake.consume(); }
+  bool drainDamage() override {
+    uint64_t value;
+    return read(state->fd, &value, sizeof(value)) == sizeof(value);
+  }
   relay::PixelFormat pixelFormat() const override { return relay::PixelFormat::BGRA; }
   relay::FrameView capture() override {
     ++state->captures;
@@ -253,7 +264,7 @@ static void fullScreenDamage(int width, int height) {
 }
 int main() {
   try {
-    healthySource(); runtimeSize(1920, 1080); runtimeSize(1366, 768);
+    healthySource(); runtimeSize(1920, 1080); runtimeSize(1366, 768); runtimeSize(3840, 2160);
     fullScreenDamage(1920, 1080); fullScreenDamage(1366, 768);
     identicalDamageRefines(); invalidSource(1); invalidSource(2);
     std::puts("backend source: decoded fresh IDRs, damage, refinement, idle, shutdown and invalid frames passed");

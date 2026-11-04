@@ -7,11 +7,10 @@
 #include <string>
 #include <utility>
 #include <vector>
-#include "wait.hpp"
 
 namespace relay {
-constexpr int min_frame_width = 320, max_frame_width = 1920;
-constexpr int min_frame_height = 240, max_frame_height = 1080;
+constexpr int min_frame_width = 320, max_frame_width = 16384;
+constexpr int min_frame_height = 240, max_frame_height = 16384;
 /** Throws unless width and height are even and inside the supported root size limits. */
 inline void requireSurfaceSize(int width, int height) {
   if (width < min_frame_width || width > max_frame_width || height < min_frame_height ||
@@ -40,8 +39,7 @@ struct CursorImage {
 class CaptureSource {
  public:
   virtual ~CaptureSource() = default;
-  /** Becomes ready when the source may have new damage; see WaitHandle. */
-  virtual WaitHandle fd() const = 0;
+  virtual int fd() const = 0;
   /** Pixel size of every full frame this source captures. */
   virtual std::pair<int, int> dimensions() const = 0;
   virtual bool drainDamage() = 0;
