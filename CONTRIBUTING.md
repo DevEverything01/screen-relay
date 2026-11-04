@@ -12,7 +12,7 @@ For the wire format, see [Relay wire protocol](PROTOCOL.md).
 | `src/engine/server/` | `main.cpp` (entry point), `config` (arguments, token and origin policy), `wire` (NSL1 encoding), `server` (session, writes, libwebsockets callback, HTTP routes), `metrics` (cgroup parsing), `screenshot` |
 | `src/engine/backends/linux/x11/` | X11 capture (XDamage, MIT-SHM, XFixes cursor) and XTest input primitives |
 | `src/engine/backends/linux/wayland/` | Wayland capture (wlr-screencopy), virtual keyboard and pointer input, Unicode keymap |
-| `src/protocol/` | Runtime-neutral wire constants and encoding, HID key table, key-combo and text parsing, origin and token rules |
+| `src/protocol/` | Runtime-neutral wire constants, input encoding, server message parsing, socket targets, HID key table, key-combo and text parsing, origin and token rules. Built without Node imports and exported as `relay/protocol`. |
 | `src/sdk/` | Node client library on top of the protocol |
 | `src/cli/` | The `relay` CLI: argument parsing, output, client commands on the SDK, host commands that supervise the display, desktop, and engine |
 | `viewer/` | Browser viewer source: `index.html` and `main.ts`; the build bundles it into `dist/viewer/viewer.js` |

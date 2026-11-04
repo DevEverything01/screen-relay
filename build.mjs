@@ -7,20 +7,20 @@ const { version } = JSON.parse(await readFile(new URL('./package.json', import.m
 const entries = [
   { entry: 'src/cli/main.ts', outfile: 'dist/cli/relay.mjs' },
   { entry: 'src/sdk/index.ts', outfile: 'dist/sdk/index.js' },
-  { entry: 'src/protocol/index.ts', outfile: 'dist/protocol/index.js' },
+  { entry: 'src/protocol/index.ts', outfile: 'dist/protocol/index.js', neutral: true },
 ];
 
-await Promise.all(entries.map(async ({ entry, outfile }) => {
+await Promise.all(entries.map(async ({ entry, outfile, neutral }) => {
   await build({
     entryPoints: [entry],
     outfile,
     bundle: true,
-    platform: 'node',
+    platform: neutral ? 'neutral' : 'node',
     format: 'esm',
     target: 'node20',
     loader: { '.tsv': 'text' },
     define: { __RELAY_VERSION__: JSON.stringify(version) },
-    banner: { js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" },
+    banner: neutral ? {} : { js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" },
     packages: 'bundle',
   });
   await chmod(outfile, 0o755);

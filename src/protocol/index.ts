@@ -8,6 +8,11 @@ export const HEADER_SIZE = 20;
 export const INPUT_SIZE = 16;
 export const MAX_INPUT_BATCH = 256;
 export const MAX_INPUT_PENDING = 32;
+export const MAX_WIDTH = 1920;
+export const MAX_HEIGHT = 1080;
+export const MAX_FRAMES_IN_FLIGHT = 8;
+export const MAX_BYTES_IN_FLIGHT = 8388608;
+export const SUBPROTOCOL = 'nsl1';
 export const MESSAGE_TYPES = { frame: 1, ack: 2, input: 3, controlReady: 4, inputResponse: 5, cursor: 6 } as const;
 export const INPUT_TYPES = { keyDown: 1, keyUp: 2, pointerMove: 3, buttonDown: 4, buttonUp: 5, wheel: 6, releaseAll: 7, text: 8 } as const;
 
@@ -109,11 +114,15 @@ export function encodeInput(event: InputEvent, generation: number, sequence: num
   return bytes;
 }
 
+export function encodeAck(generation: number, sequence: number): Uint8Array {
+  return header(MESSAGE_TYPES.ack, generation, sequence, 0);
+}
+
 export interface Header { type: number; flags: number; generation: number; sequence: number; payloadLength: number }
 
 export function parseHeader(bytes: Uint8Array | ArrayBuffer): Header {
   const data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-  if (data.byteLength < HEADER_SIZE || data.byteLength > 8388640) throw new RelayError('protocol_error', 'Invalid message length');
+  if (data.byteLength < HEADER_SIZE || data.byteLength > HEADER_SIZE + 12 + MAX_BYTES_IN_FLIGHT) throw new RelayError('protocol_error', 'Invalid message length');
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
   const type = view.getUint8(5), flags = view.getUint16(6), generation = view.getUint32(8);
   if (view.getUint32(0) !== MAGIC || view.getUint8(4) !== VERSION || type < 1 || type > 6 ||
@@ -121,6 +130,62 @@ export function parseHeader(bytes: Uint8Array | ArrayBuffer): Header {
     throw new RelayError('protocol_error', 'Invalid message envelope');
   }
   return { type, flags, generation, sequence: view.getUint32(12), payloadLength: view.getUint32(16) };
+}
+
+export type Message =
+  | { type: 'frame'; generation: number; sequence: number; keyframe: boolean; width: number; height: number; timestamp: number; data: Uint8Array }
+  | { type: 'cursor'; generation: number; width: number; height: number; hotX: number; hotY: number; pixels: Uint8ClampedArray }
+  | { type: 'controlReady'; generation: number; width: number; height: number }
+  | { type: 'inputResponse'; generation: number; sequence: number; status: number };
+
+/** Validates and decodes one server message; throws a protocol_error RelayError for anything malformed or client-bound. */
+export function parseMessage(bytes: Uint8Array | ArrayBuffer): Message {
+  const data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  const { type, flags, generation, sequence, payloadLength: size } = parseHeader(data);
+  const view = new DataView(data.buffer, data.byteOffset + HEADER_SIZE, size);
+  const invalid = (what: string) => new RelayError('protocol_error', `Invalid ${what}`);
+  if (type === MESSAGE_TYPES.frame) {
+    if (size < 13 || !sequence) throw invalid('frame header');
+    const width = view.getUint16(0), height = view.getUint16(2), timestamp = view.getBigUint64(4);
+    if (!width || width > MAX_WIDTH || !height || height > MAX_HEIGHT || timestamp > BigInt(Number.MAX_SAFE_INTEGER)) throw invalid('frame header');
+    return { type: 'frame', generation, sequence, keyframe: flags === 1, width, height, timestamp: Number(timestamp), data: data.subarray(HEADER_SIZE + 12) };
+  }
+  if (type === MESSAGE_TYPES.cursor) {
+    if (size < 8 || sequence) throw invalid('cursor envelope');
+    const width = view.getUint16(0), height = view.getUint16(2), hotX = view.getUint16(4), hotY = view.getUint16(6);
+    if (width > 256 || height > 256 || size !== 8 + width * height * 4 ||
+        (width && height ? hotX >= width || hotY >= height : width || height || hotX || hotY)) throw invalid('cursor image');
+    return { type: 'cursor', generation, width, height, hotX, hotY, pixels: new Uint8ClampedArray(data.buffer, data.byteOffset + HEADER_SIZE + 8, size - 8) };
+  }
+  if (type === MESSAGE_TYPES.controlReady) {
+    if (size !== 4 || sequence || !view.getUint16(0) || !view.getUint16(2)) throw invalid('ready message');
+    return { type: 'controlReady', generation, width: view.getUint16(0), height: view.getUint16(2) };
+  }
+  if (type === MESSAGE_TYPES.inputResponse) {
+    if (size !== 1 || !sequence || view.getUint8(0) > 2) throw invalid('input response');
+    return { type: 'inputResponse', generation, sequence, status: view.getUint8(0) };
+  }
+  throw invalid('message type');
+}
+
+/** Returns the `avc1.PPCCLL` codec string from the SPS in an H.264 Annex B keyframe. */
+export function h264Codec(bytes: Uint8Array): string {
+  for (let i = 0; i + 7 < bytes.length; i++) {
+    let n = 0;
+    if (bytes[i] === 0 && bytes[i + 1] === 0 && bytes[i + 2] === 1) n = i + 3;
+    else if (bytes[i] === 0 && bytes[i + 1] === 0 && bytes[i + 2] === 0 && bytes[i + 3] === 1) n = i + 4;
+    if (n && n + 3 < bytes.length && (bytes[n] & 31) === 7) {
+      return `avc1.${[bytes[n + 1], bytes[n + 2], bytes[n + 3]].map((v) => v.toString(16).padStart(2, '0')).join('')}`;
+    }
+  }
+  throw new RelayError('protocol_error', 'Keyframe is missing SPS');
+}
+
+/** Returns the WebSocket URL and subprotocols for `/stream` or `/control` on an engine origin. */
+export function socketTarget(origin: URL, path: '/stream' | '/control', token?: string): { url: URL; protocols: string[] } {
+  const url = new URL(path, origin);
+  url.protocol = origin.protocol === 'https:' ? 'wss:' : 'ws:';
+  return { url, protocols: token ? [SUBPROTOCOL, `bearer.${token}`] : [SUBPROTOCOL] };
 }
 
 export const HID_KEYS: Record<string, number> = {};

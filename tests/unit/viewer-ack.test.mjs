@@ -39,7 +39,7 @@ function viewer({ devicePixelRatio = 1, storage } = {}) {
   const context = createContext({
     document, window: { devicePixelRatio, VideoDecoder: Decoder, EncodedVideoChunk: true, addEventListener() {} },
     location: { protocol: 'http:', hostname: 'localhost', host: 'localhost', hash: '' },
-    URLSearchParams, WebSocket: Socket, VideoDecoder: Decoder,
+    URL, URLSearchParams, WebSocket: Socket, VideoDecoder: Decoder,
     EncodedVideoChunk: class { constructor(options) { Object.assign(this, options); } },
     MutationObserver: class { observe() {} }, ResizeObserver: class { observe() {} },
     performance: { now: () => 0 }, setInterval: () => 1, clearInterval() {},
