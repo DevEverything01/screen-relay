@@ -28,6 +28,8 @@ constexpr int vbvBufferKbit(uint64_t bitrate, bool refinement = false) {
   return int(bitrate / (refinement ? 7500 : 15000));
 }
 constexpr float encoder_crf = 10;
+/// Slice threads that encode one frame in parallel, which cuts the time to encode a large change.
+int encoderThreads() { return int(std::clamp(std::thread::hardware_concurrency(), 1u, 4u)); }
 using Clock = std::chrono::steady_clock;
 constexpr timespec pollTimeout(int64_t nanoseconds) {
   return {static_cast<time_t>(nanoseconds / 1000000000),
@@ -80,7 +82,7 @@ struct Resources {
     params.i_width = width; params.i_height = height; params.i_csp = X264_CSP_NV12;
     params.i_timebase_num = 1; params.i_timebase_den = 1000000;
     params.i_fps_num = int(settings.fps); params.i_fps_den = 1;
-    params.i_threads = 1; params.i_keyint_max = X264_KEYINT_MAX_INFINITE; params.i_bframe = 0;
+    params.i_threads = encoderThreads(); params.b_sliced_threads = 1; params.i_keyint_max = X264_KEYINT_MAX_INFINITE; params.i_bframe = 0;
     params.i_scenecut_threshold = 0; params.i_sync_lookahead = 0;
     params.rc.i_rc_method = X264_RC_CRF; params.rc.f_rf_constant = encoder_crf;
     params.rc.i_lookahead = 0; params.rc.i_vbv_max_bitrate = int(settings.start_bitrate / 1000); params.rc.i_vbv_buffer_size = vbvBufferKbit(settings.start_bitrate, true);
