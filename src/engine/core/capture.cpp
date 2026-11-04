@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <x264.h>
 #include <algorithm>
+#include <atomic>
 #include <cassert>
 #include <chrono>
 #include <condition_variable>
@@ -24,6 +25,10 @@ constexpr int vbvBufferKbit(uint64_t bitrate, bool refinement = false) {
   return int(bitrate / (refinement ? 7500 : 15000));
 }
 constexpr float encoder_crf = 10;
+/// Changed macroblocks above which damage conversion is split across worker threads.
+constexpr int parallel_convert_macroblocks = 512;
+/// Slice threads that encode one frame in parallel, which cuts the time to encode a large change.
+int encoderThreads() { return int(std::clamp(std::thread::hardware_concurrency(), 1u, 4u)); }
 using Clock = std::chrono::steady_clock;
 
 uint64_t ns(Clock::duration d) {
@@ -39,6 +44,50 @@ bool hasNal(const std::vector<uint8_t>& bytes, uint8_t type) {
 void require(bool ok, const char* message) {
   if (!ok) throw std::runtime_error(message);
 }
+/// Runs one job on every thread at once, the caller included, and returns when all of them finish.
+class Workers {
+ public:
+  explicit Workers(int count) {
+    for (int i = 1; i < count; ++i) threads.emplace_back([this] { loop(); });
+  }
+  ~Workers() {
+    { std::lock_guard<std::mutex> lock(mutex); stopping = true; }
+    wake.notify_all();
+    for (auto& thread : threads) thread.join();
+  }
+  int size() const { return int(threads.size()) + 1; }
+  void run(const std::function<void(int)>& job) {
+    { std::lock_guard<std::mutex> lock(mutex); task = &job; next = 1; pending = int(threads.size()); ++round; }
+    wake.notify_all();
+    job(0);
+    std::unique_lock<std::mutex> lock(mutex);
+    finished.wait(lock, [this] { return pending == 0; });
+    task = nullptr;
+  }
+ private:
+  void loop() {
+    uint64_t seen = 0;
+    std::unique_lock<std::mutex> lock(mutex);
+    while (true) {
+      wake.wait(lock, [&] { return stopping || round != seen; });
+      if (stopping) return;
+      seen = round;
+      const int part = next++;
+      const auto* job = task;
+      lock.unlock();
+      (*job)(part);
+      lock.lock();
+      if (--pending == 0) finished.notify_one();
+    }
+  }
+  std::vector<std::thread> threads;
+  std::mutex mutex;
+  std::condition_variable wake, finished;
+  const std::function<void(int)>* task = nullptr;
+  uint64_t round = 0;
+  int next = 0, pending = 0;
+  bool stopping = false;
+};
 struct Resources {
   PixelFormat format;
   int width, height;
@@ -46,14 +95,16 @@ struct Resources {
   x264_t* codec = nullptr;
   x264_picture_t frame{};
   std::vector<uint8_t> mb_info;
-  std::vector<uint8_t> scratch;
+  std::vector<std::vector<uint8_t>> scratch;
+  Workers workers;
   bool frame_allocated = false;
   uint64_t bitrate;
   bool wide_vbv = false;
   Resources(PixelFormat f, int w, int h, CaptureSettings s)
       : format(f), width(w), height(h), settings(s),
         mb_info(size_t((w + 15) / 16) * size_t((h + 15) / 16)),
-        scratch(size_t(w) * 24), bitrate(s.start_bitrate) {}
+        scratch(size_t(encoderThreads()), std::vector<uint8_t>(size_t(w) * 24)), workers(encoderThreads()),
+        bitrate(s.start_bitrate) {}
   ~Resources() {
     if (codec) x264_encoder_close(codec);
     if (frame_allocated) x264_picture_clean(&frame);
@@ -67,7 +118,7 @@ struct Resources {
     params.i_width = width; params.i_height = height; params.i_csp = X264_CSP_NV12;
     params.i_timebase_num = 1; params.i_timebase_den = 1000000;
     params.i_fps_num = int(settings.fps); params.i_fps_den = 1;
-    params.i_threads = 1; params.i_keyint_max = X264_KEYINT_MAX_INFINITE; params.i_bframe = 0;
+    params.i_threads = encoderThreads(); params.b_sliced_threads = 1; params.i_keyint_max = X264_KEYINT_MAX_INFINITE; params.i_bframe = 0;
     params.i_scenecut_threshold = 0; params.i_sync_lookahead = 0;
     params.rc.i_rc_method = X264_RC_CRF; params.rc.f_rf_constant = encoder_crf;
     params.rc.i_lookahead = 0; params.rc.i_vbv_max_bitrate = int(settings.start_bitrate / 1000); params.rc.i_vbv_buffer_size = vbvBufferKbit(settings.start_bitrate, true);
@@ -90,6 +141,7 @@ struct Resources {
   bool convertDamage(const FrameView& view, const std::vector<DamageRect>& rects) {
     const int columns = (width + 15) / 16;
     std::fill(mb_info.begin(), mb_info.end(), uint8_t(X264_MBINFO_CONSTANT));
+    int damaged = 0;
     for (const auto& rect : rects) {
       const int64_t x0 = std::max<int64_t>(view.x, rect.x);
       const int64_t y0 = std::max<int64_t>(view.y, rect.y);
@@ -98,11 +150,25 @@ struct Resources {
       if (x1 <= x0 || y1 <= y0) continue;
       for (int row = int(y0) / 16; row <= (y1 - 1) / 16; ++row)
         for (int column = int(x0) / 16; column <= (x1 - 1) / 16; ++column)
-          mb_info[row * columns + column] = 0;
+          if (mb_info[row * columns + column]) { mb_info[row * columns + column] = 0; ++damaged; }
     }
+    const int first = view.y / 16, rows = (view.y + view.height - 1) / 16 - first + 1;
+    std::atomic<bool> changed{false}, failed{false};
+    const int parts = damaged >= parallel_convert_macroblocks ? workers.size() : 1;
+    const std::function<void(int)> job = [&](int part) {
+      bool different = false;
+      if (!convertRows(view, first + rows * part / parts, first + rows * (part + 1) / parts, scratch[part], different))
+        failed = true;
+      if (different) changed = true;
+    };
+    if (parts > 1) workers.run(job); else job(0);
+    require(!failed, "RGB conversion failed");
+    return changed;
+  }
+  bool convertRows(const FrameView& view, int begin, int end, std::vector<uint8_t>& buffer, bool& changed) {
+    const int columns = (width + 15) / 16;
     const auto convert = view.format == PixelFormat::BGRA ? bgraToNv12 : argbToNv12;
-    bool changed = false;
-    for (int row = view.y / 16; row <= (view.y + view.height - 1) / 16; ++row) {
+    for (int row = begin; row < end; ++row) {
       const int y0 = std::max(row * 16, view.y);
       const int y1 = std::min(row * 16 + 16, view.y + view.height);
       for (int column = view.x / 16; column <= (view.x + view.width - 1) / 16;) {
@@ -111,9 +177,8 @@ struct Resources {
         while (column <= (view.x + view.width - 1) / 16 && !mb_info[row * columns + column]) ++column;
         const int x0 = std::max(first * 16, view.x);
         const int x1 = std::min(column * 16, view.x + view.width);
-        require(convert(view.data + (y0 - view.y) * view.stride + (x0 - view.x) * 4, view.stride,
-                        scratch.data(), width, scratch.data() + width * 16, width,
-                        x1 - x0, y1 - y0), "RGB conversion failed");
+        if (!convert(view.data + (y0 - view.y) * view.stride + (x0 - view.x) * 4, view.stride,
+                     buffer.data(), width, buffer.data() + width * 16, width, x1 - x0, y1 - y0)) return false;
         for (int block = first; block < column; ++block) {
           const int left = std::max(block * 16, x0);
           const int right = std::min(block * 16 + 16, x1);
@@ -121,7 +186,7 @@ struct Resources {
           for (int plane = 0; plane < 2; ++plane) {
             const int lines = plane ? (y1 - y0) / 2 : y1 - y0;
             uint8_t* target = frame.img.plane[plane] + (plane ? y0 / 2 : y0) * frame.img.i_stride[plane] + left;
-            const uint8_t* source = scratch.data() + (plane ? width * 16 : 0) + left - x0;
+            const uint8_t* source = buffer.data() + (plane ? width * 16 : 0) + left - x0;
             for (int line = 0; line < lines; ++line) {
               if (std::memcmp(target, source, right - left) != 0) {
                 std::memcpy(target, source, right - left);
@@ -136,7 +201,7 @@ struct Resources {
         }
       }
     }
-    return changed;
+    return true;
   }
 };
 }  // namespace

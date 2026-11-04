@@ -1,4 +1,5 @@
 import { spawnSync, type ChildProcess, type SpawnOptions } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { accessSync, closeSync, constants, fchmodSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { Readable } from 'node:stream';
@@ -6,7 +7,7 @@ import { createClient } from '../../sdk/index.js';
 import { BACKENDS, backendValue } from '../config.js';
 import { Failure, nextFor, sessionCommand } from '../output.js';
 import { HostArgs, LAUNCHER_DIR, run, spawnCleared, which } from './common.js';
-import { identity, SessionData, tail, writeSession } from './state.js';
+import { identity, SessionData, sweep, tail, writeSession } from './state.js';
 
 export const BACKEND_PROGRAMS = {
   x11: ['Xvfb', 'xauth', 'xprop', 'xwininfo', 'xdpyinfo', 'setxkbmap'],
@@ -86,7 +87,7 @@ export async function startXvfb(
   resolution = '1280x720',
   signal?: AbortSignal,
 ): Promise<string> {
-  const cookie = (await import('node:crypto')).randomBytes(16).toString('hex');
+  const cookie = randomBytes(16).toString('hex');
   const authorize = (display: string) => {
     const result = spawnSync('xauth', ['-f', auth, 'add', display, '.', cookie], { stdio: 'ignore' });
     if (result.status !== 0) throw new Failure('component_failed', 'Cannot authorize X display', HINTS.display, { component: 'display' });
@@ -329,7 +330,7 @@ export class Session {
     engineCommand.push('--backend', backend);
     if (this.args.output) engineCommand.push('--output', this.args.output);
     if (bind !== '127.0.0.1' || this.args.public) {
-      token = (await import('node:crypto')).randomBytes(32).toString('hex');
+      token = randomBytes(32).toString('hex');
       const tokenFile = join(this.dir, 'token');
       const descriptor = openSync(tokenFile, 'w', 0o600);
       fchmodSync(descriptor, 0o600);
@@ -434,7 +435,7 @@ export class Session {
         await new Promise((resolve) => child.once('exit', resolve));
       }
     }
-    await import('./state.js').then(({ sweep }) => sweep(this.dir));
+    await sweep(this.dir);
     if (this.runtimeDir) rmSync(this.runtimeDir, { recursive: true, force: true });
     for (const fd of this.logs) {
       try { closeSync(fd); } catch {}
