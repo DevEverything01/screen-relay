@@ -240,17 +240,60 @@ int main() {
   limited.sampleTransport(app_limited, 1);
   app_limited.bytes_acked += 10000;
   limited.sampleTransport(app_limited, 500001);
-  assert(limited.delivery_rate_bps == 0 && limited.target_bitrate == 8000000);
+  assert(limited.delivery_rate_bps == 0 && limited.target_bitrate > 8000000);
   auto eligible = sample;
   eligible.delivery_rate_bps = 6000000; eligible.bytes_acked = 30000;
   limited.sampleTransport(eligible, 500002);
+  const auto limited_target = limited.target_bitrate;
   app_limited.delivery_rate_bps = 100000000;
   app_limited.bytes_acked = 40000;
   limited.sampleTransport(app_limited, 750002);
-  assert(limited.delivery_rate_bps == 6000000 && limited.target_bitrate == 8000000);
+  limited.update(800002);
+  assert(limited.delivery_rate_bps == 6000000 && limited.target_bitrate >= limited_target);
+  const auto cached_target = limited.target_bitrate;
   app_limited.bytes_acked += 10000;
   limited.sampleTransport(app_limited, 1500002);
-  assert(limited.delivery_rate_bps == 0 && limited.target_bitrate == 8000000);
+  assert(limited.delivery_rate_bps == 0 && limited.target_bitrate >= cached_target);
+
+  for (const bool app_limited_sample : {true, false}) {
+    FlowControl probing, sparse_probing;
+    auto headroom = sample;
+    headroom.app_limited = app_limited_sample;
+    headroom.delivery_rate_bps = app_limited_sample ? 1000000 : 0;
+    probing.sampleTransport(headroom, 1);
+    sparse_probing.sampleTransport(headroom, 1);
+    for (uint64_t elapsed = 100000; elapsed <= 8000000; elapsed += 100000) {
+      const auto previous = probing.target_bitrate;
+      headroom.bytes_acked += 10000;
+      probing.sampleTransport(headroom, elapsed + 1);
+      probing.update(elapsed + 1);
+      assert(probing.target_bitrate >= previous && probing.target_bitrate <= probing.max_bitrate);
+      if (elapsed % 500000 == 0) {
+        sparse_probing.sampleTransport(headroom, elapsed + 1);
+        assert(std::abs(double(probing.target_bitrate) - double(sparse_probing.target_bitrate)) < 100);
+      }
+      if (elapsed == 1000000) assert(std::abs(double(probing.target_bitrate) - 10000000.0) < 100);
+    }
+    assert(probing.target_bitrate == probing.max_bitrate);
+
+    for (const uint64_t queued_us : {(probing.frameIntervalUs() + 1) / 2, probing.frameIntervalUs() + 1}) {
+      FlowControl building;
+      headroom.notsent_bytes = queued_us;
+      building.sampleTransport(headroom, 1);
+      assert(building.senderQueueUs() == queued_us);
+      building.update(1000001);
+      assert(building.target_bitrate == 8000000);
+    }
+
+    FlowControl stale;
+    headroom.notsent_bytes = 0;
+    stale.sampleTransport(headroom, 1);
+    assert(stale.enqueue(1, 1000, 1, 1) && stale.sent(1, 1));
+    assert(stale.senderQueueUs() == 0);
+    stale.update(1 + stale.admissionAgeUs());
+    stale.update(1000001);
+    assert(stale.target_bitrate == 8000000);
+  }
 
   FlowControl smoothed, frequent;
   auto fast = sample;

@@ -80,6 +80,12 @@ struct FlowControl {
     const uint64_t rate = delivery_rate_bps ? delivery_rate_bps : std::max<uint64_t>(1, target_bitrate);
     return uint64_t(std::ceil(queued * 8000000.0 / double(rate)));
   }
+  static uint64_t headroomBitrate(uint64_t target, uint64_t maximum, uint64_t elapsed_us,
+      uint64_t queued_us, uint64_t interval_us, uint64_t oldest_us, uint64_t age_limit_us) {
+    if (queued_us >= (interval_us + 1) / 2 || oldest_us >= age_limit_us) return target;
+    return uint64_t(std::round(std::min(double(maximum), double(target) *
+        std::pow(1.25, double(elapsed_us) / 1000000.0))));
+  }
   uint64_t frameBitrate() const {
     if (!transport_available) return target_bitrate;
     const uint64_t interval = frameIntervalUs();
@@ -174,6 +180,9 @@ struct FlowControl {
       expireDelivery(now);
       const uint64_t elapsed = now - std::min(now, last_transport_update_us);
       last_transport_update_us = now;
+      const uint64_t probe = transport.app_limited || !delivery_rate_bps ?
+          headroomBitrate(target_bitrate, max_bitrate, elapsed, senderQueueUs(), frameIntervalUs(),
+              oldestAge(now), admissionAgeUs()) : 0;
       if (delivery_rate_bps) {
         const double desired = std::clamp(double(delivery_rate_bps) * 0.85,
             double(min_bitrate), double(max_bitrate));
@@ -183,6 +192,7 @@ struct FlowControl {
               (desired - double(target_bitrate)) * weight)), min_bitrate, max_bitrate);
         }
       }
+      target_bitrate = std::max(target_bitrate, probe);
       return;
     }
     const bool busy = sample_start_us && sample_acks >= 8 && sample_bytes >= 65536;
