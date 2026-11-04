@@ -1,4 +1,7 @@
-import { HID_KEYS, encodeInput, header, type InputEvent } from '../src/protocol/index.js';
+import {
+  HID_KEYS, MAX_BYTES_IN_FLIGHT, encodeAck, encodeInput, h264Codec, isLoopback, parseMessage, socketTarget, validToken,
+  type InputEvent, type Message,
+} from '../src/protocol/index.js';
 
 const keys = HID_KEYS;
 const canvas = document.querySelector('#screen') as HTMLCanvasElement,
@@ -6,12 +9,12 @@ const canvas = document.querySelector('#screen') as HTMLCanvasElement,
   status = document.querySelector('#status')!;
 const cursor = document.querySelector('#cursor') as HTMLCanvasElement, cursorContext = cursor.getContext('2d')!;
 let accessToken = '';
-const trustedPage = location.protocol === 'https:' || ['localhost', '127.0.0.1'].includes(location.hostname);
+const trustedPage = location.protocol === 'https:' || isLoopback(location.hostname);
 {
   const fragmentToken = new URLSearchParams(location.hash.slice(1)).get('token');
   if (fragmentToken !== null) {
     history.replaceState(null, '', location.pathname + location.search);
-    if (/^[0-9a-f]{64}$/.test(fragmentToken) && trustedPage) accessToken = (document.querySelector('#access-token') as HTMLInputElement).value = fragmentToken;
+    if (validToken(fragmentToken) && trustedPage) accessToken = (document.querySelector('#access-token') as HTMLInputElement).value = fragmentToken;
   }
 }
 let cursorAvailable = false, cursorHotX = 0, cursorHotY = 0, pointerPosition: any;
@@ -27,22 +30,12 @@ function renderCursor() {
   cursor.style.left = `${p.clientX - cursorHotX * sx}px`;
   cursor.style.top = `${p.clientY - cursorHotY * sy}px`;
 }
-function receiveCursor(data: ArrayBuffer) {
-  const v = new DataView(data);
-  if (data.byteLength < 28 || data.byteLength > 28 + 256 * 256 * 4 ||
-      v.getUint16(6) || v.getUint32(12) || !generation || v.getUint32(8) !== generation) {
-    throw new Error('Invalid cursor envelope');
-  }
-  const width = v.getUint16(20), height = v.getUint16(22),
-    hotX = v.getUint16(24), hotY = v.getUint16(26);
-  if (width > 256 || height > 256 || data.byteLength !== 28 + width * height * 4 ||
-      (width && height ? hotX >= width || hotY >= height : width || height || hotX || hotY)) {
-    throw new Error('Invalid cursor image');
-  }
+function receiveCursor({ generation: gen, width, height, hotX, hotY, pixels }: Extract<Message, { type: 'cursor' }>) {
+  if (!generation || gen !== generation) throw new Error('Invalid cursor envelope');
   cursorAvailable = width > 0;
   cursorHotX = hotX; cursorHotY = hotY;
   cursor.width = width || 1; cursor.height = height || 1;
-  if (cursorAvailable) cursorContext.putImageData(new ImageData(new Uint8ClampedArray(data, 28), width, height), 0, 0);
+  if (cursorAvailable) cursorContext.putImageData(new ImageData(pixels as Uint8ClampedArray<ArrayBuffer>, width, height), 0, 0);
   renderCursor();
 }
 const stats = ((window as any).nativeStats = {
@@ -162,7 +155,7 @@ function schedulePresent() {
 function ackFrame(item: any): boolean {
   try {
     if (socket?.readyState !== WebSocket.OPEN) throw new Error('Connection closed before ACK');
-    socket.send(header(2, item.gen, item.seq, 0));
+    socket.send(encodeAck(item.gen, item.seq));
     return true;
   } catch (error: any) {
     fail(`ACK failed: ${error.message}`);
@@ -227,17 +220,6 @@ function present() {
   if (!item || !draw(item)) return;
   schedulePresent();
 }
-function codecFromSps(bytes: Uint8Array): string {
-  for (let i = 0; i + 7 < bytes.length; i++) {
-    let n = 0;
-    if (bytes[i] === 0 && bytes[i + 1] === 0 && bytes[i + 2] === 1) n = i + 3;
-    else if (bytes[i] === 0 && bytes[i + 1] === 0 && bytes[i + 2] === 0 && bytes[i + 3] === 1) n = i + 4;
-    if (n && n + 3 < bytes.length && (bytes[n] & 31) === 7) {
-      return `avc1.${[bytes[n + 1], bytes[n + 2], bytes[n + 3]].map((v) => v.toString(16).padStart(2, '0')).join('')}`;
-    }
-  }
-  throw new Error('Keyframe is missing SPS');
-}
 function connect() {
   clearTimeout(retryTimer);
   epoch++;
@@ -253,10 +235,8 @@ function connect() {
     setStatus('WebCodecs unavailable in this browser');
     return;
   }
-  socket = new WebSocket(
-    `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/stream`,
-    accessToken ? ['nsl1', `bearer.${accessToken}`] : 'nsl1',
-  );
+  const target = socketTarget(new URL(`${location.protocol}//${location.host}`), '/stream', accessToken);
+  socket = new WebSocket(target.url, target.protocols);
   transportBroken = false;
   loadCapabilities();
   const ws = socket;
@@ -272,34 +252,22 @@ function connect() {
   ws.onmessage = (e: MessageEvent) => {
     if (current !== epoch || ws.readyState !== WebSocket.OPEN) return;
     try {
-      if (
-        !(e.data instanceof ArrayBuffer) || e.data.byteLength < 20 ||
-        e.data.byteLength > 8388640
-      ) throw new Error('Invalid frame length');
-      const v = new DataView(e.data), gen = v.getUint32(8), seq = v.getUint32(12), flags = v.getUint16(6);
-      if (v.getUint32(0) !== 0x4e534c31 || v.getUint8(4) !== 1 || v.getUint32(16) !== e.data.byteLength - 20) {
-        throw new Error('Invalid message envelope');
-      }
-      if (v.getUint8(5) === 6) { receiveCursor(e.data); return; }
-      if (e.data.byteLength < 33) throw new Error('Invalid frame length');
-      const width = v.getUint16(20), height = v.getUint16(22), pts = v.getBigUint64(24);
-      if (
-        v.getUint8(5) !== 1 || flags > 1 || !gen || !seq ||
-        !width || !height ||
-        pts > BigInt(Number.MAX_SAFE_INTEGER)
-      ) throw new Error('Invalid frame header');
+      if (!(e.data instanceof ArrayBuffer)) throw new Error('Invalid frame length');
+      const message = parseMessage(e.data);
+      if (message.type === 'cursor') { receiveCursor(message); return; }
+      if (message.type !== 'frame') throw new Error('Invalid frame header');
+      const { generation: gen, sequence: seq, keyframe, width, height, timestamp, data } = message;
       if (generation && gen < generation) throw new Error('Stale generation');
       if (gen !== generation) {
         reset();
         generation = gen;
-        if (!(flags & 1) || seq !== 1) {
+        if (!keyframe || seq !== 1) {
           throw new Error('Generation must start with a keyframe');
         }
       }
-      const data = new Uint8Array(e.data, 32), timestamp = Number(pts);
       if (
         seq !== sequence + 1 || timestamp <= lastTimestamp ||
-        pending.size >= 360 || stats.pendingBytes + data.byteLength > 8388608
+        pending.size >= 360 || stats.pendingBytes + data.byteLength > MAX_BYTES_IN_FLIGHT
       ) throw new Error('Unexpected frame sequence or queue limit');
       sequence = seq;
       lastTimestamp = timestamp;
@@ -316,7 +284,7 @@ function connect() {
           canvas.style.setProperty('--w', String(width)); canvas.style.setProperty('--h', String(height));
           syncSize();
         }
-        const config = { codec: codecFromSps(data), codedWidth: width, codedHeight: height, optimizeForLatency: true };
+        const config = { codec: h264Codec(data), codedWidth: width, codedHeight: height, optimizeForLatency: true };
         const instance = new VideoDecoder({
           output(frame: VideoFrame) {
             let retained = false;
@@ -346,7 +314,7 @@ function connect() {
         decoder.configure(config);
       }
       decoder.decode(
-        new EncodedVideoChunk({ type: flags & 1 ? 'key' : 'delta', timestamp, data }),
+        new EncodedVideoChunk({ type: keyframe ? 'key' : 'delta', timestamp, data }),
       );
     } catch (error: any) {
       if (current === epoch) fail(error.message);
@@ -703,7 +671,7 @@ panels.keys.addEventListener('click', (e) => {
 panels.connection.addEventListener('submit', (e) => {
   e.preventDefault();
   const value = (document.querySelector('#access-token') as HTMLInputElement).value.trim();
-  if (value && (!/^[0-9a-f]{64}$/.test(value) || !trustedPage)) {
+  if (value && (!validToken(value) || !trustedPage)) {
     setStatus('Use a 64-character token over HTTPS or a localhost tunnel');
     return;
   }

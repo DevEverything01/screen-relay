@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { encodeInputRecord, encodeInput, encodeInputBatch, comboEvents, textEvents, batches, baseUrl, parseHeader, RelayError } from '../../dist/protocol/index.js';
+import { encodeInputRecord, encodeInput, encodeInputBatch, comboEvents, textEvents, batches, baseUrl, parseHeader, parseMessage, header, RelayError } from '../../dist/protocol/index.js';
 const hex = bytes => Buffer.from(bytes).toString('hex');
 
 test('input records and WebSocket envelope match golden bytes', () => {
@@ -65,4 +65,35 @@ test('origin and token rules reject unsafe targets', () => {
     ['http://user:pass@localhost'], ['http://localhost?x=1'], ['http://localhost#token'],
     ['http://localhost', 'A'.repeat(64)], ['ws://localhost'], ['not a URL'],
   ]) assert.throws(() => baseUrl(url, token), RelayError);
+});
+
+test('frame parsing accepts wire dimensions beyond 1080p and rejects unsafe headers', () => {
+  const bytes = header(1, 1, 1, 13);
+  const view = new DataView(bytes.buffer);
+  for (const [width, height] of [[3840, 2160], [16384, 16384], [65534, 65534], [65535, 65535]]) {
+    view.setUint16(20, width);
+    view.setUint16(22, height);
+    view.setBigUint64(24, BigInt(Number.MAX_SAFE_INTEGER));
+    const frame = parseMessage(bytes);
+    assert.equal(frame.type, 'frame');
+    assert.equal(frame.width, width);
+    assert.equal(frame.height, height);
+    assert.equal(frame.timestamp, Number.MAX_SAFE_INTEGER);
+    assert.equal(frame.data.byteLength, 1);
+  }
+  const invalid = () => assert.throws(() => parseMessage(bytes), { reason: 'protocol_error' });
+  view.setBigUint64(24, BigInt(Number.MAX_SAFE_INTEGER) + 1n);
+  invalid();
+  view.setBigUint64(24, 1n);
+  view.setUint16(20, 0);
+  invalid();
+  view.setUint16(20, 3840);
+  view.setUint16(22, 0);
+  invalid();
+  view.setUint16(22, 2160);
+  view.setUint32(12, 0);
+  invalid();
+  view.setUint32(12, 1);
+  view.setUint32(16, 12);
+  invalid();
 });

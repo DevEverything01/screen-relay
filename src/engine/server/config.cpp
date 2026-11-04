@@ -119,9 +119,8 @@ bool loopbackHost(const std::string& host) { return loopbackOrigin("http://" + h
 bool localRequest(const Config& config, lws* wsi) {
   const auto host = header(wsi, WSI_TOKEN_HOST);
   if (!loopbackHost(host) && (config.origin.empty() || host != config.authority)) return false;
-  if (lws_hdr_total_length(wsi, WSI_TOKEN_ORIGIN) <= 0) return true;
-  const auto origin = header(wsi, WSI_TOKEN_ORIGIN);
-  return (loopbackHost(host) && loopbackOrigin(origin)) || (!config.token.empty() && !origin.empty() && origin == config.origin);
+  if (!config.token.empty() || lws_hdr_total_length(wsi, WSI_TOKEN_ORIGIN) <= 0) return true;
+  return loopbackHost(host) && loopbackOrigin(header(wsi, WSI_TOKEN_ORIGIN));
 }
 bool unsignedNumber(const std::string& text, uint64_t& value) {
   if (text.empty()) return false;

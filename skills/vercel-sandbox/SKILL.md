@@ -19,7 +19,7 @@ relay up -d --public https://<id>.vercel.run
 relay status --json
 ```
 
-Piped, `up -d` prints the viewer URL, including its `#token=` fragment; treat the whole URL as a secret and share it only through the user's secret channel. `/` must resolve to `https://<id>.vercel.run`; run `relay up -d --public` once the edge URL exists, because the engine accepts only that origin.
+Piped, `up -d` prints the viewer URL, including its `#token=` fragment; treat the whole URL as a secret and share it only through the user's secret channel. `/` must resolve to `https://<id>.vercel.run`; run `relay up -d --public` once the edge URL exists, because the engine accepts only that host.
 
 Extend the sandbox lifetime when needed:
 

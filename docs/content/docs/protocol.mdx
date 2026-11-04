@@ -50,7 +50,7 @@ Replace the URL and securely copy the session token into `./token`. For a local 
 
 When the session has a token, send `Authorization: Bearer TOKEN`. Do not put the token in a request URL. See [Tokens](/docs/remote-access#tokens).
 
-The `Host` must be `localhost`, `127.0.0.1`, or the authority configured with `--public`, with its port if specified. `Origin` is optional for HTTP and `/control`, but required for `/stream`. If sent, it must be a loopback origin with a loopback `Host`, or match the `--public` origin with a token configured.
+The `Host` must be `localhost`, `127.0.0.1`, or the authority configured with `--public`, with its port if specified. `Origin` is optional. When the session has a token, any `Origin` is accepted. Without a token, a sent `Origin` must be a loopback origin with a loopback `Host`.
 
 ## Errors
 
