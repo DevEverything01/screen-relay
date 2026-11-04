@@ -6,10 +6,78 @@
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
+#ifdef _WIN32
+#include <windows.h>
+#include <aclapi.h>
+#else
 #include <sys/stat.h>
 #include <unistd.h>
+#endif
 
 namespace relay {
+namespace {
+#ifdef _WIN32
+/// Reports whether an ACE only denies, audits, or labels access, so it cannot grant anyone access to the file.
+bool deniesOrAudits(BYTE type) {
+  switch (type) {
+    case ACCESS_DENIED_ACE_TYPE: case ACCESS_DENIED_OBJECT_ACE_TYPE: case ACCESS_DENIED_CALLBACK_ACE_TYPE:
+    case ACCESS_DENIED_CALLBACK_OBJECT_ACE_TYPE: case SYSTEM_AUDIT_ACE_TYPE: case SYSTEM_AUDIT_OBJECT_ACE_TYPE:
+    case SYSTEM_AUDIT_CALLBACK_ACE_TYPE: case SYSTEM_AUDIT_CALLBACK_OBJECT_ACE_TYPE: case SYSTEM_ALARM_ACE_TYPE:
+    case SYSTEM_MANDATORY_LABEL_ACE_TYPE:
+      return true;
+    default:
+      return false;
+  }
+}
+/// Reports whether only the current user, SYSTEM, and Administrators own or may open the file.
+bool privateTokenFile(const std::string& path) {
+  std::error_code error;
+  if (!std::filesystem::is_regular_file(path, error) || std::filesystem::file_size(path, error) > 66 || error) return false;
+  HANDLE token = nullptr;
+  if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) return false;
+  alignas(TOKEN_USER) unsigned char buffer[256];
+  DWORD length = 0;
+  const bool queried = GetTokenInformation(token, TokenUser, buffer, sizeof(buffer), &length);
+  CloseHandle(token);
+  if (!queried) return false;
+  const PSID user = reinterpret_cast<TOKEN_USER*>(buffer)->User.Sid;
+  PSID owner = nullptr;
+  PACL dacl = nullptr;
+  PSECURITY_DESCRIPTOR descriptor = nullptr;
+  if (GetNamedSecurityInfoA(path.c_str(), SE_FILE_OBJECT, OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION,
+                            &owner, nullptr, &dacl, nullptr, &descriptor) != ERROR_SUCCESS) return false;
+  const auto privileged = [&](PSID sid) {
+    return EqualSid(sid, user) || IsWellKnownSid(sid, WinLocalSystemSid) || IsWellKnownSid(sid, WinBuiltinAdministratorsSid);
+  };
+  bool owned = dacl && owner && privileged(owner);
+  for (DWORD index = 0; owned && index < dacl->AceCount; ++index) {
+    ACE_HEADER* header = nullptr;
+    if (!GetAce(dacl, index, reinterpret_cast<void**>(&header))) { owned = false; break; }
+    if (deniesOrAudits(header->AceType)) continue;
+    owned = header->AceType == ACCESS_ALLOWED_ACE_TYPE &&
+            privileged(&reinterpret_cast<ACCESS_ALLOWED_ACE*>(header)->SidStart);
+  }
+  LocalFree(descriptor);
+  return owned;
+}
+/// Path of the running engine binary, used to find the bundled viewer.
+std::filesystem::path executablePath() {
+  wchar_t path[MAX_PATH];
+  const DWORD length = GetModuleFileNameW(nullptr, path, MAX_PATH);
+  if (!length || length == MAX_PATH) throw std::runtime_error("Could not find the engine executable");
+  return std::filesystem::path(path);
+}
+#else
+/// Path of the running engine binary, used to find the bundled viewer.
+std::filesystem::path executablePath() { return std::filesystem::canonical("/proc/self/exe"); }
+/// Reports whether the current user owns the file and no other user can read or write it.
+bool privateTokenFile(const std::string& path) {
+  struct stat st{};
+  return !stat(path.c_str(), &st) && S_ISREG(st.st_mode) && st.st_uid == geteuid() && !(st.st_mode & 0077) &&
+         st.st_size <= 66;
+}
+#endif
+}
 bool secretEqual(const std::string& a, const std::string& b) {
   if (a.size() != b.size()) return false;
   unsigned difference = 0;
@@ -61,7 +129,7 @@ bool unsignedNumber(const std::string& text, uint64_t& value) {
   return parsed.ec == std::errc{} && parsed.ptr == text.data()+text.size();
 }
 bool parseConfig(int argc, char** argv, Config& config) {
-  config.viewer = (std::filesystem::canonical("/proc/self/exe").parent_path() / "viewer").string();
+  config.viewer = (executablePath().parent_path() / "viewer").string();
   if (config.backend.empty()) config.backend = defaultBackend().name;
   const auto bitrate = [](const std::string& text) {
     uint64_t value;
@@ -111,8 +179,7 @@ bool parseConfig(int argc, char** argv, Config& config) {
         throw std::runtime_error("Public origin must be an HTTPS origin without path or credentials");
       config.origin = value; config.authority = value.substr(8);
     } else if (option == "--token-file") {
-      struct stat st{};
-      if (stat(value.c_str(), &st) || !S_ISREG(st.st_mode) || st.st_uid != geteuid() || (st.st_mode & 0077) || st.st_size > 66)
+      if (!privateTokenFile(value))
         throw std::runtime_error("Token file must be private, owned by this user and contain 64 hexadecimal characters");
       std::ifstream file(value); std::getline(file, config.token);
       if (!file || config.token.size() != 64 || config.token.find_first_not_of("0123456789abcdef") != std::string::npos)
