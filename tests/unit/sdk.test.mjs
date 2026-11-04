@@ -122,7 +122,7 @@ function packet(type, generation, sequence, payload) {
 class FakeSocket extends EventTarget {
   static CLOSING = 2;
   constructor(url, protocol) {
-    super(); assert.equal(url.pathname, '/control'); assert.equal(protocol, 'nsl1');
+    super(); assert.equal(url.pathname, '/control'); assert.deepEqual(protocol, ['nsl1']);
     this.readyState = 1;
     FakeSocket.current = this;
     queueMicrotask(() => this.dispatchEvent(new MessageEvent('message', { data: packet(4, 7, 0, Buffer.from([5, 0, 2, 208])) })));

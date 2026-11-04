@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { createContext, runInContext } from 'node:vm';
 
-function viewer({ devicePixelRatio = 1, storage } = {}) {
+function viewer({ devicePixelRatio = 1, storage, decode = true } = {}) {
   const listeners = {}, elements = {}, sockets = [];
   const element = () => ({
     style: { setProperty(name, value) { this[name] = value; } }, classList: { toggle() {} }, hidden: false, width: 1280, height: 720,
@@ -28,7 +28,7 @@ function viewer({ devicePixelRatio = 1, storage } = {}) {
   class Decoder {
     constructor(callbacks) { this.callbacks = callbacks; this.state = 'configured'; }
     configure() {}
-    decode(chunk) { this.callbacks.output({ timestamp: chunk.timestamp, close() {} }); }
+    decode(chunk) { if (decode) this.callbacks.output({ timestamp: chunk.timestamp, close() {} }); }
     close() { this.state = 'closed'; }
   }
   const document = {
@@ -39,7 +39,7 @@ function viewer({ devicePixelRatio = 1, storage } = {}) {
   const context = createContext({
     document, window: { devicePixelRatio, VideoDecoder: Decoder, EncodedVideoChunk: true, addEventListener() {} },
     location: { protocol: 'http:', hostname: 'localhost', host: 'localhost', hash: '' },
-    URLSearchParams, WebSocket: Socket, VideoDecoder: Decoder,
+    URL, URLSearchParams, WebSocket: Socket, VideoDecoder: Decoder,
     EncodedVideoChunk: class { constructor(options) { Object.assign(this, options); } },
     MutationObserver: class { observe() {} }, ResizeObserver: class { observe() {} },
     performance: { now: () => 0 }, setInterval: () => 1, clearInterval() {},
@@ -267,4 +267,15 @@ test('keys-panel buttons keep the canvas focus so hold latches survive clicks', 
   press('hold', 'ControlLeft');
   press('keys', 'Escape');
   assert.deepEqual(inputBytes(app).slice(7), [[1, 224], [1, 41], [2, 41], [2, 224]]);
+});
+
+test('pending decoder frames allow 360 entries before reconnecting', () => {
+  const app = viewer({ decode: false });
+  for (let seq = 1; seq <= 360; seq++) app.frame(seq);
+  assert.equal(app.context.window.nativeStats.outstanding, 360);
+  assert.equal(app.context.window.nativeStats.decodeerrors, 0);
+  app.frame(361);
+  assert.equal(app.context.window.nativeStats.decodeerrors, 1);
+  assert.equal(app.document.querySelector('#status').textContent, 'Unexpected frame sequence or queue limit');
+  assert.equal(app.sockets[0].events.at(-1), 'close');
 });

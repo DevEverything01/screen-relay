@@ -4,7 +4,7 @@ import { request as httpRequest } from 'node:http';
 import { request as httpsRequest, type RequestOptions } from 'node:https';
 import {
   RelayError, networkError, responseError, baseUrl, integer, encodeInput, encodeInputBatch, comboEvents, textEvents,
-  batches, parseHeader, HEADER_SIZE, MESSAGE_TYPES, MAX_INPUT_BATCH, MAX_INPUT_PENDING,
+  batches, parseMessage, socketTarget, MAX_INPUT_BATCH, MAX_INPUT_PENDING,
   type InputEvent,
 } from '../protocol/index.js';
 
@@ -266,9 +266,8 @@ export async function connect(options: ClientOptions = {}): Promise<Session> {
   if (server.ca || server.connect) throw new RelayError('invalid_option', 'Control connections do not support ca or connect options.');
   if (server.signal?.aborted) throw new RelayError('canceled', 'Control connection canceled.');
   if (typeof WebSocket === 'undefined') throw new RelayError('unsupported_platform', 'Control sessions require Node 22 or newer');
-  const wsUrl = new URL('/control', server.base);
-  wsUrl.protocol = server.base.protocol === 'https:' ? 'wss:' : 'ws:';
-  const socket = new WebSocket(wsUrl, server.token ? ['nsl1', `bearer.${server.token}`] : 'nsl1');
+  const { url, protocols } = socketTarget(server.base, '/control', server.token);
+  const socket = new WebSocket(url, protocols);
   socket.binaryType = 'arraybuffer';
   let generation = 0, sequence = 0, closed = false, ready = false;
   const pending = new Map<number, { resolve: () => void; reject: (error: RelayError) => void; timer: ReturnType<typeof setTimeout> }>();
@@ -291,20 +290,19 @@ export async function connect(options: ClientOptions = {}): Promise<Session> {
   socket.addEventListener('message', ({ data }) => {
     try {
       if (!(data instanceof ArrayBuffer)) throw new Error('Non-binary message');
-      const header = parseHeader(data);
-      const payload = new DataView(data, HEADER_SIZE);
+      const message = parseMessage(data);
       if (!ready) {
-        if (header.type !== MESSAGE_TYPES.controlReady || header.payloadLength !== 4 || header.sequence || !payload.getUint16(0) || !payload.getUint16(2)) throw new Error('Invalid ready message');
-        generation = header.generation;
+        if (message.type !== 'controlReady') throw new Error('Invalid ready message');
+        generation = message.generation;
         ready = true;
-        resolveReady({ width: payload.getUint16(0), height: payload.getUint16(2) });
+        resolveReady({ width: message.width, height: message.height });
         return;
       }
-      if (header.type !== MESSAGE_TYPES.inputResponse || header.payloadLength !== 1 || header.generation !== generation || !header.sequence || !pending.has(header.sequence) || payload.getUint8(0) > 2) throw new Error('Invalid input response');
-      const item = pending.get(header.sequence)!;
-      pending.delete(header.sequence);
+      if (message.type !== 'inputResponse' || message.generation !== generation || !pending.has(message.sequence)) throw new Error('Invalid input response');
+      const item = pending.get(message.sequence)!;
+      pending.delete(message.sequence);
       clearTimeout(item.timer);
-      if (payload.getUint8(0)) item.reject(new RelayError(payload.getUint8(0) === 1 ? 'invalid_input' : 'unsupported_input', 'Input rejected by server'));
+      if (message.status) item.reject(new RelayError(message.status === 1 ? 'invalid_input' : 'unsupported_input', 'Input rejected by server'));
       else item.resolve();
     } catch (error) { finish(new RelayError('protocol_error', error instanceof Error ? error.message : String(error))); }
   });
