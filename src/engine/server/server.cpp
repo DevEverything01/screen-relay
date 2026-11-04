@@ -117,7 +117,7 @@ bool Server::message() {
 void Server::updateFlow() {
   if (viewer && !lws_partial_buffered(viewer)) buffered_stream_bytes = 0;
 #ifdef __linux__
-  const auto sample = viewer && !controller ? streamTransportSample(viewer, buffered_stream_bytes) : std::nullopt;
+  const auto sample = viewer && !controller && !config.proxy ? streamTransportSample(viewer, buffered_stream_bytes) : std::nullopt;
 #endif
   uint32_t gen, notsent_lowat; unsigned window; uint64_t bitrate, admit_until, service_deadline; bool paused, inflight;
   { std::lock_guard<std::mutex> lock(mutex);
