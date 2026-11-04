@@ -390,7 +390,7 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
       if (lws_hdr_copy(wsi, uri, sizeof(uri), WSI_TOKEN_GET_URI) <= 0 || !user) return 1;
       const bool control = !std::strcmp(uri, "/control");
       if (!localRequest(s->config, wsi) || !authenticated(s->config, wsi, true) ||
-          (!control && (std::strcmp(uri, "/stream") || lws_hdr_total_length(wsi, WSI_TOKEN_ORIGIN) <= 0)) ||
+          (!control && std::strcmp(uri, "/stream")) ||
           s->viewer || s->nextGeneration == UINT32_MAX) return 1;
       static_cast<HttpResponse*>(user)->control = control;
       return 0;
