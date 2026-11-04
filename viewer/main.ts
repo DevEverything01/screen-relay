@@ -299,7 +299,7 @@ function connect() {
       const data = new Uint8Array(e.data, 32), timestamp = Number(pts);
       if (
         seq !== sequence + 1 || timestamp <= lastTimestamp ||
-        pending.size >= 8 || stats.pendingBytes + data.byteLength > 8388608
+        pending.size >= 360 || stats.pendingBytes + data.byteLength > 8388608
       ) throw new Error('Unexpected frame sequence or queue limit');
       sequence = seq;
       lastTimestamp = timestamp;
