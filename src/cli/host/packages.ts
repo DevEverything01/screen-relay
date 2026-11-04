@@ -1,4 +1,6 @@
-import table from '../../../packages.tsv';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 export type Family = 'apt' | 'dnf' | 'pacman' | 'apk';
 
@@ -14,10 +16,21 @@ const columns: Record<Family, number> = { apt: 2, dnf: 3, pacman: 4, apk: 5 };
 
 const unsupported = ['rhel', 'rocky', 'almalinux', 'centos'];
 
-export const rows = table
-  .split('\n')
-  .filter((line) => line !== '' && !line.startsWith('#'))
-  .map((line) => line.split('\t'));
+const runtimeDirectory = dirname(fileURLToPath(import.meta.url));
+let table: string[][] | undefined;
+
+/** Rows of packages.tsv, read on first use from beside the installed CLI or from the root of a source checkout. */
+export function rows(): string[][] {
+  if (table) return table;
+  const candidates = [join(runtimeDirectory, 'packages.tsv'), resolve(runtimeDirectory, '../../packages.tsv'), resolve(runtimeDirectory, '../../../packages.tsv')];
+  const path = candidates.find((candidate) => existsSync(candidate));
+  if (path === undefined) throw new Error(`packages.tsv not found beside ${runtimeDirectory}`);
+  table = readFileSync(path, 'utf8')
+    .split('\n')
+    .filter((line) => line !== '' && !line.startsWith('#'))
+    .map((line) => line.split('\t'));
+  return table;
+}
 
 function osReleaseWords(osRelease: string, key: string): string[] {
   const line = osRelease.split('\n').find((row) => row.startsWith(`${key}=`));
@@ -36,10 +49,10 @@ export function detectFamily(osRelease: string): Family | undefined {
 
 /** Distro package names for the logical names, in table order, deduplicated. Throws on an unknown name. */
 export function packagesFor(family: Family, names: string[]): string[] {
-  const unknown = names.find((name) => !rows.some((row) => row[1] === name));
+  const unknown = names.find((name) => !rows().some((row) => row[1] === name));
   if (unknown !== undefined) throw new Error(`unknown package name: ${unknown}`);
   const packages = new Set<string>();
-  for (const row of rows.filter((entry) => names.includes(entry[1]))) {
+  for (const row of rows().filter((entry) => names.includes(entry[1]))) {
     for (const cell of row[columns[family]].split(' ')) {
       if (cell !== '-') packages.add(cell);
     }

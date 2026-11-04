@@ -1,20 +1,19 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { after, test } from 'node:test';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { buildSync } from 'esbuild';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
-const directory = mkdtempSync(join(tmpdir(), 'relay-packages-test-'));
+mkdirSync(join(root, 'build'), { recursive: true });
+const directory = mkdtempSync(join(root, 'build', 'packages-test-'));
 after(() => rmSync(directory, { recursive: true, force: true }));
 const bundle = buildSync({
   entryPoints: [join(root, 'src/cli/host/packages.ts')],
   bundle: true,
   platform: 'node',
   format: 'esm',
-  loader: { '.tsv': 'text' },
   write: false,
 });
 const bundlePath = join(directory, 'packages.mjs');
@@ -44,10 +43,10 @@ test('packagesFor maps logical names to distro packages, skipping unavailable ce
 });
 
 test('every packages.tsv row has six non-empty fields and no repeated logical name', () => {
-  for (const row of rows) {
+  for (const row of rows()) {
     assert.equal(row.length, 6, row.join(' | '));
     assert.ok(row.every((field) => field !== ''), row.join(' | '));
   }
-  const logical = rows.map((row) => row[1]);
+  const logical = rows().map((row) => row[1]);
   assert.equal(new Set(logical).size, logical.length);
 });

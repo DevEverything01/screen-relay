@@ -235,6 +235,7 @@ on_path() {
 install_cli() {
   install -d "$prefix/bin" "$prefix/lib/relay"
   install -m 0755 dist/cli/relay.mjs "$prefix/lib/relay/relay.mjs"
+  install -m 0644 packages.tsv "$prefix/lib/relay/packages.tsv"
   install -d "$prefix/lib/relay/skills"
   cp -R skills/. "$prefix/lib/relay/skills/"
   cat > "$prefix/bin/relay" <<EOF
