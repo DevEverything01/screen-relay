@@ -9,6 +9,7 @@ core	libgcc	-	-	-	libgcc
 core	x264-dev	libx264-dev	x264-devel	x264	x264-dev
 core	libwebsockets-dev	libwebsockets-dev	libwebsockets-devel	libwebsockets	libwebsockets-dev openssl-dev
 core	zlib-dev	zlib1g-dev	zlib-ng-compat-devel	zlib	zlib-dev
+core	linux-headers	-	-	-	linux-headers
 x11	libx11-dev	libx11-dev	libX11-devel	libx11	libx11-dev
 x11	libxext-dev	libxext-dev	libXext-devel	libxext	libxext-dev
 x11	libxdamage-dev	libxdamage-dev	libXdamage-devel	libxdamage	libxdamage-dev
