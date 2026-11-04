@@ -1,11 +1,17 @@
 CXX ?= g++
+ifeq ($(OS),Windows_NT)
+BACKENDS ?= windows
+endif
 BACKENDS ?= x11
 HAS_WAYLAND = $(filter wayland,$(BACKENDS))
-AVAILABLE_BACKENDS = x11 wayland
+AVAILABLE_BACKENDS = x11 wayland windows
 BACKEND_PKGS_x11 = x11 xext xdamage xfixes xtst
 BACKEND_DIR_x11 = linux/x11
 BACKEND_PKGS_wayland = wayland-client xkbcommon
 BACKEND_DIR_wayland = linux/wayland
+BACKEND_DIR_windows = windows
+BACKEND_LIBS_windows = -ld3d11 -ldxgi
+BACKEND_FLAGS_windows = -DNOMINMAX -D_WIN32_WINNT=0x0A00
 ifneq ($(filter-out $(AVAILABLE_BACKENDS),$(BACKENDS)),)
 $(error Unknown BACKENDS '$(filter-out $(AVAILABLE_BACKENDS),$(BACKENDS))'; available: $(AVAILABLE_BACKENDS))
 endif
@@ -14,13 +20,14 @@ $(error BACKENDS must name at least one backend; available: $(AVAILABLE_BACKENDS
 endif
 BACKEND_PKGS = $(sort $(foreach backend,$(BACKENDS),$(BACKEND_PKGS_$(backend))))
 BACKEND_DIRS = $(sort $(foreach backend,$(BACKENDS),$(BACKEND_DIR_$(backend))))
-BACKEND_CPPFLAGS = $(foreach backend,$(sort $(BACKENDS)),-DRELAY_BACKEND_$(backend))
+BACKEND_CPPFLAGS = $(foreach backend,$(sort $(BACKENDS)),-DRELAY_BACKEND_$(backend) $(BACKEND_FLAGS_$(backend)))
 CODEC_PKGS = x264
 PKGS = $(sort $(BACKEND_PKGS) $(CODEC_PKGS) libwebsockets zlib)
 CPPFLAGS += -Isrc/engine $(BACKEND_CPPFLAGS) $(shell pkg-config --cflags $(PKGS))
 CXXFLAGS ?= -O2
 CXXFLAGS += -std=c++17 -Wall -Wextra -Wpedantic -pthread
-LDLIBS += $(shell pkg-config --libs $(PKGS)) -pthread
+BACKEND_LIBS = $(foreach backend,$(BACKENDS),$(BACKEND_LIBS_$(backend)))
+LDLIBS += $(shell pkg-config --libs $(PKGS)) $(BACKEND_LIBS) -pthread
 
 CORE_SRCS = $(wildcard src/engine/core/*.cpp)
 BACKEND_SRCS = $(foreach dir,$(BACKEND_DIRS),$(wildcard src/engine/backends/$(dir)/*.cpp))
@@ -107,7 +114,7 @@ build/test-viewer/viewer.js:
 
 build/server-test: tests/unit/server-test.cpp $(SERVER_TEST_SRCS) $(HEADERS) $(WAYLAND_PROTOCOL_HEADERS) $(WAYLAND_PROTOCOL_OBJECTS) build/test-viewer/viewer.js build/backends
 	mkdir -p build
-	$(CXX) -Isrc/engine $(BACKEND_CPPFLAGS) $(if $(HAS_WAYLAND),-Ibuild/protocols) $(shell pkg-config --cflags $(BACKEND_PKGS) libwebsockets) $(CXXFLAGS) tests/unit/server-test.cpp $(SERVER_TEST_SRCS) $(WAYLAND_PROTOCOL_OBJECTS) -o $@ $(shell pkg-config --libs $(BACKEND_PKGS) libwebsockets)
+	$(CXX) -Isrc/engine $(BACKEND_CPPFLAGS) $(if $(HAS_WAYLAND),-Ibuild/protocols) $(shell pkg-config --cflags $(BACKEND_PKGS) libwebsockets) $(CXXFLAGS) tests/unit/server-test.cpp $(SERVER_TEST_SRCS) $(WAYLAND_PROTOCOL_OBJECTS) -o $@ $(shell pkg-config --libs $(BACKEND_PKGS) libwebsockets) $(BACKEND_LIBS)
 
 test-server: build/server-test
 	./build/server-test
