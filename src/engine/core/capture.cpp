@@ -305,6 +305,7 @@ struct CaptureEncoder::Impl {
                     counters.convert_ns += ns(converted - captured);
                   }
                   consecutive_failures = 0;
+                  bucket.spend(ns(converted.time_since_epoch()));
                   continue;
                 }
               }
