@@ -8,8 +8,8 @@ export const HEADER_SIZE = 20;
 export const INPUT_SIZE = 16;
 export const MAX_INPUT_BATCH = 256;
 export const MAX_INPUT_PENDING = 32;
-export const MAX_WIDTH = 1920;
-export const MAX_HEIGHT = 1080;
+export const MAX_WIDTH = 65535;
+export const MAX_HEIGHT = 65535;
 export const MAX_FRAMES_IN_FLIGHT = 8;
 export const MAX_BYTES_IN_FLIGHT = 8388608;
 export const SUBPROTOCOL = 'nsl1';
@@ -147,7 +147,7 @@ export function parseMessage(bytes: Uint8Array | ArrayBuffer): Message {
   if (type === MESSAGE_TYPES.frame) {
     if (size < 13 || !sequence) throw invalid('frame header');
     const width = view.getUint16(0), height = view.getUint16(2), timestamp = view.getBigUint64(4);
-    if (!width || width > MAX_WIDTH || !height || height > MAX_HEIGHT || timestamp > BigInt(Number.MAX_SAFE_INTEGER)) throw invalid('frame header');
+    if (!width || !height || timestamp > BigInt(Number.MAX_SAFE_INTEGER)) throw invalid('frame header');
     return { type: 'frame', generation, sequence, keyframe: flags === 1, width, height, timestamp: Number(timestamp), data: data.subarray(HEADER_SIZE + 12) };
   }
   if (type === MESSAGE_TYPES.cursor) {

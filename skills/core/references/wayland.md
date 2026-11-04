@@ -42,7 +42,7 @@ Attach mode does not set `DISPLAY`. X11 apps need it, so export `DISPLAY` in the
 
 ## Limits
 
-- Output width must be 320 to 1920 pixels and height 240 to 1080 pixels, both even. For a larger screen, create a headless output of a supported size on your compositor, then attach to it.
+- Output width must be 320 to 16384 pixels and height 240 to 16384 pixels, both even. For a larger screen, create a headless output of a supported size on your compositor, then attach to it.
 - Selecting an output with `--output` needs `wl_output` version 4.
 - The output size cannot change during a session. Run `relay down` and start again to use another size.
 - The cursor image is not streamed. The viewer shows its own arrow.

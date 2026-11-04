@@ -84,7 +84,8 @@ test('rejects unknown keys with their path and valid keys', () => {
 
 test('requires even resolutions within bounds', () => {
   assert.throws(() => config.loadConfig(write('display:\n  resolution: 1281x720\n')), /display\.resolution.*even/);
-  assert.throws(() => config.loadConfig(write('display:\n  resolution: 2000x1080\n')), /display\.resolution.*320\.\.1920/);
+  assert.equal(config.loadConfig(write('display:\n  resolution: 3840x2160\n'))[0].display.resolution, '3840x2160');
+  assert.throws(() => config.loadConfig(write('display:\n  resolution: 16386x1080\n')), /display\.resolution.*320\.\.16384/);
 });
 
 test('validates bitrate suffixes and ordering', () => {

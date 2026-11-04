@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { Readable } from 'node:stream';
@@ -40,7 +40,6 @@ export async function cmdUp(args: Args): Promise<number> {
   if (Boolean(args['tls-cert']) !== Boolean(args['tls-key'])) throw new Failure('invalid_input', '--tls-cert and --tls-key go together', 'Run `relay up --help`.');
   const directory = stateDir(args.name);
   mkdirSync(directory, { recursive: true, mode: 0o700 });
-  const { chmodSync } = await import('node:fs');
   chmodSync(directory, 0o700);
   const readyFd = Number(process.env.RELAY_READY_FD ?? -1);
   delete process.env.RELAY_READY_FD;

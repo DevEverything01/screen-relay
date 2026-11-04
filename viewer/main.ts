@@ -1,5 +1,5 @@
 import {
-  HID_KEYS, MAX_BYTES_IN_FLIGHT, MAX_FRAMES_IN_FLIGHT, encodeAck, encodeInput, h264Codec, isLoopback, parseMessage, socketTarget, validToken,
+  HID_KEYS, MAX_BYTES_IN_FLIGHT, encodeAck, encodeInput, h264Codec, isLoopback, parseMessage, socketTarget, validToken,
   type InputEvent, type Message,
 } from '../src/protocol/index.js';
 
@@ -248,7 +248,7 @@ function connect() {
       }
       if (
         seq !== sequence + 1 || timestamp <= lastTimestamp ||
-        pending.size >= MAX_FRAMES_IN_FLIGHT || stats.pendingBytes + data.byteLength > MAX_BYTES_IN_FLIGHT
+        pending.size >= 360 || stats.pendingBytes + data.byteLength > MAX_BYTES_IN_FLIGHT
       ) throw new Error('Unexpected frame sequence or queue limit');
       sequence = seq;
       lastTimestamp = timestamp;
@@ -426,7 +426,7 @@ function startHud() {
     previousTime = now;
     previousDrawn = stats.drawn;
     previousBytes = stats.bytes;
-    if (!metricsRequest) {
+    if (!metricsRequest && !document.querySelector('#stats')!.hidden) {
       const controller = metricsRequest = new AbortController();
       const timer = setTimeout(() => controller.abort(), 2000);
       fetch('/metrics', { cache: 'no-store', signal: controller.signal, redirect: 'error', headers: authHeaders() })
