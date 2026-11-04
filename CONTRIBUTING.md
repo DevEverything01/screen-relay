@@ -72,7 +72,7 @@ Only one of the viewer, `/control`, and `/input` owns input at a time.
 | Decrease | Target x 0.75 (and at most 90% of measured goodput) when 2+ frames and enough bytes are outstanding, oldest capture is 200 ms old, and 500 ms since the last decrease. The floor is the configured minimum. |
 | Increase | Target x 1.10 after a busy 1 s sample, oldest under 100 ms, 1 s since last increase, 2 s since last decrease. |
 
-Engine flags: `--fps` takes 10 to 60. `--bitrate-min`, `--bitrate-start`, and `--bitrate-max` take bits per second with `250000 <= min <= start <= max <= 100000000`. `relay-engine --help` lists them with their defaults.
+Engine flags: `--fps` takes 10 to 120. `--bitrate-min`, `--bitrate-start`, and `--bitrate-max` take bits per second with `250000 <= min <= start <= max <= 100000000`. `relay-engine --help` lists them with their defaults.
 
 ACK time includes network, decode, scheduling, and waiting for a frame to be drawn or superseded. It is not pure RTT. Paths with latency near 200 ms can back off repeatedly.
 

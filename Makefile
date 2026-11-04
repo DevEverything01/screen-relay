@@ -28,7 +28,7 @@ ENGINE_SRCS = $(CORE_SRCS) $(wildcard src/engine/server/*.cpp) $(BACKEND_SRCS)
 HEADERS = $(wildcard src/engine/*/*.hpp src/engine/backends/linux/*.hpp) $(foreach dir,$(BACKEND_DIRS),$(wildcard src/engine/backends/$(dir)/*.hpp))
 
 WAYLAND_PROTOCOLS = wlr-screencopy-unstable-v1 wlr-virtual-pointer-unstable-v1 virtual-keyboard-unstable-v1
-.PHONY: all install test test-color test-flow test-input test-backend test-server test-keymap clean FORCE
+.PHONY: all install test test-color test-flow test-capture-bucket test-input test-backend test-server test-keymap clean FORCE
 all: relay-engine
 
 ifeq ($(HAS_WAYLAND),wayland)
@@ -84,6 +84,13 @@ build/flow-test: tests/unit/flow-test.cpp src/engine/core/flow.hpp
 test-flow: build/flow-test
 	./build/flow-test
 
+build/capture-bucket-test: tests/unit/capture-bucket-test.cpp src/engine/core/capture-bucket.hpp
+	mkdir -p build
+	$(CXX) -Isrc/engine $(CXXFLAGS) tests/unit/capture-bucket-test.cpp -o $@
+
+test-capture-bucket: build/capture-bucket-test
+	./build/capture-bucket-test
+
 build/input-test: tests/unit/input-test.cpp src/engine/core/input.cpp src/engine/core/input.hpp
 	mkdir -p build
 	$(CXX) -Isrc/engine $(CXXFLAGS) tests/unit/input-test.cpp src/engine/core/input.cpp -o $@
@@ -119,7 +126,7 @@ build/keymap-test: tests/unit/keymap-test.cpp src/engine/backends/linux/wayland/
 test-keymap: build/keymap-test
 	./build/keymap-test
 
-test: test-color test-flow test-input test-backend test-server $(if $(HAS_WAYLAND),test-keymap)
+test: test-color test-flow test-capture-bucket test-input test-backend test-server $(if $(HAS_WAYLAND),test-keymap)
 
 clean:
 	rm -rf build relay-engine

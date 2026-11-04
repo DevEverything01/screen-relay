@@ -4,10 +4,14 @@ import { test } from 'node:test';
 import { createContext, runInContext } from 'node:vm';
 
 function viewer({ devicePixelRatio = 1, storage } = {}) {
-  const listeners = {}, elements = {}, sockets = [];
+  const listeners = {}, elements = {}, sockets = [], trace = [], animationFrames = new Map();
+  let now = 0, nextAnimationFrame = 1;
   const element = () => ({
     style: { setProperty(name, value) { this[name] = value; } }, classList: { toggle() {} }, hidden: false, width: 1280, height: 720,
-    textContent: '', value: '', attributes: {}, handlers: {}, getContext: () => ({ drawImage() {} }),
+    value: '', attributes: {}, handlers: {}, text: '', textWrites: 0,
+    get textContent() { return this.text; },
+    set textContent(value) { this.text = value; this.textWrites++; },
+    getContext: () => ({ drawImage(frame) { trace.push(['draw', frame.timestamp]); } }),
     addEventListener(name, callback) { this.handlers[name] = callback; },
     setAttribute(name, value) { this.attributes[name] = String(value); }, focus() {}, querySelector: () => element(),
     getBoundingClientRect: () => ({ left: 0, top: 0, right: 1280, bottom: 720, width: 1280, height: 720 }),
@@ -20,7 +24,9 @@ function viewer({ devicePixelRatio = 1, storage } = {}) {
       const offset = data instanceof ArrayBuffer ? 0 : data.byteOffset;
       const length = data instanceof ArrayBuffer ? data.byteLength : data.byteLength;
       const view = new DataView(data instanceof ArrayBuffer ? data : data.buffer, offset, length), type = view.getUint8(5);
+      if (type === 2 && this.failAck === view.getUint32(12)) throw new Error('send failed');
       this.events.push([type, view.getUint32(12)]);
+      if (type === 2) trace.push(['ack', view.getUint32(12)]);
       if (type === 3) this.inputs.push({ event: view.getUint8(20), code: view.getUint16(22), modifiers: view.getUint16(34) });
     }
     close() { this.events.push('close'); this.readyState = Socket.CLOSING; }
@@ -28,7 +34,7 @@ function viewer({ devicePixelRatio = 1, storage } = {}) {
   class Decoder {
     constructor(callbacks) { this.callbacks = callbacks; this.state = 'configured'; }
     configure() {}
-    decode(chunk) { this.callbacks.output({ timestamp: chunk.timestamp, close() {} }); }
+    decode(chunk) { this.callbacks.output({ timestamp: chunk.timestamp, close() { trace.push(['close', chunk.timestamp]); } }); }
     close() { this.state = 'closed'; }
   }
   const document = {
@@ -42,8 +48,10 @@ function viewer({ devicePixelRatio = 1, storage } = {}) {
     URLSearchParams, WebSocket: Socket, VideoDecoder: Decoder,
     EncodedVideoChunk: class { constructor(options) { Object.assign(this, options); } },
     MutationObserver: class { observe() {} }, ResizeObserver: class { observe() {} },
-    performance: { now: () => 0 }, setInterval: () => 1, clearInterval() {},
-    setTimeout: () => 1, clearTimeout() {}, requestAnimationFrame: () => 1, cancelAnimationFrame() {},
+    performance: { now: () => now }, setInterval: () => 1, clearInterval() {},
+    setTimeout: () => 1, clearTimeout() {},
+    requestAnimationFrame(callback) { const id = nextAnimationFrame++; animationFrames.set(id, callback); return id; },
+    cancelAnimationFrame(id) { animationFrames.delete(id); },
     fetch: async () => ({ ok: false, status: 401 }), localStorage: storage,
   });
   runInContext(readFileSync('dist/viewer/viewer.js', 'utf8'), context);
@@ -55,8 +63,139 @@ function viewer({ devicePixelRatio = 1, storage } = {}) {
     view.setBigUint64(24, ${seq}n); new Uint8Array(data, 32).set([0, 0, 1, 103, 66, 0, 30, 0]);
     relayViewer.socket.onmessage({ data });
   })()`, context);
-  return { context, document, listeners, sockets, frame };
+  const tick = (time) => {
+    now = time;
+    assert.equal(animationFrames.size, 1);
+    const [id, callback] = animationFrames.entries().next().value;
+    animationFrames.delete(id);
+    callback(now);
+  };
+  return { context, document, listeners, sockets, trace, frame, tick, setTime: (time) => { now = time; } };
 }
+
+const traced = (app, type) => app.trace.filter((event) => event[0] === type).map((event) => event[1]);
+
+test('a burst of six frames draws in order across six animation frames', () => {
+  const app = viewer();
+  app.frame(1);
+  for (let sequence = 2; sequence <= 7; sequence++) app.frame(sequence);
+  assert.deepEqual(app.trace, [['draw', 1], ['close', 1], ['ack', 1]]);
+  for (let sequence = 2; sequence <= 7; sequence++) {
+    app.tick((sequence - 1) * 16);
+    assert.deepEqual(app.trace.slice(-3), [['draw', sequence], ['close', sequence], ['ack', sequence]]);
+  }
+  assert.equal(app.context.window.nativeStats.superseded, 0);
+  app.tick(112);
+  app.frame(8);
+  assert.deepEqual(app.trace.slice(-3), [['draw', 8], ['close', 8], ['ack', 8]]);
+  app.frame(9);
+  assert.deepEqual(traced(app, 'draw'), [1, 2, 3, 4, 5, 6, 7, 8]);
+  app.tick(128);
+  assert.deepEqual(app.trace.slice(-3), [['draw', 9], ['close', 9], ['ack', 9]]);
+});
+
+test('sustained backlog skips at most once every 250 ms after 500 ms', () => {
+  const app = viewer();
+  let sequence = 1;
+  for (; sequence <= 8; sequence++) app.frame(sequence);
+  const step = (time) => { app.tick(time); app.frame(sequence++); };
+  for (let time = 20; time <= 480; time += 20) step(time);
+  step(499);
+  assert.equal(app.context.window.nativeStats.superseded, 0);
+  step(500);
+  assert.equal(app.context.window.nativeStats.superseded, 1);
+  for (let time = 520; time <= 740; time += 20) step(time);
+  step(749);
+  assert.equal(app.context.window.nativeStats.superseded, 1);
+  step(750);
+  assert.equal(app.context.window.nativeStats.superseded, 2);
+  const drawn = traced(app, 'draw'), closed = traced(app, 'close'), acked = traced(app, 'ack');
+  assert.equal(closed.filter((frame) => !drawn.includes(frame)).length, 2);
+  assert.deepEqual(acked, Array.from({ length: acked.length }, (_, index) => index + 1));
+  assert.deepEqual(closed, acked);
+});
+
+test('the catch-up timer restarts when the queue falls to two frames', () => {
+  const app = viewer();
+  let sequence = 1;
+  for (; sequence <= 6; sequence++) app.frame(sequence);
+  const step = (time) => { app.tick(time); app.frame(sequence++); };
+  for (let time = 20; time <= 480; time += 20) step(time);
+  app.tick(490); app.tick(491); app.tick(492);
+  app.frame(sequence++); app.frame(sequence++); app.frame(sequence++);
+  for (let time = 500; time <= 980; time += 20) step(time);
+  step(991);
+  assert.equal(app.context.window.nativeStats.superseded, 0);
+  step(992);
+  assert.equal(app.context.window.nativeStats.superseded, 1);
+});
+
+test('more than 12 queued frames skips down to two and ACKs in order', () => {
+  const app = viewer();
+  for (let sequence = 1; sequence <= 13; sequence++) app.frame(sequence);
+  assert.equal(app.context.window.nativeStats.superseded, 0);
+  app.frame(14);
+  assert.equal(app.context.window.nativeStats.superseded, 11);
+  assert.deepEqual(traced(app, 'draw'), [1]);
+  assert.deepEqual(traced(app, 'close'), Array.from({ length: 12 }, (_, index) => index + 1));
+  assert.deepEqual(traced(app, 'ack'), traced(app, 'close'));
+  app.tick(16); app.tick(32);
+  assert.deepEqual(traced(app, 'draw'), [1, 13, 14]);
+  assert.deepEqual(traced(app, 'ack'), Array.from({ length: 14 }, (_, index) => index + 1));
+});
+
+test('a frame older than 200 ms skips the backlog down to two', () => {
+  const app = viewer();
+  for (let sequence = 1; sequence <= 6; sequence++) app.frame(sequence);
+  app.setTime(200); app.frame(7);
+  assert.equal(app.context.window.nativeStats.superseded, 0);
+  app.tick(201);
+  assert.equal(app.context.window.nativeStats.superseded, 4);
+  assert.deepEqual(traced(app, 'draw'), [1, 6]);
+  assert.deepEqual(traced(app, 'close'), [1, 2, 3, 4, 5, 6]);
+  assert.deepEqual(traced(app, 'ack'), [1, 2, 3, 4, 5, 6]);
+  app.tick(217);
+  assert.deepEqual(traced(app, 'draw'), [1, 6, 7]);
+  assert.deepEqual(traced(app, 'ack'), [1, 2, 3, 4, 5, 6, 7]);
+});
+
+test('an arriving frame also triggers the age bound without an animation frame', () => {
+  const app = viewer();
+  for (let sequence = 1; sequence <= 4; sequence++) app.frame(sequence);
+  app.setTime(201); app.frame(5);
+  assert.equal(app.context.window.nativeStats.superseded, 2);
+  assert.deepEqual(traced(app, 'draw'), [1]);
+  assert.deepEqual(traced(app, 'close'), [1, 2, 3]);
+  assert.deepEqual(traced(app, 'ack'), [1, 2, 3]);
+  app.tick(202); app.tick(218);
+  assert.deepEqual(traced(app, 'draw'), [1, 4, 5]);
+  assert.deepEqual(traced(app, 'ack'), [1, 2, 3, 4, 5]);
+});
+
+test('a failed skipped-frame ACK closes the remaining queue and connection', () => {
+  const app = viewer();
+  for (let sequence = 1; sequence <= 13; sequence++) app.frame(sequence);
+  app.sockets[0].failAck = 2;
+  app.frame(14);
+  assert.equal(app.context.window.nativeStats.decodeerrors, 1);
+  assert.deepEqual(traced(app, 'ack'), [1]);
+  assert.deepEqual(traced(app, 'close'), Array.from({ length: 14 }, (_, index) => index + 1));
+  assert.equal(app.sockets[0].events.at(-1), 'close');
+});
+
+test('drawing updates status only when its text changes', () => {
+  const app = viewer();
+  const status = app.document.querySelector('#status');
+  app.frame(1);
+  const liveWrites = status.textWrites;
+  app.frame(2); app.tick(16);
+  assert.equal(status.textWrites, liveWrites);
+  app.sockets[0].onerror();
+  assert.equal(status.textContent, 'Connection error');
+  app.frame(3); app.tick(32);
+  assert.equal(status.textContent, 'Live · click to control');
+  assert.equal(status.textWrites, liveWrites + 2);
+});
 
 test('voluntary reconnect and hiding ACK queued frames on the old socket', () => {
   const app = viewer();

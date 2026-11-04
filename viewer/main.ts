@@ -50,11 +50,15 @@ const stats = ((window as any).nativeStats = {
 });
 let socket: WebSocket, decoder: VideoDecoder, retryTimer: any, deadline: any, frameHandle = 0, drawnThisFrame = false, transportBroken = false;
 let generation = 0, sequence = 0, lastTimestamp = -1, ready = false, retry = 0, epoch = 0;
+let backlogSince: number | null = null, lastCatchUp = -Infinity;
 let buttons = 0, modifiers = 0, x = 0, y = 0, viewOnly = false, capsLock = false,
   metaAsCtrl = stored('relay.metaCtrl') === null ? macos() : stored('relay.metaCtrl') === '1';
 const pending = new Map(), decoded: any[] = [], held = new Set<number>(), latched = new Map<number, Element>();
 const clamp = (value: number, low: number, high: number) => Math.max(low, Math.min(high, value));
 
+function setStatus(message: string) {
+  if (status.textContent !== message) status.textContent = message;
+}
 function macos(): boolean {
   const platform = (globalThis as any).navigator?.userAgentData?.platform || (globalThis as any).navigator?.platform || '';
   return platform === 'macOS' || platform === 'MacIntel';
@@ -122,6 +126,8 @@ function reset() {
   cancelAnimationFrame(frameHandle);
   frameHandle = 0;
   drawnThisFrame = false;
+  backlogSince = null;
+  lastCatchUp = -Infinity;
   pending.clear();
   for (const item of decoded) item.frame.close();
   decoded.length = 0;
@@ -136,7 +142,7 @@ function reset() {
 }
 function fail(message: string) {
   stats.decodeerrors++;
-  status.textContent = message;
+  setStatus(message);
   const old = socket;
   reset();
   if (old && old.readyState < WebSocket.CLOSING) old.close();
@@ -182,29 +188,42 @@ function draw(item: any): boolean {
   ready = true;
   if (!wasReady) renderCursor();
   retry = 0;
-  status.textContent = 'Live · click to control';
+  setStatus('Live · click to control');
   drawnThisFrame = true;
   return ackFrame(item);
 }
-function presentDecoded(item: any): boolean {
-  if (!decoded.length && !drawnThisFrame) {
-    if (!draw(item)) return false;
-  } else {
-    decoded.push(item);
+function trimDecoded(now: number): boolean {
+  if (decoded.length <= 2) {
+    backlogSince = null;
+    return true;
   }
-  while (decoded.length > 3) {
+  backlogSince ??= now;
+  const hardLimit = decoded.length > 12 || now - decoded[0].decodedAt > 200;
+  if (!hardLimit && (now - backlogSince < 500 || now - lastCatchUp < 250)) return true;
+  do {
     const dropped = decoded.shift();
     dropped.frame.close();
     stats.superseded++;
     if (!ackFrame(dropped)) return false;
-  }
+  } while (hardLimit && decoded.length > 2);
+  if (decoded.length <= 2) backlogSince = null;
+  if (!hardLimit) lastCatchUp = now;
+  return true;
+}
+function presentDecoded(item: any): boolean {
+  const now = performance.now(), immediate = !decoded.length && !drawnThisFrame;
+  decoded.push({ ...item, decodedAt: now });
+  if (!trimDecoded(now)) return false;
+  if (immediate && !draw(decoded.shift())) return false;
   schedulePresent();
   return true;
 }
 function present() {
   frameHandle = 0;
   drawnThisFrame = false;
+  if (!trimDecoded(performance.now())) return;
   const item = decoded.shift();
+  if (decoded.length <= 2) backlogSince = null;
   if (!item || !draw(item)) return;
   schedulePresent();
 }
@@ -229,9 +248,9 @@ function connect() {
     socket.close();
   }
   reset();
-  status.textContent = 'Connecting…';
+  setStatus('Connecting…');
   if (!('VideoDecoder' in window) || !('EncodedVideoChunk' in window)) {
-    status.textContent = 'WebCodecs unavailable in this browser';
+    setStatus('WebCodecs unavailable in this browser');
     return;
   }
   socket = new WebSocket(
@@ -244,7 +263,7 @@ function connect() {
   ws.binaryType = 'arraybuffer';
   ws.onopen = () => {
     if (current === epoch) {
-      status.textContent = 'Waiting for frame…';
+      setStatus('Waiting for frame…');
       deadline = setTimeout(() => {
         if (current === epoch) fail('First frame timed out; reconnecting');
       }, 5000);
@@ -334,21 +353,21 @@ function connect() {
     }
   };
   ws.onerror = () => {
-    if (current === epoch) { transportBroken = true; status.textContent = 'Connection error'; }
+    if (current === epoch) { transportBroken = true; setStatus('Connection error'); }
   };
   ws.onclose = () => {
     if (current !== epoch) return;
     reset();
     if (document.hidden) {
-      status.textContent = 'Paused while hidden';
+      setStatus('Paused while hidden');
       return;
     }
     if (retry >= 5) {
-      status.textContent += ' · reconnect manually';
+      setStatus(status.textContent + ' · reconnect manually');
       return;
     }
     const delay = Math.min(1000 * 2 ** retry++, 8000);
-    status.textContent += ` · retrying in ${delay / 1000}s`;
+    setStatus(status.textContent + ` · retrying in ${delay / 1000}s`);
     retryTimer = setTimeout(connect, delay);
     checkAccess(current);
   };
@@ -502,7 +521,7 @@ document.addEventListener('visibilitychange', () => {
     if (socket) socket.close();
     reset();
     clearTimeout(retryTimer);
-    status.textContent = 'Paused while hidden';
+    setStatus('Paused while hidden');
   } else {
     startHud();
     retry = 0;
@@ -514,7 +533,7 @@ function checkAccess(current: number) {
     .then((response) => {
       if (response.status !== 401 || current !== epoch) return;
       clearTimeout(retryTimer);
-      status.textContent = accessToken ? 'Access token rejected' : 'Access token required';
+      setStatus(accessToken ? 'Access token rejected' : 'Access token required');
       setExpanded(true);
       showPanel('connection', true);
       (document.querySelector('#access-token') as HTMLInputElement).focus();
@@ -685,7 +704,7 @@ panels.connection.addEventListener('submit', (e) => {
   e.preventDefault();
   const value = (document.querySelector('#access-token') as HTMLInputElement).value.trim();
   if (value && (!/^[0-9a-f]{64}$/.test(value) || !trustedPage)) {
-    status.textContent = 'Use a 64-character token over HTTPS or a localhost tunnel';
+    setStatus('Use a 64-character token over HTTPS or a localhost tunnel');
     return;
   }
   accessToken = value;

@@ -61,6 +61,9 @@ struct Server {
   std::deque<EncodedFrame> pending;
   std::optional<CursorImage> pending_cursor;
   bool last_write_cursor = false;
+  size_t buffered_stream_bytes = 0;
+  uint32_t stream_notsent_lowat = 0;
+  uint64_t flow_timer_due_us = 0;
   FlowControl flow;
   CaptureEncoder capture;
   uint32_t generation = 0, lastSequence = 0, nextGeneration = 0;

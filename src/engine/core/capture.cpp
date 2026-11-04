@@ -1,4 +1,5 @@
 #include "capture.hpp"
+#include "capture-bucket.hpp"
 #include "color.hpp"
 #include "flow.hpp"
 #include "capture-source.hpp"
@@ -23,10 +24,23 @@
 
 namespace relay {
 namespace {
-/// VBV buffer in kbit: about 1/15 s of `bitrate`, or 2/15 s while refining a quiet picture or encoding a forced keyframe.
-constexpr int vbvBufferKbit(uint64_t bitrate, bool refinement = false) {
-  return int(bitrate / (refinement ? 7500 : 15000));
+/// Motion frames get 4 frame budgets; forced keyframes and refinement get 8.
+constexpr int vbvBufferKbit(uint64_t bitrate, unsigned fps, bool wide) {
+  const uint64_t motion = 4 * bitrate / (1000ull * fps);
+  const uint64_t legacy_wide = 8 * bitrate / (1000ull * fps);
+  return int(std::max<uint64_t>(1, wide ? std::max(motion, legacy_wide) : motion));
 }
+static_assert(vbvBufferKbit(1000000, 10, false) == 400);
+static_assert(vbvBufferKbit(1000000, 30, false) == 133);
+static_assert(vbvBufferKbit(1000000, 60, false) == 66);
+static_assert(vbvBufferKbit(250000, 60, false) == 16);
+static_assert(vbvBufferKbit(1000000, 10, true) == 800);
+static_assert(vbvBufferKbit(1000000, 30, true) == 266);
+static_assert(vbvBufferKbit(250000, 60, true) == 33);
+static_assert(vbvBufferKbit(1000000, 120, false) == 33);
+static_assert(vbvBufferKbit(1000000, 120, true) == 66);
+static_assert(vbvBufferKbit(62500, 120, false) == 2);
+static_assert(vbvBufferKbit(62500, 120, true) == 4);
 constexpr float encoder_crf = 10;
 using Clock = std::chrono::steady_clock;
 constexpr timespec pollTimeout(int64_t nanoseconds) {
@@ -83,7 +97,7 @@ struct Resources {
     params.i_threads = 1; params.i_keyint_max = X264_KEYINT_MAX_INFINITE; params.i_bframe = 0;
     params.i_scenecut_threshold = 0; params.i_sync_lookahead = 0;
     params.rc.i_rc_method = X264_RC_CRF; params.rc.f_rf_constant = encoder_crf;
-    params.rc.i_lookahead = 0; params.rc.i_vbv_max_bitrate = int(settings.start_bitrate / 1000); params.rc.i_vbv_buffer_size = vbvBufferKbit(settings.start_bitrate, true);
+    params.rc.i_lookahead = 0; params.rc.i_vbv_max_bitrate = int(settings.start_bitrate / 1000); params.rc.i_vbv_buffer_size = vbvBufferKbit(settings.start_bitrate, settings.fps, true);
     params.analyse.b_mb_info = 1; params.analyse.b_mb_info_update = 0;
     params.b_annexb = 1; params.b_repeat_headers = 1;
     params.vui.b_fullrange = 0; params.vui.i_colmatrix = 1;
@@ -204,8 +218,11 @@ struct CaptureEncoder::Impl {
       const auto frame_interval = std::chrono::nanoseconds(1000000000LL / settings.fps);
       const auto refinement_delay = std::chrono::milliseconds(150);
       constexpr unsigned refinement_max_frames = 8;
-      auto deadline = Clock::now();
-      auto last_publish = deadline;
+      CaptureBucket bucket;
+      const auto started = Clock::now();
+      bucket.reset(ns(started.time_since_epoch()), ns(frame_interval));
+      auto last_publish = started;
+      auto retry_after = Clock::time_point::min();
       bool last_was_refinement = true, refining = false;
       unsigned cascade_frames = 0;
       uint64_t first_refinement_size = 0;
@@ -244,11 +261,12 @@ struct CaptureEncoder::Impl {
           }
         }
         const auto now = Clock::now();
+        const int64_t now_ns = ns(now.time_since_epoch());
         const bool refinement_pending = !dirty && refining;
         const auto refinement_pace = last_was_refinement ? frame_interval : refinement_delay;
-        const auto encode_deadline = refinement_pending
-            ? std::max(deadline, last_publish + refinement_pace) : deadline;
-        if (admitted && (dirty || (refinement_pending && queue_empty)) && now >= encode_deadline) {
+        const bool refinement_ready = !refinement_pending || now >= last_publish + refinement_pace;
+        if (admitted && (dirty || (refinement_pending && queue_empty)) && now >= retry_after &&
+            refinement_ready && bucket.ready(now_ns)) {
           bool refinement = !dirty;
           const bool captured_frame = !refinement;
           const auto capture_start = Clock::now();
@@ -287,7 +305,6 @@ struct CaptureEncoder::Impl {
                     counters.convert_ns += ns(converted - captured);
                   }
                   consecutive_failures = 0;
-                  deadline = std::max(deadline + frame_interval, capture_start + frame_interval);
                   continue;
                 }
               }
@@ -299,7 +316,7 @@ struct CaptureEncoder::Impl {
               x264_param_t params;
               x264_encoder_parameters(r.codec, &params);
               params.rc.i_vbv_max_bitrate = int(rate / 1000);
-              params.rc.i_vbv_buffer_size = vbvBufferKbit(rate, wide_vbv);
+              params.rc.i_vbv_buffer_size = vbvBufferKbit(rate, settings.fps, wide_vbv);
               require(x264_encoder_reconfig(r.codec, &params) == 0, "encoder reconfiguration failed");
               r.bitrate = rate;
               r.wide_vbv = wide_vbv;
@@ -325,6 +342,7 @@ struct CaptureEncoder::Impl {
                     hasNal(output.annex_b, 5) && hasNal(output.annex_b, 7) && hasNal(output.annex_b, 8)),
                     "encoder buffered frame or omitted IDR/SPS/PPS");
             const auto encoded = Clock::now();
+            bucket.spend(ns(encoded.time_since_epoch()));
             bool current;
             {
               std::lock_guard<std::mutex> lock(mutex);
@@ -364,9 +382,6 @@ struct CaptureEncoder::Impl {
               reset_refinement();
             }
             consecutive_failures = 0;
-            deadline += frame_interval;
-            const auto next = Clock::now();
-            if (deadline < next - frame_interval) deadline = capture_start + frame_interval;
           } catch (const std::exception& error) {
             std::fprintf(stderr, "capture: %s; retrying with IDR\n", error.what());
             dirty = true;
@@ -376,7 +391,7 @@ struct CaptureEncoder::Impl {
               throw std::runtime_error(std::string("capture failed three consecutive times: ") + error.what());
             }
             r.openEncoder();
-            deadline = Clock::now() + std::chrono::seconds(1);
+            retry_after = Clock::now() + std::chrono::seconds(1);
           }
           continue;
         }
@@ -385,8 +400,14 @@ struct CaptureEncoder::Impl {
         timespec timeout{};
         const timespec* timeout_ptr = nullptr;
         if (admitted && (dirty || (refinement_pending && queue_empty))) {
+          const auto wait_now = Clock::now();
+          const int64_t wait_now_ns = ns(wait_now.time_since_epoch());
+          auto wake_at = wait_now + std::chrono::nanoseconds(bucket.wait_ns(wait_now_ns));
+          if (retry_after > wake_at) wake_at = retry_after;
+          if (refinement_pending && queue_empty && last_publish + refinement_pace > wake_at)
+            wake_at = last_publish + refinement_pace;
           const auto remaining = std::chrono::duration_cast<std::chrono::nanoseconds>(
-              encode_deadline - Clock::now()).count();
+              wake_at - wait_now).count();
           timeout = pollTimeout(std::max<int64_t>(0, remaining));
           timeout_ptr = &timeout;
         }
@@ -474,7 +495,7 @@ void CaptureEncoder::setFlowControl(uint32_t generation, unsigned window, uint64
   std::lock_guard<std::mutex> lock(i.mutex);
   if (!generation || generation != i.generation) return;
   i.window = std::clamp(window, 1u, unsigned(FlowControl::max_frames));
-  i.bitrate = std::clamp<uint64_t>(bitrate, i.settings.min_bitrate, i.settings.max_bitrate);
+  i.bitrate = std::clamp<uint64_t>(bitrate, std::max<uint64_t>(1, i.settings.min_bitrate / 4), i.settings.max_bitrate);
   i.paused = paused;
   i.admit_until_us = admit_until_us;
   i.wake();

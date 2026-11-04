@@ -64,7 +64,8 @@ int main() {
   assert(error == "Missing value for --output");
   assert(engineConfig({"--fps", "10"}, engine) && engine.fps == 10);
   assert(engineConfig({"--fps", "60"}, engine) && engine.fps == 60);
-  assert(!engineConfig({"--fps", "9"}, engine) && !engineConfig({"--fps", "61"}, engine));
+  assert(engineConfig({"--fps", "120"}, engine) && engine.fps == 120);
+  assert(!engineConfig({"--fps", "9"}, engine) && !engineConfig({"--fps", "121"}, engine));
   assert(!engineConfig({"--fps", "-1"}, engine) && !engineConfig({"--fps", "30x"}, engine));
   assert(engineConfig({"--bitrate-min", "250000", "--bitrate-start", "250000", "--bitrate-max", "100000000"}, engine));
   assert(engine.bitrate_min == 250000 && engine.bitrate_start == 250000 && engine.bitrate_max == 100000000);
