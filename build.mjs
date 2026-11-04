@@ -18,7 +18,6 @@ await Promise.all(entries.map(async ({ entry, outfile }) => {
     platform: 'node',
     format: 'esm',
     target: 'node20',
-    loader: { '.tsv': 'text' },
     define: { __RELAY_VERSION__: JSON.stringify(version) },
     banner: { js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" },
     packages: 'bundle',

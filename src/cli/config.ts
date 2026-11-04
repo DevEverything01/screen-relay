@@ -190,19 +190,20 @@ function checkBitrateOrder(settings: ConfigSettings): void {
   }
 }
 
-const validators: Record<string, (value: unknown, path: string) => unknown> = {
+type Validator = (value: unknown, path: string) => unknown;
+const validators = {
   'display.resolution': resolution,
   'stream.fps': (value, path) => integer(value, path, 10, 120),
   'server.port': (value, path) => integer(value, path, 1, 65535),
   'server.bind': textValue,
-  'server.public': (value, path) => {
+  'server.public': (value: unknown, path: string) => {
     const origin = textValue(value, path);
     if (!/^https:\/\/[^/?#@\\\s]+$/.test(origin)) wrong(path, value, 'an HTTPS origin without a path, query or credentials');
     return origin;
   },
   'server.tls_cert': textValue,
   'server.tls_key': textValue,
-  'keyboard.layout': (value, path) => {
+  'keyboard.layout': (value: unknown, path: string) => {
     const layout = textValue(value, path);
     if (!/^[A-Za-z0-9_,-]+$/.test(layout)) {
       wrong(path, value, 'a comma-separated layout using letters, digits, "_" or "-"');
@@ -210,6 +211,17 @@ const validators: Record<string, (value: unknown, path: string) => unknown> = {
     return layout;
   },
   backend: backendValue,
+} satisfies Record<string, Validator>;
+const validatorFor: Record<string, Validator> = validators;
+const assign: Record<string, (settings: ConfigSettings, value: unknown, path: string) => void> = {
+  'display.resolution': (settings, value, path) => { settings.display.resolution = validators['display.resolution'](value, path); },
+  'stream.fps': (settings, value, path) => { settings.stream.fps = validators['stream.fps'](value, path); },
+  'server.port': (settings, value, path) => { settings.server.port = validators['server.port'](value, path); },
+  'server.bind': (settings, value, path) => { settings.server.bind = validators['server.bind'](value, path); },
+  'server.public': (settings, value, path) => { settings.server.public = validators['server.public'](value, path); },
+  'server.tls_cert': (settings, value, path) => { settings.server.tls_cert = validators['server.tls_cert'](value, path); },
+  'server.tls_key': (settings, value, path) => { settings.server.tls_key = validators['server.tls_key'](value, path); },
+  'keyboard.layout': (settings, value, path) => { settings.keyboard.layout = validators['keyboard.layout'](value, path); },
 };
 
 export function loadConfig(path?: string): [ConfigSettings, string | null, Set<string>] {
@@ -251,7 +263,7 @@ function applyConfig(settings: ConfigSettings, data: Mapping, present: Set<strin
       const path = `${section}.${key}`;
       collect(errors, () => {
         if (key === 'bitrate') bitrates(settings, block[key], errors);
-        else (settings[section] as unknown as Mapping)[key] = validators[path](block[key], path);
+        else assign[path](settings, block[key], path);
       });
       present.add(path);
     }
@@ -260,7 +272,7 @@ function applyConfig(settings: ConfigSettings, data: Mapping, present: Set<strin
     collect(errors, () => { settings.desktop = textValue(data.desktop, 'desktop'); });
     present.add('desktop');
   }
-  if (Object.hasOwn(data, 'backend')) collect(errors, () => { settings.backend = validators.backend(data.backend, 'backend') as string; });
+  if (Object.hasOwn(data, 'backend')) collect(errors, () => { settings.backend = validators.backend(data.backend, 'backend'); });
 }
 
 export function applyTo(args: Record<string, unknown>, settings: ConfigSettings, present: Set<string>): void {
@@ -296,7 +308,7 @@ export function applyTo(args: Record<string, unknown>, settings: ConfigSettings,
         if (typeof input === 'number' && Number.isSafeInteger(input)) input = BigInt(input);
         else if (typeof input === 'string' && /^[0-9]+$/.test(input)) input = BigInt(input);
       } else if (path.startsWith('stream.bitrate.') && typeof input === 'number' && Number.isSafeInteger(input)) input = BigInt(input);
-      const validate = path.startsWith('stream.bitrate.') ? bitrate : path === 'desktop' ? textValue : validators[path];
+      const validate = path.startsWith('stream.bitrate.') ? bitrate : path === 'desktop' ? textValue : validatorFor[path];
       resolved[key] = validate(input, label);
     });
   }

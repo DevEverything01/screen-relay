@@ -23,7 +23,7 @@ struct HttpResponse {
   size_t length, input_length, input_expected;
   std::vector<uint8_t>* image;
   size_t offset;
-  bool image_headers, screenshot_error, control, input_reply, input_headers;
+  bool image_headers, screenshot_error, control, input_reply, input_headers, closing;
   unsigned reply_status;
 };
 /** One viewer session at a time; the capture thread and the lws service thread share it through mutex. */

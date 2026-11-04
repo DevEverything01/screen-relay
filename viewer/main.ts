@@ -477,7 +477,7 @@ function startHud() {
     previousTime = now;
     previousDrawn = stats.drawn;
     previousBytes = stats.bytes;
-    if (!metricsRequest) {
+    if (!metricsRequest && !document.querySelector('#stats')!.hidden) {
       const controller = metricsRequest = new AbortController();
       const timer = setTimeout(() => controller.abort(), 2000);
       fetch('/metrics', { cache: 'no-store', signal: controller.signal, redirect: 'error', headers: authHeaders() })
