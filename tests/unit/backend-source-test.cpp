@@ -1,10 +1,9 @@
 #include "core/capture.hpp"
+#include "core/wait.hpp"
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libswscale/swscale.h>
 }
-#include <sys/eventfd.h>
-#include <unistd.h>
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -21,16 +20,12 @@ static void require(bool ok, const char* message) {
   if (!ok) throw std::runtime_error(message);
 }
 struct SourceState {
-  int fd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
+  relay::Wake wake;
   std::atomic<unsigned> captures{0};
   std::atomic<bool> red{false};
   int invalid = 0;
-  SourceState() { require(fd >= 0, "eventfd failed"); }
-  ~SourceState() { close(fd); }
-  void damage() {
-    const uint64_t one = 1;
-    require(write(fd, &one, sizeof(one)) == sizeof(one), "damage wake failed");
-  }
+  SourceState() { require(wake.valid(), "damage wake unavailable"); }
+  void damage() { wake.signal(); }
 };
 // This source has no display connection or native-backend factory dependency.
 class CpuSource final : public relay::CaptureSource {
@@ -40,12 +35,9 @@ class CpuSource final : public relay::CaptureSource {
  public:
   explicit CpuSource(std::shared_ptr<SourceState> s, int w = 1280, int h = 720)
       : state(std::move(s)), width(w), height(h), pixels(size_t(w) * size_t(h) * 4) {}
-  int fd() const override { return state->fd; }
+  relay::WaitHandle fd() const override { return state->wake.handle(); }
   std::pair<int, int> dimensions() const override { return {width, height}; }
-  bool drainDamage() override {
-    uint64_t value;
-    return read(state->fd, &value, sizeof(value)) == sizeof(value);
-  }
+  bool drainDamage() override { return state->wake.consume(); }
   relay::PixelFormat pixelFormat() const override { return relay::PixelFormat::BGRA; }
   relay::FrameView capture() override {
     ++state->captures;
