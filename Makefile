@@ -43,7 +43,7 @@ ENGINE_SRCS = $(CORE_SRCS) $(wildcard src/engine/server/*.cpp) $(BACKEND_SRCS)
 HEADERS = $(wildcard src/engine/*/*.hpp src/engine/backends/linux/*.hpp) $(foreach dir,$(BACKEND_DIRS),$(wildcard src/engine/backends/$(dir)/*.hpp))
 
 WAYLAND_PROTOCOLS = wlr-screencopy-unstable-v1 wlr-virtual-pointer-unstable-v1 virtual-keyboard-unstable-v1
-.PHONY: all install test test-color test-flow test-capture-bucket test-input test-backend test-server test-keymap clean FORCE
+.PHONY: all install test test-color test-flow test-capture-bucket test-input test-backend test-server test-keymap test-macos-keys clean FORCE
 all: relay-engine
 
 ifeq ($(HAS_WAYLAND),wayland)
@@ -141,7 +141,14 @@ build/keymap-test: tests/unit/keymap-test.cpp src/engine/backends/linux/wayland/
 test-keymap: build/keymap-test
 	./build/keymap-test
 
-test: test-color test-flow test-capture-bucket test-input test-backend test-server $(if $(HAS_WAYLAND),test-keymap)
+build/macos-keys-test: tests/unit/macos-keys-test.cpp src/engine/backends/macos/keys.hpp
+	mkdir -p build
+	$(CXX) -Isrc/engine $(CXXFLAGS) tests/unit/macos-keys-test.cpp -o $@ -framework Carbon -framework CoreFoundation
+
+test-macos-keys: build/macos-keys-test
+	./build/macos-keys-test
+
+test: test-color test-flow test-capture-bucket test-input test-backend test-server $(if $(HAS_WAYLAND),test-keymap) $(if $(filter macos,$(BACKENDS)),test-macos-keys)
 
 clean:
 	rm -rf build relay-engine
