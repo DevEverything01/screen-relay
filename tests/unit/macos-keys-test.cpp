@@ -64,7 +64,6 @@ int main() {
   const uint32_t keyboardType = LMGetKbdType();
   for (int hid = 4; hid <= 29; ++hid) expectCharacter(layout, keyboardType, hid, uint32_t('a' + hid - 4));
   for (int hid = 30; hid <= 38; ++hid) expectCharacter(layout, keyboardType, hid, uint32_t('1' + hid - 30));
-  for (int hid = 89; hid <= 97; ++hid) expectCharacter(layout, keyboardType, hid, uint32_t('1' + hid - 89));
   expectCharacter(layout, keyboardType, 39, '0');
   expectCharacter(layout, keyboardType, 40, '\r');
   expectCharacter(layout, keyboardType, 41, 0x1b);
@@ -91,14 +90,16 @@ int main() {
   expectCharacter(layout, keyboardType, 80, 0x1c);
   expectCharacter(layout, keyboardType, 81, 0x1f);
   expectCharacter(layout, keyboardType, 82, 0x1e);
-  expectCharacter(layout, keyboardType, 84, '/');
+  expectKey(84, kVK_ANSI_KeypadDivide);
   expectCharacter(layout, keyboardType, 85, '*');
-  expectCharacter(layout, keyboardType, 86, '-');
+  expectKey(86, kVK_ANSI_KeypadMinus);
   expectCharacter(layout, keyboardType, 87, '+');
   expectCharacter(layout, keyboardType, 88, 0x03);
-  expectCharacter(layout, keyboardType, 98, '0');
-  expectCharacter(layout, keyboardType, 99, '.');
-  expectCharacter(layout, keyboardType, 103, '=');
+  const int keypad[] = {kVK_ANSI_Keypad1, kVK_ANSI_Keypad2, kVK_ANSI_Keypad3, kVK_ANSI_Keypad4, kVK_ANSI_Keypad5,
+                        kVK_ANSI_Keypad6, kVK_ANSI_Keypad7, kVK_ANSI_Keypad8, kVK_ANSI_Keypad9, kVK_ANSI_Keypad0,
+                        kVK_ANSI_KeypadDecimal};
+  for (int hid = 89; hid <= 99; ++hid) expectKey(hid, keypad[hid - 89]);
+  expectKey(103, kVK_ANSI_KeypadEquals);
   expectKey(57, kVK_CapsLock);
   expectKey(58, kVK_F1);
   expectKey(59, kVK_F2);
