@@ -13,6 +13,11 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #endif
+#ifdef __APPLE__
+#include <cerrno>
+#include <mach-o/dyld.h>
+#include <sys/acl.h>
+#endif
 
 namespace relay {
 namespace {
@@ -67,14 +72,45 @@ std::filesystem::path executablePath() {
   if (!length || length == MAX_PATH) throw std::runtime_error("Could not find the engine executable");
   return std::filesystem::path(path);
 }
+#elif defined(__APPLE__)
+/// Path of the running engine binary, used to find the bundled viewer.
+std::filesystem::path executablePath() {
+  uint32_t size = 0;
+  if (_NSGetExecutablePath(nullptr, &size) != -1 || !size) throw std::runtime_error("Could not find the engine executable");
+  std::string path(size, '\0');
+  if (_NSGetExecutablePath(path.data(), &size) != 0) throw std::runtime_error("Could not find the engine executable");
+  return std::filesystem::canonical(path.c_str());
+}
 #else
 /// Path of the running engine binary, used to find the bundled viewer.
 std::filesystem::path executablePath() { return std::filesystem::canonical("/proc/self/exe"); }
+#endif
+#ifdef __APPLE__
+/// Reports whether the file has no extended ACL entry that could grant access; deny entries are allowed.
+bool privateTokenAcl(const std::string& path) {
+  acl_t acl = acl_get_file(path.c_str(), ACL_TYPE_EXTENDED);
+  if (!acl) return errno == ENOENT;
+  acl_entry_t entry;
+  int result = acl_get_entry(acl, ACL_FIRST_ENTRY, &entry);
+  while (result == 0) {
+    acl_tag_t tag;
+    if (acl_get_tag_type(entry, &tag) || tag != ACL_EXTENDED_DENY) break;
+    result = acl_get_entry(acl, ACL_NEXT_ENTRY, &entry);
+  }
+  const bool safe = result == -1 && errno == EINVAL;
+  acl_free(acl);
+  return safe;
+}
+#elif !defined(_WIN32)
+/// Mode bits already reflect POSIX ACL grants, so there is nothing extra to check.
+bool privateTokenAcl(const std::string&) { return true; }
+#endif
+#ifndef _WIN32
 /// Reports whether the current user owns the file and no other user can read or write it.
 bool privateTokenFile(const std::string& path) {
   struct stat st{};
   return !stat(path.c_str(), &st) && S_ISREG(st.st_mode) && st.st_uid == geteuid() && !(st.st_mode & 0077) &&
-         st.st_size <= 66;
+         st.st_size <= 66 && privateTokenAcl(path);
 }
 #endif
 }

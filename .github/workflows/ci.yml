@@ -65,6 +65,18 @@ jobs:
       - run: make -j"$(nproc)" relay-engine
       - run: make test
 
+  macos:
+    name: Engine (macOS)
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install build dependencies
+        run: brew install pkgconf x264 libwebsockets ffmpeg
+      - run: make -j"$(sysctl -n hw.ncpu)" test-color test-flow test-capture-bucket test-input test-backend
+
   node:
     name: SDK and CLI
     runs-on: ubuntu-24.04

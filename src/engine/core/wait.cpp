@@ -5,9 +5,14 @@
 
 #ifdef _WIN32
 #include <windows.h>
-#else
+#elif defined(__linux__)
 #include <poll.h>
 #include <sys/eventfd.h>
+#include <unistd.h>
+#else
+#include <climits>
+#include <fcntl.h>
+#include <poll.h>
 #include <unistd.h>
 #endif
 
@@ -44,7 +49,7 @@ WaitReady wait(WaitHandle source, Wake& wake, int64_t timeout_ns) {
   ready.wake = result == WAIT_OBJECT_0 + 1;
   return ready;
 }
-#else
+#elif defined(__linux__)
 Wake::Wake() : handle_(eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK)) {}
 Wake::~Wake() { if (handle_ >= 0) close(handle_); }
 bool Wake::valid() const { return handle_ >= 0; }
@@ -67,6 +72,51 @@ WaitReady wait(WaitHandle source, Wake& wake, int64_t timeout_ns) {
   if (ppoll(descriptors, 2, timeout_ptr, nullptr) < 0) {
     if (errno == EINTR) return {};
     throw std::runtime_error("capture ppoll failed");
+  }
+  if (descriptors[0].revents & (POLLERR | POLLHUP | POLLNVAL)) throw std::runtime_error("capture source connection closed");
+  return {bool(descriptors[0].revents & POLLIN), bool(descriptors[1].revents & POLLIN)};
+}
+#else
+Wake::Wake() : handle_(-1) {
+  int descriptors[2] = {-1, -1};
+  if (pipe(descriptors) != 0) return;
+  for (const int fd : descriptors) {
+    fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
+    fcntl(fd, F_SETFD, fcntl(fd, F_GETFD) | FD_CLOEXEC);
+  }
+  handle_ = descriptors[0];
+  write_handle_ = descriptors[1];
+}
+Wake::~Wake() {
+  if (handle_ >= 0) close(handle_);
+  if (write_handle_ >= 0) close(write_handle_);
+}
+bool Wake::valid() const { return handle_ >= 0 && write_handle_ >= 0; }
+void Wake::signal() {
+  const char one = 1;
+  if (write_handle_ >= 0) { const auto result = write(write_handle_, &one, sizeof(one)); (void)result; }
+}
+bool Wake::consume() {
+  if (handle_ < 0) return false;
+  char buffer[64];
+  bool any = false;
+  for (;;) {
+    const auto count = read(handle_, buffer, sizeof(buffer));
+    if (count > 0) { any = true; continue; }
+    if (count < 0 && errno == EINTR) continue;
+    return any;
+  }
+}
+WaitReady wait(WaitHandle source, Wake& wake, int64_t timeout_ns) {
+  int timeout_ms = -1;
+  if (timeout_ns >= 0) {
+    const int64_t milliseconds = timeout_ns / 1000000 + (timeout_ns % 1000000 != 0 ? 1 : 0);
+    timeout_ms = milliseconds > INT_MAX ? INT_MAX : static_cast<int>(milliseconds);
+  }
+  pollfd descriptors[2] = {{source, POLLIN, 0}, {wake.handle(), POLLIN, 0}};
+  if (poll(descriptors, 2, timeout_ms) < 0) {
+    if (errno == EINTR) return {};
+    throw std::runtime_error("capture poll failed");
   }
   if (descriptors[0].revents & (POLLERR | POLLHUP | POLLNVAL)) throw std::runtime_error("capture source connection closed");
   return {bool(descriptors[0].revents & POLLIN), bool(descriptors[1].revents & POLLIN)};
