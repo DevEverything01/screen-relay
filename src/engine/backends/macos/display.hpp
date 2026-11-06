@@ -3,7 +3,7 @@
 
 namespace relay {
 namespace macos {
-/// A display relay captures and streams, with its global bounds and stream size.
+/// A display with global bounds and a stream size based on native pixels when available.
 struct Display {
   /// CoreGraphics display ID (CGDirectDisplayID).
   CGDirectDisplayID id;

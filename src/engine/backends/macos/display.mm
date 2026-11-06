@@ -12,9 +12,9 @@ namespace relay {
 namespace macos {
 namespace {
 std::string chosen;
-/// Even stream size for the display bounds, halved until it fits the maximum frame size.
-std::pair<int, int> streamSize(CGRect bounds) {
-  int width = int(bounds.size.width) & ~1, height = int(bounds.size.height) & ~1;
+/// Even stream size in pixels, halved until it fits the maximum frame size.
+std::pair<int, int> streamSize(int width, int height) {
+  width &= ~1; height &= ~1;
   while (width > max_frame_width || height > max_frame_height) {
     width = (width / 2) & ~1;
     height = (height / 2) & ~1;
@@ -42,7 +42,13 @@ Display findDisplay() {
     names += (names.empty() ? "" : ", ") + std::to_string(id) + " (" +
              std::to_string(int(bounds.size.width)) + "x" + std::to_string(int(bounds.size.height)) + " points)";
     if (valid && id == selected) {
-      const auto size = streamSize(bounds);
+      int width = int(bounds.size.width), height = int(bounds.size.height);
+      if (CGDisplayModeRef mode = CGDisplayCopyDisplayMode(id)) {
+        width = int(CGDisplayModeGetPixelWidth(mode));
+        height = int(CGDisplayModeGetPixelHeight(mode));
+        CGDisplayModeRelease(mode);
+      }
+      const auto size = streamSize(width, height);
       return {id, bounds, size.first, size.second};
     }
   }
