@@ -36,12 +36,12 @@ The VM runs a display and a desktop. The engine on the VM captures the screen, e
 
 | Area | Limit |
 | --- | --- |
-| Display server | X11 or Wayland. `relay up` uses X11 when the engine includes it, otherwise Wayland. See [Wayland](/docs/wayland) for compositor requirements. |
+| Display server | X11 or Wayland on Linux; the Windows engine captures the signed-in desktop. `relay up` uses X11 when the engine includes it, otherwise Wayland. See [Wayland](/docs/wayland) for compositor requirements. |
 | Resolution | Up to 16384x16384, set in [Configuration](/docs/configuration). A change applies when the session starts. |
 | Control | One input owner at a time: a viewer or one agent. Screenshots work at any time. |
 | Not supported | Audio, clipboard, IME, relative pointer, and hardware encoding. |
 | Auth | One shared token per session; a session on loopback has none. No separate user identities. |
-| Install | The engine installs on Linux only. Automatic dependencies cover Debian, Ubuntu, Fedora, Arch Linux, and Alpine. `--client-only` installs the CLI on any OS with Node 26 or newer. |
+| Install | `install.sh` and `relay up` need Linux. On Windows you build and start the engine by hand; see [Windows](/docs/windows). Automatic dependencies cover Debian, Ubuntu, Fedora, Arch Linux, and Alpine. `--client-only` installs the CLI on any OS with Node 26 or newer. |
 | Failure | Three capture failures in a row end the session. `relay logs` shows why. |
 
 ## Status
@@ -58,6 +58,7 @@ The VM runs a display and a desktop. The engine on the VM captures the screen, e
 - [Getting started](/docs/getting-started): install relay and open the viewer.
 - [X11](/docs/x11): start an X11 desktop or attach to a display.
 - [Wayland](/docs/wayland): attach to a compositor or capture one output.
+- [Windows](/docs/windows): build the engine and stream a Windows desktop.
 - [CLI reference](/docs/cli): every command, option, output, and error.
 - [SDK](/docs/sdk): control a session from Node.
 - [HTTP API](/docs/protocol): endpoints, input events, and the wire format.
