@@ -206,7 +206,7 @@ class MacInput final : public InputBackend {
       case InputJob::Kind::button: applyButton(job.number, job.press, state); break;
       case InputJob::Kind::motion: {
         const CGPoint target = globalPoint(job.x, job.y);
-        if (CGPointEqualToPoint(target, position)) break;
+        if (CGPointEqualToPoint(target, position) && !heldButtons.empty()) break;
         position = target;
         send(mouseEvent(motionType(), position, dragButton(), 0, state));
         break;
