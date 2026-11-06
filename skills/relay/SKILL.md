@@ -1,6 +1,6 @@
 ---
 name: relay
-description: Start a streamed Linux desktop and control it with the relay CLI (screenshot, click, type, key). Use when an agent needs to see and operate a GUI on a Linux VM, sandbox or container.
+description: Stream a desktop and control it with the relay CLI (screenshot, click, type, key). Use when an agent needs to see and operate a GUI on a Linux VM, sandbox or container, or on a Mac.
 hidden: true
 ---
 

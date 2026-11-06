@@ -1,0 +1,86 @@
+---
+title: macOS
+description: Stream and control the display of a Mac you are logged in to.
+---
+
+On a Mac, relay attaches to the display of the logged-in user. It starts no virtual display and no desktop. It streams the display with ScreenCaptureKit at the display's native pixel size and controls it with posted keyboard and mouse events. Its backend is `macos`, the only backend on a Mac.
+
+## Requirements
+
+- macOS 12.3 or later, on Apple silicon or Intel.
+- [Homebrew](https://brew.sh).
+- Node 26 or newer. The installer downloads it if needed.
+- A logged-in user session. Start relay from a terminal in that session.
+
+## Install
+
+From a [repository clone](/docs/getting-started#1-install-relay), run:
+
+```sh
+./install.sh
+```
+
+The installer runs `brew install pkgconf x264 libwebsockets`, builds relay, and runs `relay doctor`. On a Mac, `--backend` accepts only `macos`, and `--no-desktop` has no effect. If `relay` is not on your `PATH`, run `export PATH="$HOME/.local/bin:$PATH"` for the default install prefix.
+
+## Grant permissions
+
+Relay needs two permissions under **System Settings > Privacy & Security**:
+
+- **Screen & System Audio Recording**, to capture the display.
+- **Accessibility**, to send keyboard and mouse events.
+
+Enable them for the app that starts relay, such as your terminal, then restart that app. Relay asks for each missing permission once when it starts.
+
+`relay doctor` reports both in its `permissions` check. For the raw engine message, run:
+
+```sh
+relay-engine --backend macos --check
+```
+
+## Start a session
+
+```sh
+relay up -d
+```
+
+Open the viewer link as described in [Getting started](/docs/getting-started#3-open-the-viewer). Stop the session with `relay down`. Stopping relay leaves your display as it was.
+
+To start an app in your user session, run:
+
+```sh
+relay run -- APP
+```
+
+The app inherits the environment of the command that runs it, without `DISPLAY`, `WAYLAND_DISPLAY`, and `XAUTHORITY`. It starts in your home directory.
+
+### Choose a display
+
+Relay captures the main display by default. To capture another, pass its display ID:
+
+```sh
+relay up -d --output DISPLAY_ID
+```
+
+To list the IDs, pass one that does not exist, such as `--output 0`. The engine reports `Display 0 not found; active displays:` followed by each ID with its size in points, and the error appears in the output of `relay up`.
+
+`--display` is not supported on a Mac. `display.resolution` is ignored, and relay prints a warning if your configuration sets it.
+
+## What you will notice
+
+- The stream uses the display's native pixels, so a Retina display streams at full resolution. A display larger than the 16384-pixel limit is halved until it fits.
+- The pointer is not part of the video. The viewer shows the browser's own pointer.
+- The frame rate follows the display's refresh rate, up to `stream.fps`. The setting accepts up to 120.
+- If the display's size or position changes, the stream stops with `The display changed from WxH to WxH or moved; restart relay to stream it`. Run `relay up` again.
+- Text is typed as Unicode characters.
+
+## Check the machine
+
+```sh
+relay doctor
+```
+
+The checks cover the macOS version, the Homebrew packages, the engine, and the permissions.
+
+## Remote access
+
+Remote access works as it does on Linux. See [Remote access](/docs/remote-access).

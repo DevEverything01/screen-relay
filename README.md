@@ -1,6 +1,6 @@
 # relay
 
-Relay streams a Linux desktop to a browser and lets people and agents control it from the `relay` CLI, a Node SDK, or an HTTP and WebSocket API.
+Relay streams a Linux or macOS desktop to a browser and lets people and agents control it from the `relay` CLI, a Node SDK, or an HTTP and WebSocket API.
 
 ## Quickstart
 
@@ -19,6 +19,8 @@ The engine listens on `127.0.0.1:8080`, so from your laptop, forward the port fi
 ```sh
 ssh -N -L 8080:127.0.0.1:8080 user@your-vm
 ```
+
+On a Mac, `./install.sh` and `relay up -d` attach to the display you are logged in to. See the [macOS page](https://relay.labs.vercel.dev/docs/macos).
 
 For Wayland:
 

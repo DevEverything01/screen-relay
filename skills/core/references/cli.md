@@ -6,11 +6,11 @@ Run `relay help` for root help, `relay help <command>` for one command, and `rel
 
 ## VM commands
 
-Run these on the Linux machine that shows the desktop. `up`, `down` and `run` fail with `unsupported_platform` elsewhere.
+Run these on the Linux or macOS machine that shows the desktop. `up`, `down` and `run` fail with `unsupported_platform` elsewhere.
 
 ```sh
 relay up [-d] [--name NAME] [--config FILE] [--port PORT] [--desktop xfce|none|COMMAND]
-         [--display DISPLAY] [--backend x11|wayland] [--output NAME]
+         [--display DISPLAY] [--backend x11|wayland|macos] [--output NAME|DISPLAY_ID]
          [--public HTTPS_URL] [--tls-cert FILE --tls-key FILE]
          [--bind ADDRESS] [--timeout SECONDS]
 relay down [--name NAME]
@@ -19,17 +19,17 @@ relay run -- <app> [args]... [--name NAME] [--restart]
 relay doctor [--config FILE]
 ```
 
-- `up` starts a display (Xvfb on X11, or sway with XWayland on Wayland) or attaches to an existing one. It then starts the desktop when enabled and the engine, waits until ready, and supervises the session.
+- `up` starts a display (Xvfb on X11, or sway with XWayland on Wayland) or attaches to an existing one. On macOS it always attaches to the logged-in user's display and starts no desktop. It then starts the desktop when enabled and the engine, waits until ready, and supervises the session.
   - Without `-d` it runs in the foreground, and the first Ctrl+C stops the session (exit 130). Piped, it prints only the viewer URL.
-  - `--display DISPLAY`: Attach to an existing X display (:0) or Wayland socket (wayland-1). It keeps the caller's environment, and a Wayland socket needs `XDG_RUNTIME_DIR`.
-  - `--backend x11|wayland`: Use the x11 or wayland backend; defaults to x11 when the engine has it, else wayland. A `--display` without a colon, such as `wayland-1`, selects the Wayland backend on its own.
-  - `--output NAME`: Capture this Wayland output, by name. Wayland only; `up` fails on x11.
+  - `--display DISPLAY`: Attach to an existing X display (:0) or Wayland socket (wayland-1). It keeps the caller's environment, and a Wayland socket needs `XDG_RUNTIME_DIR`. macOS rejects it with `invalid_input`.
+  - `--backend x11|wayland|macos`: On Linux, defaults to x11 when the engine has it, else wayland, and a `--display` without a colon, such as `wayland-1`, selects the Wayland backend on its own. On macOS the only backend is `macos` and it is the default; x11 and wayland fail with `invalid_input`, as does `macos` on Linux.
+  - `--output NAME|DISPLAY_ID`: Capture this Wayland output by name, or a macOS display by its CGDirectDisplayID. `up` fails on x11. See [macOS](macos.md).
   - `--public HTTPS_URL` advertises an HTTPS origin and expects a TLS proxy unless `--tls-cert` is set.
-  - See [Wayland](wayland.md) for setup.
+  - See [Wayland](wayland.md) or [macOS](macos.md) for setup.
 - `down` stops the session and everything it started; safe to repeat. Its JSON outcome is `stopped` or `unchanged`.
 - `logs` prints the last 200 lines of one component (`display`, `dbus`, `desktop`, `engine`, `apps`) or of every component log. `-f` follows; it cannot be combined with `--json`.
-- `run` starts an app on the session desktop and returns its pid. It shares the desktop's display and available D-Bus session bus, runtime, config, cache and X authority settings, and clears ambient capabilities. On Wayland it also sets `WAYLAND_DISPLAY`. `--restart` restarts the app until the session stops. App output goes to `relay logs apps`.
-- `doctor` checks the machine it runs on and prints a fix command for each problem. Off Linux it reports the platform check as failed. It uses `RELAY_BACKEND`, then the config file's `backend` key (from `--config FILE` or the default config), then the engine's default. Use `RELAY_BACKEND=wayland relay doctor` for a Wayland setup.
+- `run` starts an app on the session desktop and returns its pid. It shares the desktop's display and available D-Bus session bus, runtime, config, cache and X authority settings, and clears ambient capabilities. On Wayland it also sets `WAYLAND_DISPLAY`. On macOS it clears `DISPLAY`, `WAYLAND_DISPLAY` and `XAUTHORITY`. `--restart` restarts the app until the session stops. App output goes to `relay logs apps`.
+- `doctor` checks the machine it runs on and prints a fix command for each problem. On macOS it checks `platform` (macOS 12.3 or later), `Homebrew packages`, `engine` and `permissions`. Off Linux and macOS it reports the platform check as failed. It uses `RELAY_BACKEND`, then the config file's `backend` key (from `--config FILE` or the default config), then the engine's default. Use `RELAY_BACKEND=wayland relay doctor` for a Wayland setup.
 
 ## Client commands
 
@@ -50,7 +50,7 @@ relay input --stdin
 
 - `status` with no URL reads the local session and exits 0 for any existing session. With `--url` (or `RELAY_URL`) it queries a remote engine. A missing session is `not_running`, exit 1.
 - `status --json` puts the session under `session`. These fields name the display server:
-  - `backend`: `x11` or `wayland`.
+  - `backend`: `x11`, `wayland` or `macos`.
   - `waylandDisplay`: the Wayland socket, such as `wayland-1`. Wayland only.
   - `runtimeDir`: the runtime directory of the sway session. Wayland only, when relay starts sway. `down` deletes it.
 - Coordinates are fractions of the screen from `0` to `1`, from the top-left.
