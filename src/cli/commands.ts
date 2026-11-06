@@ -63,15 +63,15 @@ const coordinateNotes = ['Coordinates are fractions of the screen from 0 to 1.']
 
 export const commands: Record<string, Command> = {
   up: {
-    summary: 'Start a display, desktop and engine', group: 'Session', runsOn: 'vm', arguments: [],
+    summary: 'Start or attach to a display and start the engine', group: 'Session', runsOn: 'vm', arguments: [],
     options: [
       { name: 'detach', short: 'd', type: 'boolean', summary: 'Run in the background', default: false },
       configOption,
       { name: 'port', type: 'number', valueHint: '<PORT>', summary: 'Listen on this port', environment: 'RELAY_PORT', default: 8080, deferredDefault: true, validate: (value) => Number.isInteger(value) && Number(value) >= 1 && Number(value) <= 65535 },
-      { name: 'desktop', type: 'string', valueHint: '<COMMAND>', summary: 'Start xfce, none, or a desktop command; defaults to xfce on x11, foot on wayland, or none when attaching', environment: 'RELAY_DESKTOP' },
-      { name: 'display', type: 'string', valueHint: '<DISPLAY>', summary: 'Attach to an existing X display (:0) or Wayland socket (wayland-1)' },
-      { name: 'backend', type: 'string', valueHint: '<BACKEND>', summary: 'Use the x11 or wayland backend; defaults to x11 when the engine has it, else wayland. A --display without a colon selects wayland', environment: 'RELAY_BACKEND', acceptedValues: BACKENDS },
-      { name: 'output', type: 'string', valueHint: '<NAME>', summary: 'Capture this Wayland output, by name' },
+      { name: 'desktop', type: 'string', valueHint: '<COMMAND>', summary: 'Start xfce, none, or a desktop command; defaults to xfce on x11, foot on wayland, or none when attaching. On macOS, the desktop is always none', environment: 'RELAY_DESKTOP' },
+      { name: 'display', type: 'string', valueHint: '<DISPLAY>', summary: 'Attach to an existing X display (:0) or Wayland socket (wayland-1) on Linux' },
+      { name: 'backend', type: 'string', valueHint: '<BACKEND>', summary: 'On Linux, defaults to x11 when the engine has it, else wayland; a --display without a colon selects wayland. On macOS, defaults to macos', environment: 'RELAY_BACKEND', acceptedValues: BACKENDS },
+      { name: 'output', type: 'string', valueHint: '<NAME>', summary: 'Capture a Wayland output by name or a macOS display by CGDirectDisplayID' },
       { name: 'public', type: 'string', valueHint: '<URL>', summary: 'Advertise this HTTPS origin', environment: 'RELAY_PUBLIC', validate: (value) => /^https:\/\/[^/?#@\\\s]+$/.test(String(value)) },
       { name: 'tls-cert', type: 'string', valueHint: '<FILE>', summary: 'Serve TLS with this certificate', environment: 'RELAY_TLS_CERT' },
       { name: 'tls-key', type: 'string', valueHint: '<FILE>', summary: 'Read the TLS private key', environment: 'RELAY_TLS_KEY' },
@@ -80,10 +80,11 @@ export const commands: Record<string, Command> = {
     ],
     examples: [
       { description: 'Start a session in the background', command: 'relay up -d' },
-      { description: 'Start a Wayland session', command: 'relay up -d --backend wayland' },
+      { description: 'Start a Wayland session on Linux', command: 'relay up -d --backend wayland' },
       { description: 'Attach to the running Wayland compositor', command: 'relay up -d --display "$WAYLAND_DISPLAY"' },
+      { description: 'Attach to the current display on macOS', command: 'relay up -d --backend macos' },
     ],
-    notes: ['Without --detach, Ctrl+C stops the session.', '--display uses the existing display size and defaults to no desktop.', 'Flags override config values. RELAY_CONFIG selects the config file.', 'Config-only settings and their variables: display.resolution (RELAY_RESOLUTION), stream.fps (RELAY_FPS), stream.bitrate.* (RELAY_BITRATE_MIN, RELAY_BITRATE_START, RELAY_BITRATE_MAX), keyboard.layout (RELAY_KEYBOARD_LAYOUT).'],
+    notes: ['Without --detach, Ctrl+C stops the session.', 'On Linux, --display uses the existing display size and defaults to no desktop. On macOS, relay always attaches to the existing display.', 'Flags override config values. RELAY_CONFIG selects the config file.', 'Config-only settings and their variables: display.resolution (RELAY_RESOLUTION), stream.fps (RELAY_FPS), stream.bitrate.* (RELAY_BITRATE_MIN, RELAY_BITRATE_START, RELAY_BITRATE_MAX), keyboard.layout (RELAY_KEYBOARD_LAYOUT).'],
     resultSchema: { session: 'object', outcome: 'started' },
     validate: (args) => args.display === '' ? new Failure('invalid_input', '--display is empty', 'Set WAYLAND_DISPLAY or DISPLAY, or drop --display to start a new desktop.') : undefined,
     run: cmdUp,

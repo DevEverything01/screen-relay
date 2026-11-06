@@ -8,7 +8,7 @@ import { createClient } from '../../sdk/index.js';
 import { clientFailure, cmdRemoteStatus } from '../client.js';
 import { applyTo, loadConfig } from '../config.js';
 import { emit, Failure, formatReady, formatStarted, formatStatus, formatStopped, nextStep, printNext, printWarning, sessionCommand } from '../output.js';
-import { COMPONENTS, HostArgs, requireLinux, spawnCleared, which } from './common.js';
+import { COMPONENTS, HostArgs, requireHost, spawnCleared, which } from './common.js';
 import { alive, lock, readSession, reap, stateDir, tail, writeSession } from './state.js';
 import { connectHost, desktopEnv, Session } from './supervisor.js';
 import { startWatcher } from './watcher.js';
@@ -25,10 +25,15 @@ async function reapSession(directory: string, session: Record<string, any> | nul
 }
 
 export async function cmdUp(args: Args): Promise<number> {
-  requireLinux();
+  requireHost();
+  if (process.platform === 'darwin' && args.display !== undefined) {
+    throw new Failure('invalid_input', '--display is not supported on macOS', 'Remove --display; relay attaches to the current display on macOS.');
+  }
   const [settings, , present] = loadConfig(typeof args.config === 'string' && args.config ? args.config : undefined);
-  const warnings = args.display && present.has('display.resolution')
-    ? [{ reason: 'display_resolution_ignored', message: 'display.resolution is ignored with --display; the existing display size is used' }] : [];
+  const warnings = (args.display || process.platform === 'darwin') && present.has('display.resolution')
+    ? [{ reason: 'display_resolution_ignored', message: process.platform === 'darwin'
+      ? 'display.resolution is ignored on macOS; the existing display size is used'
+      : 'display.resolution is ignored with --display; the existing display size is used' }] : [];
   for (const warning of warnings) printWarning(warning.message, args);
   applyTo(args, settings, present);
   const port = Number(args.port ?? 8080);
@@ -141,7 +146,7 @@ async function detach(args: Args, directory: string, timeout: number, warnings: 
 }
 
 export async function cmdDown(args: Args): Promise<number> {
-  requireLinux();
+  requireHost();
   args.signal?.throwIfAborted();
   const directory = stateDir(args.name);
   let session = readSession(args.name);
@@ -222,7 +227,7 @@ export async function cmdLogs(args: Args): Promise<number> {
 }
 
 export async function cmdRun(args: Args): Promise<number> {
-  requireLinux();
+  requireHost();
   const rest = args.args === undefined ? [] : Array.isArray(args.args) ? args.args : [args.args];
   const command = [args.app, ...rest].filter((value) => value !== undefined).map(String);
   if (!command.length) throw new Failure('missing_command', 'Name the app to start', 'Run `relay run --help`.');
@@ -231,13 +236,19 @@ export async function cmdRun(args: Args): Promise<number> {
   if (!session || session.state !== 'ready' || !alive(session.supervisor)) throw new Failure('not_found', `No running session named "${args.name}"`, 'Start one with `relay up -d`.');
   const directory = stateDir(args.name);
   const env = session.ownsDisplay === false
-    ? { ...process.env, RELAY_SESSION: directory }
+    ? { ...process.env, ...(session.backend === 'macos' ? session.environment ?? {} : {}), RELAY_SESSION: directory }
     : { ...desktopEnv(directory), ...(session.environment ?? {}) };
-  env.DISPLAY = session.display;
-  const runtimeDir = session.runtimeDir ?? (session.waylandDisplay ? session.environment?.XDG_RUNTIME_DIR : undefined);
-  if (runtimeDir) env.XDG_RUNTIME_DIR = runtimeDir;
-  if (session.waylandDisplay) env.WAYLAND_DISPLAY = session.waylandDisplay;
-  if (session.xauthority) env.XAUTHORITY = session.xauthority;
+  if (session.backend === 'macos') {
+    delete env.DISPLAY;
+    delete env.WAYLAND_DISPLAY;
+    delete env.XAUTHORITY;
+  } else {
+    env.DISPLAY = session.display;
+    const runtimeDir = session.runtimeDir ?? (session.waylandDisplay ? session.environment?.XDG_RUNTIME_DIR : undefined);
+    if (runtimeDir) env.XDG_RUNTIME_DIR = runtimeDir;
+    if (session.waylandDisplay) env.WAYLAND_DISPLAY = session.waylandDisplay;
+    if (session.xauthority) env.XAUTHORITY = session.xauthority;
+  }
   const path = join(directory, 'apps.log');
   const log = openSync(path, 'a', 0o600);
   let pid: number;
@@ -262,6 +273,6 @@ export async function cmdRun(args: Args): Promise<number> {
     closeSync(log);
   }
   emit(args, { app: { pid, command }, outcome: 'started' },
-    formatStarted(command[0], pid, session.display, path, args) + '\n' + nextStep('Read app output', sessionCommand('logs apps', args.name), args), { identifier: String(pid) });
+    formatStarted(command[0], pid, session.backend === 'macos' ? 'macOS' : session.display, path, args) + '\n' + nextStep('Read app output', sessionCommand('logs apps', args.name), args), { identifier: String(pid) });
   return 0;
 }

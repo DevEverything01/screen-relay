@@ -5,13 +5,20 @@ import { LAUNCHER_DIR, spawnCleared } from './common.js';
 const WATCHER_SCRIPT = `
 import fs from 'node:fs';
 import os from 'node:os';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 let readyFd = Number(process.argv[1]);
 const command = process.argv.slice(2);
 const caps = 'import ctypes,os,sys; ctypes.CDLL(None).prctl(47,4,0,0,0); os.execvp(sys.argv[0],sys.argv)';
 const stopping = { value: false };
 for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP']) process.on(signal, () => { stopping.value = true; });
 function startTime(pid) {
+  if (process.platform === 'darwin') {
+    try {
+      const output = execFileSync('ps', ['-o', 'lstart=', '-p', String(pid)], { encoding: 'utf8', timeout: 2000, env: { ...process.env, LC_ALL: 'C' } }).trim();
+      const started = Date.parse(output);
+      return Number.isNaN(started) ? output : String(started);
+    } catch { return null; }
+  }
   try {
     const stat = fs.readFileSync('/proc/' + pid + '/stat', 'utf8');
     const fields = stat.slice(stat.lastIndexOf(')') + 2).split(/\\s+/);
@@ -38,7 +45,8 @@ async function main() {
     while (!stopping.value && alive(supervisor)) {
       const started = Date.now();
       try {
-        processChild = spawn('setpriv', ['--inh-caps=-all', '--ambient-caps=-all', ...command], {
+        const childCommand = process.platform === 'linux' ? ['setpriv', '--inh-caps=-all', '--ambient-caps=-all', ...command] : command;
+        processChild = spawn(childCommand[0], childCommand.slice(1), {
           cwd: os.homedir(), env: process.env, detached: true,
           stdio: ['ignore', 'inherit', 'inherit']
         });

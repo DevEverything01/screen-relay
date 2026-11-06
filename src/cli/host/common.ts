@@ -14,10 +14,10 @@ export function isLinux(): boolean {
   return process.platform.startsWith('linux');
 }
 
-export function requireLinux(): void {
-  if (!isLinux()) {
-    throw new Failure('unsupported_platform', 'Host commands run on Linux only',
-      'Run this on the Linux machine; client commands (status, screenshot, click, ...) work anywhere with --url.');
+export function requireHost(): void {
+  if (!isLinux() && process.platform !== 'darwin') {
+    throw new Failure('unsupported_platform', 'Host commands run on Linux or macOS only',
+      'Run this on the Linux or macOS machine; client commands (status, screenshot, click, ...) work anywhere with --url.');
   }
 }
 
@@ -40,8 +40,9 @@ export function which(program: string): string | undefined {
   return undefined;
 }
 
-/** Prefixes a command so it runs without inheritable or ambient capabilities, as delivered apps expect. */
+/** Clears Linux capabilities or leaves the command unchanged on macOS. */
 export function clearedCommand(command: string[]): [string, ...string[]] {
+  if (process.platform === 'darwin') return command as [string, ...string[]];
   return ['setpriv', '--inh-caps=-all', '--ambient-caps=-all', ...command];
 }
 

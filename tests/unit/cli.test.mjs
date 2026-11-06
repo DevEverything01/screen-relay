@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { after, test } from 'node:test';
@@ -12,7 +13,7 @@ const directory = mkdtempSync(join(root, '.cli-test-'));
 after(() => rmSync(directory, { recursive: true, force: true }));
 const bundle = buildSync({
   stdin: {
-    contents: "export { commands } from './src/cli/commands.ts'; export { parseCommand } from './src/cli/parser.ts';",
+    contents: "export { commands } from './src/cli/commands.ts'; export { parseCommand } from './src/cli/parser.ts'; export { Session, resolveBackend } from './src/cli/host/supervisor.ts'; export { cmdRun } from './src/cli/host/session_commands.ts';",
     resolveDir: root,
   },
   bundle: true,
@@ -24,7 +25,7 @@ const bundle = buildSync({
 });
 const bundlePath = join(directory, 'parser.mjs');
 writeFileSync(bundlePath, bundle.outputFiles[0].contents);
-const { commands, parseCommand } = await import(pathToFileURL(bundlePath).href);
+const { commands, parseCommand, Session, resolveBackend, cmdRun } = await import(pathToFileURL(bundlePath).href);
 
 test('every metadata example parses through the command parser', () => {
   for (const [name, command] of Object.entries(commands)) {
@@ -40,6 +41,81 @@ test('every metadata example parses through the command parser', () => {
 
 test('an empty RELAY_CONFIG is treated as unset', () => {
   assert.equal(parseCommand(['up'], { RELAY_CONFIG: '' }).config, undefined);
+});
+
+test('macOS attaches with its backend and starts apps without display variables', async () => {
+  const platform = Object.getOwnPropertyDescriptor(process, 'platform');
+  const keys = ['DISPLAY', 'WAYLAND_DISPLAY', 'XAUTHORITY', 'XDG_STATE_HOME', 'XDG_CONFIG_HOME', 'RELAY_TEST_BACKENDS'];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  const engine = join(directory, 'relay-engine');
+  const stateHome = join(directory, 'state');
+  const sessionDir = join(stateHome, 'relay', 'desk');
+  let session;
+  try {
+    Object.defineProperty(process, 'platform', { value: 'darwin' });
+    Object.assign(process.env, { DISPLAY: ':9', WAYLAND_DISPLAY: 'wayland-9', XAUTHORITY: '/tmp/auth', XDG_STATE_HOME: stateHome, XDG_CONFIG_HOME: join(directory, 'session-config'), RELAY_TEST_BACKENDS: 'macos' });
+    mkdirSync(sessionDir, { recursive: true });
+    writeFileSync(engine, `#!/usr/bin/env node
+import { createServer } from 'node:http';
+import { writeFileSync } from 'node:fs';
+if (process.argv.includes('--help')) {
+  console.log('Compiled backends: ' + process.env.RELAY_TEST_BACKENDS);
+} else if (process.argv.includes('invalid-output')) {
+  console.error('Display invalid-output not found; active displays: 77 (1x1 points)');
+  process.exitCode = 1;
+} else {
+  writeFileSync(process.env.RELAY_SESSION + '/engine-invocation.json', JSON.stringify({ args: process.argv.slice(2), env: process.env }));
+  const image = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64');
+  const port = Number(process.argv[process.argv.indexOf('--port') + 1]);
+  createServer((req, res) => { res.writeHead(200, { 'Content-Type': 'image/png' }); res.end(image); }).listen(port, '127.0.0.1', () => console.log(JSON.stringify({ ready: true, pid: process.pid })));
+}
+`, { mode: 0o755 });
+
+    assert.equal(resolveBackend(undefined), 'macos');
+    for (const backend of ['x11', 'wayland']) assert.throws(() => resolveBackend(backend), { reason: 'invalid_input' });
+    process.env.RELAY_TEST_BACKENDS = 'x11';
+    assert.throws(() => resolveBackend(undefined), { reason: 'missing_dependency' });
+    process.env.RELAY_TEST_BACKENDS = 'macos';
+    Object.defineProperty(process, 'platform', { value: 'linux' });
+    assert.throws(() => resolveBackend('macos'), { reason: 'invalid_input' });
+    Object.defineProperty(process, 'platform', { value: 'darwin' });
+
+    const probe = createServer();
+    await new Promise((resolve) => probe.listen(0, '127.0.0.1', resolve));
+    const port = probe.address().port;
+    await new Promise((resolve, reject) => probe.close((error) => error ? reject(error) : resolve()));
+    session = new Session({ command: 'up', json: true, name: 'desk', port, desktop: 'xfce', output: '77', resolution: '1280x720', fps: 60, bitrateMin: 1000000, bitrateStart: 8000000, bitrateMax: 40000000, timeout: 5 }, sessionDir);
+    const info = await session.start();
+    assert.equal(info.resolution, '1x1');
+    assert.equal(session.data.backend, 'macos');
+    assert.equal(session.data.desktop, 'none');
+    assert.equal(session.data.ownsDisplay, false);
+    assert.deepEqual(Object.keys(session.data.components), ['engine']);
+    const invocation = JSON.parse(readFileSync(join(sessionDir, 'engine-invocation.json'), 'utf8'));
+    assert.deepEqual(invocation.args.slice(-4), ['--backend', 'macos', '--output', '77']);
+    for (const key of ['DISPLAY', 'WAYLAND_DISPLAY', 'XAUTHORITY']) assert.equal(invocation.env[key], undefined);
+
+    process.env.XDG_CONFIG_HOME = join(directory, 'different-config');
+    const app = "process.stdout.write(JSON.stringify({ DISPLAY: process.env.DISPLAY, WAYLAND_DISPLAY: process.env.WAYLAND_DISPLAY, XAUTHORITY: process.env.XAUTHORITY, RELAY_SESSION: process.env.RELAY_SESSION, XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME }))";
+    assert.equal(await cmdRun({ command: 'run', json: true, name: 'desk', app: process.execPath, args: ['-e', app] }), 0);
+    const appEnv = JSON.parse(readFileSync(join(sessionDir, 'apps.log'), 'utf8'));
+    assert.deepEqual(appEnv, { RELAY_SESSION: sessionDir, XDG_CONFIG_HOME: join(directory, 'session-config') });
+    await session.cleanup();
+    session = undefined;
+
+    const badDir = join(stateHome, 'relay', 'bad');
+    mkdirSync(badDir, { recursive: true });
+    session = new Session({ command: 'up', json: true, name: 'bad', port, output: 'invalid-output', resolution: '1280x720', fps: 60, bitrateMin: 1000000, bitrateStart: 8000000, bitrateMax: 40000000, timeout: 5 }, badDir);
+    await assert.rejects(session.start(), { reason: 'component_failed', message: /Display invalid-output not found; active displays: 77/ });
+  } finally {
+    if (session) await session.cleanup();
+    rmSync(engine, { force: true });
+    if (platform) Object.defineProperty(process, 'platform', platform);
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
 });
 
 test('--json failures write one JSON line to stderr and nothing to stdout', () => {
@@ -121,17 +197,17 @@ test('human help is piped plain text with the command hint', () => {
     assert.doesNotMatch(result.stdout, /Start here \(for AI agents\):/);
   }
   const root = help('0');
-  assert.match(root.stdout, /^relay \d+\.\d+\.\d+\n\n▲ relay \[options\] <command>\n\nFor command help, run `relay <command> --help`\n\nVM commands \(run on the Linux machine that shows the desktop\):\n\n {4}up /);
+  assert.match(root.stdout, /^relay \d+\.\d+\.\d+\n\n▲ relay \[options\] <command>\n\nFor command help, run `relay <command> --help`\n\nHost commands \(run on the Linux or macOS machine that shows the desktop\):\n\n {4}up /);
   const click = help('0', ['click', '--help']);
-  assert.match(click.stdout, /^click\n\n▲ relay click <x> <y> \[options\]\n\nClick at screen coordinates\nRuns on the VM, or on another machine with --url and a token file\.\n\nOptions:\n\n {4}--button <BUTTON> +Select the mouse button\. Values: left, middle, right \[default: left\]\n/);
+  assert.match(click.stdout, /^click\n\n▲ relay click <x> <y> \[options\]\n\nClick at screen coordinates\nRuns on the host, or on another machine with --url and a token file\.\n\nOptions:\n\n {4}--button <BUTTON> +Select the mouse button\. Values: left, middle, right \[default: left\]\n/);
   assert.match(click.stdout, /– Click the center\n\n {2}\$ relay click 0\.5 0\.5\n\n$/);
 });
 
-test('human help lists up under the VM section and click under the client section', () => {
+test('human help lists up under the host section and click under the client section', () => {
   const result = help('0');
   assert.ifError(result.error);
   assert.equal(result.status, 0);
-  const vm = result.stdout.slice(result.stdout.indexOf('VM commands'), result.stdout.indexOf('Client commands'));
+  const vm = result.stdout.slice(result.stdout.indexOf('Host commands'), result.stdout.indexOf('Client commands'));
   assert.match(vm, /^ {4}up /m);
   assert.doesNotMatch(vm, /^ {4}click /m);
   const client = result.stdout.slice(result.stdout.indexOf('Client commands'), result.stdout.indexOf('Other commands'));

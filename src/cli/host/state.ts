@@ -1,5 +1,5 @@
 import { closeSync, fstatSync, openSync, readFileSync, readdirSync, readSync, renameSync, writeFileSync } from 'node:fs';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -45,7 +45,23 @@ export function tail(path: string, lines = 20): string {
   }
 }
 
+/** Reads a process start time from ps, the only source macOS has without /proc. */
+function darwinStartTime(pid: number): string | null {
+  try {
+    const output = execFileSync('ps', ['-o', 'lstart=', '-p', String(pid)], {
+      encoding: 'utf8',
+      timeout: 2000,
+      env: { ...process.env, LC_ALL: 'C' },
+    }).trim();
+    const started = Date.parse(output);
+    return Number.isNaN(started) ? output : String(started);
+  } catch {
+    return null;
+  }
+}
+
 export function startTime(pid: number): string | null {
+  if (process.platform === 'darwin') return darwinStartTime(pid);
   try {
     const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
     const fields = stat.slice(stat.lastIndexOf(')') + 2).split(/\s+/);
@@ -65,7 +81,9 @@ export function identity(pid: number): ProcessIdentity {
   return { pid, start: startTime(pid) };
 }
 
+/** Signal every process carrying this session's RELAY_SESSION marker; macOS relies on the process-group kill in reap. */
 export async function sweep(directory: string, signal?: AbortSignal): Promise<void> {
+  if (process.platform === 'darwin') return;
   const marker = Buffer.from(`RELAY_SESSION=${directory}`);
   for (const killSignal of ['SIGTERM', 'SIGKILL'] as const) {
     signal?.throwIfAborted();
@@ -104,12 +122,15 @@ export async function reap(directory: string, session: SessionData | null, signa
   await sweep(directory, signal);
 }
 
-/** Holds the kernel session lock until close. */
+/** Holds the kernel session lock until close, with flock on Linux and lockf on macOS. */
 export async function lock(name: string, directory: string): Promise<{ close(): Promise<void> }> {
   const file = join(directory, 'lock');
   const busy = () => new Failure('already_running', `Session "${name}" is already running`,
     'Stop it with `relay down --name ' + name + '` or pick another --name.');
-  const child = spawn('flock', ['--exclusive', '--nonblock', '--conflict-exit-code', '75', file, 'sh', '-c', 'printf .; cat'], { detached: true, stdio: ['pipe', 'pipe', 'ignore'] });
+  const [command, args] = process.platform === 'darwin'
+    ? ['lockf', ['-k', '-s', '-t', '0', file, 'sh', '-c', 'printf .; cat']]
+    : ['flock', ['--exclusive', '--nonblock', '--conflict-exit-code', '75', file, 'sh', '-c', 'printf .; cat']];
+  const child = spawn(command, args, { detached: true, stdio: ['pipe', 'pipe', 'ignore'] });
   const acquired = new Promise<void>((resolve, reject) => {
     let ready = false;
     child.stdout.on('data', () => {
