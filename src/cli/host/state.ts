@@ -81,30 +81,32 @@ export function identity(pid: number): ProcessIdentity {
   return { pid, start: startTime(pid) };
 }
 
-/** Signal every process carrying this session's RELAY_SESSION marker; macOS relies on the process-group kill in reap. */
+/** Lists processes whose environment holds the marker, from /proc on Linux and from ps on macOS. */
+function marked(marker: string): number[] {
+  if (process.platform === 'darwin') {
+    const list = (flags: string) => new Map(execFileSync('ps', [flags, '-o', 'pid=,command='], { encoding: 'utf8', maxBuffer: 1 << 26, env: { ...process.env, LC_ALL: 'C' } })
+      .split('\n').map((line) => [Number.parseInt(line, 10), line] as const));
+    const commands = list('-axww');
+    return [...list('-axwwE')].filter(([pid, line]) => {
+      const command = commands.get(pid);
+      return command !== undefined && line.startsWith(command) && ` ${line.slice(command.length)} `.includes(` ${marker} `);
+    }).map(([pid]) => pid);
+  }
+  let entries: string[] = [];
+  try { entries = readdirSync('/proc'); } catch {}
+  return entries.map(Number).filter((pid) => {
+    try { return Number.isInteger(pid) && readFileSync(`/proc/${pid}/environ`).toString().split('\0').includes(marker); } catch { return false; }
+  });
+}
+
+/** Signal every process carrying this session's RELAY_SESSION marker. */
 export async function sweep(directory: string, signal?: AbortSignal): Promise<void> {
-  if (process.platform === 'darwin') return;
-  const marker = Buffer.from(`RELAY_SESSION=${directory}`);
+  const marker = `RELAY_SESSION=${directory}`;
   for (const killSignal of ['SIGTERM', 'SIGKILL'] as const) {
     signal?.throwIfAborted();
-    const found: number[] = [];
-    let entries: string[];
-    try {
-      entries = readdirSync('/proc');
-    } catch {
-      return;
-    }
-    for (const entry of entries) {
-      const pid = Number(entry);
-      if (!Number.isInteger(pid) || pid === process.pid) continue;
-      try {
-        const environment = readFileSync(`/proc/${entry}/environ`);
-        if (environment.toString().split('\0').some((entry) => entry === marker.toString())) {
-          process.kill(pid, killSignal);
-          found.push(pid);
-        }
-      } catch {}
-    }
+    const found = marked(marker).filter((pid) => {
+      try { return pid !== process.pid && process.kill(pid, killSignal); } catch { return false; }
+    });
     if (!found.length) return;
     await delay(500, undefined, { signal });
   }

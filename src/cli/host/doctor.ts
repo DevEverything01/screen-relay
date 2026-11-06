@@ -114,15 +114,14 @@ export async function cmdDoctor(args: HostArgs): Promise<number> {
       check('config', false, error.message, error.hint);
     }
     const requestedBackend = process.env.RELAY_BACKEND ?? configuredBackend;
-    let backend: 'x11' | 'wayland' | 'macos' = 'macos';
-    if (linux || requestedBackend !== undefined) {
-      try {
-        backend = resolveBackend(requestedBackend);
-      } catch (error) {
-        if (!(error instanceof Failure)) throw error;
-        check('backend', false, error.message, error.hint);
-        backend = requestedBackend === 'x11' || requestedBackend === 'wayland' ? requestedBackend : 'x11';
-      }
+    let backend: 'x11' | 'wayland' | 'macos';
+    let backendResolved = true;
+    try {
+      backend = resolveBackend(requestedBackend);
+    } catch (error) {
+      if (!(error instanceof Failure)) throw error;
+      backendResolved = check('backend', false, error.message, error.hint);
+      backend = requestedBackend === 'x11' || requestedBackend === 'wayland' ? requestedBackend : 'x11';
     }
     const x11 = backend === 'x11';
     check('user', true, root ? 'root' : `uid ${process.getuid?.() ?? -1}`);
@@ -135,25 +134,16 @@ export async function cmdDoctor(args: HostArgs): Promise<number> {
     let writable = true;
     try { mkdirSync(state, { recursive: true }); accessSync(state, constants.W_OK); } catch { writable = false; }
     check('state dir', writable, state, 'export XDG_STATE_HOME=/path/to/a/writable/dir');
+    const engine = findEngine();
+    const engineRuns = check('engine', Boolean(engine && run([engine, '--help']).status === 0), engine ?? 'relay-engine not found', './install.sh');
     if (!linux) {
-      const packages = run(['pkg-config', '--exists', 'x264', 'libwebsockets']).status === 0;
-      check('Homebrew packages', packages, packages ? 'x264 libwebsockets' : 'x264 or libwebsockets not found', 'Install Homebrew, then run `brew install pkgconf x264 libwebsockets`.');
-      const engine = findEngine();
-      const help = engine ? run([engine, '--help'], { timeout: 20000 }) : null;
-      const compiled = /^Compiled backends:\s*(.*)$/m.exec(help?.stdout ?? '')?.[1].split(',').map((name) => name.trim()) ?? [];
-      const engineRuns = Boolean(engine && help?.status === 0 && compiled.includes('macos'));
-      const engineDetail = !engine ? 'relay-engine not found' : help?.status !== 0 ? `${engine}: could not run` : compiled.includes('macos') ? `${engine} (macos)` : `${engine}: macos backend not compiled`;
-      check('engine', engineRuns, engineDetail, './install.sh');
-      if (engineRuns && engine) {
+      if (engineRuns && backendResolved && engine) {
         const result = run([engine, '--backend', 'macos', '--check'], { timeout: 20000 });
         check('permissions', result.status === 0, result.status === 0 ? 'Screen Recording and Accessibility granted' : 'backend initialization failed', result.stderr?.trim() || result.error?.message || 'Run `relay-engine --backend macos --check` for details.');
       } else {
-        check('permissions', false, 'not checked', 'Fix the engine check first.', 'warn');
+        check('permissions', false, 'not checked', 'Fix the engine and backend checks first.', 'warn');
       }
     } else {
-      const engine = findEngine();
-      const engineRuns = Boolean(engine && run([engine, '--help']).status === 0);
-      check('engine', engineRuns, engine ?? 'relay-engine not found', './install.sh');
       const x264 = findLibrary('x264');
       const rpmFusionCommand = `${sudo}dnf -y install https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm`;
       const x264Hint = family === 'apt'

@@ -44,7 +44,7 @@ The backend comes from `--backend`, then `RELAY_BACKEND`, then the config file's
 
 ## Where commands run
 
-- VM commands (`up`, `down`, `logs`, `run`, `doctor`) manage the session on the Linux machine that shows the desktop. `up`, `down` and `run` fail with `unsupported_platform` on other systems.
+- VM commands (`up`, `down`, `logs`, `run`, `doctor`) manage the session on the Linux or macOS machine that shows the desktop. `up`, `down` and `run` fail with `unsupported_platform` on other systems.
 - Client commands (`status`, `screenshot`, `click`, `move`, `scroll`, `key`, `type`, `input`) reach the engine on that machine, either through the local session or with `--url` and a token.
 
 `skills` and `help` work anywhere and never contact an engine.

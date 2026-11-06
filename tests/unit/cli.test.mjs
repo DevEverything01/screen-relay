@@ -43,7 +43,7 @@ test('an empty RELAY_CONFIG is treated as unset', () => {
   assert.equal(parseCommand(['up'], { RELAY_CONFIG: '' }).config, undefined);
 });
 
-test('macOS attaches with its backend and starts apps without display variables', async () => {
+test('macOS attaches with its backend and starts apps without display variables', { skip: process.platform !== 'darwin' }, async () => {
   const platform = Object.getOwnPropertyDescriptor(process, 'platform');
   const keys = ['DISPLAY', 'WAYLAND_DISPLAY', 'XAUTHORITY', 'XDG_STATE_HOME', 'XDG_CONFIG_HOME', 'RELAY_TEST_BACKENDS'];
   const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
@@ -92,7 +92,7 @@ if (process.argv.includes('--help')) {
     assert.equal(session.data.ownsDisplay, false);
     assert.deepEqual(Object.keys(session.data.components), ['engine']);
     const invocation = JSON.parse(readFileSync(join(sessionDir, 'engine-invocation.json'), 'utf8'));
-    assert.deepEqual(invocation.args.slice(-4), ['--backend', 'macos', '--output', '77']);
+    assert.deepEqual(invocation.args.slice(-6), ['--backend', 'macos', '--output', '77', '--token-file', join(sessionDir, 'token')]);
     for (const key of ['DISPLAY', 'WAYLAND_DISPLAY', 'XAUTHORITY']) assert.equal(invocation.env[key], undefined);
 
     process.env.XDG_CONFIG_HOME = join(directory, 'different-config');

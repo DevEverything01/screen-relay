@@ -80,6 +80,13 @@ jobs:
         run: brew install pkgconf x264 libwebsockets ffmpeg
       - run: make -j"$(sysctl -n hw.ncpu)" relay-engine
       - run: make test
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      - run: node --test tests/unit/cli.test.mjs tests/unit/cli-state.test.mjs
 
   node:
     name: SDK and CLI
