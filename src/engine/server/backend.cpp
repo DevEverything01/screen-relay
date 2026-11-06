@@ -23,6 +23,13 @@ std::unique_ptr<CaptureSource> makeCaptureSource();
 std::unique_ptr<InputBackend> makeInputBackend();
 }
 #endif
+#ifdef RELAY_BACKEND_macos
+namespace macos {
+bool initializeNativeBackend(const std::string& output);
+std::unique_ptr<CaptureSource> makeCaptureSource();
+std::unique_ptr<InputBackend> makeInputBackend();
+}
+#endif
 
 namespace {
 const Backend backends[] = {
@@ -34,6 +41,9 @@ const Backend backends[] = {
 #endif
 #ifdef RELAY_BACKEND_windows
   {"windows", windows::initializeNativeBackend, windows::makeCaptureSource, windows::makeInputBackend},
+#endif
+#ifdef RELAY_BACKEND_macos
+  {"macos", macos::initializeNativeBackend, macos::makeCaptureSource, macos::makeInputBackend},
 #endif
 };
 }

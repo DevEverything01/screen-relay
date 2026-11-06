@@ -118,8 +118,9 @@ void Server::updateFlow() {
   if (viewer && !lws_partial_buffered(viewer)) buffered_stream_bytes = 0;
 #ifdef __linux__
   const auto sample = viewer && !controller && !config.proxy ? streamTransportSample(viewer, buffered_stream_bytes) : std::nullopt;
+  uint32_t notsent_lowat;
 #endif
-  uint32_t gen, notsent_lowat; unsigned window; uint64_t bitrate, admit_until, service_deadline; bool paused, inflight;
+  uint32_t gen; unsigned window; uint64_t bitrate, admit_until, service_deadline; bool paused, inflight;
   { std::lock_guard<std::mutex> lock(mutex);
     const auto now = nowUs();
 #ifdef __linux__
@@ -129,7 +130,9 @@ void Server::updateFlow() {
     gen = generation; window = flow.window; bitrate = flow.frameBitrate(); paused = flow.paused(now);
     inflight = !flow.frames.empty();
     admit_until = inflight ? flow.frames.front().captured_us + flow.admissionAgeUs() : 0;
+#ifdef __linux__
     notsent_lowat = flow.notsentLowat();
+#endif
     service_deadline = flow.serviceDeadlineUs(now, flow_timer_due_us);
   }
 #ifdef __linux__

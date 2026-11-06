@@ -13,6 +13,7 @@ For the wire format, see [Relay wire protocol](PROTOCOL.md).
 | `src/engine/backends/linux/x11/` | X11 capture (XDamage, MIT-SHM, XFixes cursor) and XTest input primitives |
 | `src/engine/backends/linux/wayland/` | Wayland capture (wlr-screencopy), virtual keyboard and pointer input, Unicode keymap |
 | `src/engine/backends/windows/` | Windows capture (Desktop Duplication, shared per display, mipmap downscaling) and SendInput input primitives |
+| `src/engine/backends/macos/` | macOS capture (ScreenCaptureKit, shared per display), CGEvent input primitives, and display and permission checks |
 | `src/protocol/` | Runtime-neutral wire constants, input encoding, server message parsing, socket targets, HID key table, key-combo and text parsing, origin and token rules. Built without Node imports and exported as `relay/protocol`. |
 | `src/sdk/` | Node client library on top of the protocol |
 | `src/cli/` | The `relay` CLI: argument parsing, output, client commands on the SDK, host commands that supervise the display, desktop, and engine |
@@ -50,9 +51,10 @@ Only one of the viewer, `/control`, and `/input` owns input at a time.
 
 - The service thread owns libwebsockets, the `InputController`, flow-control state, and all socket writes. On Linux it sets `TCP_NODELAY` and `TCP_NOTSENT_LOWAT` on the stream socket.
 - On Linux, input work runs on a thread that owns the backend connection. The service thread only queues events, so it never waits for a slow character. The `/input` and `/control` replies follow a backend fence (XSync on X11 and a Wayland roundtrip on Wayland), which gives clients backpressure and keeps `applied` true.
+- On macOS, the input worker thread posts CGEvents from a private event source. Its fence completes after the events queued before it are posted, and it reports `applied` as false when the process lacks event posting permission.
 - Shutdown destroys the input controller and joins its thread before the libwebsockets context is destroyed. The thread wakes the service thread through a shared context holder that is cleared first.
 - The capture worker owns its `CaptureSource`, a reusable YUV frame, and the x264 encoder. It publishes owning `EncodedFrame` vectors to a bounded queue and wakes the service thread with `lws_cancel_service`.
-- A separate screenshot worker owns its own `CaptureSource`.
+- A separate screenshot worker owns its own `CaptureSource`. On macOS, the video and screenshot sources read one shared ScreenCaptureKit stream.
 - Each X11 backend object owns its own X connection. Xlib threading is initialized once by `initializeNativeBackend()`.
 - Workers finish before the resources they use are destroyed.
 - A full queue fails the generation. It never drops an encoded reference frame.
@@ -101,7 +103,10 @@ Color: little-endian BGRA and big-endian ARGB convert to NV12 with limited-range
    std::unique_ptr<CaptureSource> makeCaptureSource();
    std::unique_ptr<InputBackend> makeInputBackend();
    ```
-2. Add the backend name to `AVAILABLE_BACKENDS`, then add `BACKEND_DIR_<name>` and `BACKEND_PKGS_<name>` to the `Makefile`. The current values are `x11`, `wayland`, and `windows`. Put system libraries that have no pkg-config file in `BACKEND_LIBS_<name>`.
+
+   Backend sources can be `.mm` files, compiled as Objective-C++ with ARC.
+
+2. Add the backend name to `AVAILABLE_BACKENDS`, then add `BACKEND_DIR_<name>` and `BACKEND_PKGS_<name>` to the `Makefile`. The current values are `x11`, `wayland`, `windows`, and `macos`. Put system libraries that have no pkg-config file in `BACKEND_LIBS_<name>`.
 3. Add a guarded entry to the `backends` array in `src/engine/server/backend.cpp`. The `Makefile` adds `-DRELAY_BACKEND_<name>` for each selected backend. The first compiled entry is the default, so keep X11 first when both backends are built.
 4. Build with `make BACKENDS=<name>`. The default is `x11`; quote a space-separated list to build multiple backends, such as `make BACKENDS="x11 wayland"`.
 5. For Wayland protocols, vendor their XML under `src/engine/backends/linux/wayland/protocols/` and add each protocol name to `WAYLAND_PROTOCOLS` in the `Makefile`. The Wayland build uses `wayland-scanner` to generate client headers and private protocol code under `build/protocols/`.
@@ -127,6 +132,18 @@ make test            # native unit tests: color, flow, input, server, backend
 ```
 
 Desktop Duplication works only in the signed-in user's desktop session. Start `relay-engine.exe` from that session, not from an SSH or service session.
+
+On macOS, install the packages with Homebrew. The `macos` backend builds by default:
+
+```sh
+brew install pkgconf x264 libwebsockets ffmpeg
+make                 # builds relay-engine with the macos backend
+make test
+```
+
+ffmpeg is only needed for `make test-backend`.
+
+The build targets macOS 12.3, the first release with ScreenCaptureKit, and fails on a newer API that has no availability check. Grant **Screen Recording** and **Accessibility** under **Privacy & Security** to the app that starts the engine, such as your terminal. The engine must run in a logged-in user session. A display size or position change stops the stream, so restart relay.
 
 `make test-backend` also needs the FFmpeg 7 development libraries (`libavcodec` ABI 61, `libavutil`, `libswscale`; no FFmpeg 8-only APIs) to decode the encoder output.
 
