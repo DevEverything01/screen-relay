@@ -51,16 +51,21 @@ Run `relay-engine.exe --help` for the full list, including the bitrate and TLS o
 
 On the same machine, open `http://127.0.0.1:8080` in a browser with H.264 WebCodecs, such as current Chrome or Edge. A loopback engine with no token needs no sign-in.
 
-To reach the engine from another machine, give it a token. The token is 64 lowercase hexadecimal characters in a file. Create one with Node:
+To reach the engine from another machine, pick one path:
+
+- **SSH tunnel.** Keep the default `127.0.0.1` bind, forward its port, and open `http://127.0.0.1:8080` on the other machine. Loopback requests need no token.
+- **Public HTTPS URL.** Give the engine a token file and its public origin, and serve TLS. The engine then accepts requests only for that host.
 
 ```sh
 node -e "process.stdout.write(require('crypto').randomBytes(32).toString('hex'))" > token
-./relay-engine.exe --viewer-dir dist/viewer --token-file token --bind 0.0.0.0
+./relay-engine.exe --viewer-dir dist/viewer --bind 0.0.0.0 --token-file token --public-origin https://desktop.example.com --tls-cert fullchain.pem --tls-key key.pem
 ```
 
-The engine rejects a token file unless the signed-in user owns it and only that user, SYSTEM, and Administrators can read it. If it rejects yours, remove access for other users and try again. It reports `Token file must be private, owned by this user and contain 64 hexadecimal characters`.
+When a proxy ends TLS, pass `--behind-tls-proxy` instead of `--tls-cert` and `--tls-key`. [Remote access](/docs/remote-access) lists what the proxy must forward.
 
-The viewer reads the token from the link fragment, so open `https://HOST:PORT/#token=TOKEN` and keep that link secret. The viewer uses the token only on `https://` or loopback pages, so serve the engine over TLS or tunnel its port. [Remote access](/docs/remote-access) covers both, and the engine takes the same `--tls-cert`, `--tls-key`, and `--behind-tls-proxy` options.
+The token is 64 lowercase hexadecimal characters. The engine rejects a token file unless the signed-in user owns it and only that user, SYSTEM, and Administrators can read it. If it rejects yours, remove access for other users and try again. It reports `Token file must be private, owned by this user and contain 64 hexadecimal characters`.
+
+Open `https://desktop.example.com/#token=TOKEN` and keep that link secret. The viewer reads the token from the link fragment.
 
 ## Control it from another machine
 
