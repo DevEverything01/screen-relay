@@ -86,7 +86,7 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - run: npm run build
-      - run: node --test tests/unit/cli.test.mjs tests/unit/cli-state.test.mjs
+      - run: node --test tests/unit/cli.test.mjs tests/unit/cli-state.test.mjs tests/unit/cli-apps.test.mjs
 
   node:
     name: SDK and CLI
