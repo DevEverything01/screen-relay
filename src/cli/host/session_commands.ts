@@ -253,9 +253,12 @@ export async function cmdRun(args: Args): Promise<number> {
   const log = openSync(path, 'a', 0o600);
   let pid: number;
   try {
-    if (args.restart) pid = await startWatcher(command, env, log, args.signal);
-    else {
-      args.signal?.throwIfAborted();
+    args.signal?.throwIfAborted();
+    if (args.restart || session.backend === 'macos') {
+      const started = await startWatcher(command, env, log, args.signal, Boolean(args.restart));
+      if (started.exited) throw new Failure('component_failed', `${command[0]} exited with code ${started.exited}`, 'Read `relay logs apps`.', { component: 'apps', log: tail(path) });
+      pid = started.pid;
+    } else {
       const child = spawnCleared(command, { cwd: homedir(), env, stdio: ['ignore', log, log], detached: true, signal: args.signal });
       await new Promise<void>((resolve, reject) => { child.once('spawn', () => resolve()); child.once('error', reject); });
       pid = child.pid!;
