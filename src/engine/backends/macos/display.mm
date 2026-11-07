@@ -24,11 +24,11 @@ std::pair<int, int> streamSize(int width, int height) {
 }
 Display findDisplay() {
   uint32_t count = 0;
-  if (CGGetActiveDisplayList(0, nullptr, &count) != kCGErrorSuccess)
-    throw std::runtime_error("Cannot list active displays");
+  if (CGGetOnlineDisplayList(0, nullptr, &count) != kCGErrorSuccess)
+    throw std::runtime_error("Cannot list online displays");
   std::vector<CGDirectDisplayID> displays(count);
-  if (count && CGGetActiveDisplayList(count, displays.data(), &count) != kCGErrorSuccess)
-    throw std::runtime_error("Cannot list active displays");
+  if (count && CGGetOnlineDisplayList(count, displays.data(), &count) != kCGErrorSuccess)
+    throw std::runtime_error("Cannot list online displays");
   displays.resize(count);
   CGDirectDisplayID selected = CGMainDisplayID();
   bool valid = true;
@@ -54,7 +54,7 @@ Display findDisplay() {
   }
   if (names.empty()) names = "none";
   throw std::runtime_error((chosen.empty() ? "Main display not found" : "Display " + chosen + " not found") +
-                           "; active displays: " + names);
+                           "; online displays: " + names);
 }
 /// Checks screen capture and event posting permissions, requests each missing one once, and validates --output.
 bool initializeNativeBackend(const std::string& output) {
