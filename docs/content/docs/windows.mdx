@@ -5,7 +5,7 @@ description: Build the engine on Windows, stream the signed-in desktop, and cont
 
 The relay engine runs on Windows. It captures a display of the signed-in user's desktop session with Desktop Duplication and injects input with `SendInput`.
 
-Only the engine runs on Windows. `relay up`, `relay down`, `relay doctor`, and `install.sh` need Linux, so you build and start the engine by hand. The [client commands](/docs/cli#client-target) work from any machine with `--url` and a token file.
+On Windows, build and start the engine by hand. `relay up`, `relay down`, and `relay doctor` need Linux. To install the CLI, run `./install.sh --client-only` in a shell with Node 26 or newer. The [client commands](/docs/cli#client-target) work from any machine with `--url` and a token file.
 
 ## Build the engine
 
@@ -58,10 +58,10 @@ To reach the engine from another machine, pick one path:
 
 ```sh
 node -e "process.stdout.write(require('crypto').randomBytes(32).toString('hex'))" > token
-./relay-engine.exe --viewer-dir dist/viewer --bind 0.0.0.0 --token-file token --public-origin https://desktop.example.com --tls-cert fullchain.pem --tls-key key.pem
+./relay-engine.exe --viewer-dir dist/viewer --bind 0.0.0.0 --port 443 --token-file token --public-origin https://desktop.example.com --tls-cert fullchain.pem --tls-key key.pem
 ```
 
-When a proxy ends TLS, pass `--behind-tls-proxy` instead of `--tls-cert` and `--tls-key`. [Remote access](/docs/remote-access) lists what the proxy must forward.
+When a proxy ends TLS, pass `--behind-tls-proxy` instead of `--port 443`, `--tls-cert`, and `--tls-key`. [Remote access](/docs/remote-access) lists what the proxy must forward.
 
 The token is 64 lowercase hexadecimal characters. The engine rejects a token file unless the signed-in user owns it and only that user, SYSTEM, and Administrators can read it. If it rejects yours, remove access for other users and try again. It reports `Token file must be private, owned by this user and contain 64 hexadecimal characters`.
 
