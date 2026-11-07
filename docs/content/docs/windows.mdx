@@ -5,7 +5,7 @@ description: Build the engine on Windows, stream the signed-in desktop, and cont
 
 The relay engine runs on Windows. It captures a display of the signed-in user's desktop session with Desktop Duplication and injects input with `SendInput`.
 
-On Windows, build and start the engine by hand. `relay up`, `relay down`, and `relay doctor` need Linux. To install the CLI, run `./install.sh --client-only` in a shell with Node 26 or newer. The [client commands](/docs/cli#client-target) work from any machine with `--url` and a token file.
+On Windows, build and start the engine by hand. `relay up` and `relay down` are not supported, and `relay doctor` reports the platform as unsupported. To install the CLI, run `./install.sh --client-only` in a shell with Node 26 or newer. The [client commands](/docs/cli#client-target) work from any machine with `--url` and a token file.
 
 ## Build the engine
 
