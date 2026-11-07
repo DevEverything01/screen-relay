@@ -8,7 +8,7 @@ On macOS, `relay up -d` streams the logged-in user's display. It starts no virtu
 ./install.sh
 ```
 
-The installer uses Homebrew for `pkgconf`, `x264` and `libwebsockets` and builds the `macos` backend. `--backend` accepts only `macos`. Without Homebrew, install the packages yourself and pass `--no-deps`. Node 26 or newer is required. The installer's Node download requires macOS 13.5 or later; on macOS 12.3 through 13.4, install a compatible Node version first.
+The installer uses Homebrew for `pkgconf`, `x264` and `libwebsockets` and builds the `macos` backend. `--backend` accepts only `macos`. Without Homebrew, install the packages yourself and pass `--no-deps`. relay requires macOS 13.5 or later and Node 26 or newer. The installer downloads Node 26 when `node` is missing or older than 26.
 
 ## Permissions
 
@@ -17,7 +17,7 @@ Grant both to the app that starts relay, such as your terminal, then restart tha
 - Screen Recording: System Settings > Privacy & Security > Screen & System Audio Recording.
 - Accessibility: System Settings > Privacy & Security > Accessibility.
 
-`relay doctor` reports them in the `permissions` check. macOS 12.3 or later is required.
+`relay doctor` reports them in the `permissions` check.
 
 ## Start a session
 
