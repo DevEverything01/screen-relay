@@ -155,6 +155,20 @@ jobs:
           if [ -z "$socket" ] || [ -z "$x11" ]; then cat "$runtime/labwc.log"; exit 1; fi
           PATH="$HOME/.local/bin:$PATH" DISPLAY=":${x11##*/X}" RELAY_BACKEND=wayland RELAY_DISPLAY="${socket##*/}" tests/smoke.sh
 
+  macos-token-acl:
+    name: macOS token ACL
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - run: brew install pkgconf libwebsockets
+      - run: |
+          mkdir -p build
+          c++ -std=c++17 -Wall -Wextra -Wpedantic -pthread -Isrc/engine $(pkg-config --cflags libwebsockets) tests/unit/macos-config-test.cpp src/engine/server/config.cpp -o build/macos-config-test $(pkg-config --libs libwebsockets)
+          ./build/macos-config-test
+
   install:
     name: Install (${{ matrix.image }})
     runs-on: ubuntu-24.04
