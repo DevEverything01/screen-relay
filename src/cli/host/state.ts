@@ -81,7 +81,7 @@ export function identity(pid: number): ProcessIdentity {
   return { pid, start: startTime(pid) };
 }
 
-/** Signal every process carrying this session's RELAY_SESSION marker; macOS relies on the process-group kill in reap. */
+/** Signals every Linux process carrying this session's RELAY_SESSION marker; on macOS the app watcher stops each app it holds. */
 export async function sweep(directory: string, signal?: AbortSignal): Promise<void> {
   if (process.platform === 'darwin') return;
   const marker = Buffer.from(`RELAY_SESSION=${directory}`);
