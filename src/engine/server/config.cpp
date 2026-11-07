@@ -16,7 +16,9 @@
 #ifdef __APPLE__
 #include <cerrno>
 #include <mach-o/dyld.h>
+#include <membership.h>
 #include <sys/acl.h>
+#include <uuid/uuid.h>
 #endif
 
 namespace relay {
@@ -86,7 +88,18 @@ std::filesystem::path executablePath() {
 std::filesystem::path executablePath() { return std::filesystem::canonical("/proc/self/exe"); }
 #endif
 #ifdef __APPLE__
-/// Reports whether the file has no extended ACL entry that could grant access; deny entries are allowed.
+/// Reports whether an extended ACL entry names only the user running the engine.
+bool ownerAclEntry(acl_entry_t entry) {
+  uuid_t owner;
+  if (mbr_uid_to_uuid(geteuid(), owner)) return false;
+  void* qualifier = acl_get_qualifier(entry);
+  if (!qualifier) return false;
+  const bool same = uuid_compare(*static_cast<uuid_t*>(qualifier), owner) == 0;
+  acl_free(qualifier);
+  return same;
+}
+/// Reports whether the file has no extended ACL entry that could grant another user access; deny entries and
+/// allow entries for the owner are still accepted.
 bool privateTokenAcl(const std::string& path) {
   acl_t acl = acl_get_file(path.c_str(), ACL_TYPE_EXTENDED);
   if (!acl) return errno == ENOENT;
@@ -94,7 +107,8 @@ bool privateTokenAcl(const std::string& path) {
   int result = acl_get_entry(acl, ACL_FIRST_ENTRY, &entry);
   while (result == 0) {
     acl_tag_t tag;
-    if (acl_get_tag_type(entry, &tag) || tag != ACL_EXTENDED_DENY) break;
+    if (acl_get_tag_type(entry, &tag)) break;
+    if (tag != ACL_EXTENDED_DENY && (tag != ACL_EXTENDED_ALLOW || !ownerAclEntry(entry))) break;
     result = acl_get_entry(acl, ACL_NEXT_ENTRY, &entry);
   }
   const bool safe = result == -1 && errno == EINVAL;

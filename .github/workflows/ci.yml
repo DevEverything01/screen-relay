@@ -164,6 +164,12 @@ jobs:
         with:
           persist-credentials: false
       - run: brew install pkgconf libwebsockets openssl
+      - name: Compile the server sources
+        run: |
+          for source in src/engine/server/*.cpp; do
+            c++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -pthread -DRELAY_BACKEND_x11 -Isrc/engine -c "$source" \
+              $(pkg-config --cflags libwebsockets openssl) -o /dev/null
+          done
       - run: |
           mkdir -p build
           c++ -std=c++17 -Wall -Wextra -Wpedantic -pthread -Isrc/engine $(pkg-config --cflags libwebsockets openssl) tests/unit/macos-config-test.cpp src/engine/server/config.cpp -o build/macos-config-test $(pkg-config --libs libwebsockets openssl)
