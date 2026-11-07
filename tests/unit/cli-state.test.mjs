@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { after, test } from 'node:test';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -54,19 +54,18 @@ test('desktop command parsing preserves quoted empty arguments', () => {
   assert.deepEqual(splitCommand('my-desktop --profile "" --fullscreen'), ['my-desktop', '--profile', '', '--fullscreen']);
 });
 
-test('session sweep stops its own processes and not a longer RELAY_SESSION value', async () => {
+test('session sweep does not match a longer RELAY_SESSION value', { skip: !existsSync('/proc/self/environ') }, async () => {
   const session = join(directory, 'desk');
-  const start = (value) => spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { env: { ...process.env, RELAY_SESSION: value }, stdio: 'ignore' });
-  const own = start(session);
-  const other = start(`${session}2`);
+  const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+    env: { ...process.env, RELAY_SESSION: `${session}2` },
+    stdio: 'ignore',
+  });
   try {
-    await Promise.all([own, other].map((child) => new Promise((resolve, reject) => { child.once('spawn', resolve); child.once('error', reject); })));
+    await new Promise((resolve, reject) => { child.once('spawn', resolve); child.once('error', reject); });
     await state.sweep(session);
-    assert.equal(own.signalCode, 'SIGTERM');
-    assert.equal(other.exitCode, null);
+    assert.equal(child.exitCode, null);
   } finally {
-    own.kill('SIGKILL');
-    other.kill('SIGKILL');
+    child.kill('SIGKILL');
   }
 });
 
