@@ -41,7 +41,7 @@ The VM runs a display and a desktop. The engine on the VM captures the screen, e
 | Control | One input owner at a time: a viewer or one agent. Screenshots work at any time. |
 | Not supported | Audio, clipboard, IME, relative pointer, and hardware encoding. |
 | Auth | One shared token per session; a session on loopback has none. No separate user identities. |
-| Install | The engine installs on Linux and macOS 12.3 or later. On Linux, automatic dependencies cover Debian, Ubuntu, Fedora, Arch Linux, and Alpine. On macOS, they come from Homebrew. `--client-only` installs the CLI on any OS with Node 26 or newer. |
+| Install | The engine installs on Linux and macOS 12.3 or later. On Linux, automatic dependencies cover Debian, Ubuntu, Fedora, Arch Linux, and Alpine. On macOS, dependencies come from Homebrew, and the installer's Node download requires macOS 13.5 or later. See [macOS](/docs/macos) for requirements. `--client-only` installs the CLI on any OS with Node 26 or newer. |
 | Failure | Three capture failures in a row end the session. `relay logs` shows why. |
 
 ## Status

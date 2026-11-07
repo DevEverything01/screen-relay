@@ -9,12 +9,12 @@ On a Mac, relay attaches to the display of the logged-in user. It starts no virt
 
 - macOS 12.3 or later, on Apple silicon or Intel.
 - [Homebrew](https://brew.sh).
-- Node 26 or newer. The installer downloads it if needed.
+- Node 26 or newer. The installer's Node download requires macOS 13.5 or later; on macOS 12.3 through 13.4, install a compatible Node 26 or newer yourself.
 - A logged-in user session. Start relay from a terminal in that session.
 
 ## Install
 
-From a [repository clone](/docs/getting-started#1-install-relay), run:
+From a [repository clone](/docs/getting-started#install-relay), run:
 
 ```sh
 ./install.sh
@@ -43,7 +43,7 @@ relay-engine --backend macos --check
 relay up -d
 ```
 
-Open the viewer link as described in [Getting started](/docs/getting-started#3-open-the-viewer). Stop the session with `relay down`. Stopping relay leaves your display as it was.
+Open the viewer link as described in [Getting started](/docs/getting-started#open-the-viewer). Stop the session with `relay down`. Stopping relay leaves your display as it was.
 
 To start an app in your user session, run:
 

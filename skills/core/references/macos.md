@@ -8,7 +8,7 @@ On macOS, `relay up -d` streams the logged-in user's display. It starts no virtu
 ./install.sh
 ```
 
-The installer uses Homebrew for `pkgconf`, `x264` and `libwebsockets` and builds the `macos` backend. `--backend` accepts only `macos`. Without Homebrew, install the packages yourself and pass `--no-deps`.
+The installer uses Homebrew for `pkgconf`, `x264` and `libwebsockets` and builds the `macos` backend. `--backend` accepts only `macos`. Without Homebrew, install the packages yourself and pass `--no-deps`. Node 26 or newer is required. The installer's Node download requires macOS 13.5 or later; on macOS 12.3 through 13.4, install a compatible Node version first.
 
 ## Permissions
 
