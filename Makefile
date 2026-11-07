@@ -141,7 +141,7 @@ build/keymap-test: tests/unit/keymap-test.cpp src/engine/backends/linux/wayland/
 test-keymap: build/keymap-test
 	./build/keymap-test
 
-build/macos-keys-test: tests/unit/macos-keys-test.cpp src/engine/backends/linux/keycodes.hpp src/engine/backends/macos/keys.hpp
+build/macos-keys-test: tests/unit/macos-keys-test.cpp src/engine/backends/macos/keys.hpp src/engine/backends/linux/keycodes.hpp
 	mkdir -p build
 	$(CXX) -Isrc/engine $(CXXFLAGS) tests/unit/macos-keys-test.cpp -o $@ -framework Carbon -framework CoreFoundation
 
