@@ -151,16 +151,17 @@ class MacInput final : public InputBackend {
     for (const auto key : held) value |= modifierFlag(key);
     return value;
   }
-  CGEventRef keyEvent(NativeKey key, bool press, CGEventFlags state) const {
-    CGEventRef event = CGEventCreateKeyboardEvent(source, CGKeyCode(key), press);
-    CGEventSetFlags(event, state);
+  static CGEventRef withFlags(CGEventRef event, CGEventFlags state) {
+    if (event) CGEventSetFlags(event, state);
     return event;
+  }
+  CGEventRef keyEvent(NativeKey key, bool press, CGEventFlags state) const {
+    return withFlags(CGEventCreateKeyboardEvent(source, CGKeyCode(key), press), state);
   }
   CGEventRef mouseEvent(CGEventType type, CGPoint where, CGMouseButton button, unsigned clickCount,
                         CGEventFlags state) const {
-    CGEventRef event = CGEventCreateMouseEvent(source, type, where, button);
-    CGEventSetFlags(event, state);
-    if (clickCount) CGEventSetIntegerValueField(event, kCGMouseEventClickState, clickCount);
+    CGEventRef event = withFlags(CGEventCreateMouseEvent(source, type, where, button), state);
+    if (event && clickCount) CGEventSetIntegerValueField(event, kCGMouseEventClickState, clickCount);
     return event;
   }
   static void send(CGEventRef event) {
@@ -212,9 +213,9 @@ class MacInput final : public InputBackend {
     const UniCharCount count = unicodeUnits(codepoint, units);
     for (const bool press : {true, false}) {
       CGEventRef event = CGEventCreateKeyboardEvent(source, 0, press);
+      if (!event) continue;
       CGEventKeyboardSetUnicodeString(event, count, units);
-      CGEventSetFlags(event, 0);
-      send(event);
+      send(withFlags(event, 0));
     }
   }
   void applyButton(unsigned number, bool press, CGEventFlags state) {
@@ -240,8 +241,7 @@ class MacInput final : public InputBackend {
     CGEventRef event = axis == 0
         ? CGEventCreateScrollWheelEvent2(source, kCGScrollEventUnitLine, 1, amount, 0, 0)
         : CGEventCreateScrollWheelEvent2(source, kCGScrollEventUnitLine, 2, 0, amount, 0);
-    CGEventSetFlags(event, state);
-    send(event);
+    send(withFlags(event, state));
   }
   void applyLocks(CGEventFlags state) {
     if (CGEventSourceFlagsState(kCGEventSourceStateHIDSystemState) & kCGEventFlagMaskAlphaShift) {
