@@ -1,0 +1,86 @@
+---
+title: Windows
+description: Build the engine on Windows, stream the signed-in desktop, and control it from another machine.
+---
+
+The relay engine runs on Windows. It captures a display of the signed-in user's desktop session with Desktop Duplication and injects input with `SendInput`.
+
+On Windows, build and start the engine by hand. `relay up` and `relay down` are not supported, and `relay doctor` reports the platform as unsupported. To install the CLI, run `./install.sh --client-only` in a shell with Node 26 or newer. The [client commands](/docs/cli#client-target) work from any machine with `--url` and a token file.
+
+## Build the engine
+
+Build in [MSYS2](https://www.msys2.org/) with the UCRT64 environment. In a UCRT64 shell, from a repository clone, install the packages and build:
+
+```sh
+pacman -S make diffutils mingw-w64-ucrt-x86_64-{gcc,pkgconf,libwebsockets,x264,ffmpeg}
+make
+```
+
+On Windows, `make` builds the Windows backend by default and produces `relay-engine.exe`.
+
+The engine serves the viewer from a folder of built assets. Build them with Node 26 or newer:
+
+```sh
+npm ci && npm run build
+```
+
+This writes the viewer to `dist/viewer`. The engine looks for a `viewer` folder next to `relay-engine.exe`, so pass `--viewer-dir` to point it at `dist/viewer`.
+
+## Start the engine
+
+Start `relay-engine.exe` from a terminal in the signed-in user's desktop session. Desktop Duplication works only in that session, so an SSH or service session fails with `Desktop Duplication is unavailable; start relay in the signed-in user's desktop session` or `No display is attached to this session`.
+
+```sh
+./relay-engine.exe --viewer-dir dist/viewer
+```
+
+The engine listens on `127.0.0.1:8080` at 60 fps and captures the primary display. It prints `Relay listening on 127.0.0.1:8080` to stderr. Press Ctrl+C to stop it.
+
+| Option | Meaning |
+| --- | --- |
+| `--viewer-dir DIR` | Folder with the built viewer. |
+| `--port PORT` | Port to listen on. Default `8080`. |
+| `--bind ADDRESS` | Address to listen on. Default `127.0.0.1`. Any other address needs `--token-file`. |
+| `--token-file FILE` | File that holds the session token. |
+| `--fps N` | Frame rate, 10 to 120. Default `60`. |
+| `--output NAME` | Display to capture, such as `\\.\DISPLAY2`. The error for an unknown name lists the attached displays. |
+
+Run `relay-engine.exe --help` for the full list, including the bitrate and TLS options that [Remote access](/docs/remote-access) describes.
+
+## Open the viewer
+
+On the same machine, open `http://127.0.0.1:8080` in a browser with H.264 WebCodecs, such as current Chrome or Edge. A loopback engine with no token needs no sign-in.
+
+To reach the engine from another machine, pick one path:
+
+- **SSH tunnel.** Keep the default `127.0.0.1` bind, forward its port, and open `http://127.0.0.1:8080` on the other machine. Loopback requests need no token.
+- **Public HTTPS URL.** Give the engine a token file and its public origin, and serve TLS. The engine then accepts requests only for that host.
+
+```sh
+node -e "process.stdout.write(require('crypto').randomBytes(32).toString('hex'))" > token
+./relay-engine.exe --viewer-dir dist/viewer --bind 0.0.0.0 --port 443 --token-file token --public-origin https://desktop.example.com --tls-cert fullchain.pem --tls-key key.pem
+```
+
+When a proxy ends TLS, pass `--behind-tls-proxy` instead of `--port 443`, `--tls-cert`, and `--tls-key`. [Remote access](/docs/remote-access) lists what the proxy must forward.
+
+The token is 64 lowercase hexadecimal characters. The engine rejects a token file unless the signed-in user owns it and only that user, SYSTEM, and Administrators can read it. If it rejects yours, remove access for other users and try again. It reports `Token file must be private, owned by this user and contain 64 hexadecimal characters`.
+
+Open `https://desktop.example.com/#token=TOKEN` and keep that link secret. The viewer reads the token from the link fragment.
+
+## Control it from another machine
+
+Install the CLI on any machine, then pass the engine's URL and the same token file:
+
+```sh
+relay status --url https://desktop.example.com --token-file ./token
+relay screenshot screen.png --url https://desktop.example.com --token-file ./token
+```
+
+[Remote access](/docs/remote-access#control-a-session-from-your-laptop) explains the URL rules and the `RELAY_URL` and `RELAY_TOKEN_FILE` variables. The [CLI reference](/docs/cli) lists the client commands.
+
+## Limits
+
+- The engine captures one display, the primary one unless you pass `--output`. A display wider or taller than 16384 pixels is scaled down by halves until it fits. The streamed size must be 320 to 16384 pixels wide and 240 to 16384 pixels high, with even dimensions.
+- If the display's size or position changes, the stream stops with `The display changed from WxH to WxH or moved; restart relay to stream it`. Restart the engine.
+- Windows refuses input to elevated (administrator) windows, and the engine reports that input as not applied.
+- Text typing uses the keyboard layout of the foreground window. Characters that layout cannot type are sent as Unicode input.

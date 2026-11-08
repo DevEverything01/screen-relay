@@ -36,12 +36,12 @@ The VM runs a display and a desktop. The engine on the VM captures the screen, e
 
 | Area | Limit |
 | --- | --- |
-| Display server | X11 or Wayland on Linux, or the logged-in user's display on macOS. On Linux, `relay up` uses X11 when the engine includes it, otherwise Wayland. See [Wayland](/docs/wayland) for compositor requirements and [macOS](/docs/macos) for permissions. |
+| Display server | X11 or Wayland on Linux, the logged-in user's display on macOS, or the signed-in desktop on Windows. On Linux, `relay up` uses X11 when the engine includes it, otherwise Wayland. See [Wayland](/docs/wayland) for compositor requirements, [macOS](/docs/macos) for permissions, and [Windows](/docs/windows) for the Windows engine. |
 | Resolution | Up to 16384x16384, set in [Configuration](/docs/configuration). A change applies when the session starts. |
 | Control | One input owner at a time: a viewer or one agent. Screenshots work at any time. |
 | Not supported | Audio, clipboard, IME, relative pointer, and hardware encoding. |
 | Auth | One shared token per session; a session on loopback has none. No separate user identities. |
-| Install | The engine installs on Linux and macOS 13.5 or later. On Linux, automatic dependencies cover Debian, Ubuntu, Fedora, Arch Linux, and Alpine. On macOS, dependencies come from Homebrew. See [macOS](/docs/macos) for requirements. `--client-only` installs the CLI on any OS with Node 26 or newer. |
+| Install | The engine installs on Linux and macOS 13.5 or later. On Windows, build and start it by hand; see [Windows](/docs/windows). On Linux, automatic dependencies cover Debian, Ubuntu, Fedora, Arch Linux, and Alpine. On macOS, dependencies come from Homebrew. See [macOS](/docs/macos) for requirements. `--client-only` installs the CLI on any OS with Node 26 or newer. |
 | Failure | Three capture failures in a row end the session. `relay logs` shows why. |
 
 ## Status
@@ -59,6 +59,7 @@ The VM runs a display and a desktop. The engine on the VM captures the screen, e
 - [X11](/docs/x11): start an X11 desktop or attach to a display.
 - [Wayland](/docs/wayland): attach to a compositor or capture one output.
 - [macOS](/docs/macos): stream a Mac's display.
+- [Windows](/docs/windows): build the engine and stream a Windows desktop.
 - [CLI reference](/docs/cli): every command, option, output, and error.
 - [SDK](/docs/sdk): control a session from Node.
 - [HTTP API](/docs/protocol): endpoints, input events, and the wire format.
