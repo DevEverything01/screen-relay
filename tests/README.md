@@ -9,6 +9,7 @@ Run `npm test` for the TypeScript unit tests; it builds `dist/` first. `make tes
 | Layer | Command | Needs |
 | --- | --- | --- |
 | Native unit (color, flow, the input controller with a fake backend, server config/wire/metrics, injected source through the real encoder) | `make test` | Build dependencies, including FFmpeg dev libraries for `test-backend`. No X11. |
+| macOS key table against the US layout through `UCKeyTranslate` | `make test` on macOS, or `make test-macos-keys` | macOS with the US keyboard layout installed |
 | Protocol golden bytes, key combos, config validation, SDK, viewer ACK | `npm ci && npm test` | Node 26 or newer |
 | SDK types | `tsc --noEmit --strict --module NodeNext --target ES2022 tests/unit/sdk-types.mts` | TypeScript |
 | Smoke | `tests/smoke.sh` | An installed `relay` on Linux. It starts and stops its own session on port 18090 (`SMOKE_PORT`). |

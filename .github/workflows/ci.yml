@@ -66,8 +66,11 @@ jobs:
       - run: make test
 
   macos:
-    name: Engine (macOS)
-    runs-on: macos-15
+    name: Engine (${{ matrix.runner }})
+    strategy:
+      matrix:
+        runner: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -75,7 +78,8 @@ jobs:
           persist-credentials: false
       - name: Install build dependencies
         run: brew install pkgconf x264 libwebsockets ffmpeg
-      - run: make -j"$(sysctl -n hw.ncpu)" test-color test-flow test-capture-bucket test-input test-backend
+      - run: make -j"$(sysctl -n hw.ncpu)" relay-engine
+      - run: make test
 
   node:
     name: SDK and CLI
