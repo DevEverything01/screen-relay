@@ -5,7 +5,7 @@ import { inspect, TextDecoder } from 'node:util';
 import { parseDocument } from 'yaml';
 import { Failure } from './output.js';
 
-export const BACKENDS = ['x11', 'wayland'] as const;
+export const BACKENDS = ['x11', 'wayland', 'macos'] as const;
 
 export type ConfigSettings = {
   display: { resolution: string };

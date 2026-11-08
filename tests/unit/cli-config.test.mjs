@@ -160,11 +160,11 @@ test('defaults keyboard layout to us and validates its allowed characters', () =
   assert.throws(() => config.loadConfig(write('keyboard:\n  layout: 7\n')), /keyboard\.layout.*a string/);
 });
 
-test('backend from the config file accepts x11 or wayland and names them when wrong', () => {
-  for (const backend of ['x11', 'wayland']) {
+test('backend from the config file accepts supported names and reports invalid ones', () => {
+  for (const backend of ['x11', 'wayland', 'macos']) {
     assert.equal(config.loadConfig(write(`backend: ${backend}\n`))[0].backend, backend);
   }
-  assert.throws(() => config.loadConfig(write('backend: mir\n')), /backend.*x11 or wayland/);
+  assert.throws(() => config.loadConfig(write('backend: mir\n')), /backend.*x11 or wayland or macos/);
 });
 
 test('doctor reports an invalid RELAY_BACKEND as a failed check', { skip: process.platform !== 'linux' }, () => {

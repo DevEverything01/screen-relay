@@ -65,6 +65,29 @@ jobs:
       - run: make -j"$(nproc)" relay-engine
       - run: make test
 
+  macos:
+    name: Engine (${{ matrix.runner }})
+    strategy:
+      matrix:
+        runner: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install build dependencies
+        run: brew install pkgconf x264 libwebsockets ffmpeg
+      - run: make -j"$(sysctl -n hw.ncpu)" relay-engine
+      - run: make test
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      - run: node --test tests/unit/cli.test.mjs tests/unit/cli-state.test.mjs tests/unit/cli-apps.test.mjs
+
   node:
     name: SDK and CLI
     runs-on: ubuntu-24.04
@@ -142,6 +165,26 @@ jobs:
           done
           if [ -z "$socket" ] || [ -z "$x11" ]; then cat "$runtime/labwc.log"; exit 1; fi
           PATH="$HOME/.local/bin:$PATH" DISPLAY=":${x11##*/X}" RELAY_BACKEND=wayland RELAY_DISPLAY="${socket##*/}" tests/smoke.sh
+
+  macos-token-acl:
+    name: macOS token ACL
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - run: brew install pkgconf libwebsockets openssl
+      - name: Compile the server sources
+        run: |
+          for source in src/engine/server/*.cpp; do
+            c++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -pthread -DRELAY_BACKEND_x11 -Isrc/engine -c "$source" \
+              $(pkg-config --cflags libwebsockets openssl) -o /dev/null
+          done
+      - run: |
+          mkdir -p build
+          c++ -std=c++17 -Wall -Wextra -Wpedantic -pthread -Isrc/engine $(pkg-config --cflags libwebsockets openssl) tests/unit/macos-config-test.cpp src/engine/server/config.cpp -o build/macos-config-test $(pkg-config --libs libwebsockets openssl)
+          ./build/macos-config-test
 
   install:
     name: Install (${{ matrix.image }})

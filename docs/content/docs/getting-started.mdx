@@ -1,13 +1,13 @@
 ---
 title: Getting started
-description: Start a Linux desktop and control it from a browser or the CLI.
+description: Start a Linux or macOS desktop and control it from a browser or the CLI.
 ---
 
 Start a desktop on a Linux VM, open it in your browser, and control it with relay.
 
 ## Prerequisites
 
-- A Linux VM, container, or sandbox with Git and root or passwordless `sudo`.
+- A Linux VM, container, or sandbox with Git and root or passwordless `sudo`. On a Mac, use macOS 13.5 or later with Git and Homebrew. See [macOS](/docs/macos) for the other requirements.
 - Debian, Ubuntu, Fedora, Arch Linux, or Alpine for automatic dependency installation. On another distribution, install the dependencies yourself and add `--no-deps` to the install command.
 - SSH access to the VM from your laptop.
 - A browser with H.264 WebCodecs, such as current Chrome, Edge, or Safari.
@@ -25,7 +25,7 @@ cd relay
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-The installer installs the dependencies, builds and installs relay, and runs `relay doctor`. It exits with an error if a check fails. Add the `export` line to your shell profile to keep relay on your `PATH`. The installer needs Node 26 or newer and npm; on Linux x64 and arm64, it downloads its pinned version if needed.
+The installer installs the dependencies, builds and installs relay, and runs `relay doctor`. It exits with an error if a check fails. Add the `export` line to your shell profile to keep relay on your `PATH`. The installer needs Node 26 or newer and npm; on Linux and macOS, x64 and arm64, it downloads its pinned version if needed.
 
 On Fedora, if the installer asks for RPM Fusion Free, run the printed command and retry. For a user with `sudo`, the command is:
 
@@ -33,7 +33,7 @@ On Fedora, if the installer asks for RPM Fusion Free, run the printed command an
 sudo dnf -y install https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm
 ```
 
-For backend options, see [X11](/docs/x11) and [Wayland](/docs/wayland). For containers, see [Docker](/docs/docker). The [CLI reference](/docs/cli) lists all installer options.
+For backend options, see [X11](/docs/x11), [Wayland](/docs/wayland), and [macOS](/docs/macos). For containers, see [Docker](/docs/docker). The [CLI reference](/docs/cli) lists all installer options.
 
 ## 2. Start a session
 

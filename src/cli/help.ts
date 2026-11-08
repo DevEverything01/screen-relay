@@ -3,7 +3,7 @@ import { agent, type OutputOptions } from './mode.js';
 import { theme } from './theme.js';
 
 const docs = 'https://relay.labs.vercel.dev/docs/cli';
-const summary = 'Start a streamed Linux desktop and control it';
+const summary = 'Start a streamed desktop and control it';
 const width = 80;
 const labelLimit = 24;
 
@@ -140,14 +140,14 @@ function humanUsage(name: string, style: Style): string {
 }
 
 const sections: { runsOn: RunsOn; label: string }[] = [
-  { runsOn: 'vm', label: 'VM commands (run on the Linux machine that shows the desktop):' },
-  { runsOn: 'client', label: 'Client commands (run on the VM, or anywhere with --url and a token):' },
+  { runsOn: 'vm', label: 'Host commands (run on the Linux or macOS machine that shows the desktop):' },
+  { runsOn: 'client', label: 'Client commands (run on the host, or anywhere with --url and a token):' },
   { runsOn: 'anywhere', label: 'Other commands:' },
 ];
 
 const location: Record<RunsOn, string> = {
-  vm: 'VM only. Run it on the Linux machine that shows the desktop.',
-  client: 'Runs on the VM, or on another machine with --url and a token file.',
+  vm: 'Run it on the Linux or macOS machine that shows the desktop.',
+  client: 'Runs on the host, or on another machine with --url and a token file.',
   anywhere: 'Runs on any machine. It does not reach an engine.',
 };
 
@@ -158,7 +158,7 @@ const startHere = [
   '  Skills ship with the CLI, so their instructions always match the',
   '  installed version. Load one to control the desktop or a sandbox.',
   '',
-  '  VM commands must run on the machine with the desktop and client',
+  '  Host commands must run on the machine with the desktop and client',
   '  commands can run there or on another machine with --url and a',
   '  token file.',
   '',

@@ -8,6 +8,7 @@
     "---Platforms---",
     "x11",
     "wayland",
+    "macos",
     "windows",
     "---Reference---",
     "cli",

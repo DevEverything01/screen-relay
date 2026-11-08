@@ -6,11 +6,11 @@ allowed-tools: Bash(relay:*)
 
 # Relay core workflow
 
-Relay runs a Linux desktop on X11 or Wayland and gives you a browser viewer plus CLI control.
+Relay streams a desktop to a browser viewer and gives you CLI control. On Linux it runs an X11 or Wayland desktop. On macOS it streams the logged-in user's display.
 
 ## Install
 
-On the Linux machine that will show the desktop, from a clone of the repository:
+On the Linux or macOS machine that will show the desktop, from a clone of the repository:
 
 ```sh
 ./install.sh
@@ -23,9 +23,13 @@ export PATH="$HOME/.local/bin:$PATH"
 
 Automatic package installation supports Debian, Ubuntu, Fedora, Arch, and Alpine, and needs root or passwordless `sudo`. On another distribution, install the dependencies yourself and pass `--no-deps`. The installer ends by running `relay doctor`, and it is safe to run again.
 
+On macOS the installer uses Homebrew (`pkgconf`, `x264`, `libwebsockets`) and builds the one `macos` backend, so `--backend` accepts only `macos`. Without Homebrew, install those packages yourself and pass `--no-deps`. After it finishes, grant Screen Recording and Accessibility to the app that starts relay; see [macOS](references/macos.md).
+
 ## Pick a backend
 
-`relay up` uses X11 unless you choose Wayland. Install the backend you need first. `relay up -d` starts a virtual X11 display with XFCE. `relay up -d --backend wayland` starts a headless sway desktop with foot:
+On macOS there is nothing to pick: `relay up -d` uses the `macos` backend, attaches to the logged-in user's display, and starts no virtual display or desktop. `--display` is rejected there. Details are in [macOS](references/macos.md).
+
+On Linux, `relay up` uses X11 unless you choose Wayland. Install the backend you need first. `relay up -d` starts a virtual X11 display with XFCE. `relay up -d --backend wayland` starts a headless sway desktop with foot:
 
 ```sh
 relay up -d
@@ -44,7 +48,7 @@ The backend comes from `--backend`, then `RELAY_BACKEND`, then the config file's
 
 ## Where commands run
 
-- VM commands (`up`, `down`, `logs`, `run`, `doctor`) manage the session on the Linux machine that shows the desktop. `up`, `down` and `run` fail with `unsupported_platform` on other systems.
+- VM commands (`up`, `down`, `logs`, `run`, `doctor`) manage the session on the Linux or macOS machine that shows the desktop. `up`, `down` and `run` fail with `unsupported_platform` on other systems.
 - Client commands (`status`, `screenshot`, `click`, `move`, `scroll`, `key`, `type`, `input`) reach the engine on that machine, either through the local session or with `--url` and a token.
 
 `skills` and `help` work anywhere and never contact an engine.
@@ -74,7 +78,7 @@ relay key Enter
 relay screenshot /tmp/relay-after.png
 ```
 
-A complete run that opens a terminal, focuses it, types, and verifies. This uses `xfce4-terminal`, the terminal on X11; on Wayland, use `foot`:
+A complete run that opens a terminal, focuses it, types, and verifies. This uses `xfce4-terminal`, the terminal on X11; on Wayland, use `foot`; on macOS, start an app with `relay run -- open -a Terminal`:
 
 ```sh
 relay up -d
@@ -173,7 +177,7 @@ Exit codes: 0 success (including `status` of any existing session), 1 runtime, n
 | `missing_command` | `run` was given no app (exit 2). | `relay run -- APP`. |
 | `spawn_failed` | `run` could not start the app. | Check the app name and `relay logs apps`. |
 | `unsupported_input` | The backend cannot produce a character or apply the input. | Use `relay type` for layout-neutral text. |
-| `unsupported_platform` | `up`, `down` or `run` off Linux. | Run host commands on the Linux machine. |
+| `unsupported_platform` | `up`, `down` or `run` off Linux and macOS. | Run host commands on the Linux or macOS machine. |
 | `invalid_config` | A config key or value is invalid; the message names the file and key. | Fix the file and start again. |
 | `invalid_input`, `invalid_option`, `unknown_command`, `missing_input` | Usage error (exit 2). | Read the `next` command, usually `relay help <command>`. |
 | `internal` | A bug in relay. | Report it with the command you ran. |
@@ -188,7 +192,7 @@ Settings come from flags, `RELAY_*` variables, or the config file at `${XDG_CONF
 
 ## Troubleshooting
 
-- Start with `relay doctor`. It checks the x11 backend unless `RELAY_BACKEND` or the config `backend` key says otherwise; for Wayland, run `RELAY_BACKEND=wayland relay doctor`. Each failing check prints a fix. Some fixes are manual; see [references/troubleshooting.md](references/troubleshooting.md).
+- Start with `relay doctor`. On Linux it checks the x11 backend unless `RELAY_BACKEND` or the config `backend` key says otherwise; for Wayland, run `RELAY_BACKEND=wayland relay doctor`. On macOS it checks the macOS version, Homebrew packages, the engine and the permissions. Each failing check prints a fix. Some fixes are manual; see [references/troubleshooting.md](references/troubleshooting.md).
 - `relay logs` prints the last 200 lines of every component log; `relay logs engine` (or `display`, `dbus`, `desktop`, `apps`) selects one. `-f` follows.
 - `component_failed` or `timeout` from `up`: read `data.component` and `data.logs`, then `relay logs <component>`.
 - Port already in use: `relay down` the old session, or use another `--port`.
@@ -202,6 +206,7 @@ Settings come from flags, `RELAY_*` variables, or the config file at `${XDG_CONF
 - `references/cli.md`: commands, options and output.
 - `references/config.md`: configuration keys and precedence.
 - `references/wayland.md`: Wayland compositors, attaching to one, and its limits.
+- `references/macos.md`: macOS attach behaviour, permissions, `--output` display IDs and limits.
 - `references/troubleshooting.md`: symptoms and fixes.
 - `relay skills get vercel-sandbox`: run relay inside a Vercel Sandbox.
 - https://relay.labs.vercel.dev/docs: the published documentation.
