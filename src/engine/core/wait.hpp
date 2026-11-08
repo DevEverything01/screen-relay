@@ -31,6 +31,9 @@ class Wake {
   WaitHandle handle() const { return handle_; }
  private:
   WaitHandle handle_;
+#if !defined(_WIN32) && !defined(__linux__)
+  int write_handle_ = -1;
+#endif
 };
 struct WaitReady { bool source = false, wake = false; };
 /// Blocks until the source or wake is ready or timeout_ns passes; a negative timeout waits indefinitely.
