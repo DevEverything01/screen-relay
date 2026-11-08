@@ -256,14 +256,7 @@ class MacInput final : public InputBackend {
       held.erase(held.begin());
       send(keyEvent(key, false, flags()));
     }
-    const CGEventFlags state = flags();
-    for (const auto& entry : heldButtons) {
-      const unsigned button = entry.first;
-      const CGEventType type = button == 1 ? kCGEventLeftMouseUp : button == 3 ? kCGEventRightMouseUp : kCGEventOtherMouseUp;
-      const CGMouseButton code = button == 1 ? kCGMouseButtonLeft : button == 3 ? kCGMouseButtonRight : kCGMouseButtonCenter;
-      send(mouseEvent(type, position, code, entry.second, state));
-    }
-    heldButtons.clear();
+    while (!heldButtons.empty()) applyButton(heldButtons.begin()->first, false, flags());
   }
   CGPoint globalPoint(int x, int y) const {
     return CGPointMake(bounds.origin.x + (x + 0.5) * bounds.size.width / std::max(1, int(width)),
