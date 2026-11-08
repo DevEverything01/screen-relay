@@ -6,12 +6,13 @@ import type { Readable } from 'node:stream';
 import { createClient } from '../../sdk/index.js';
 import { BACKENDS, backendValue } from '../config.js';
 import { Failure, nextFor, sessionCommand } from '../output.js';
-import { HostArgs, LAUNCHER_DIR, run, spawnCleared, which } from './common.js';
+import { HostArgs, isLinux, LAUNCHER_DIR, run, spawnCleared, which } from './common.js';
 import { identity, SessionData, sweep, tail, writeSession } from './state.js';
 
 export const BACKEND_PROGRAMS = {
   x11: ['Xvfb', 'xauth', 'xprop', 'xwininfo', 'xdpyinfo', 'setxkbmap'],
   wayland: ['sway', 'Xwayland', 'swaymsg', 'foot'],
+  macos: [],
 };
 
 export const HINTS: Record<string, string> = {
@@ -185,7 +186,9 @@ export class Session {
     const recovery = code === 'component_failed' || code === 'timeout'
       ? { next: nextFor(sessionCommand(`logs ${name}`, this.args.name)), label: 'Read the logs' } : {};
     const hint = name === 'display' && this.data.backend === 'wayland' ? 'Read `relay logs display`, then run `RELAY_BACKEND=wayland relay doctor`.' : HINTS[name] ?? '';
-    return new Failure(code, message, hint, { component: name, log: tail(join(this.dir, `${name}.log`)), logs: this.dir }, recovery);
+    const log = tail(join(this.dir, `${name}.log`));
+    const detail = name === 'engine' && this.data.backend === 'macos' && code === 'component_failed' ? log.trim().replace(/\r?\n/g, '; ') : '';
+    return new Failure(code, detail ? `${message}: ${detail}` : message, hint, { component: name, log, logs: this.dir }, recovery);
   }
 
   checkChildren(): void {
@@ -265,13 +268,22 @@ export class Session {
 
   async start(): Promise<Record<string, unknown>> {
     this.args.signal?.throwIfAborted();
+    if (process.platform === 'darwin' && this.args.display !== undefined) {
+      throw new Failure('invalid_input', '--display is not supported on macOS', 'Remove --display; relay attaches to the current display on macOS.');
+    }
     const runtime = join(this.dir, 'runtime');
     rmSync(runtime, { recursive: true, force: true });
     mkdirSync(runtime, { mode: 0o700 });
-    this.env = this.args.display
+    const backend = resolveBackend(this.args.backend, this.args.display);
+    const attached = backend === 'macos' || Boolean(this.args.display);
+    this.env = attached
       ? { ...process.env, RELAY_SESSION: this.dir }
       : desktopEnv(this.dir);
-    const backend = resolveBackend(this.args.backend, this.args.display);
+    if (backend === 'macos') {
+      delete this.env.DISPLAY;
+      delete this.env.WAYLAND_DISPLAY;
+      delete this.env.XAUTHORITY;
+    }
     if (backend === 'x11' && this.args.output !== undefined) {
       throw new Failure('invalid_input', '--output is only supported with the Wayland backend', 'Use --backend wayland with --output, or remove --output for X11.');
     }
@@ -280,10 +292,10 @@ export class Session {
     }
     const engine = findEngine();
     if (!engine) throw new Failure('missing_dependency', 'relay-engine not found', 'Run ./install.sh first.', { component: 'engine' });
-    const desktop = this.args.desktop || (this.args.display ? 'none' : backend === 'wayland' ? 'foot' : 'xfce');
+    const desktop = backend === 'macos' ? 'none' : this.args.desktop || (this.args.display ? 'none' : backend === 'wayland' ? 'foot' : 'xfce');
     let desktopCommand = desktop === 'xfce' ? ['xfce4-session'] : desktop === 'none' ? [] : splitCommand(desktop);
     const layout = this.args.keyboardLayout ?? 'us';
-    const needed = backend === 'wayland'
+    const needed = backend === 'macos' ? [] : backend === 'wayland'
       ? [...(this.args.display ? [] : BACKEND_PROGRAMS.wayland.filter((program) => program !== 'foot')), ...(desktopCommand.length ? [desktopCommand[0]] : [])]
       : [...(this.args.display ? [] : ['Xvfb', 'xauth']), ...(desktopCommand.length ? ['xprop', 'xwininfo', desktopCommand[0]] : []), ...(!this.args.display && layout !== 'us' ? ['setxkbmap'] : [])];
     const missing = needed.filter((program) => !which(program));
@@ -292,7 +304,9 @@ export class Session {
     else if (desktop === 'xfce' && !this.args.display && !ownBus) missing.push('dbus-run-session');
     if (missing.length) throw new Failure('missing_dependency', `Missing ${missing.join(', ')}`, backend === 'wayland' ? 'Run `./install.sh --backend wayland`, or check with `RELAY_BACKEND=wayland relay doctor`.' : 'Run ./install.sh, or check with `relay doctor`.');
     let resolution: string | null;
-    if (backend === 'wayland') {
+    if (backend === 'macos') {
+      resolution = null;
+    } else if (backend === 'wayland') {
       resolution = await this.startWaylandDisplay(layout);
     } else if (this.args.display) {
       this.env.DISPLAY = this.args.display;
@@ -322,7 +336,7 @@ export class Session {
       const value = this.env[key];
       if (value) environment[key] = value;
     }
-    this.save({ backend, ...(backend === 'wayland' ? { waylandDisplay: this.env.WAYLAND_DISPLAY } : {}), display: this.env.DISPLAY, xauthority: this.env.XAUTHORITY ?? null, ownsDisplay: !this.args.display, desktop, environment, resolution, fps: this.args.fps });
+    this.save({ backend, ...(backend === 'wayland' ? { waylandDisplay: this.env.WAYLAND_DISPLAY } : {}), display: this.env.DISPLAY, xauthority: this.env.XAUTHORITY ?? null, ownsDisplay: !attached, desktop, environment, resolution, fps: this.args.fps });
     if (desktopCommand.length) await waitSpawn(this.spawn('desktop', desktopCommand));
     const bind = this.args.bind || (this.args.public ? '0.0.0.0' : '127.0.0.1');
     let token: string | null = null;
@@ -368,7 +382,7 @@ export class Session {
             url: where.url, token: where.token ?? undefined, ca: where.caFile ?? undefined, connect: where.connect ?? undefined, timeout: 3000, signal: this.args.signal,
           }).screenshot());
           if (!image.subarray(0, 8).equals(PNG)) return false;
-          if (this.args.display) {
+          if (this.args.display || this.data.backend === 'macos') {
             if (image.length < 24) return false;
             this.save({ resolution: `${image.readUInt32BE(16)}x${image.readUInt32BE(20)}` });
           }
@@ -466,9 +480,14 @@ export function findEngine(): string | null {
   return which('relay-engine') ?? null;
 }
 
-/** Picks the explicit backend, else wayland for a --display without a colon, else x11 when the engine has it or its backends are unknown, else wayland. Throws when the engine reports it was built without the selected backend. */
+/** Selects a backend for the platform and checks the engine's compiled backends. */
 export function resolveBackend(explicit: string | undefined, display?: string): (typeof BACKENDS)[number] {
-  const requested = explicit !== undefined ? backendValue(explicit, 'RELAY_BACKEND') : display !== undefined && !display.includes(':') ? 'wayland' : undefined;
+  const requested = explicit !== undefined ? backendValue(explicit, 'RELAY_BACKEND')
+    : process.platform !== 'darwin' && display !== undefined && !display.includes(':') ? 'wayland' : undefined;
+  if (requested && (requested === 'macos' ? process.platform !== 'darwin' : !isLinux())) {
+    throw new Failure('invalid_input', `The ${requested} backend is only supported on ${requested === 'macos' ? 'macOS' : 'Linux'}`,
+      process.platform === 'darwin' ? 'Use --backend macos on macOS.' : 'Use --backend x11 or --backend wayland on Linux.');
+  }
   if (requested === 'x11' && display !== undefined && !display.includes(':')) {
     throw new Failure('invalid_input', `${display} is a Wayland socket, not an X display`, `Run \`relay up -d --backend wayland --display ${display}\``);
   }
@@ -478,9 +497,10 @@ export function resolveBackend(explicit: string | undefined, display?: string): 
   const engine = findEngine();
   const compiled = engine ? /^Compiled backends: (.+)$/m.exec(run([engine, '--help']).stdout)?.[1] : undefined;
   const available = compiled?.split(', ');
-  const backend = requested ?? (!available || available.includes('x11') ? 'x11' : 'wayland');
+  const backend = requested ?? (process.platform === 'darwin' ? 'macos' : !available || available.includes('x11') ? 'x11' : 'wayland');
   if (available && !available.includes(backend)) {
-    throw new Failure('missing_dependency', `relay-engine was built without the ${backend} backend (compiled: ${compiled})`, `Run \`./install.sh --backend ${backend}\` or \`./install.sh --backend all\``);
+    const hint = backend === 'macos' ? 'Rebuild relay-engine with the macos backend.' : `Run \`./install.sh --backend ${backend}\` or \`./install.sh --backend all\``;
+    throw new Failure('missing_dependency', `relay-engine was built without the ${backend} backend (compiled: ${compiled})`, hint);
   }
   return backend;
 }

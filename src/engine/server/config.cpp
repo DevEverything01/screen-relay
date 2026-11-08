@@ -190,7 +190,7 @@ bool parseConfig(int argc, char** argv, Config& config) {
     const std::string option = argv[i];
     if (option == "--help") {
       std::cout << "Usage: relay-engine [--bind ADDRESS] [--port PORT] [--viewer-dir DIR]\n"
-                   "  [--backend NAME] [--output NAME]\n"
+                   "  [--backend NAME] [--output NAME] [--check]\n"
                    "  [--fps N] [--bitrate-min BPS] [--bitrate-start BPS] [--bitrate-max BPS]\n"
                    "  [--token-file FILE [--public-origin https://HOST[:PORT]]]\n"
                    "  [--tls-cert FILE --tls-key FILE | --behind-tls-proxy]\n"
@@ -198,6 +198,7 @@ bool parseConfig(int argc, char** argv, Config& config) {
                    "FPS is 10 to 120; bitrates are 250000 to 100000000 bits per second with\n"
                    "min <= start <= max. Non-loopback --bind needs --token-file;\n"
                    "--public-origin also needs TLS or --behind-tls-proxy.\n"
+                   "--check initializes the backend and exits without starting capture or the server.\n"
                    "Attach to DISPLAY using the caller's XAUTHORITY. Defaults: 127.0.0.1:8080, 60 fps,\n"
                    "1000000/8000000/40000000 bps.\n"
                 << "Compiled backends: " << backendNames() << '\n';
@@ -205,6 +206,7 @@ bool parseConfig(int argc, char** argv, Config& config) {
     }
     if (option == "--behind-tls-proxy") { config.proxy = true; continue; }
     if (option == "--insecure-local") { config.insecure_local = true; continue; }
+    if (option == "--check") { config.check = true; continue; }
     if (++i == argc) throw std::runtime_error("Missing value for " + option);
     const std::string value = argv[i];
     if (option == "--bind") config.bind = value;
@@ -248,7 +250,7 @@ bool parseConfig(int argc, char** argv, Config& config) {
   if (config.bind != "127.0.0.1" && !config.insecure_local && (config.token.empty() || (!config.origin.empty() && config.cert.empty() && !config.proxy)))
     throw std::runtime_error("Non-loopback binding requires a token; a public origin also requires TLS or --behind-tls-proxy");
   if (config.insecure_local) std::cerr << "WARNING: unauthenticated development listener; isolate it and publish to host loopback only\n";
-  for (const char* name : {"index.html", "viewer.js"})
+  if (!config.check) for (const char* name : {"index.html", "viewer.js"})
     if (!std::filesystem::is_regular_file(std::filesystem::path(config.viewer)/name)) throw std::runtime_error("Viewer assets missing; use --viewer-dir");
   return true;
 }

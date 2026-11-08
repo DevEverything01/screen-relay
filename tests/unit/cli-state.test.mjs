@@ -20,7 +20,7 @@ const supervisorPath = join(directory, 'supervisor.mjs');
 writeFileSync(supervisorPath, supervisorBundle.outputFiles[0].contents);
 const { resolveBackend, splitCommand } = await import(pathToFileURL(supervisorPath).href);
 
-test('backend follows the display unless explicitly selected', () => {
+test('backend follows the display unless explicitly selected', { skip: process.platform === 'darwin' }, () => {
   const engine = join(directory, 'relay-engine');
   writeFileSync(engine, "#!/bin/sh\nprintf '%s\\n' 'Compiled backends: x11, wayland'\n", { mode: 0o755 });
   try {
@@ -30,6 +30,21 @@ test('backend follows the display unless explicitly selected', () => {
     assert.throws(() => resolveBackend('wayland', ':0'), { reason: 'invalid_input' });
     writeFileSync(engine, "#!/bin/sh\nprintf '%s\\n' 'Compiled backends: x11'\n");
     assert.throws(() => resolveBackend(undefined, 'wayland-1'), { reason: 'missing_dependency' });
+  } finally {
+    rmSync(engine, { force: true });
+  }
+});
+
+test('macOS uses the macos backend and rejects the Linux ones', { skip: process.platform !== 'darwin' }, () => {
+  const engine = join(directory, 'relay-engine');
+  writeFileSync(engine, "#!/bin/sh\nprintf '%s\\n' 'Compiled backends: macos'\n", { mode: 0o755 });
+  try {
+    assert.equal(resolveBackend(undefined), 'macos');
+    assert.equal(resolveBackend('macos'), 'macos');
+    assert.throws(() => resolveBackend('x11'), { reason: 'invalid_input' });
+    assert.throws(() => resolveBackend('wayland'), { reason: 'invalid_input' });
+    writeFileSync(engine, "#!/bin/sh\nprintf '%s\\n' 'Compiled backends: x11, wayland'\n");
+    assert.throws(() => resolveBackend(undefined), { reason: 'missing_dependency' });
   } finally {
     rmSync(engine, { force: true });
   }
@@ -54,7 +69,27 @@ test('session sweep does not match a longer RELAY_SESSION value', { skip: !exist
   }
 });
 
-test('closing an exited lock holder resolves', { skip: spawnSync('flock', ['--version'], { stdio: 'ignore' }).status !== 0 }, async () => {
+test('process identity is stable while a process lives and dead after it exits', async () => {
+  const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
+  let record;
+  try {
+    await new Promise((resolve, reject) => { child.once('spawn', resolve); child.once('error', reject); });
+    record = state.identity(child.pid);
+    assert.equal(typeof record.start, 'string');
+    assert.deepEqual(state.identity(child.pid), record);
+    assert.equal(state.alive(record), true);
+  } finally {
+    child.kill('SIGKILL');
+  }
+  await new Promise((resolve) => child.once('exit', resolve));
+  assert.equal(state.alive(record), false);
+});
+
+const lockToolReady = process.platform === 'darwin'
+  ? spawnSync('lockf', ['-s', '-t', '0', join(directory, 'lock-probe'), 'true'], { stdio: 'ignore' }).status === 0
+  : spawnSync('flock', ['--version'], { stdio: 'ignore' }).status === 0;
+
+test('closing an exited lock holder resolves', { skip: !lockToolReady }, async () => {
   const sessionDirectory = join(directory, 'exited-holder');
   mkdirSync(sessionDirectory);
   const held = await state.lock('exited-holder', sessionDirectory);
@@ -62,7 +97,7 @@ test('closing an exited lock holder resolves', { skip: spawnSync('flock', ['--ve
   await held.close();
 });
 
-test('the regular lock file serializes concurrent acquisitions', { skip: spawnSync('flock', ['--version'], { stdio: 'ignore' }).status !== 0 }, async () => {
+test('the regular lock file serializes concurrent acquisitions', { skip: !lockToolReady }, async () => {
   const lockDir = join(directory, 'lock-race');
   mkdirSync(lockDir);
   const lockFile = join(lockDir, 'lock');

@@ -1,22 +1,34 @@
 #!/bin/sh
 set -eu
+os=$(uname -s)
 desktop=1
 deps=1
 client=0
-backend=x11
 prefix=${PREFIX:-"$HOME/.local"}
-usage='Usage: ./install.sh [--prefix DIR] [--backend x11|wayland|all] [--no-desktop] [--no-deps] [--client-only]
+if [ "$os" = Darwin ]; then
+  backend=macos
+  backend_message='--backend requires macos'
+  usage='Usage: ./install.sh [--prefix DIR] [--backend macos] [--no-deps] [--client-only]
+  --prefix DIR     Install under DIR. Default: $PREFIX, else ~/.local.
+  --backend macos  Backend to install. macOS has one backend.
+  --no-deps        Skip package installation. Default: install them.
+  --client-only    Install the CLI only. Default: install the engine too.'
+else
+  backend=x11
+  backend_message='--backend requires x11, wayland or all'
+  usage='Usage: ./install.sh [--prefix DIR] [--backend x11|wayland|all] [--no-desktop] [--no-deps] [--client-only]
   --prefix DIR               Install under DIR. Default: $PREFIX, else ~/.local.
   --backend x11|wayland|all  Backend to install. Default: x11; wayland installs sway, XWayland, and foot; all installs both.
   --no-desktop               Skip the XFCE packages. Default: install them.
   --no-deps                  Skip package installation. Default: install them.
   --client-only              Install the CLI only. Default: install the engine too.'
+fi
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --no-desktop) desktop=0 ;;
     --no-deps) deps=0 ;;
     --client-only) client=1 ;;
-    --backend) shift; backend=${1:?--backend requires x11, wayland or all} ;;
+    --backend) shift; backend=${1:?"$backend_message"} ;;
     --prefix) shift; prefix=${1:?--prefix requires a directory} ;;
     --help) echo "$usage"; exit 0 ;;
     *) echo "Unknown option: $1" >&2; echo "$usage" >&2; exit 2 ;;
@@ -24,15 +36,22 @@ while [ "$#" -gt 0 ]; do
   shift
 done
 case "$prefix" in /*) ;; *) echo '--prefix must be absolute' >&2; exit 2 ;; esac
-case "$backend" in
-  x11) backends=$backend; doctor_backend=$backend; groups='core x11 xfce' ;;
-  wayland) backends=$backend; doctor_backend=$backend; groups='core wayland' ;;
-  all) backends='x11 wayland'; doctor_backend=x11; groups='core x11 wayland xfce' ;;
-  *) echo '--backend must be x11, wayland or all' >&2; exit 2 ;;
-esac
+if [ "$os" = Darwin ]; then
+  case "$backend" in
+    macos) backends=macos; doctor_backend=macos ;;
+    *) echo '--backend must be macos on macOS' >&2; exit 2 ;;
+  esac
+else
+  case "$backend" in
+    x11) backends=$backend; doctor_backend=$backend; groups='core x11 xfce' ;;
+    wayland) backends=$backend; doctor_backend=$backend; groups='core wayland' ;;
+    all) backends='x11 wayland'; doctor_backend=x11; groups='core x11 wayland xfce' ;;
+    *) echo '--backend must be x11, wayland or all' >&2; exit 2 ;;
+  esac
+fi
 engine="$prefix/lib/relay/relay-engine"
 if [ "$client" = 0 ] && [ -x "$engine" ] && installed=$("$engine" --help 2>/dev/null); then
-  case "$backend" in x11) other=wayland ;; wayland) other=x11 ;; all) other='' ;; esac
+  case "$backend" in x11) other=wayland ;; wayland) other=x11 ;; *) other='' ;; esac
   if [ -n "$other" ] &&
     printf '%s\n' "$installed" | grep -Eq "^Compiled backends: (.*, )?$other(, |$)"; then
     backends='x11 wayland'
@@ -161,6 +180,14 @@ if [ "$deps" = 1 ] && [ "$(uname -s)" = Linux ]; then
   fi
 fi
 
+if [ "$deps" = 1 ] && [ "$client" = 0 ] && [ "$os" = Darwin ]; then
+  command -v brew >/dev/null 2>&1 || {
+    echo 'Installing dependencies needs Homebrew. Install it from https://brew.sh, or install pkgconf, x264, and libwebsockets yourself and rerun with --no-deps.' >&2
+    exit 1
+  }
+  brew install pkgconf x264 libwebsockets
+fi
+
 fetch() {
   if command -v curl >/dev/null 2>&1; then curl -fsSL "$1"; else wget -qO- "$1"; fi
 }
@@ -252,14 +279,22 @@ if [ "$client" = 1 ]; then
   on_path
   exit 0
 fi
-[ "$(uname -s)" = Linux ] || { echo 'The engine builds on Linux only; use --client-only on this machine.' >&2; exit 1; }
-make -j2 BACKENDS="$backends"
+if [ "$os" = Darwin ]; then
+  make -j"$(sysctl -n hw.ncpu)" BACKENDS="$backends"
+else
+  [ "$os" = Linux ] || { echo 'The engine builds on Linux and macOS only; use --client-only on this machine.' >&2; exit 1; }
+  make -j2 BACKENDS="$backends"
+fi
 make install PREFIX="$prefix" BACKENDS="$backends"
 install_cli
 printf '\nInstalled: %s/bin/relay (engine: %s/bin/relay-engine)\n' "$prefix" "$prefix"
 on_path
 printf '\n'
-RELAY_BACKEND=$doctor_backend "$prefix/bin/relay" doctor
+if [ "$os" = Darwin ]; then
+  RELAY_BACKEND=$doctor_backend "$prefix/bin/relay" doctor || true
+else
+  RELAY_BACKEND=$doctor_backend "$prefix/bin/relay" doctor
+fi
 case ":$PATH:" in
   *":$prefix/bin:"*) start=relay ;;
   *) start="$prefix/bin/relay" ;;
@@ -269,3 +304,6 @@ case "$doctor_backend" in
   *) start="$start up -d" ;;
 esac
 printf '\nStart a session: %s\n' "$start"
+if [ "$os" = Darwin ]; then
+  printf 'Grant Screen Recording and Accessibility to this terminal in System Settings > Privacy & Security.\n'
+fi

@@ -57,6 +57,7 @@ int main() {
          engine.bitrate_min == 1000000 && engine.bitrate_start == 8000000 && engine.bitrate_max == 40000000);
   assert(engineConfig({"--backend", defaultName, "--output", "HDMI-A-1"}, engine) &&
          engine.backend == defaultName && engine.output == "HDMI-A-1");
+  assert(engineConfig({"--check"}, engine) && engine.check);
   std::string error;
   assert(!engineConfig({"--backend", "wayland2"}, engine, &error));
   assert(error.find("wayland2") != std::string::npos && error.find(backendNames()) != std::string::npos);

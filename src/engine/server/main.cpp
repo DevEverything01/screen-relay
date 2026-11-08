@@ -26,6 +26,7 @@ int main(int argc, char** argv) {
   } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 2; }
   const auto& backend = relay::backendFor(config.backend);
   if (!backend.initialize(config.output)) { std::cerr << "Native backend initialization failed\n"; return 1; }
+  if (config.check) return 0;
   std::signal(SIGINT, signalStop); std::signal(SIGTERM, signalStop);
   relay::Server s(config);
   std::string captureError;
