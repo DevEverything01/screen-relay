@@ -5,9 +5,10 @@
   "pages": [
     "index",
     "getting-started",
-    "---Display servers---",
+    "---Platforms---",
     "x11",
     "wayland",
+    "macos",
     "---Reference---",
     "cli",
     "configuration",

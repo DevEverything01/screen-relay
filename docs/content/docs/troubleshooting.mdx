@@ -21,8 +21,8 @@ Stopping a session also stops the processes it started. Save your work before ru
 | `relay: command not found` | Run `export PATH="$HOME/.local/bin:$PATH"` and add it to your shell profile, or run `~/.local/bin/relay`. |
 | The installer rejects the distribution or needs privileges | Automatic dependency installation needs a [supported distribution](/docs/getting-started) and root or passwordless `sudo`. Otherwise, install dependencies yourself and run `./install.sh --no-deps`, or `./install.sh --client-only --no-deps` for the client alone. |
 | The Fedora installer asks for RPM Fusion | Run the printed command, then rerun `./install.sh`. |
-| `unsupported_platform` | Run `up`, `down`, and `run` on the VM. On your laptop, install with `./install.sh --client-only` and use the [client commands](/docs/remote-access). |
-| `missing_dependency` or a failed doctor check | Run the suggested fix. See [X11](/docs/x11) or [Wayland](/docs/wayland) for backend checks. |
+| `unsupported_platform` | Run `up`, `down`, and `run` on the Linux or macOS machine. On your laptop, install with `./install.sh --client-only` and use the [client commands](/docs/remote-access). |
+| `missing_dependency` or a failed doctor check | Run the suggested fix. See [X11](/docs/x11), [Wayland](/docs/wayland), or [macOS](/docs/macos) for backend checks. |
 | XFCE exits with a `default_icon_at_size` assertion on Ubuntu 26.04 | Install the icon loader with `sudo apt-get install glycin-loaders`, or rerun `./install.sh`. |
 
 ## Starting a session
@@ -63,6 +63,14 @@ Stopping a session also stops the processes it started. Save your work before ru
 | `forbidden` (HTTP 403) | The `Host` or `Origin` is not allowed. Connect through `127.0.0.1`, `localhost`, or the `--public` URL. Configure the proxy to preserve both headers. |
 | `invalid_input` about a URL or plain HTTP | Use an HTTPS origin without a path, query, or credentials, and pass a token for remote hosts. Plain HTTP works only for `localhost` and `127.0.0.1`; use an [SSH tunnel](/docs/remote-access) if needed. |
 | `unreachable` | Check the URL and run `relay status` on the VM. If the certificate was rejected, use one the client trusts. |
+
+## macOS
+
+| Symptom | Cause and fix |
+| --- | --- |
+| `Screen capture permission is missing` or `Accessibility permission is missing` | In **System Settings > Privacy & Security**, enable **Screen & System Audio Recording** and **Accessibility** for the app that starts relay, such as your terminal. Then restart that app and run `relay doctor`. See [macOS](/docs/macos#grant-permissions). |
+| `Display N not found; active displays:` | Pick an ID from the list in the error and pass it with `--output`. See [macOS](/docs/macos#choose-a-display). |
+| `The display changed ... restart relay to stream it` | The display's size or position changed. Run `relay up` again. |
 
 ## Wayland
 

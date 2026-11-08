@@ -53,7 +53,7 @@ keyboard:
 # Linux only. xfce, none, or a command. Default: xfce (x11) or foot (wayland), or none with --display.
 # desktop: xfce
 
-# x11 or wayland. Default: x11 when the engine has it, else wayland.
+# x11, wayland, or macos. Default: x11 when the engine has it, else wayland; macos on macOS.
 # backend: x11
 ```
 
@@ -68,7 +68,7 @@ nano ~/.config/relay/config.yaml
 
 | Key | Default | Allowed values | Flag | Environment variable |
 | --- | --- | --- | --- | --- |
-| `display.resolution` | `1280x720` | The desktop size as `WIDTHxHEIGHT`, both even. Width 320 to 16384, height 240 to 16384. Ignored with `--display`, which uses the existing screen's size. | None | `RELAY_RESOLUTION` |
+| `display.resolution` | `1280x720` | The desktop size as `WIDTHxHEIGHT`, both even. Width 320 to 16384, height 240 to 16384. Ignored with `--display` and on macOS, which use the existing screen's size. | None | `RELAY_RESOLUTION` |
 | `stream.fps` | `60` | Whole number from 10 to 120 | None | `RELAY_FPS` |
 | `stream.bitrate.min` | `1M` | 250000 to 100000000, as a whole number or with a `k` (thousand) or `M` (million) suffix. No higher than `start`. | None | `RELAY_BITRATE_MIN` |
 | `stream.bitrate.start` | `8M` | Same values as `min`. The stream adjusts between `min` and `max` from here. | None | `RELAY_BITRATE_START` |
@@ -79,7 +79,7 @@ nano ~/.config/relay/config.yaml
 | `server.tls_cert` | unset | Path to a certificate file. Set with `tls_key`. | `--tls-cert` | `RELAY_TLS_CERT` |
 | `server.tls_key` | unset | Path to the private key file. Set with `tls_cert`. | `--tls-key` | `RELAY_TLS_KEY` |
 | `keyboard.layout` | `us` | A layout name such as `de` or `fr`, or a comma-separated list such as `us,de`, using letters, digits, `_`, and `-`. On X11 it needs `setxkbmap`, which `relay doctor` checks. | None | `RELAY_KEYBOARD_LAYOUT` |
-| `backend` | `x11` when the engine includes it, else `wayland` | `x11` or `wayland`. See [X11](/docs/x11) and [Wayland](/docs/wayland). | `--backend` | `RELAY_BACKEND` |
+| `backend` | `x11` when the engine includes it, else `wayland`; `macos` on macOS | `x11`, `wayland`, or `macos`. See [X11](/docs/x11), [Wayland](/docs/wayland), and [macOS](/docs/macos). | `--backend` | `RELAY_BACKEND` |
 | `desktop` | `xfce` on X11, `foot` on Wayland, or `none` with `--display` | `xfce`, `none`, or a command. See [X11](/docs/x11) and [Wayland](/docs/wayland). | `--desktop` | `RELAY_DESKTOP` |
 
 `stream.bitrate` needs `min <= start <= max`, including when you change one value. `server.tls_cert` and `server.tls_key` must be set together.

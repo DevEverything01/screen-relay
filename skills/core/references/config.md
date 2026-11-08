@@ -17,8 +17,8 @@ The published reference is at https://relay.labs.vercel.dev/docs/configuration.
 | `server.tls_cert` | none | Certificate file; `server.tls_key` must be set too | `RELAY_TLS_CERT` |
 | `server.tls_key` | none | Private key file | `RELAY_TLS_KEY` |
 | `keyboard.layout` | `us` | Comma-separated XKB layout such as `fr,us` | `RELAY_KEYBOARD_LAYOUT` |
-| `backend` | `x11` when the engine has it, else `wayland` | `x11` or `wayland`; `--backend` overrides it | `RELAY_BACKEND` |
-| `desktop` | `xfce` (x11) or `foot` (wayland) | `xfce`, `none`, or a desktop command; defaults to `none` with `--display` | `RELAY_DESKTOP` |
+| `backend` | Linux: `x11` when the engine has it, else `wayland`. macOS: `macos` | `x11`, `wayland` or `macos`; `--backend` overrides it | `RELAY_BACKEND` |
+| `desktop` | `xfce` (x11) or `foot` (wayland) | `xfce`, `none`, or a desktop command; defaults to `none` with `--display`; always `none` on macOS | `RELAY_DESKTOP` |
 
 Example:
 
@@ -37,4 +37,4 @@ keyboard:
   layout: us
 ```
 
-There is no live reload or resize. Run `relay down`, edit the file, then `relay up -d`. `--display` ignores `display.resolution` and uses the existing display's size; `up` warns about this. Client commands use `RELAY_URL` and `RELAY_TOKEN_FILE` instead of the config file.
+There is no live reload or resize. Run `relay down`, edit the file, then `relay up -d`. `--display` ignores `display.resolution` and uses the existing display's size; `up` warns about this. macOS ignores `display.resolution` the same way and warns. Client commands use `RELAY_URL` and `RELAY_TOKEN_FILE` instead of the config file.

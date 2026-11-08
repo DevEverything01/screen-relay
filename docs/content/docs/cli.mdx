@@ -10,7 +10,7 @@ relay up -d
 relay screenshot screen.png
 ```
 
-VM commands run on the Linux VM hosting the desktop, including a container or sandbox. Client commands also run remotely with a URL and token. [Global options](#global-options) include `--json`.
+VM commands run on the Linux VM or Mac hosting the desktop, including a container or sandbox. Client commands also run remotely with a URL and token. [Global options](#global-options) include `--json`.
 
 ## VM commands
 
@@ -22,23 +22,23 @@ Starts a desktop session and waits for it to be ready.
 relay up -d --name demo --port 8084
 ```
 
-For backend-specific usage, see [X11](/docs/x11) and [Wayland](/docs/wayland).
+For backend-specific usage, see [X11](/docs/x11), [Wayland](/docs/wayland), and [macOS](/docs/macos).
 
 | Option | Meaning |
 | --- | --- |
 | `-d`, `--detach` | Run in the background. Otherwise, Ctrl+C stops the session. |
 | `--config FILE` | YAML config. Default: `RELAY_CONFIG`, then `${XDG_CONFIG_HOME:-~/.config}/relay/config.yaml` if present. |
 | `--port N` | Listen port, 1–65535. Default `8080`. |
-| `--desktop CMD` | `xfce`, `none`, or a command. Default: `xfce` on X11, `foot` on Wayland, or `none` when attaching. |
-| `--display DISPLAY` | Attach to an existing display at its size. |
-| `--backend x11\|wayland` | Default `x11` when available, else `wayland`. Without a configured backend, a display without a colon selects Wayland. |
-| `--output NAME` | Wayland output. Default: first output. Not valid on X11. |
+| `--desktop CMD` | `xfce`, `none`, or a command. Default: `xfce` on X11, `foot` on Wayland, or `none` when attaching. Always `none` on macOS. |
+| `--display DISPLAY` | Attach to an existing display at its size. Not supported on macOS. |
+| `--backend x11\|wayland\|macos` | On Linux, default `x11` when available, else `wayland`. Without a configured backend, a display without a colon selects Wayland. On macOS, `macos`. |
+| `--output NAME` | Wayland output name, or a macOS display ID. Default: first output, or the main display. Not valid on X11. |
 | `--public URL` | HTTPS origin. Generates a token. Requires a TLS proxy unless direct TLS is configured. |
 | `--tls-cert FILE`, `--tls-key FILE` | Serve TLS directly. Both are required. |
 | `--bind ADDR` | Listen address. Default `127.0.0.1`, or `0.0.0.0` with `--public`. Other addresses generate a token. |
 | `--timeout S` | Engine and desktop readiness timeout in seconds. Default `30`; must be positive. |
 
-Default display: 1280x720 at 60 fps. Relay does not stop an attached display. Treat viewer URLs containing `#token=` and JSON tokens as secrets. See [Configuration](/docs/configuration) and [Remote access](/docs/remote-access).
+Default display: 1280x720 at 60 fps. On macOS, relay attaches to the existing display and ignores `display.resolution`. Relay does not stop an attached display. Treat viewer URLs containing `#token=` and JSON tokens as secrets. See [Configuration](/docs/configuration) and [Remote access](/docs/remote-access).
 
 To become ready, a desktop command must open a window on X11 or a new Wayland display. Startup failures include the component's log. If the display, desktop, or engine exits later, the session stops; check `relay status` and `relay logs`. Foreground `up --json` prints after supervision ends; an interrupt prints no success document.
 
@@ -81,11 +81,11 @@ relay run --name demo --restart -- mousepad notes.txt
 
 Put relay options before `--`; everything after it goes to the app. Read output with `relay logs apps`. Without `--restart`, a nonzero exit within one second reports `component_failed`. Restarts get new process IDs. Retry delays start at one second, double to 30 seconds, and reset after 60 seconds of uptime.
 
-Apps share the display and D-Bus session when available; attached displays use the caller's environment. Apps run without ambient capabilities.
+Apps share the display and D-Bus session when available; attached displays use the caller's environment. On Linux, apps run without ambient capabilities. On macOS, apps start in your user session without `DISPLAY`, `WAYLAND_DISPLAY`, or `XAUTHORITY`.
 
 ### doctor
 
-Checks the VM and prints fixes for failed checks.
+Checks the VM or Mac and prints fixes for failed checks.
 
 ```sh
 RELAY_BACKEND=wayland relay doctor
@@ -95,7 +95,7 @@ RELAY_BACKEND=wayland relay doctor
 | --- | --- |
 | `--config FILE` | Load a YAML config, using the same default as `up`. |
 
-The backend comes from `RELAY_BACKEND`, config, or the engine default. Failures exit 1; warnings do not. JSON checks include `name`, `status`, `detail`, and `fix`.
+The backend comes from `RELAY_BACKEND`, config, or the engine default. On macOS, doctor checks the macOS version, Homebrew packages, engine, and the Screen Recording and Accessibility permissions. Failures exit 1; warnings do not. JSON checks include `name`, `status`, `detail`, and `fix`.
 
 ## Client commands
 
@@ -315,7 +315,7 @@ Errors contain `status` (`error` or `action_required`), `reason`, `message`, and
 | `component_failed` | Component or app failed. Read its logs. |
 | `spawn_failed` | App could not start. Check its name and installation. |
 | `missing_dependency` | A required program is missing. Run `relay doctor`. |
-| `unsupported_platform` | `up`, `down`, or `run` needs Linux. Run on the VM. |
+| `unsupported_platform` | `up`, `down`, or `run` needs Linux or macOS. Run on the VM or Mac. |
 | `invalid_config` | Invalid configuration. Correct the file and key named in the error. |
 | `disconnected`, `io_error`, `protocol_error` | Connection lost, local I/O failed, or engine response invalid. Check the connection or reported file. |
 | `canceled` | Interrupted. Retry if needed. |
@@ -361,14 +361,14 @@ Install from a repository clone. See [Getting started](/docs/getting-started) fo
 | Option | Meaning |
 | --- | --- |
 | `--prefix DIR` | Absolute install directory. Default `$PREFIX`, then `~/.local`. |
-| `--backend x11\|wayland\|all` | Backend to install. Default `x11`; `all` installs both and checks X11 with `doctor`. Existing backends are retained on reinstall. |
-| `--no-desktop` | Skip XFCE packages. |
+| `--backend x11\|wayland\|all` | Backend to install. Default `x11`; `all` installs both and checks X11 with `doctor`. Existing backends are retained on reinstall. On macOS, only `macos` is accepted. |
+| `--no-desktop` | Skip XFCE packages. No effect on macOS. |
 | `--no-deps` | Skip system package installation; install dependencies yourself. |
-| `--client-only` | Install only the CLI, including on non-Linux machines. |
+| `--client-only` | Install only the CLI, including on machines other than Linux or macOS. |
 | `--help` | Show installer options. |
 
-Automatic dependencies require root or passwordless sudo and support Debian, Ubuntu, Fedora, Arch, and Alpine. Elsewhere, install dependencies and use `--no-deps`. On Linux, `--client-only` can install Node-related packages unless `--no-deps` is set. On Arch, package installation runs `pacman -Syu`.
+On macOS, the installer runs `brew install pkgconf x264 libwebsockets`. On Linux, automatic dependencies require root or passwordless sudo and support Debian, Ubuntu, Fedora, Arch, and Alpine. Elsewhere, install dependencies and use `--no-deps`. On Linux, `--client-only` can install Node-related packages unless `--no-deps` is set. On Arch, package installation runs `pacman -Syu`.
 
 For a full install with `--no-deps`, install build tools, `setpriv`, development libraries for x264, libwebsockets, zlib, and X11 or Wayland, and the tools listed under [X11](/docs/x11#check-the-machine) or [Wayland](/docs/wayland#check-the-machine).
 
-The installer uses Node 26 or newer with npm, or downloads a pinned release using curl or wget. It installs the CLI under `<prefix>/bin`; a full install runs `relay doctor` and fails on a failed check. Add `<prefix>/bin` to `PATH` if needed.
+The installer uses Node 26 or newer with npm, or downloads a pinned release using curl or wget. It installs the CLI under `<prefix>/bin`; a full install runs `relay doctor` and, on Linux, fails on a failed check. On a Mac it continues, because permissions are usually not granted yet. Add `<prefix>/bin` to `PATH` if needed.

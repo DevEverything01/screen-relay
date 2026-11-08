@@ -27,6 +27,19 @@ Start with `relay doctor`; it prints a fix command for every failing check. Read
 | Blank viewer page or WebCodecs error | The browser lacks H.264 WebCodecs, or the page is not a secure context. | Use a current Chrome, Edge or Safari over `https://` or `http://127.0.0.1`. |
 | Viewer cannot connect through a proxy | The proxy drops WebSocket upgrades or rewrites headers. | Forward `/stream`, `/control`, `/input` and the rest without a path prefix, and keep `Host`, `Origin` and `Authorization`. |
 | `Cannot open display` with `--display` | Missing `XAUTHORITY` for that display. | Export the session's `XAUTHORITY`; never use `xhost +`. |
+| `invalid_input` saying `--display is not supported on macOS` | macOS attaches to the current display on its own. | Remove `--display`; use `--output DISPLAY_ID` to pick a display. |
+| Engine log says `Screen capture permission is missing`, `Screen Recording permission is missing` or `Accessibility permission is missing`, or `doctor` fails `permissions` | The app that started relay lacks the permission. | See macOS permissions below. |
+| Engine log says `Display N not found; active displays: ...` | `--output` is not a CGDirectDisplayID of an active display. | Use one of the listed IDs. |
+| Engine log says `The display changed from ... restart relay to stream it` | The display's size, position or ID changed during the session. The stream stops. | `relay down`, then `relay up -d`. |
+
+## macOS permissions
+
+Grant both permissions to the app that starts relay, such as your terminal, then restart that app and run `relay doctor` again:
+
+- Screen Recording: System Settings > Privacy & Security > Screen & System Audio Recording.
+- Accessibility: System Settings > Privacy & Security > Accessibility.
+
+`relay doctor` reports them in the `permissions` check, which is skipped (a warning) until the `engine` check passes. The `Homebrew packages` check is fixed with `brew install pkgconf x264 libwebsockets`.
 
 ## Doctor checks that need a manual step
 
