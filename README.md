@@ -31,7 +31,7 @@ relay up -d --backend wayland
 
 ## Documentation
 
-Install options, the CLI reference, configuration, remote access, Docker, agent skills, the Node SDK, and troubleshooting are at https://relay.labs.vercel.dev. The engine also runs on Windows; see the Windows page there.
+Install options, the CLI reference, configuration, remote access, Docker, agent skills, the Node SDK, and troubleshooting are at https://relay.labs.vercel.dev. The engine also runs on [Windows](https://relay.labs.vercel.dev/docs/windows).
 
 ## Contributing
 

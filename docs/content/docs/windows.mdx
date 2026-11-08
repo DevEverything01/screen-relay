@@ -28,7 +28,7 @@ This writes the viewer to `dist/viewer`. The engine looks for a `viewer` folder 
 
 ## Start the engine
 
-Start `relay-engine.exe` from a terminal in the signed-in user's desktop session. Desktop Duplication works only in that session, so an SSH or service session fails with `Desktop Duplication is unavailable; start relay in the signed-in user's desktop session` or `No display is attached to this session`.
+Start `relay-engine.exe` from the UCRT64 shell in the signed-in user's desktop session, which puts the libraries it needs on `PATH`. Desktop Duplication works only in that session, so an SSH or service session fails with `Desktop Duplication is unavailable; start relay in the signed-in user's desktop session` or `No display is attached to this session`.
 
 ```sh
 ./relay-engine.exe --viewer-dir dist/viewer
@@ -43,9 +43,9 @@ The engine listens on `127.0.0.1:8080` at 60 fps and captures the primary displa
 | `--bind ADDRESS` | Address to listen on. Default `127.0.0.1`. Any other address needs `--token-file`. |
 | `--token-file FILE` | File that holds the session token. |
 | `--fps N` | Frame rate, 10 to 120. Default `60`. |
-| `--output NAME` | Display to capture, such as `\\.\DISPLAY2`. The error for an unknown name lists the attached displays. |
+| `--output NAME` | Display to capture, such as `'\\.\DISPLAY2'`. Quote the name so the shell keeps its backslashes. The error for an unknown name lists the attached displays. |
 
-Run `relay-engine.exe --help` for the full list, including the bitrate and TLS options that [Remote access](/docs/remote-access) describes.
+Run `relay-engine.exe --help` for the full list, including the bitrate and TLS options.
 
 ## Open the viewer
 
