@@ -268,9 +268,6 @@ export class Session {
 
   async start(): Promise<Record<string, unknown>> {
     this.args.signal?.throwIfAborted();
-    if (process.platform === 'darwin' && this.args.display !== undefined) {
-      throw new Failure('invalid_input', '--display is not supported on macOS', 'Remove --display; relay attaches to the current display on macOS.');
-    }
     const runtime = join(this.dir, 'runtime');
     rmSync(runtime, { recursive: true, force: true });
     mkdirSync(runtime, { mode: 0o700 });
@@ -343,7 +340,7 @@ export class Session {
     const engineCommand = [engine, '--bind', bind, '--port', String(this.args.port), '--fps', String(this.args.fps), '--bitrate-min', String(this.args.bitrateMin), '--bitrate-start', String(this.args.bitrateStart), '--bitrate-max', String(this.args.bitrateMax)];
     engineCommand.push('--backend', backend);
     if (this.args.output) engineCommand.push('--output', this.args.output);
-    if (bind !== '127.0.0.1' || this.args.public) {
+    if (bind !== '127.0.0.1' || this.args.public || backend === 'macos') {
       token = randomBytes(32).toString('hex');
       const tokenFile = join(this.dir, 'token');
       const descriptor = openSync(tokenFile, 'w', 0o600);
