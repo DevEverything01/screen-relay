@@ -1,0 +1,14 @@
+#!/bin/sh
+set -e
+state=${RELAY_STATE:-/vercel/.local/state/relay/default/session.json}
+eval "$(python3 - "$state" <<'PY'
+import json, sys
+s = json.load(open(sys.argv[1]))
+print(f'export DISPLAY={s["display"]}')
+if s.get("xauthority"):
+    print(f'export XAUTHORITY={s["xauthority"]}')
+for k, v in (s.get("environment") or {}).items():
+    print(f'export {k}={v}')
+PY
+)"
+exec "$@"
