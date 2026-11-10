@@ -42,7 +42,7 @@ constexpr float encoder_crf = 10;
 /// Changed macroblocks above which damage conversion is split across worker threads.
 constexpr int parallel_convert_macroblocks = 512;
 /// Slice threads that encode one frame in parallel, which cuts the time to encode a large change.
-int encoderThreads() { return int(std::clamp(std::thread::hardware_concurrency(), 1u, 4u)); }
+int encoderThreads() { return int(std::clamp(std::thread::hardware_concurrency(), 1u, 32u)); }
 using Clock = std::chrono::steady_clock;
 
 uint64_t ns(Clock::duration d) {
