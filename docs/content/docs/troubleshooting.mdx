@@ -44,7 +44,7 @@ Stopping a session also stops the processes it started. Save your work before ru
 | The viewer cannot connect through a proxy | Forward WebSocket upgrades, preserve `Host` and `Origin`, and use the `--public` URL. See [Remote access](/docs/remote-access). |
 | The picture is too small or blurry | Under **Scaling**, choose **Actual size** or **Sharp pixels**. To resize the desktop, set `display.resolution` and restart. With `--display`, relay uses the existing screen size. See [Configuration](/docs/configuration). |
 | The desktop streams at about 60 fps although `stream.fps` is higher | XFCE compositing caps repaints at the display refresh rate. Turn it off as described in [The desktop holds at 60 fps](#the-desktop-holds-at-60-fps). |
-| The picture is blocky although the desktop fills the viewer | The stream may sit at its minimum bitrate. Read `target_bitrate_bps` from `relay status --json`, then raise `stream.bitrate.min` if the link can carry more. See [Configuration](/docs/configuration). |
+| The picture is blocky although the desktop fills the viewer | The stream may sit at its minimum bitrate. Read `target_bitrate_bps` from the engine's `/metrics` endpoint, which `relay status --url URL --json` reports for a remote engine, then raise `stream.bitrate.min` if the link can carry more. See [Configuration](/docs/configuration). |
 | `resources_available: false` | Relay cannot read valid cgroup v2 counters. Ensure `/sys/fs/cgroup/cpu.stat`, `/sys/fs/cgroup/memory.current`, and `/sys/fs/cgroup/memory.stat` are readable. Streaming is unaffected. |
 
 ### The desktop holds at 60 fps

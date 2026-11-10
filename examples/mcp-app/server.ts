@@ -7,7 +7,6 @@ import { registerViewer } from "./viewer.ts";
 
 const port = Number(process.env.PORT ?? 3001);
 const localHosts = [`localhost:${port}`, `127.0.0.1:${port}`];
-const localOrigins = localHosts.map((host) => `http://${host}`);
 
 /** Builds a server with the relay tools and viewer resource. */
 export function createServer(): McpServer {
@@ -22,9 +21,16 @@ function trustedHost(req: IncomingMessage): boolean {
   return localHosts.includes(String(req.headers.host ?? ""));
 }
 
-/** Accepts no Origin, or a local one; opaque values such as "null" are rejected without parsing. */
+/** Accepts no Origin, or one served from this machine, so local hosts on any port can connect. */
 function trustedOrigin(origin: string | undefined): boolean {
-  return origin === undefined || localOrigins.includes(origin);
+  if (origin === undefined) return true;
+  try {
+    const { hostname, protocol } = new URL(origin);
+    return (protocol === "http:" || protocol === "https:") &&
+      (hostname === "localhost" || hostname === "127.0.0.1");
+  } catch {
+    return false;
+  }
 }
 
 function cors(origin: string | undefined) {
@@ -57,7 +63,6 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
     sessionIdGenerator: undefined,
     enableDnsRebindingProtection: true,
     allowedHosts: localHosts,
-    allowedOrigins: localOrigins,
   });
   res.on("close", () => {
     transport.close().catch(() => {});

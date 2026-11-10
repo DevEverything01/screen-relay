@@ -31,7 +31,7 @@ RELAY_ORIGIN=https://your-sandbox.vercel.run RELAY_TOKEN="$RELAY_TOKEN" npm run 
 
 The MCP endpoint is `http://localhost:3001/mcp`. Without `--http`, the server uses stdio.
 
-The HTTP mode listens on loopback only and rejects any request whose `Host` or `Origin` is not this server, which stops DNS rebinding from reaching the desktop tools.
+The HTTP mode listens on loopback only, rejects any request whose `Host` is not this server, and rejects an `Origin` that is not served from this machine. That stops DNS rebinding from reaching the desktop tools while letting a local host such as `http://localhost:8080` connect.
 
 For the ext-apps basic host:
 

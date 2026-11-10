@@ -11,7 +11,7 @@ export async function runInSandbox(binary: string, args: string[]) {
   try {
     const { stdout, stderr } = await run(
       "sandbox",
-      ["exec", SANDBOX, ...scope, "--", "sh", "-lc", `/vercel/.local/bin/relay-env ${binary} "$@"`, "_", ...args],
+      ["exec", SANDBOX, ...scope, "--", "/vercel/.local/bin/relay-env", binary, ...args],
       { timeout: 120_000, maxBuffer: 8 * 1024 * 1024 },
     );
     return { content: [{ type: "text" as const, text: JSON.stringify({ stdout, stderr: stripEcho(stderr) }) }] };

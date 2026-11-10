@@ -1,14 +1,24 @@
-#!/bin/sh
-set -e
-state=${RELAY_STATE:-/vercel/.local/state/relay/default/session.json}
-eval "$(python3 - "$state" <<'PY'
-import json, sys
-s = json.load(open(sys.argv[1]))
-print(f'export DISPLAY={s["display"]}')
-if s.get("xauthority"):
-    print(f'export XAUTHORITY={s["xauthority"]}')
-for k, v in (s.get("environment") or {}).items():
-    print(f'export {k}={v}')
-PY
-)"
-exec "$@"
+#!/usr/bin/env python3
+"""Runs a command with the display, authority, and D-Bus address of a relay desktop session."""
+import json
+import os
+import sys
+
+state = os.environ.get("RELAY_STATE", "/vercel/.local/state/relay/default/session.json")
+with open(state, encoding="utf-8") as handle:
+    session = json.load(handle)
+
+env = dict(os.environ)
+env["DISPLAY"] = session["display"]
+if session.get("xauthority"):
+    env["XAUTHORITY"] = session["xauthority"]
+env.update(session.get("environment") or {})
+
+if len(sys.argv) < 2:
+    sys.stderr.write("usage: relay-env COMMAND [ARG...]\n")
+    sys.exit(2)
+try:
+    os.execvpe(sys.argv[1], sys.argv[1:], env)
+except OSError as error:
+    sys.stderr.write(f"relay-env: {error}\n")
+    sys.exit(127)
