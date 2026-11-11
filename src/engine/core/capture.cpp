@@ -3,6 +3,7 @@
 #include "color.hpp"
 #include "flow.hpp"
 #include "capture-source.hpp"
+#include "cpu-budget.hpp"
 #include "wait.hpp"
 
 #include <cstdint>
@@ -41,8 +42,6 @@ static_assert(vbvBufferKbit(62500, 120, true) == 4);
 constexpr float encoder_crf = 10;
 /// Changed macroblocks above which damage conversion is split across worker threads.
 constexpr int parallel_convert_macroblocks = 512;
-/// Slice threads that encode one frame in parallel, which cuts the time to encode a large change.
-int encoderThreads() { return int(std::clamp(std::thread::hardware_concurrency(), 1u, 4u)); }
 using Clock = std::chrono::steady_clock;
 
 uint64_t ns(Clock::duration d) {
@@ -109,6 +108,7 @@ struct Resources {
   x264_t* codec = nullptr;
   x264_picture_t frame{};
   std::vector<uint8_t> mb_info;
+  int threads;
   std::vector<std::vector<uint8_t>> scratch;
   Workers workers;
   bool frame_allocated = false;
@@ -117,7 +117,8 @@ struct Resources {
   Resources(PixelFormat f, int w, int h, CaptureSettings s)
       : format(f), width(w), height(h), settings(s),
         mb_info(size_t((w + 15) / 16) * size_t((h + 15) / 16)),
-        scratch(size_t(encoderThreads()), std::vector<uint8_t>(size_t(w) * 24)), workers(encoderThreads()),
+        threads(encoderThreads(h)),
+        scratch(size_t(threads), std::vector<uint8_t>(size_t(w) * 24)), workers(threads),
         bitrate(s.start_bitrate) {}
   ~Resources() {
     if (codec) x264_encoder_close(codec);
@@ -132,7 +133,7 @@ struct Resources {
     params.i_width = width; params.i_height = height; params.i_csp = X264_CSP_NV12;
     params.i_timebase_num = 1; params.i_timebase_den = 1000000;
     params.i_fps_num = int(settings.fps); params.i_fps_den = 1;
-    params.i_threads = encoderThreads(); params.b_sliced_threads = 1; params.i_keyint_max = X264_KEYINT_MAX_INFINITE; params.i_bframe = 0;
+    params.i_threads = threads; params.b_sliced_threads = 1; params.i_keyint_max = X264_KEYINT_MAX_INFINITE; params.i_bframe = 0;
     params.i_scenecut_threshold = 0; params.i_sync_lookahead = 0;
     params.rc.i_rc_method = X264_RC_CRF; params.rc.f_rf_constant = encoder_crf;
     params.rc.i_lookahead = 0; params.rc.i_vbv_max_bitrate = int(settings.start_bitrate / 1000); params.rc.i_vbv_buffer_size = vbvBufferKbit(settings.start_bitrate, settings.fps, true);

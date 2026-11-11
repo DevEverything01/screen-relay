@@ -43,7 +43,7 @@ ENGINE_SRCS = $(CORE_SRCS) $(wildcard src/engine/server/*.cpp) $(BACKEND_SRCS)
 HEADERS = $(wildcard src/engine/*/*.hpp src/engine/backends/linux/*.hpp) $(foreach dir,$(BACKEND_DIRS),$(wildcard src/engine/backends/$(dir)/*.hpp))
 
 WAYLAND_PROTOCOLS = wlr-screencopy-unstable-v1 wlr-virtual-pointer-unstable-v1 virtual-keyboard-unstable-v1
-.PHONY: all install test test-color test-flow test-capture-bucket test-input test-backend test-server test-keymap test-macos-keys clean FORCE
+.PHONY: all install test test-color test-flow test-capture-bucket test-cpu-budget test-input test-backend test-server test-keymap test-macos-keys clean FORCE
 all: relay-engine
 
 ifeq ($(HAS_WAYLAND),wayland)
@@ -106,6 +106,13 @@ build/capture-bucket-test: tests/unit/capture-bucket-test.cpp src/engine/core/ca
 test-capture-bucket: build/capture-bucket-test
 	./build/capture-bucket-test
 
+build/cpu-budget-test: tests/unit/cpu-budget-test.cpp src/engine/core/cpu-budget.hpp
+	mkdir -p build
+	$(CXX) -Isrc/engine $(CXXFLAGS) tests/unit/cpu-budget-test.cpp -o $@
+
+test-cpu-budget: build/cpu-budget-test
+	./build/cpu-budget-test
+
 build/input-test: tests/unit/input-test.cpp src/engine/core/input.cpp src/engine/core/input.hpp
 	mkdir -p build
 	$(CXX) -Isrc/engine $(CXXFLAGS) tests/unit/input-test.cpp src/engine/core/input.cpp -o $@
@@ -148,7 +155,7 @@ build/macos-keys-test: tests/unit/macos-keys-test.cpp src/engine/backends/macos/
 test-macos-keys: build/macos-keys-test
 	./build/macos-keys-test
 
-test: test-color test-flow test-capture-bucket test-input test-backend test-server $(if $(HAS_WAYLAND),test-keymap) $(if $(filter macos,$(BACKENDS)),test-macos-keys)
+test: test-color test-flow test-capture-bucket test-cpu-budget test-input test-backend test-server $(if $(HAS_WAYLAND),test-keymap) $(if $(filter macos,$(BACKENDS)),test-macos-keys)
 
 clean:
 	rm -rf build relay-engine
