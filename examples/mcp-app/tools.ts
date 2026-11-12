@@ -6,10 +6,10 @@ import { originOf, tokenOf } from "./config.ts";
 import { runInSandbox } from "./sandbox.ts";
 import { RESOURCE_URI } from "./viewer.ts";
 
-let session: { url: string; token?: string } | undefined;
-
 /** Registers the desktop, screenshot, and automation tools on a server. */
 export function registerTools(server: McpServer): void {
+  let session: { url: string; token?: string } | undefined;
+
   registerAppTool(
     server,
     "open_desktop",

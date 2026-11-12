@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { createServer as createHttpServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { McpServer } from "@modelcontextprotocol/server";
 import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
@@ -7,6 +8,7 @@ import { registerViewer } from "./viewer.ts";
 
 const port = Number(process.env.PORT ?? 3001);
 const localHosts = [`localhost:${port}`, `127.0.0.1:${port}`];
+const sessions = new Map<string, NodeStreamableHTTPServerTransport>();
 
 /** Builds a server with the relay tools and viewer resource. */
 export function createServer(): McpServer {
@@ -58,18 +60,40 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
     res.writeHead(204).end();
     return;
   }
+  const sessionId = req.headers["mcp-session-id"];
+  if (typeof sessionId === "string") {
+    const transport = sessions.get(sessionId);
+    if (!transport) {
+      res.writeHead(404, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        jsonrpc: "2.0",
+        error: { code: -32001, message: "Session not found" },
+        id: null,
+      }));
+      return;
+    }
+    await transport.handleRequest(req, res);
+    return;
+  }
   const server = createServer();
   const transport = new NodeStreamableHTTPServerTransport({
-    sessionIdGenerator: undefined,
+    sessionIdGenerator: () => randomUUID(),
     enableDnsRebindingProtection: true,
     allowedHosts: localHosts,
+    onsessioninitialized: (id) => {
+      sessions.set(id, transport);
+    },
   });
-  res.on("close", () => {
-    transport.close().catch(() => {});
+  transport.onclose = () => {
+    if (transport.sessionId) sessions.delete(transport.sessionId);
     server.close().catch(() => {});
-  });
+  };
   await server.connect(transport);
-  await transport.handleRequest(req, res);
+  try {
+    await transport.handleRequest(req, res);
+  } finally {
+    if (!transport.sessionId) await server.close().catch(() => {});
+  }
 }
 
 async function startHttp() {
