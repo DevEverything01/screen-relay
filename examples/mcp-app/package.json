@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "start": "node server.ts",
-    "start:http": "node server.ts --http"
+    "start:http": "node server.ts --http",
+    "typecheck": "tsc -p ."
   },
   "dependencies": {
     "@modelcontextprotocol/client": "2.4.0",
