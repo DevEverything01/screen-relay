@@ -51,20 +51,15 @@ Stopping a session also stops the processes it started. Save your work before ru
 
 A compositing window manager repaints at the display refresh rate, so the engine captures at most one frame per refresh however high `stream.fps` is set. The XFCE desktop that `relay up` starts enables compositing.
 
-Turn compositing off for the session display. Read `display` and `xauthority` from `relay status --name NAME --json`, then run:
+Turn compositing off from inside the running session. Replace `NAME` with the session name, or omit `--name` for the `default` session:
 
 ```sh
-export DISPLAY=:0 XAUTHORITY=/path/from/relay-status/Xauthority
-xfconf-query -c xfwm4 -p /general/use_compositing -n -t bool -s false
-xfwm4 --replace
+relay run --name NAME -- xfconf-query -c xfwm4 -p /general/use_compositing -n -t bool -s false
 ```
 
-The setting is stored in `~/.config/xfce4` and applies to later sessions in the same home directory. If a restarted session brings compositing back, a saved XFCE session is restoring it. Move the profile aside, then start the session again with the flags you used before:
+The window manager applies the change within a few seconds, without a restart. To turn compositing back on, run the command with `-s true`.
 
-```sh
-mv ~/.config/xfce4 ~/.config/xfce4.bak
-relay up -d --public https://your-host
-```
+Relay keeps each session's XFCE settings in that session's [state directory](/docs/cli#state-directory). The setting therefore stays off when you stop the session and start it again under the same name, and a session with a different name starts with compositing on. Run `xfconf-query` through `relay run`: from a plain shell it changes the settings in `~/.config/xfce4`, which the session doesn't read.
 
 Compare the result in the viewer's **Stream statistics**, which reports the frames actually drawn. With compositing off, a 1280x720 session set to 120 fps draws at the configured rate while the encoder uses a fraction of one core.
 
