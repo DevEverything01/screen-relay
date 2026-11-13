@@ -104,6 +104,11 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
       - run: npm test
+      - name: Typecheck the MCP App example
+        working-directory: examples/mcp-app
+        run: |
+          npm ci --ignore-scripts
+          npm run typecheck
 
   smoke:
     name: Install and smoke test
