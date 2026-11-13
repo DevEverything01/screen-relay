@@ -8,7 +8,41 @@ import { registerViewer } from "./viewer.ts";
 
 const port = Number(process.env.PORT ?? 3001);
 const localHosts = [`localhost:${port}`, `127.0.0.1:${port}`];
-const sessions = new Map<string, NodeStreamableHTTPServerTransport>();
+const defaultIdleMs = 30 * 60_000;
+
+type Session = {
+  transport: NodeStreamableHTTPServerTransport;
+  server: McpServer;
+  lastSeen: number;
+};
+
+const sessions = new Map<string, Session>();
+
+/** Reads the idle timeout from MCP_SESSION_IDLE_MS, falling back to 30 minutes when it is not a positive number. */
+function idleTimeout(): number {
+  const value = Number(process.env.MCP_SESSION_IDLE_MS);
+  return Number.isFinite(value) && value > 0 ? value : defaultIdleMs;
+}
+
+const sessionIdleMs = idleTimeout();
+
+/** Drops a session from the map and closes its transport and server; closing twice is harmless. */
+async function closeSession(id: string): Promise<void> {
+  const session = sessions.get(id);
+  if (!session) return;
+  sessions.delete(id);
+  await session.transport.close().catch(() => {});
+  await session.server.close().catch(() => {});
+}
+
+/** Closes sessions left idle past the timeout, so a host that reconnects without terminating does not pile them up. */
+const sweeper = setInterval(() => {
+  const cutoff = Date.now() - sessionIdleMs;
+  for (const [id, session] of sessions) {
+    if (session.lastSeen <= cutoff) void closeSession(id);
+  }
+}, Math.max(1_000, Math.min(sessionIdleMs, 60_000)));
+sweeper.unref();
 
 /** Builds a server with the relay tools and viewer resource. */
 export function createServer(): McpServer {
@@ -62,8 +96,8 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
   }
   const sessionId = req.headers["mcp-session-id"];
   if (typeof sessionId === "string") {
-    const transport = sessions.get(sessionId);
-    if (!transport) {
+    const session = sessions.get(sessionId);
+    if (!session) {
       res.writeHead(404, { "Content-Type": "application/json" });
       res.end(JSON.stringify({
         jsonrpc: "2.0",
@@ -72,7 +106,13 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
       }));
       return;
     }
-    await transport.handleRequest(req, res);
+    if (req.method === "DELETE") {
+      await closeSession(sessionId);
+      res.writeHead(200).end();
+      return;
+    }
+    session.lastSeen = Date.now();
+    await session.transport.handleRequest(req, res);
     return;
   }
   const server = createServer();
@@ -81,7 +121,7 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
     enableDnsRebindingProtection: true,
     allowedHosts: localHosts,
     onsessioninitialized: (id) => {
-      sessions.set(id, transport);
+      sessions.set(id, { transport, server, lastSeen: Date.now() });
     },
   });
   transport.onclose = () => {

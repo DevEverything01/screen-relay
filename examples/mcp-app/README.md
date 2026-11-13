@@ -33,6 +33,8 @@ The MCP endpoint is `http://localhost:3001/mcp`. Without `--http`, the server us
 
 In HTTP mode, each MCP session keeps its own state. `desktop_screenshot` captures the desktop that the same client opened with `open_desktop`, and returns `Call open_desktop first` to a client that hasn't opened one.
 
+An idle session closes after 30 minutes, and a later request that carries its id returns `404 Session not found`. Set `MCP_SESSION_IDLE_MS` to change the timeout in milliseconds. A host that reconnects without closing its previous session does not keep that session alive.
+
 The HTTP mode listens on loopback only, rejects any request whose `Host` is not this server, and rejects an `Origin` that is not served from this machine. That stops DNS rebinding from reaching the desktop tools while letting a local host such as `http://localhost:8080` connect.
 
 For the ext-apps basic host:
@@ -70,6 +72,8 @@ npm install -g agent-desktop
 ```
 
 Copy `relay-env` to `/vercel/.local/bin/relay-env` and make it executable. It reads `display`, `xauthority`, and the session D-Bus address from relay's `session.json` before running a command, which is what lets these tools reach the running desktop.
+
+It reads the session named by `RELAY_SESSION_NAME`, which defaults to `default`. Set it to the name you gave `relay up --name` to reach a named desktop. The state directory comes from `XDG_STATE_HOME`, or from `$HOME/.local/state` when that is unset. Set `RELAY_STATE` to the full path of a `session.json` to read a file outside that layout. An invalid session name or an unreadable file exits with status 2 and a message on stderr naming the session or the path.
 
 ```json
 { "name": "desktop_action", "arguments": { "args": ["list-windows"] } }

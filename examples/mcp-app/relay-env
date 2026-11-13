@@ -2,11 +2,35 @@
 """Runs a command with the display, authority, and D-Bus address of a relay desktop session."""
 import json
 import os
+import re
 import sys
 
-state = os.environ.get("RELAY_STATE", "/vercel/.local/state/relay/default/session.json")
-with open(state, encoding="utf-8") as handle:
-    session = json.load(handle)
+SESSION_NAME = re.compile(r"[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}")
+
+
+def session_state():
+    """Returns the session state file and the session name it belongs to, or None if RELAY_STATE points at it."""
+    override = os.environ.get("RELAY_STATE")
+    if override:
+        return override, None
+    name = os.environ.get("RELAY_SESSION_NAME") or "default"
+    if not SESSION_NAME.fullmatch(name):
+        sys.stderr.write(f'relay-env: invalid session name "{name}"\n')
+        sys.stderr.write('relay-env: use 1 to 64 characters from letters, digits, ".", "_" or "-"\n')
+        sys.exit(2)
+    root = os.environ.get("XDG_STATE_HOME") or os.path.join(os.path.expanduser("~"), ".local", "state")
+    return os.path.join(root, "relay", name, "session.json"), name
+
+
+path, name = session_state()
+try:
+    with open(path, encoding="utf-8") as handle:
+        session = json.load(handle)
+except (OSError, ValueError) as error:
+    detail = f' for session "{name}"' if name else ""
+    reason = getattr(error, "strerror", None) or error
+    sys.stderr.write(f"relay-env: cannot read {path}{detail}: {reason}\n")
+    sys.exit(2)
 
 env = dict(os.environ)
 env["DISPLAY"] = session["display"]
