@@ -1,8 +1,20 @@
 {
-  "name": "relay",
+  "name": "desktop-relay",
   "version": "0.1.0",
-  "private": true,
+  "description": "Stream a desktop to a browser and control it from a CLI and a Node SDK.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vercel-labs/desktop-relay.git"
+  },
   "type": "module",
+  "bin": {
+    "relay": "dist/cli/relay.mjs"
+  },
+  "files": [
+    "dist",
+    "skills",
+    "packages.tsv"
+  ],
   "exports": {
     ".": {
       "types": "./dist/sdk/index.d.ts",
