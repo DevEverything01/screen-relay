@@ -153,17 +153,7 @@ The build targets macOS 12.3, the first release with ScreenCaptureKit, and fails
 
 ## Releasing
 
-A release is one PR that changes the version. Merging it publishes the release.
-
-1. Bump `version` in `package.json`, then run `npm install --package-lock-only` to update `package-lock.json`.
-2. Add a `## <version>` entry at the top of `CHANGELOG.md`, wrapped in `<!-- release:start -->` and `<!-- release:end -->`. Remove the markers from the previous entry so that only the new one has them.
-3. Open the PR and merge it to `main`.
-
-On every push to `main`, the Release workflow compares the version in `package.json` with the `desktop-relay` version on npm. When they differ, it builds `relay-engine` for Linux x64 and ARM64, macOS ARM64 and x64, and Windows x64, publishes `desktop-relay` to npm, and creates the `v<version>` GitHub release with the binaries attached. The release notes are the text between the markers in `CHANGELOG.md`.
-
-If npm already has the version but the GitHub release is missing, the workflow rebuilds the binaries and creates only the release. Start the workflow by hand from the Actions tab to retry a failed run.
-
-Publishing uses npm trusted publishing from the `Release` environment, so the workflow needs no npm token.
+To cut a release, follow the "Releasing" section of [AGENTS.md](AGENTS.md).
 
 ## Conventions
 
