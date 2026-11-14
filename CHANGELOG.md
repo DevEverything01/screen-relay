@@ -1,6 +1,6 @@
 # desktop-relay
 
-## 0.1.0
+## 0.0.1
 
 <!-- release:start -->
 

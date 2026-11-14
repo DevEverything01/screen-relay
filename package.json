@@ -1,6 +1,6 @@
 {
   "name": "desktop-relay",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "Stream a desktop to a browser and control it from a CLI and a Node SDK.",
   "repository": {
     "type": "git",
