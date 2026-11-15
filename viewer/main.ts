@@ -165,10 +165,9 @@ function watchPending(current: number) {
   }
 }
 /**
- * Tracks the smallest arrival-minus-capture offset as the path's base delay and sets the hold to a high
- * percentile of how much later than that frames normally arrive, capped at MAX_HOLD_MS. A jump in the offset
- * larger than CLOCK_JUMP_MS (idle desktop or a long outage) restarts the clock and the hold. Returns the base
- * the frame is timed against.
+ * Returns the smallest recent arrival-minus-capture offset, the base the frame is timed against, and sets the hold
+ * to a high percentile of how much later frames arrive, capped at MAX_HOLD_MS. An offset jump above CLOCK_JUMP_MS
+ * (idle desktop or a long outage) restarts the clock and the hold.
  */
 function observeArrival(timestamp: number, arrivedMs: number): number {
   const offset = arrivedMs - timestamp / 1000, last = samples.at(-1);
