@@ -63,7 +63,7 @@ When the session has a token, offer both `nsl1` and `bearer.TOKEN` as subprotoco
 | Rule | Detail |
 | --- | --- |
 | Encoding | All integers are unsigned big-endian except the signed input value. Reject malformed messages and unknown types or versions. |
-| Flow control | At most 8 frames and 8 MiB can be in flight. With frames outstanding, the stream closes after about 3 seconds without ACK progress or when the oldest frame reaches 3 seconds. |
+| Flow control | At most 3 seconds of frames at the configured frame rate, and 8 MiB, can be in flight. With frames outstanding, the stream closes after about 3 seconds without ACK progress or when the oldest frame reaches 3 seconds. |
 | Frame size | An access unit is at most 8 MiB; the complete message is at most 8,388,640 bytes. Decode frames in order. |
 | Counters | Reconnect when the frame sequence reaches 4294967295. If the generation reaches that value, restart the session before connecting again. |
 | Cursor | At most 256 by 256 pixels, with the hotspot inside the image. Eight zero bytes restore the local arrow; a transparent image hides the cursor. The cursor does not follow pointer jumps made by the desktop. |

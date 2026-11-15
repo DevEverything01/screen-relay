@@ -65,19 +65,19 @@ Only one of the viewer, `/control`, and `/input` owns input at a time.
 | Rule | Value |
 | --- | --- |
 | Initial credit | 1 frame |
-| Window after first ACK | `clamp(ceil(ack_rtt / 16.667 ms) + 1, 2, 8)` |
+| Window after first ACK | Without TCP statistics: `ceil(peak capture-to-ACK time in seconds x frame rate) + 2`, where the peak covers the last 10 s. With TCP statistics: `ceil(2 x min RTT in seconds x frame rate) + 2`, or 250 ms of frames before the first RTT sample. Clamped to 2 through 3 s of frames. |
 | ACK RTT | EWMA, `0.875 * old + 0.125 * sample` |
-| In flight | At most 8 frames and 8 MiB |
-| Admission pause | Oldest outstanding capture reaches 250 ms |
+| In flight | At most 3 seconds of frames at the configured frame rate, and 8 MiB |
+| Admission pause | With TCP statistics: oldest outstanding capture reaches 2 x min RTT + 2 frame intervals, capped at 3 s, or 250 ms before an RTT is known. Without: the standing queue, measured above the base capture-to-ACK time, reaches the pause queue (base time + 2 frame intervals), or 250 ms before the first ACK. |
 | Generation closed | No ACK progress for 3 s, or oldest capture 3 s old (checked every 100 ms) |
 | x264 | ultrafast, zerolatency, CRF 10, no B frames, no lookahead, no scheduled IDRs (IDR only at session start and recovery), 1 thread |
 | Bitrate target | Starts at `--bitrate-start` (default 8 Mbps), clamped by `--bitrate-min` and `--bitrate-max` (default 1 to 40 Mbps). The VBV buffer holds about 1/15 s at the target rate. |
-| Decrease | Target x 0.75 (and at most 90% of measured goodput) when 2+ frames and enough bytes are outstanding, oldest capture is 200 ms old, and 500 ms since the last decrease. The floor is the configured minimum. |
-| Increase | Target x 1.10 after a busy 1 s sample, oldest under 100 ms, 1 s since last increase, 2 s since last decrease. |
+| Decrease | Without TCP statistics: target x 0.75 (and at most 90% of measured goodput) when 2+ frames and enough bytes are outstanding, the standing network queue is at least half the pause queue, and 500 ms since the last decrease. The floor is the configured minimum. |
+| Increase | Without TCP statistics: target x 1.10 after a busy 1 s sample, the standing network queue is below a quarter of the pause queue, 1 s since last increase, 2 s since last decrease. |
 
 Engine flags: `--fps` takes 10 to 120. `--bitrate-min`, `--bitrate-start`, and `--bitrate-max` take bits per second with `250000 <= min <= start <= max <= 100000000`. `relay-engine --help` lists them with their defaults.
 
-ACK time includes network, decode, scheduling, and waiting for a frame to be drawn or superseded. It is not pure RTT. Paths with latency near 200 ms can back off repeatedly.
+ACK time includes network, decode, scheduling, and waiting for a frame to be drawn or superseded. It is not pure RTT.
 
 Quality recovery: when the picture is unchanged for 150 ms, the capture worker re-encodes the full picture as a P frame. If the transport queue is empty it keeps refining at up to the configured frame rate, using a VBV buffer twice the motion size at the current target bitrate. Forced IDR frames at session start and recovery use that same larger buffer. Refinement stops when:
 
