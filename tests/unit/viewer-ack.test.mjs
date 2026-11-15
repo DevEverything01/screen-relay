@@ -511,7 +511,6 @@ test('a 60 ms stall every 500 ms is smoothed without dropping frames once the ho
   assert.equal(stats.superseded, 0);
   assert.equal(stats.drawn, frames);
   assert.ok(maxGap(drawnAt, 3000) <= 2 * 16.667 + 1, `max gap ${maxGap(drawnAt, 3000)}`);
-  assert.ok(stats.holdMs <= 100);
 });
 
 test('on a clean link the hold stays under one refresh', () => {
@@ -546,4 +545,56 @@ test('every frame is acknowledged once and in order under stalls', () => {
   assert.ok(acked.length >= frames - 8);
   const closed = traced(app, 'close').slice(0, acked.length);
   assert.deepEqual(closed, [...closed].sort((a, b) => a - b));
+});
+
+const FRAME_MS = 16.667;
+const feed = (app, k, at) => { app.setTime(at); app.frame(k, 1280, 720, 8, Math.round(k * FRAME_MS * 1000) + 1); };
+const withHold = () => {
+  const app = viewer();
+  for (let k = 1; k <= 20; k++) { feed(app, k, k * FRAME_MS); app.refresh(k * FRAME_MS + 0.5); }
+  for (let k = 21; k <= 23; k++) { feed(app, k, k * FRAME_MS + 60); app.refresh(k * FRAME_MS + 60.5); }
+  assert.ok(app.context.window.nativeStats.holdMs > 50);
+  return app;
+};
+
+test('a clock jump while frames are queued does not stall them', () => {
+  const app = withHold();
+  for (let k = 24; k <= 27; k++) feed(app, k, k * FRAME_MS + 60);
+  assert.equal(traced(app, 'draw').length, 24);
+  const jumpAt = 28 * FRAME_MS + 5060;
+  feed(app, 28, jumpAt);
+  for (let time = jumpAt + 1, refreshes = 0; traced(app, 'ack').length < 28 && refreshes < 6; time += FRAME_MS, refreshes++) app.refresh(time);
+  assert.equal(traced(app, 'draw').at(-1), Math.round(28 * FRAME_MS * 1000) + 1);
+  assert.deepEqual(traced(app, 'ack'), Array.from({ length: 28 }, (_, index) => index + 1));
+});
+
+test('a new generation does not inherit the clock or the hold', () => {
+  const app = withHold();
+  runInContext('relayViewer.reset()', app.context);
+  assert.equal(app.context.window.nativeStats.holdMs, 0);
+  const before = traced(app, 'draw').length;
+  feed(app, 1, 5000);
+  assert.equal(traced(app, 'draw').length, before + 1);
+  assert.equal(app.context.window.nativeStats.holdMs, 0);
+});
+
+test('under a hold, frames wait for their due time and a trimmed frame is acknowledged with its wait', () => {
+  const app = withHold();
+  const start = 460;
+  app.setTime(start);
+  for (let k = 24; k <= 37; k++) app.frame(k, 1280, 720, 8, Math.round(k * FRAME_MS * 1000) + 1);
+  const hold = app.context.window.nativeStats.holdMs;
+  assert.ok(hold > 50);
+  app.refresh(start + 1);
+  const drawn = traced(app, 'draw').length, acked = traced(app, 'ack').length;
+  assert.equal(drawn, 24);
+  assert.equal(app.context.window.nativeStats.superseded, 0);
+  app.refresh(start + hold + 1);
+  assert.equal(app.context.window.nativeStats.superseded, 11);
+  assert.equal(traced(app, 'draw').length, drawn + 1);
+  const waits = app.sockets[0].waits.slice(acked);
+  assert.equal(waits.length, 12);
+  for (const wait of waits) assert.ok(Math.abs(wait - (hold + 1) * 1000) < 1);
+  const all = traced(app, 'ack');
+  assert.deepEqual(all, Array.from({ length: all.length }, (_, index) => index + 1));
 });

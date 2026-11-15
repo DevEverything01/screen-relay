@@ -44,8 +44,20 @@ const stats = ((window as any).nativeStats = {
 let socket: WebSocket, decoder: VideoDecoder, retryTimer: any, deadline: any, frameHandle = 0, drawnThisFrame = false, transportBroken = false;
 let generation = 0, sequence = 0, lastTimestamp = -1, ready = false, retry = 0, epoch = 0;
 let backlogSince: number | null = null, lastCatchUp = -Infinity;
-const CLOCK_WINDOW_MS = 5000, JITTER_WINDOW_MS = 2000, MAX_HOLD_MS = 100, HOLD_DECAY_PER_MS = 0.05, CLOCK_JUMP_US = 500000, JITTER_QUANTILE = 0.95;
-let offsets: { t: number; o: number }[] = [], jitters: { t: number; j: number }[] = [], baseUs = 0, holdMs = 0, lastOffset = 0, lastObserved = 0;
+/** How far back the smallest arrival-minus-capture offset is searched, in ms. */
+const CLOCK_WINDOW_MS = 5000;
+/** How far back arrival delays are measured to size the hold, in ms. */
+const JITTER_WINDOW_MS = 2000;
+/** Share of recent arrivals the hold must cover. */
+const JITTER_QUANTILE = 0.95;
+/** Longest hold in ms; a longer hold smooths more but delays what the user sees after typing. */
+const MAX_HOLD_MS = 100;
+/** Milliseconds the hold shrinks per millisecond that passes. */
+const HOLD_DECAY = 0.05;
+/** Change in the offset, in ms, that restarts the clock. */
+const CLOCK_JUMP_MS = 500;
+type Sample = { time: number; offset: number; late: number };
+let samples: Sample[] = [], lows: Sample[] = [], holdMs = 0;
 let buttons = 0, modifiers = 0, x = 0, y = 0, viewOnly = false, capsLock = false,
   metaAsCtrl = stored('relay.metaCtrl') === null ? macos() : stored('relay.metaCtrl') === '1';
 const pending = new Map(), decoded: any[] = [], held = new Set<number>(), latched = new Map<number, Element>();
@@ -123,7 +135,7 @@ function reset() {
   drawnThisFrame = false;
   backlogSince = null;
   lastCatchUp = -Infinity;
-  offsets = []; jitters = []; baseUs = holdMs = stats.holdMs = 0;
+  samples = []; lows = []; holdMs = stats.holdMs = 0;
   pending.clear();
   for (const item of decoded) item.frame.close();
   decoded.length = 0;
@@ -155,26 +167,32 @@ function watchPending(current: number) {
 /**
  * Tracks the smallest arrival-minus-capture offset as the path's base delay and sets the hold to a high
  * percentile of how much later than that frames normally arrive, capped at MAX_HOLD_MS. A jump in the offset
- * larger than CLOCK_JUMP_US (idle desktop or a long outage) restarts the clock and returns true so the frame is shown at once.
+ * larger than CLOCK_JUMP_MS (idle desktop or a long outage) restarts the clock and the hold. Returns the base
+ * the frame is timed against.
  */
-function observeArrival(timestamp: number, arrivedMs: number): boolean {
-  const o = arrivedMs * 1000 - timestamp, rebased = offsets.length > 0 && Math.abs(o - lastOffset) > CLOCK_JUMP_US;
-  if (rebased) { offsets = []; jitters = []; }
-  lastOffset = o;
-  offsets.push({ t: arrivedMs, o });
-  while (offsets[0].t < arrivedMs - CLOCK_WINDOW_MS) offsets.shift();
-  baseUs = Math.min(...offsets.map((sample) => sample.o));
-  jitters.push({ t: arrivedMs, j: (o - baseUs) / 1000 });
-  while (jitters[0].t < arrivedMs - JITTER_WINDOW_MS) jitters.shift();
-  const sorted = jitters.map((sample) => sample.j).sort((a, b) => a - b);
-  const target = Math.min(MAX_HOLD_MS, sorted[Math.floor(JITTER_QUANTILE * (sorted.length - 1))]);
-  holdMs = target >= holdMs ? target : Math.max(target, holdMs - (arrivedMs - lastObserved) * HOLD_DECAY_PER_MS);
-  lastObserved = arrivedMs;
+function observeArrival(timestamp: number, arrivedMs: number): number {
+  const offset = arrivedMs - timestamp / 1000, last = samples.at(-1);
+  if (last && Math.abs(offset - last.offset) > CLOCK_JUMP_MS) { samples = []; lows = []; holdMs = 0; }
+  const previous = samples.at(-1)?.time ?? arrivedMs, sample = { time: arrivedMs, offset, late: 0 };
+  samples.push(sample);
+  while (lows.length && lows[lows.length - 1].offset >= offset) lows.pop();
+  lows.push(sample);
+  while (samples[0].time < arrivedMs - CLOCK_WINDOW_MS) {
+    if (lows[0] === samples[0]) lows.shift();
+    samples.shift();
+  }
+  const base = lows[0].offset, recent: number[] = [];
+  sample.late = offset - base;
+  for (let i = samples.length - 1; i >= 0 && samples[i].time >= arrivedMs - JITTER_WINDOW_MS; i--) recent.push(samples[i].late);
+  recent.sort((a, b) => a - b);
+  const target = Math.min(MAX_HOLD_MS, recent[Math.floor(JITTER_QUANTILE * (recent.length - 1))]);
+  holdMs = target >= holdMs ? target : Math.max(target, holdMs - (arrivedMs - previous) * HOLD_DECAY);
   stats.holdMs = holdMs;
-  return rebased;
+  return base;
 }
+/** A frame is due once its capture time on the clock it arrived under, plus the current hold, has passed; 1e-6 ms absorbs float rounding. */
 function isDue(item: any, now: number): boolean {
-  return item.rebased || (item.timestamp + baseUs) / 1000 + holdMs <= now;
+  return item.timestamp / 1000 + item.base + holdMs <= now + 1e-6;
 }
 function dueCount(now: number): number {
   let count = 0;
@@ -217,29 +235,42 @@ function draw(item: any): boolean {
   drawnThisFrame = true;
   return ackFrame(item);
 }
-function trimDecoded(now: number): boolean {
+type Phase = 'idle' | 'backlog' | 'catchUp' | 'overrun';
+/**
+ * Decides what the presenter does this refresh: nothing, wait out a backlog, drop one frame, or drop down to two.
+ * `draws` is 1 when this refresh will draw a frame, so a queue of three that the draw brings to two is idle.
+ */
+function presenterPhase(due: number, draws: number, backlogMs: number, sinceCatchUpMs: number, headOverstayMs: number): Phase {
+  if (due <= 2) return 'idle';
+  if (due > 12 || headOverstayMs > 200) return 'overrun';
+  if (due - draws <= 2) return 'idle';
+  return backlogMs < 500 || sinceCatchUpMs < 250 ? 'backlog' : 'catchUp';
+}
+function trimDecoded(now: number, draws = 0): boolean {
   let due = dueCount(now);
-  if (due <= 2) {
+  const phase = presenterPhase(
+    due, draws, now - (backlogSince ?? now), now - lastCatchUp, decoded.length ? now - decoded[0].arrived - holdMs : 0,
+  );
+  if (phase === 'idle') {
     backlogSince = null;
     return true;
   }
   backlogSince ??= now;
-  const hardLimit = due > 12 || now - decoded[0].decodedAt - holdMs > 200;
-  if (!hardLimit && (now - backlogSince < 500 || now - lastCatchUp < 250)) return true;
+  if (phase === 'backlog') return true;
   do {
     const dropped = decoded.shift();
     dropped.frame.close();
     stats.superseded++;
     due--;
     if (!ackFrame(dropped)) return false;
-  } while (hardLimit && due > 2);
+  } while (phase === 'overrun' && due > 2);
   if (due <= 2) backlogSince = null;
-  if (!hardLimit) lastCatchUp = now;
+  if (phase === 'catchUp') lastCatchUp = now;
   return true;
 }
 function presentDecoded(item: any): boolean {
   const now = performance.now(), immediate = !decoded.length && !drawnThisFrame;
-  decoded.push({ ...item, decodedAt: now });
+  decoded.push(item);
   if (!trimDecoded(now)) return false;
   if (immediate && isDue(decoded[0], now) && !draw(decoded.shift())) return false;
   schedulePresent();
@@ -249,13 +280,12 @@ function present() {
   frameHandle = 0;
   drawnThisFrame = false;
   const now = performance.now();
-  if (!trimDecoded(now)) return;
+  if (!trimDecoded(now, 1)) return;
   let drew = false;
   if (decoded.length && isDue(decoded[0], now)) {
     if (!draw(decoded.shift())) return;
     drew = true;
   }
-  if (dueCount(now) <= 2) backlogSince = null;
   if (drew || decoded.length) schedulePresent();
 }
 function connect() {
@@ -312,7 +342,7 @@ function connect() {
       stats.received++;
       stats.bytes += data.byteLength;
       const arrived = performance.now();
-      pending.set(timestamp, { gen, seq, bytes: data.byteLength, arrived, timestamp, rebased: observeArrival(timestamp, arrived) });
+      pending.set(timestamp, { gen, seq, bytes: data.byteLength, arrived, timestamp, base: observeArrival(timestamp, arrived) });
       stats.outstanding = pending.size;
       stats.pendingBytes += data.byteLength;
       stats.pendingHighWater = Math.max(stats.pendingHighWater, pending.size);
@@ -337,7 +367,8 @@ function connect() {
               pending.delete(frame.timestamp);
               stats.pendingBytes -= item.bytes;
               stats.outstanding = pending.size;
-              if (!presentDecoded({ gen: item.gen, seq: item.seq, arrived: item.arrived, timestamp: item.timestamp, rebased: item.rebased, frame })) return;
+              item.frame = frame;
+              if (!presentDecoded(item)) return;
               watchPending(current);
             } catch (error: any) {
               fail(`Draw failed: ${error.message}`);

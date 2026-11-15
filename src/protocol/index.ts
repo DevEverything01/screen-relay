@@ -115,7 +115,7 @@ export function encodeInput(event: InputEvent, generation: number, sequence: num
 }
 
 /** Builds an ACK carrying how long the frame waited inside the viewer, in microseconds, saturating at 2^32 - 1. */
-export function encodeAck(generation: number, sequence: number, viewerWaitMs = 0): Uint8Array {
+export function encodeAck(generation: number, sequence: number, viewerWaitMs: number): Uint8Array {
   const bytes = header(MESSAGE_TYPES.ack, generation, sequence, 4);
   const micros = Number.isFinite(viewerWaitMs) ? Math.min(0xffffffff, Math.max(0, Math.round(viewerWaitMs * 1000))) : 0;
   new DataView(bytes.buffer).setUint32(HEADER_SIZE, micros);
