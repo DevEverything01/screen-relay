@@ -509,6 +509,12 @@ int main() {
   }
 
   for (const unsigned fps : {60u, 120u}) {
+    FlowControl short_hold;
+    short_hold.configure(1000000, 8000000, 40000000, fps);
+    assert(simulate(short_hold, fps, 20000, 0, 0, 12, 2000000, 0, 0, 0, 80000).skipped <= fps / 10);
+  }
+
+  for (const unsigned fps : {60u, 120u}) {
     for (const uint64_t base : {5000ULL, 20000ULL}) {
       const uint64_t interval = 1000000 / fps;
       for (const uint64_t jitter : {interval, 2 * interval}) {

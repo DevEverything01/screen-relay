@@ -102,7 +102,7 @@ Safety limits: at most 3 s of frames and 8 MiB on the way; the stream closes aft
 
 Each acknowledgement gives the engine two numbers: the time from capture to acknowledgement, and how long the frame waited in the viewer.
 
-- **Base delay.** The shortest capture-to-acknowledgement time over the last 10 seconds is the link's normal delay.
+- **Base delay.** The link's normal delay: the shortest network delay over the last 10 seconds, plus the longest recent viewer wait up to 100 ms. A viewer that starts holding frames does not look like congestion.
 - **Standing queue.** The smallest delay above the base over one round trip. A single late burst leaves it at zero, because some frames in that round trip still arrive on time. Real congestion raises it.
 
 The engine turns these into three decisions:

@@ -94,8 +94,8 @@ struct FlowControl {
     const uint64_t next = now + (frames.empty() ? idle_sample_interval_us : sample_interval_us);
     return pending ? std::min(pending, next) : next;
   }
-  /** Minimum capture-to-acknowledgement time over the last 10 s; zero when unmeasured. A queue that stands for the whole window becomes the new base because nothing drains it; the pause and the 3 s timeout bound that. */
-  uint64_t baseDepthUs() const { return depth.overall(0); }
+  /** Capture-to-acknowledgement time of an uncongested frame: the network base plus the viewer's wait, so a hold the viewer adds is not read as queue; zero when unmeasured. A queue that stands for the whole window becomes the new base because nothing drains it; the pause and the 3 s timeout bound that. */
+  uint64_t baseDepthUs() const { return networkBaseDepthUs() + viewerWaitUs(); }
   /** Largest capture-to-acknowledgement time over the last 10 s; sizes the frame window. */
   uint64_t peakDepthUs() const { return peak.overall(0); }
   /** Smallest network depth (capture-to-acknowledgement minus viewer wait) over the last 10 s; zero when unmeasured. */
