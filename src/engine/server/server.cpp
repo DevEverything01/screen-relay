@@ -130,7 +130,7 @@ void Server::updateFlow() {
     flow.update(now);
     gen = generation; window = flow.window; bitrate = flow.frameBitrate(); paused = flow.paused(now);
     inflight = !flow.frames.empty();
-    admit_until = inflight ? flow.frames.front().captured_us + flow.admissionAgeUs() : 0;
+    admit_until = inflight && flow.transport_available ? flow.frames.front().captured_us + flow.admissionAgeUs() : 0;
 #ifdef __linux__
     notsent_lowat = flow.notsentLowat();
 #endif

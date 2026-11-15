@@ -25,9 +25,31 @@ struct FlowControl {
     bool app_limited = false;
   };
   struct DeliverySample { uint64_t time_us, rate_bps; };
-  struct DepthSample { uint64_t time_us, depth_us; };
-  std::deque<DepthSample> depth_samples;
-  std::deque<DepthSample> peak_samples, standing_samples, network_base_samples, network_standing_samples;
+  /** Sliding-window extreme of timestamped values: keep a span, read the smallest (or largest) value over any shorter trailing window. */
+  struct WindowExtreme {
+    struct Sample { uint64_t time_us, value; };
+    std::deque<Sample> samples;
+    bool smallest = true;
+    void push(uint64_t now, uint64_t value, uint64_t span_us) {
+      while (!samples.empty() && now - std::min(now, samples.front().time_us) >= span_us) samples.pop_front();
+      while (!samples.empty() && (smallest ? samples.back().value >= value : samples.back().value <= value)) samples.pop_back();
+      samples.push_back({now, value});
+    }
+    bool empty() const { return samples.empty(); }
+    uint64_t overall(uint64_t none) const { return samples.empty() ? none : samples.front().value; }
+    /** Makes later reads over a window ignore anything older than `window_us` before `now`, even if a longer window is read later. */
+    void forget(uint64_t now, uint64_t window_us) { forgotten_us = std::max(forgotten_us, now - std::min(now, window_us)); }
+    uint64_t over(uint64_t now, uint64_t window_us, uint64_t none, uint64_t floor_us = 0) const {
+      for (const auto& sample : samples) {
+        if (sample.time_us > std::max(forgotten_us, floor_us) && now - std::min(now, sample.time_us) < window_us) return sample.value;
+      }
+      return none;
+    }
+    uint64_t forgotten_us = 0;
+  };
+  WindowExtreme depth, network, peak{{}, false};
+  /** Age of the oldest unacknowledged frame, sampled on service ticks; lets a stall be seen while no acknowledgements arrive. */
+  WindowExtreme waiting;
   TransportSample transport;
   bool transport_available = false;
   uint64_t delivery_rate_bps = 0, last_transport_update_us = 0;
@@ -39,10 +61,12 @@ struct FlowControl {
   uint32_t last_encoded = 0;
   uint64_t acknowledged = 0, encoded = 0, last_progress_us = 0;
   uint64_t target_bitrate = initial_bitrate;
+  /** Smoothed send-to-acknowledgement time; reported by /metrics only. */
   double ack_rtt_us = 0;
   unsigned window = 1;
   uint64_t sample_start_us = 0, sample_bytes = 0, sample_acks = 0, previous_sent_us = 0;
   uint64_t last_decrease_us = 0, last_increase_us = 0;
+  /** Rate measured over the last busy sample; reported by /metrics, and caps a cut. */
   double goodput_bps = 0;
   unsigned frame_rate = 60;
 
@@ -69,59 +93,48 @@ struct FlowControl {
     const uint64_t next = now + (frames.empty() ? idle_sample_interval_us : sample_interval_us);
     return pending ? std::min(pending, next) : next;
   }
-  /** Minimum capture-to-acknowledgement time over recent frames; zero when behind TCP statistics or unmeasured. */
-  uint64_t baseDepthUs() const {
-    return transport_available || depth_samples.empty() ? 0 : depth_samples.front().depth_us;
-  }
-  /** Largest capture-to-acknowledgement time seen recently; sizes the frame window. */
-  uint64_t peakDepthUs() const { return peak_samples.empty() ? 0 : peak_samples.front().depth_us; }
+  /** Minimum capture-to-acknowledgement time over the last 10 s; zero when unmeasured. A queue that stands for the whole window becomes the new base because nothing drains it; the pause and the 3 s timeout bound that. */
+  uint64_t baseDepthUs() const { return depth.overall(0); }
+  /** Largest capture-to-acknowledgement time over the last 10 s; sizes the frame window. */
+  uint64_t peakDepthUs() const { return peak.overall(0); }
+  /** Smallest network depth (capture-to-acknowledgement minus viewer wait) over the last 10 s; zero when unmeasured. */
+  uint64_t networkBaseDepthUs() const { return network.overall(0); }
   /** Span over which the smallest queueing delay is taken: one base round trip, at least two frame intervals. */
   uint64_t standingWindowUs() const { return std::max(baseDepthUs(), 2 * frameIntervalUs()); }
-  /** Oldest-frame age at which capture stops: base depth plus two frame intervals of standing queue, or the TCP round trip bound. */
+  /** Standing queue at which capture stops: the base plus two frame intervals, or 250 ms before any acknowledgement. This mirrors the TCP-statistics rule of twice the round trip plus two frame intervals. */
+  uint64_t pauseQueueUs() const {
+    return depth.empty() ? pause_age_us : baseDepthUs() + 2 * frameIntervalUs();
+  }
+  /** Oldest-frame age at which capture pauses, as /metrics reports it. With TCP statistics it also gates admission; without, it is the base depth plus the pause queue. */
   uint64_t admissionAgeUs() const {
-    if (transport_available) {
-      if (!transport.min_rtt_us) return pause_age_us;
-      return std::min(timeout_us, 2 * std::min(transport.min_rtt_us, timeout_us) + 2 * frameIntervalUs());
-    }
-    return depth_samples.empty() ? pause_age_us : timeout_us;
+    return transport_available ? transportAgeLimitUs() : baseDepthUs() + pauseQueueUs();
   }
-  /** Smallest network depth over recent frames (capture-to-acknowledgement minus viewer wait); zero when behind TCP statistics or unmeasured. */
-  uint64_t networkBaseDepthUs() const {
-    return transport_available || network_base_samples.empty() ? 0 : network_base_samples.front().depth_us;
+  /** Oldest-frame age at which capture stops with TCP statistics: twice the minimum round trip plus two frame intervals, capped at 3 s, or 250 ms before a round trip is known. */
+  uint64_t transportAgeLimitUs() const {
+    if (!transport.min_rtt_us) return pause_age_us;
+    return std::min(timeout_us, 2 * std::min(transport.min_rtt_us, timeout_us) + 2 * frameIntervalUs());
   }
-  uint64_t standingAbove(uint64_t now, const std::deque<DepthSample>& samples, uint64_t base) const {
+  /** Queueing delay present for the whole recent window: the smallest oldest-frame age or acknowledgement time in it, above the given base. */
+  uint64_t standingAbove(uint64_t now, const WindowExtreme& acknowledged_depths, uint64_t base) const {
     if (frames.empty()) return 0;
-    uint64_t lowest = oldestAge(now);
-    for (const auto& sample : samples) {
-      if (now - std::min(now, sample.time_us) < standingWindowUs()) { lowest = std::min(lowest, sample.depth_us); break; }
-    }
+    const uint64_t window = standingWindowUs();
+    const uint64_t lowest = std::min({oldestAge(now), acknowledged_depths.over(now, window, ~0ULL),
+        waiting.over(now, window, ~0ULL, acknowledged_depths.forgotten_us)});
     return lowest > base ? lowest - base : 0;
   }
-  /** Queueing delay present for the whole recent window, wherever it sits: the smallest oldest-frame age or acknowledgement time, above the base depth. */
-  uint64_t standingQueueUs(uint64_t now) const { return standingAbove(now, standing_samples, baseDepthUs()); }
+  /** The total standing queue, viewer wait included. */
+  uint64_t standingQueueUs(uint64_t now) const { return standingAbove(now, depth, baseDepthUs()); }
   /** The part of the standing queue that is in the network, with the time frames wait inside the viewer taken out. */
-  uint64_t standingNetworkQueueUs(uint64_t now) const {
-    return standingAbove(now, network_standing_samples, networkBaseDepthUs());
-  }
-  /** Standing queue at which capture stops; the other states sit at a half and a quarter of it. */
-  uint64_t pauseQueueUs() const {
-    return depth_samples.empty() ? pause_age_us : baseDepthUs() + 2 * frameIntervalUs();
-  }
+  uint64_t standingNetworkQueueUs(uint64_t now) const { return standingAbove(now, network, networkBaseDepthUs()); }
+  /** Classifies a standing queue against the pause limit: clear below a quarter of it, building below half, congested below the limit, paused at it. */
   Pressure levelOf(uint64_t queue) const {
     const uint64_t limit = pauseQueueUs();
     if (queue >= limit) return Pressure::paused;
     if (queue >= limit / 2) return Pressure::congested;
     return queue >= limit / 4 ? Pressure::building : Pressure::clear;
   }
-  /** Capture admission: the total standing queue, viewer wait included, against its limit. */
-  Pressure pressure(uint64_t now) const {
-    if (transport_available) return oldestAge(now) >= admissionAgeUs() ? Pressure::paused : Pressure::clear;
-    return levelOf(standingQueueUs(now));
-  }
-  /** Bitrate decisions: the standing network queue against the same limit. */
-  Pressure networkPressure(uint64_t now) const {
-    return levelOf(standingNetworkQueueUs(now));
-  }
+  /** Bitrate decisions without TCP statistics: the standing network queue against the same limit as the pause. */
+  Pressure networkPressure(uint64_t now) const { return levelOf(standingNetworkQueueUs(now)); }
   unsigned frameLimit() const {
     const uint64_t count = (timeout_us * frame_rate + 999999) / 1000000;
     return unsigned(std::clamp<uint64_t>(count, 2, max_frames));
@@ -149,9 +162,14 @@ struct FlowControl {
     return uint64_t(double(target_bitrate) *
         (1.0 - 0.75 * double(queued - interval) / double(2 * interval)));
   }
+  bool pausedWithTransport(uint64_t now) const {
+    return oldestAge(now) >= transportAgeLimitUs() || frames.size() >= window || senderQueueUs() >= 3 * frameIntervalUs();
+  }
+  bool pausedWithoutTransport(uint64_t now) const {
+    return levelOf(standingQueueUs(now)) == Pressure::paused;
+  }
   bool paused(uint64_t now) const {
-    return bytes >= max_bytes || pressure(now) == Pressure::paused ||
-        (transport_available && (frames.size() >= window || senderQueueUs() >= 3 * frameIntervalUs()));
+    return bytes >= max_bytes || (transport_available ? pausedWithTransport(now) : pausedWithoutTransport(now));
   }
   bool timedOut(uint64_t now) const {
     return !frames.empty() && (now - std::min(now, last_progress_us) >= timeout_us ||
@@ -181,7 +199,7 @@ struct FlowControl {
     recordDepth(frame.captured_us, now, viewer_wait_us);
     // Sample continuous demand only: idle gaps and tiny updates are not capacity evidence.
     if (!transport_available) {
-      if (previous_sent_us && frame.sent_us - previous_sent_us > 3000000 / frame_rate) {
+      if (previous_sent_us && frame.sent_us - previous_sent_us > 3 * frameIntervalUs()) {
         sample_start_us = sample_bytes = sample_acks = 0;
       }
       if (!sample_start_us) sample_start_us = frame.sent_us;
@@ -192,21 +210,14 @@ struct FlowControl {
     update(now);
     return true;
   }
-  static void track(std::deque<DepthSample>& samples, bool smallest, uint64_t now, uint64_t depth, uint64_t window) {
-    while (!samples.empty() && now - std::min(now, samples.front().time_us) >= window) samples.pop_front();
-    while (!samples.empty() && (smallest ? samples.back().depth_us >= depth : samples.back().depth_us <= depth)) {
-      samples.pop_back();
-    }
-    samples.push_back({now, depth});
-  }
   void recordDepth(uint64_t captured, uint64_t now, uint64_t viewer_wait_us) {
-    const uint64_t depth = now - std::min(now, captured);
-    const uint64_t network = depth - (viewer_wait_us <= depth ? viewer_wait_us : 0);
-    track(network_base_samples, true, now, network, base_window_us);
-    track(network_standing_samples, true, now, network, standingWindowUs());
-    track(depth_samples, true, now, depth, base_window_us);
-    track(peak_samples, false, now, depth, base_window_us);
-    track(standing_samples, true, now, depth, standingWindowUs());
+    const uint64_t total = now - std::min(now, captured);
+    const uint64_t kept_before = transport_available ? 2 * frameIntervalUs() : standingWindowUs();
+    network.forget(now, kept_before);
+    depth.push(now, total, base_window_us);
+    peak.push(now, total, base_window_us);
+    network.push(now, total - (viewer_wait_us <= total ? viewer_wait_us : 0), base_window_us);
+    depth.forget(now, transport_available ? 2 * frameIntervalUs() : standingWindowUs());
   }
   void expireDelivery(uint64_t now) {
     while (!delivery_samples.empty() &&
@@ -237,41 +248,40 @@ struct FlowControl {
     goodput_bps = 0;
     updateWindow();
   }
-  void updateWindow() {
-    if (transport_available) {
-      const uint64_t count = transport.min_rtt_us ?
-          (2 * std::min(transport.min_rtt_us, timeout_us) * frame_rate + 999999) / 1000000 + 2 :
-          (pause_age_us * frame_rate + 999999) / 1000000;
-      window = unsigned(std::clamp<uint64_t>(count, 2, frameLimit()));
-    } else {
-      window = acknowledged ? unsigned(std::clamp(
-          std::ceil(double(peakDepthUs()) * frame_rate / 1000000.0) + 2.0, 2.0, double(frameLimit()))) : 1;
-    }
+  void windowWithTransport() {
+    const uint64_t count = transport.min_rtt_us ?
+        (2 * std::min(transport.min_rtt_us, timeout_us) * frame_rate + 999999) / 1000000 + 2 :
+        (pause_age_us * frame_rate + 999999) / 1000000;
+    window = unsigned(std::clamp<uint64_t>(count, 2, frameLimit()));
   }
-  void update(uint64_t now) {
-    updateWindow();
-    if (transport_available) {
-      expireDelivery(now);
-      const uint64_t elapsed = now - std::min(now, last_transport_update_us);
-      last_transport_update_us = now;
-      const uint64_t probe = transport.app_limited || !delivery_rate_bps ?
-          headroomBitrate(target_bitrate, max_bitrate, elapsed, senderQueueUs(), frameIntervalUs(),
-              oldestAge(now), admissionAgeUs()) : 0;
-      if (delivery_rate_bps) {
-        const double desired = std::clamp(double(delivery_rate_bps) * 0.85,
-            double(min_bitrate), double(max_bitrate));
-        if (!transport.app_limited || desired > double(target_bitrate)) {
-          const double weight = 1.0 - std::exp(-double(elapsed) / double(bitrate_smoothing_us));
-          target_bitrate = std::clamp<uint64_t>(uint64_t(std::round(double(target_bitrate) +
-              (desired - double(target_bitrate)) * weight)), min_bitrate, max_bitrate);
-        }
+  void windowWithoutTransport() {
+    window = acknowledged ? unsigned(std::clamp(
+        std::ceil(double(peakDepthUs()) * frame_rate / 1000000.0) + 2.0, 2.0, double(frameLimit()))) : 1;
+  }
+  void updateWindow() { transport_available ? windowWithTransport() : windowWithoutTransport(); }
+  void bitrateWithTransport(uint64_t now) {
+    expireDelivery(now);
+    const uint64_t elapsed = now - std::min(now, last_transport_update_us);
+    last_transport_update_us = now;
+    const uint64_t probe = transport.app_limited || !delivery_rate_bps ?
+        headroomBitrate(target_bitrate, max_bitrate, elapsed, senderQueueUs(), frameIntervalUs(),
+            oldestAge(now), transportAgeLimitUs()) : 0;
+    if (delivery_rate_bps) {
+      const double desired = std::clamp(double(delivery_rate_bps) * 0.85,
+          double(min_bitrate), double(max_bitrate));
+      if (!transport.app_limited || desired > double(target_bitrate)) {
+        const double weight = 1.0 - std::exp(-double(elapsed) / double(bitrate_smoothing_us));
+        target_bitrate = std::clamp<uint64_t>(uint64_t(std::round(double(target_bitrate) +
+            (desired - double(target_bitrate)) * weight)), min_bitrate, max_bitrate);
       }
-      target_bitrate = std::max(target_bitrate, probe);
-      return;
     }
+    target_bitrate = std::max(target_bitrate, probe);
+  }
+  void bitrateWithoutTransport(uint64_t now) {
     if (!frames.empty()) {
-      track(standing_samples, true, now, oldestAge(now), standingWindowUs());
-      track(network_standing_samples, true, now, oldestAge(now), standingWindowUs());
+      waiting.push(now, oldestAge(now), base_window_us);
+      depth.forget(now, standingWindowUs());
+      network.forget(now, standingWindowUs());
     }
     const bool busy = sample_start_us && sample_acks >= 8 && sample_bytes >= 65536;
     const uint64_t interval = sample_start_us ? now - std::min(now, sample_start_us) : 0;
@@ -291,6 +301,10 @@ struct FlowControl {
       last_increase_us = now;
     }
     if (interval >= 1000000) { sample_start_us = now; sample_bytes = sample_acks = 0; }
+  }
+  void update(uint64_t now) {
+    updateWindow();
+    transport_available ? bitrateWithTransport(now) : bitrateWithoutTransport(now);
   }
 };
 }  // namespace relay

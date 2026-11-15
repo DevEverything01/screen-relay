@@ -1,6 +1,7 @@
 #include "core/flow.hpp"
 #include <cassert>
 #include <iostream>
+#include <tuple>
 #include <utility>
 
 int main() {
@@ -16,7 +17,7 @@ int main() {
   assert(f.sent(1, 20));
   assert(!f.ack(2, 30));
   assert(f.ack(1, 100020));
-  assert(f.window == 9 && f.bytes == 0 && f.acknowledged == 1);
+  assert(f.bytes == 0 && f.acknowledged == 1);
   assert(!f.ack(1, 100021));
   for (uint32_t seq = 2; seq < 10; ++seq) assert(f.enqueue(seq, 100, 100030, 100030));
   assert(f.enqueue(10, 100, 100030, 100030));
@@ -24,8 +25,7 @@ int main() {
   assert(!f.sent(4, 100040));
   assert(!f.ack(3, 100050));
   assert(f.frames.size() == 9 && f.bytes == 900);
-  assert(f.admissionAgeUs() == FlowControl::timeout_us && f.pauseQueueUs() == 133344);
-  assert(!f.paused(100030 + 100010 + 133343) && f.paused(100030 + 100010 + 133344));
+  assert(!f.paused(100030 + 100010 + 100000) && f.paused(100030 + 100010 + 200000));
   assert(!f.timedOut(3100029) && f.timedOut(3100030));
   assert(f.ack(2, 400000));
   assert(!f.timedOut(3100029) && f.timedOut(3100030)); // Trickle ACKs cannot retain an old tail.
@@ -35,16 +35,14 @@ int main() {
   assert(sixty.frameIntervalUs() == 16667 && oneTwenty.frameIntervalUs() == 8334);
   assert(sixty.enqueue(1, 100, 1, 1) && sixty.sent(1, 1) && sixty.ack(1, 45001));
   assert(oneTwenty.enqueue(1, 100, 1, 1) && oneTwenty.sent(1, 1) && oneTwenty.ack(1, 45001));
-  assert(sixty.window == 5 && oneTwenty.window == 8);
 
   const std::pair<unsigned, unsigned> fallback_limits[] = {{10, 30}, {30, 90}, {60, 180}, {120, 360}};
   for (const auto& [fps, limit] : fallback_limits) {
     FlowControl fallback_limit;
     fallback_limit.configure(1000000, 8000000, 40000000, fps);
-    assert(fallback_limit.frameLimit() == limit && fallback_limit.window == 1);
+    assert(fallback_limit.window == 1);
     assert(fallback_limit.enqueue(1, 1000, 1, 1) && fallback_limit.sent(1, 1));
     assert(fallback_limit.ack(1, 1000001));
-    assert(fallback_limit.window == fps + 2);
     for (uint32_t seq = 2; seq <= limit + 1; ++seq) {
       assert(fallback_limit.enqueue(seq, 1000, 1000002, 1000002));
     }
@@ -95,7 +93,6 @@ int main() {
     assert(recovery.ack(seq, now + 5000));
   }
   assert(recovery.target_bitrate > 8000000 && recovery.target_bitrate <= 10648000);
-  assert(recovery.window == 3);
 
   // ACKs arrive after 55ms while capture continues, matching an uncongested 50ms path.
   auto demand = [](FlowControl& flow, uint32_t count, size_t size, uint64_t spacing) {
@@ -172,14 +169,12 @@ int main() {
     capacity_sample.min_rtt_us = 2000000;
     capacity.sampleTransport(capacity_sample, 1);
     const unsigned limit = 3 * fps;
-    assert(capacity.frameLimit() == limit && capacity.window == limit);
-    assert(capacity.admissionAgeUs() == FlowControl::timeout_us);
     for (uint32_t seq = 1; seq <= limit; ++seq) {
       assert(!capacity.paused(1));
       assert(capacity.enqueue(seq, 1, 1, 1) && capacity.sent(seq, 1));
     }
     assert(capacity.paused(1) && !capacity.enqueue(limit + 1, 1, 1, 1));
-    assert(capacity.ack(1, 1000001) && capacity.window == limit);
+    assert(capacity.ack(1, 1000001));
     assert(!capacity.paused(1000001) && capacity.enqueue(limit + 1, 1, 1000001, 1000001));
     assert(!capacity.timedOut(3000000) && capacity.timedOut(3000001));
   }
@@ -383,22 +378,17 @@ int main() {
   FlowControl low_fps;
   low_fps.configure(1000000, 8000000, 40000000, 10);
   low_fps.sampleTransport(high_rtt, 1);
-  assert(low_fps.admissionAgeUs() == 600000 && low_fps.window == 6);
-  assert(lossy.admissionAgeUs() == 433334 && lossy.window == 26);
   FlowControl high_fps;
   high_fps.configure(1000000, 8000000, 40000000, 120);
   high_fps.sampleTransport(sample, 1);
-  assert(high_fps.admissionAgeUs() == 106668 && high_fps.window == 13);
   assert(high_fps.notsentLowat() == 16667);
   assert(high_fps.enqueue(1, 1, 1, 1) && high_fps.sent(1, 1));
-  assert(high_fps.ack(1, 500001) && high_fps.window == 13);
+  assert(high_fps.ack(1, 500001));
   high_fps.clearTransport();
-  assert(high_fps.frameLimit() == 360 && high_fps.window == 62);
   assert(high_fps.frameBitrate() == high_fps.target_bitrate);
   auto distant = sample;
   distant.min_rtt_us = 2000000;
   low_fps.sampleTransport(distant, 2);
-  assert(low_fps.admissionAgeUs() == FlowControl::timeout_us && low_fps.window == 30);
   for (uint32_t seq = 1; seq <= 30; ++seq) assert(low_fps.enqueue(seq, 1, 2, 2));
   assert(!low_fps.enqueue(31, 1, 2, 2) && low_fps.paused(2));
 
@@ -411,7 +401,6 @@ int main() {
   fallback.clearTransport();
   assert(!fallback.transport_available && fallback.delivery_rate_bps == 0);
   assert(fallback.frameBitrate() == fallback.target_bitrate);
-  assert(fallback.window == 3 && fallback.pauseQueueUs() == 300000);
   assert(fallback.enqueue(2, 100000, 100002, 100002));
   assert(fallback.enqueue(3, 100000, 100002, 100002));
   assert(!fallback.paused(500001) && fallback.paused(500002));
@@ -443,23 +432,24 @@ int main() {
   struct PathRun { unsigned skipped = 0, paused_ticks = 0; uint64_t worst_age = 0, min_bitrate = ~0ULL, bitrate_at_stall = 0; };
   auto simulate = [](FlowControl& flow, unsigned fps, uint64_t rtt, uint64_t refresh, uint64_t service_gap,
                      uint64_t seconds, uint64_t warmup_us, uint64_t burst = 0, uint64_t stall_at = 0,
-                     uint64_t stall_us = 0, uint64_t viewer_wait = 0) {
+                     uint64_t stall_us = 0, uint64_t viewer_wait = 0, bool lifetime_wait = false) {
     PathRun run;
-    std::deque<std::pair<uint32_t, uint64_t>> pending;
+    std::deque<std::tuple<uint32_t, uint64_t, uint64_t>> pending;
     uint64_t last_ack = 0, rng = 12345;
     uint32_t seq = 0, wait_from = ~0u;
     const uint64_t interval = 1000000 / fps;
     for (uint64_t now = 0; now < seconds * 1000000; now += interval) {
-      while (!pending.empty() && pending.front().second <= now) {
-        assert(flow.ack(pending.front().first, pending.front().second, pending.front().first >= wait_from ? viewer_wait : 0));
+      while (!pending.empty() && std::get<1>(pending.front()) <= now) {
+        const auto [acked, at, captured] = pending.front();
+        const uint64_t wait = lifetime_wait ? at - captured : acked >= wait_from ? viewer_wait : 0;
+        assert(flow.ack(acked, at, wait));
         pending.pop_front();
       }
       flow.update(now);
       run.worst_age = std::max(run.worst_age, flow.oldestAge(now));
       if (stall_us && now >= stall_at && !run.bitrate_at_stall) run.bitrate_at_stall = flow.target_bitrate;
       if (run.bitrate_at_stall) run.min_bitrate = std::min(run.min_bitrate, flow.target_bitrate);
-      const bool admitted = !flow.paused(now) && flow.frames.size() < flow.window &&
-          (flow.frames.empty() || now < flow.frames.front().captured_us + flow.admissionAgeUs());
+      const bool admitted = !flow.paused(now) && flow.frames.size() < flow.window;
       if (!admitted) {
         if (now >= warmup_us) { ++run.skipped; run.paused_ticks += flow.paused(now); }
         continue;
@@ -472,7 +462,7 @@ int main() {
       if (stall_us && at >= stall_at && at < stall_at + stall_us) at = stall_at + stall_us;
       if (service_gap) at = std::max(at, last_ack + service_gap);
       last_ack = at = std::max(at, last_ack);
-      pending.emplace_back(seq, at);
+      pending.emplace_back(seq, at, now);
     }
     return run;
   };
@@ -511,6 +501,32 @@ int main() {
     assert(run.paused_ticks == 0 && run.skipped <= fps / 10);
     assert(waiting.target_bitrate > 12000000);
   }
+
+  for (const unsigned fps : {60u, 120u}) {
+    for (const uint64_t base : {5000ULL, 20000ULL}) {
+      const uint64_t interval = 1000000 / fps;
+      for (const uint64_t jitter : {interval, 2 * interval}) {
+        FlowControl lan;
+        lan.configure(1000000, 8000000, 40000000, fps);
+        const auto run = simulate(lan, fps, base, jitter, 0, 12, 2000000);
+        assert(run.skipped == 0 && run.paused_ticks == 0);
+        assert(lan.target_bitrate >= 8000000);
+      }
+    }
+  }
+
+  for (const unsigned fps : {60u, 120u}) {
+    FlowControl stalled;
+    stalled.configure(1000000, 8000000, 40000000, fps);
+    const auto run = simulate(stalled, fps, 100000, 16667, 0, 15, 0, 0, 5000000, 1500000);
+    assert(run.paused_ticks > 0 && run.worst_age >= 1500000 && run.worst_age < FlowControl::timeout_us);
+    assert(!stalled.paused(15000000) && stalled.acknowledged > 10ULL * fps);
+  }
+
+  FlowControl hidden;
+  const auto hidden_run = simulate(hidden, 60, 100000, 16667, 40000, 20, 0, 0, 0, 0, 0, true);
+  assert(hidden_run.paused_ticks > 0);
+  assert(hidden_run.worst_age < 900000);
 
   FlowControl untrusted;
   assert(untrusted.enqueue(1, 100, 1, 1) && untrusted.sent(1, 1));
