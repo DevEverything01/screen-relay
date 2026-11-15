@@ -234,7 +234,7 @@ export class Session {
     this.save({ backend: 'wayland', runtimeDir: this.runtimeDir });
     const config = join(this.dir, 'sway.conf');
     const displayFile = join(this.dir, 'wayland-display');
-    writeFileSync(config, `output * mode --custom ${this.args.resolution}@60Hz\nxwayland force\n`);
+    writeFileSync(config, `output * mode --custom ${this.args.resolution}@${this.args.fps}Hz\nxwayland force\n`);
     writeFileSync(displayFile, '');
     const child = this.spawn('display', ['sway', '-c', config], {
       env: { ...this.env, WLR_BACKENDS: 'headless', WLR_RENDERER: 'pixman', WLR_HEADLESS_OUTPUTS: '1' },
@@ -328,6 +328,7 @@ export class Session {
       resolution = this.args.resolution;
     }
     if (ownBus) await this.startBus();
+    if (desktop === 'xfce' && !this.args.display) writeCompositorOff(this.env.XDG_CONFIG_HOME);
     const environment: Record<string, string> = {};
     for (const key of ['DBUS_SESSION_BUS_ADDRESS', 'XDG_RUNTIME_DIR', 'XDG_CONFIG_HOME', 'XDG_CACHE_HOME', 'ICEAUTHORITY']) {
       const value = this.env[key];
@@ -465,6 +466,14 @@ export function desktopEnv(directory: string): NodeJS.ProcessEnv {
   };
   delete env.DBUS_SESSION_BUS_ADDRESS;
   return env;
+}
+
+/** Turns the xfwm4 compositor off in a session's own config dir, because it caps repaints at 60 a second. */
+export function writeCompositorOff(configHome: string | undefined): void {
+  if (!configHome) return;
+  const dir = join(configHome, 'xfce4', 'xfconf', 'xfce-perchannel-xml');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'xfwm4.xml'), '<?xml version="1.0" encoding="UTF-8"?>\n<channel name="xfwm4" version="1.0">\n  <property name="general" type="empty">\n    <property name="use_compositing" type="bool" value="false"/>\n  </property>\n</channel>\n');
 }
 
 export function findEngine(): string | null {
