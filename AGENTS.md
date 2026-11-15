@@ -23,7 +23,7 @@ To prepare a release:
 5. Run `node scripts/check-version-sync.mjs`. CI runs the same check on every PR.
 6. Open a PR and merge it to `main`.
 
-When the PR merges, the Release workflow compares the version in `package.json` with the `desktop-relay` version on npm. If they differ, it builds `relay-engine` for Linux x64 and ARM64, macOS ARM64 and x64, and Windows x64, publishes `desktop-relay` to npm, and creates the `v<version>` GitHub release with the binaries attached. The release body is the text between the markers in `CHANGELOG.md`.
+When the PR merges, the Release workflow checks whether npm already has the version in `package.json`. If it doesn't, it builds `relay-engine` for Linux x64 and ARM64, macOS ARM64 and x64, and Windows x64, publishes `desktop-relay` to npm, and creates the `v<version>` GitHub release with the binaries attached. The release body is the text between the markers in `CHANGELOG.md`.
 
 If npm already has the version but the GitHub release is missing, the workflow rebuilds the binaries and creates only the release. To retry a failed run, start the workflow from the Actions tab on `main`.
 
