@@ -38,6 +38,7 @@ export type SessionArgs = HostArgs & {
   'tls-cert'?: string;
   'tls-key'?: string;
   keyboardLayout?: string;
+  compositor?: string;
 };
 
 type EngineTarget = { url: string; token?: string | null; caFile?: string | null; connect?: string | null };
@@ -234,7 +235,7 @@ export class Session {
     this.save({ backend: 'wayland', runtimeDir: this.runtimeDir });
     const config = join(this.dir, 'sway.conf');
     const displayFile = join(this.dir, 'wayland-display');
-    writeFileSync(config, `output * mode --custom ${this.args.resolution}@60Hz\nxwayland force\n`);
+    writeFileSync(config, `output * mode --custom ${this.args.resolution}@${this.args.fps}Hz\nxwayland force\n`);
     writeFileSync(displayFile, '');
     const child = this.spawn('display', ['sway', '-c', config], {
       env: { ...this.env, WLR_BACKENDS: 'headless', WLR_RENDERER: 'pixman', WLR_HEADLESS_OUTPUTS: '1' },
@@ -328,6 +329,7 @@ export class Session {
       resolution = this.args.resolution;
     }
     if (ownBus) await this.startBus();
+    if (desktop === 'xfce' && !this.args.display) writeCompositing(this.env.XDG_CONFIG_HOME, compositing(this.args.compositor, this.args.fps));
     const environment: Record<string, string> = {};
     for (const key of ['DBUS_SESSION_BUS_ADDRESS', 'XDG_RUNTIME_DIR', 'XDG_CONFIG_HOME', 'XDG_CACHE_HOME', 'ICEAUTHORITY']) {
       const value = this.env[key];
@@ -465,6 +467,30 @@ export function desktopEnv(directory: string): NodeJS.ProcessEnv {
   };
   delete env.DBUS_SESSION_BUS_ADDRESS;
   return env;
+}
+
+/** Whether relay's own XFCE desktop runs its compositor: `on` or `off` as set, otherwise on only up to 60 fps, because the compositor repaints at most 60 times a second. */
+export function compositing(setting: string | undefined, fps: number): boolean {
+  return setting === 'on' || (setting !== 'off' && fps <= 60);
+}
+
+/** Sets the xfwm4 compositor on or off in a session's own config dir. Other saved xfwm4 settings are kept. */
+export function writeCompositing(configHome: string | undefined, enabled: boolean): void {
+  if (!configHome) return;
+  const dir = join(configHome, 'xfce4', 'xfconf', 'xfce-perchannel-xml');
+  const file = join(dir, 'xfwm4.xml');
+  const wanted = `<property name="use_compositing" type="bool" value="${enabled}"/>`;
+  const general = `  <property name="general" type="empty">\n    ${wanted}\n  </property>\n`;
+  let saved = '';
+  try { saved = readFileSync(file, 'utf8'); } catch {}
+  const setting = /<property name="use_compositing"[^>]*\/>/;
+  const group = /<property name="general" type="empty">/;
+  const next = setting.test(saved) ? saved.replace(setting, wanted)
+    : group.test(saved) ? saved.replace(group, (open) => `${open}\n    ${wanted}`)
+    : saved.includes('</channel>') ? saved.replace('</channel>', `${general}</channel>`)
+    : `<?xml version="1.0" encoding="UTF-8"?>\n<channel name="xfwm4" version="1.0">\n${general}</channel>\n`;
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(file, next);
 }
 
 export function findEngine(): string | null {

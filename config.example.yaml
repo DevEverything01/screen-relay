@@ -3,6 +3,9 @@
 display:
   # WIDTHxHEIGHT. Width even 320..16384, height even 240..16384.
   resolution: 1280x720
+  # auto, on or off. Linux only, for the XFCE desktop relay starts.
+  # auto turns the compositor off when stream.fps is above 60.
+  compositor: auto
 
 stream:
   # 10..120.

@@ -20,14 +20,14 @@ function viewer({ devicePixelRatio = 1, storage, decode = true, deferDecode = fa
   class Socket {
     static OPEN = 1;
     static CLOSING = 2;
-    constructor() { this.readyState = Socket.OPEN; this.events = []; this.inputs = []; sockets.push(this); }
+    constructor() { this.readyState = Socket.OPEN; this.events = []; this.inputs = []; this.waits = []; sockets.push(this); }
     send(data) {
       const offset = data instanceof ArrayBuffer ? 0 : data.byteOffset;
       const length = data instanceof ArrayBuffer ? data.byteLength : data.byteLength;
       const view = new DataView(data instanceof ArrayBuffer ? data : data.buffer, offset, length), type = view.getUint8(5);
       if (type === 2 && this.failAck === view.getUint32(12)) throw new Error('send failed');
       this.events.push([type, view.getUint32(12)]);
-      if (type === 2) trace.push(['ack', view.getUint32(12)]);
+      if (type === 2) { trace.push(['ack', view.getUint32(12)]); this.waits.push(length > 20 ? view.getUint32(20) : 0); }
       if (type === 3) this.inputs.push({ event: view.getUint8(20), code: view.getUint16(22), modifiers: view.getUint16(34) });
     }
     close() { this.events.push('close'); this.readyState = Socket.CLOSING; }
@@ -61,12 +61,12 @@ function viewer({ devicePixelRatio = 1, storage, decode = true, deferDecode = fa
     fetch: async () => ({ ok: false, status: 401 }), localStorage: storage,
   });
   runInContext(readFileSync('dist/viewer/viewer.js', 'utf8'), context);
-  const frame = (seq, width = 1280, height = 720, payloadLength = 8) => runInContext(`(() => {
+  const frame = (seq, width = 1280, height = 720, payloadLength = 8, stamp = seq) => runInContext(`(() => {
     const data = new ArrayBuffer(${32 + payloadLength}), view = new DataView(data);
     view.setUint32(0, 0x4e534c31); view.setUint8(4, 1); view.setUint8(5, 1);
     view.setUint16(6, ${seq === 1 ? 1 : 0}); view.setUint32(8, 1); view.setUint32(12, ${seq});
     view.setUint32(16, ${12 + payloadLength}); view.setUint16(20, ${width}); view.setUint16(22, ${height});
-    view.setBigUint64(24, ${seq}n); new Uint8Array(data, 32).set([0, 0, 1, 103, 66, 0, 30, 0]);
+    view.setBigUint64(24, ${stamp}n); new Uint8Array(data, 32).set([0, 0, 1, 103, 66, 0, 30, 0]);
     relayViewer.socket.onmessage({ data });
   })()`, context);
   const tick = (time) => {
@@ -76,7 +76,14 @@ function viewer({ devicePixelRatio = 1, storage, decode = true, deferDecode = fa
     animationFrames.delete(id);
     callback(now);
   };
-  return { context, document, listeners, sockets, trace, frame, tick, setTime: (time) => { now = time; }, decodeAll: () => { while (decodeQueue.length) decodeQueue.shift()(); } };
+  const refresh = (time) => {
+    now = time;
+    const entry = animationFrames.entries().next().value;
+    if (!entry) return;
+    animationFrames.delete(entry[0]);
+    entry[1](now);
+  };
+  return { context, document, listeners, sockets, trace, frame, tick, refresh, setTime: (time) => { now = time; }, decodeAll: () => { while (decodeQueue.length) decodeQueue.shift()(); } };
 }
 
 const traced = (app, type) => app.trace.filter((event) => event[0] === type).map((event) => event[1]);
@@ -463,4 +470,131 @@ test('pending decoder frames allow 360 entries before reconnecting', () => {
   assert.equal(app.context.window.nativeStats.decodeerrors, 1);
   assert.equal(app.document.querySelector('#status').textContent, 'Unexpected frame sequence or queue limit');
   assert.equal(app.sockets[0].events.at(-1), 'close');
+});
+
+test('an ACK reports how long the frame sat in the viewer, in microseconds', () => {
+  const app = viewer({ deferDecode: true });
+  app.frame(1);
+  app.setTime(40);
+  app.decodeAll();
+  assert.deepEqual(app.trace.filter((event) => event[0] === 'ack'), [['ack', 1]]);
+  assert.deepEqual(app.sockets[0].waits, [40000]);
+});
+
+function playout({ seconds, stall = () => 0, idleAt = -1, idleJump = 0, rate = 60 }) {
+  const app = viewer(), interval = 1000 / rate, base = 50, drawnAt = [], arrivals = [];
+  let sequence = 0, lastDrawn = 0;
+  for (let capture = 0; capture < seconds * 1000; capture += interval) {
+    const jump = capture >= idleAt && idleAt >= 0 ? idleJump : 0;
+    arrivals.push({ at: capture + base + stall(capture), stamp: Math.round((capture + jump) * 1000) + 1 });
+  }
+  let next = 0, lastArrival = 0;
+  for (let time = 0, refreshAt = 0; time < seconds * 1000 + 500; time++) {
+    while (next < arrivals.length && arrivals[next].at <= time) {
+      app.setTime(Math.max(time, lastArrival));
+      app.frame(++sequence, 1280, 720, 8, arrivals[next].stamp);
+      lastArrival = time;
+      next++;
+    }
+    if (time >= refreshAt) { app.refresh(time); refreshAt += 1000 / 60; }
+    const drawn = traced(app, 'draw').length;
+    if (drawn !== lastDrawn) { drawnAt.push(time); lastDrawn = drawn; }
+  }
+  return { app, drawnAt, frames: arrivals.length };
+}
+const stalled = (capture) => { const phase = capture % 500; return phase < 60 ? 60 - phase : 0; };
+const maxGap = (times, from) => Math.max(...times.filter((t) => t >= from).map((t, i, all) => (i ? t - all[i - 1] : 0)));
+
+test('a 60 ms stall every 500 ms is smoothed without dropping frames once the hold adapts', () => {
+  const { app, drawnAt, frames } = playout({ seconds: 10, stall: stalled });
+  const stats = app.context.window.nativeStats;
+  assert.equal(stats.superseded, 0);
+  assert.equal(stats.drawn, frames);
+  assert.ok(maxGap(drawnAt, 3000) <= 2 * 16.667 + 1, `max gap ${maxGap(drawnAt, 3000)}`);
+});
+
+test('on a clean link the hold stays under one refresh', () => {
+  const { app } = playout({ seconds: 5 });
+  assert.ok(app.context.window.nativeStats.holdMs < 16.667);
+});
+
+test('a timestamp jump after idle neither delays the next frame nor inflates the hold', () => {
+  for (const jump of [5000, 0]) {
+    const app = viewer();
+    for (let k = 1; k <= 60; k++) { app.setTime(k * 16.667); app.frame(k, 1280, 720, 8, Math.round(k * 16667) + 1); app.refresh(k * 16.667 + 1); }
+    app.refresh(1100);
+    const before = traced(app, 'draw').length;
+    app.setTime(3000);
+    app.frame(61, 1280, 720, 8, Math.round(61 * 16667 + jump * 1000) + 1);
+    assert.equal(traced(app, 'draw').length, before + 1);
+    assert.ok(app.context.window.nativeStats.holdMs < 1);
+  }
+});
+
+test('the hold shrinks back within 4 s after the stalls stop', () => {
+  const stopsAt = 4000;
+  const { app, drawnAt } = playout({ seconds: 9, stall: (capture) => (capture < stopsAt ? stalled(capture) : 0) });
+  assert.ok(drawnAt.length > 0);
+  assert.ok(app.context.window.nativeStats.holdMs < 16.667);
+});
+
+test('every frame is acknowledged once and in order under stalls', () => {
+  const { app, frames } = playout({ seconds: 5, stall: stalled });
+  const acked = traced(app, 'ack');
+  assert.deepEqual(acked, Array.from({ length: acked.length }, (_, index) => index + 1));
+  assert.ok(acked.length >= frames - 8);
+  const closed = traced(app, 'close').slice(0, acked.length);
+  assert.deepEqual(closed, [...closed].sort((a, b) => a - b));
+});
+
+const FRAME_MS = 16.667;
+const feed = (app, k, at) => { app.setTime(at); app.frame(k, 1280, 720, 8, Math.round(k * FRAME_MS * 1000) + 1); };
+const withHold = () => {
+  const app = viewer();
+  for (let k = 1; k <= 20; k++) { feed(app, k, k * FRAME_MS); app.refresh(k * FRAME_MS + 0.5); }
+  for (let k = 21; k <= 23; k++) { feed(app, k, k * FRAME_MS + 60); app.refresh(k * FRAME_MS + 60.5); }
+  assert.ok(app.context.window.nativeStats.holdMs > 50);
+  return app;
+};
+
+test('a clock jump while frames are queued does not stall them', () => {
+  const app = withHold();
+  for (let k = 24; k <= 27; k++) feed(app, k, k * FRAME_MS + 60);
+  assert.equal(traced(app, 'draw').length, 24);
+  const jumpAt = 28 * FRAME_MS + 5060;
+  feed(app, 28, jumpAt);
+  for (let time = jumpAt + 1, refreshes = 0; traced(app, 'ack').length < 28 && refreshes < 6; time += FRAME_MS, refreshes++) app.refresh(time);
+  assert.equal(traced(app, 'draw').at(-1), Math.round(28 * FRAME_MS * 1000) + 1);
+  assert.deepEqual(traced(app, 'ack'), Array.from({ length: 28 }, (_, index) => index + 1));
+});
+
+test('a new generation does not inherit the clock or the hold', () => {
+  const app = withHold();
+  runInContext('relayViewer.reset()', app.context);
+  assert.equal(app.context.window.nativeStats.holdMs, 0);
+  const before = traced(app, 'draw').length;
+  feed(app, 1, 5000);
+  assert.equal(traced(app, 'draw').length, before + 1);
+  assert.equal(app.context.window.nativeStats.holdMs, 0);
+});
+
+test('under a hold, frames wait for their due time and a trimmed frame is acknowledged with its wait', () => {
+  const app = withHold();
+  const start = 460;
+  app.setTime(start);
+  for (let k = 24; k <= 37; k++) app.frame(k, 1280, 720, 8, Math.round(k * FRAME_MS * 1000) + 1);
+  const hold = app.context.window.nativeStats.holdMs;
+  assert.ok(hold > 50);
+  app.refresh(start + 1);
+  const drawn = traced(app, 'draw').length, acked = traced(app, 'ack').length;
+  assert.equal(drawn, 24);
+  assert.equal(app.context.window.nativeStats.superseded, 0);
+  app.refresh(start + hold + 1);
+  assert.equal(app.context.window.nativeStats.superseded, 11);
+  assert.equal(traced(app, 'draw').length, drawn + 1);
+  const waits = app.sockets[0].waits.slice(acked);
+  assert.equal(waits.length, 12);
+  for (const wait of waits) assert.ok(Math.abs(wait - (hold + 1) * 1000) < 1);
+  const all = traced(app, 'ack');
+  assert.deepEqual(all, Array.from({ length: all.length }, (_, index) => index + 1));
 });

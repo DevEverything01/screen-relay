@@ -160,6 +160,12 @@ test('defaults keyboard layout to us and validates its allowed characters', () =
   assert.throws(() => config.loadConfig(write('keyboard:\n  layout: 7\n')), /keyboard\.layout.*a string/);
 });
 
+test('the compositor setting defaults to auto and accepts only auto, on or off', () => {
+  assert.equal(config.loadConfig()[0].display.compositor, 'auto');
+  assert.equal(config.loadConfig(write('display:\n  compositor: off\n'))[0].display.compositor, 'off');
+  assert.throws(() => config.loadConfig(write('display:\n  compositor: true\n')), /display\.compositor.*auto or on or off/);
+});
+
 test('backend from the config file accepts supported names and reports invalid ones', () => {
   for (const backend of ['x11', 'wayland', 'macos']) {
     assert.equal(config.loadConfig(write(`backend: ${backend}\n`))[0].backend, backend);

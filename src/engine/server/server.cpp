@@ -103,10 +103,11 @@ bool Server::message() {
     lws_callback_on_writable(viewer); return true;
   }
   if (b[5] == 2) {
-    if (b.size() != 20) return false;
+    if (b.size() != 20 && b.size() != 24) return false;
+    const uint64_t wait = FlowControl::ackWaitUs(b.data()+20, b.size()-20);
     bool accepted = false;
     { std::lock_guard<std::mutex> lock(mutex);
-      if (gen == generation && seq) accepted = flow.ack(seq, nowUs());
+      if (gen == generation && seq) accepted = flow.ack(seq, nowUs(), wait);
     }
     if (accepted) { capture.acknowledge(gen, seq); updateFlow(); }
     return true;
@@ -129,7 +130,7 @@ void Server::updateFlow() {
     flow.update(now);
     gen = generation; window = flow.window; bitrate = flow.frameBitrate(); paused = flow.paused(now);
     inflight = !flow.frames.empty();
-    admit_until = inflight ? flow.frames.front().captured_us + flow.admissionAgeUs() : 0;
+    admit_until = inflight && flow.transport_available ? flow.frames.front().captured_us + flow.transportAgeLimitUs() : 0;
 #ifdef __linux__
     notsent_lowat = flow.notsentLowat();
 #endif

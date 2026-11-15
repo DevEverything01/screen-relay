@@ -30,7 +30,7 @@ Browser -> relay engine (clicks and keys)
 Your agent (CLI, SDK, or HTTP) <-> relay engine (screenshots and input)
 ```
 
-The VM runs a display and a desktop. The engine on the VM captures the screen, encodes it as H.264 video, and streams it to the viewer in the browser. The viewer, or an agent over HTTP or WebSocket, sends input back, and the engine applies it as keyboard and mouse input. Only one client can send input at a time. The stream lowers its bitrate on a slow link.
+The VM runs a display and a desktop. The engine on the VM captures the screen, encodes it as H.264 video, and streams it to the viewer in the browser. The viewer, or an agent over HTTP or WebSocket, sends input back, and the engine applies it as keyboard and mouse input. Only one client can send input at a time. The stream lowers its bitrate on a slow link; see [How streaming works](/docs/how-streaming-works).
 
 ## Limits
 

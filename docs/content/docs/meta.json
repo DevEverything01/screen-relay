@@ -5,6 +5,7 @@
   "pages": [
     "index",
     "getting-started",
+    "how-streaming-works",
     "---Platforms---",
     "x11",
     "wayland",

@@ -10,7 +10,6 @@ export const MAX_INPUT_BATCH = 256;
 export const MAX_INPUT_PENDING = 32;
 export const MAX_WIDTH = 65535;
 export const MAX_HEIGHT = 65535;
-export const MAX_FRAMES_IN_FLIGHT = 8;
 export const MAX_BYTES_IN_FLIGHT = 8388608;
 export const SUBPROTOCOL = 'nsl1';
 export const MESSAGE_TYPES = { frame: 1, ack: 2, input: 3, controlReady: 4, inputResponse: 5, cursor: 6 } as const;
@@ -114,8 +113,13 @@ export function encodeInput(event: InputEvent, generation: number, sequence: num
   return bytes;
 }
 
-export function encodeAck(generation: number, sequence: number): Uint8Array {
-  return header(MESSAGE_TYPES.ack, generation, sequence, 0);
+/** Builds an ACK carrying how long the frame waited inside the viewer, in microseconds, saturating at 2^32 - 1. Without a wait it is the 20-byte ACK that engines before the wait field require. */
+export function encodeAck(generation: number, sequence: number, viewerWaitMs?: number): Uint8Array {
+  if (viewerWaitMs === undefined) return header(MESSAGE_TYPES.ack, generation, sequence, 0);
+  const bytes = header(MESSAGE_TYPES.ack, generation, sequence, 4);
+  const micros = Number.isFinite(viewerWaitMs) ? Math.min(0xffffffff, Math.max(0, Math.round(viewerWaitMs * 1000))) : 0;
+  new DataView(bytes.buffer).setUint32(HEADER_SIZE, micros);
+  return bytes;
 }
 
 export interface Header { type: number; flags: number; generation: number; sequence: number; payloadLength: number }

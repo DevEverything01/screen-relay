@@ -54,7 +54,7 @@ When the session has a token, offer both `nsl1` and `bearer.TOKEN` as subprotoco
 | Type | Direction | Payload and sequence |
 | ---: | --- | --- |
 | 1 | Server to `/stream` | Width and height (2 bytes each), capture time in microseconds (8 bytes), and an H.264 Annex B access unit. Sequence starts at 1 and increases per frame. The first and recovery frames are keyframes with SPS and PPS. |
-| 2 | `/stream` to server | Empty payload. ACK each frame in order after drawing it or dropping it for a newer frame; use its generation and sequence. Only the oldest outstanding frame earns credit. |
+| 2 | `/stream` to server | Optional 4-byte payload: how long the frame waited inside the viewer, from its arrival to the draw or drop, as big-endian microseconds that saturate at 4294967295. An empty payload counts as no wait, and the server counts a wait longer than the frame's whole capture-to-ACK time as no wait. ACK each frame in order after drawing it or dropping it for a newer frame; use its generation and sequence. Only the oldest outstanding frame earns credit. |
 | 3 | Client to either endpoint | One 16-byte input record. Sequence is zero on `/stream` or a nonzero request ID on `/control`. |
 | 4 | Server to `/control` | Desktop width and height, 2 bytes each. Sequence is zero. |
 | 5 | Server to `/control` | One status byte: 0 accepted, 1 invalid, 2 unsupported. Sequence echoes the request ID. A status of 0 does not report a later backend failure. |
@@ -63,7 +63,7 @@ When the session has a token, offer both `nsl1` and `bearer.TOKEN` as subprotoco
 | Rule | Detail |
 | --- | --- |
 | Encoding | All integers are unsigned big-endian except the signed input value. Reject malformed messages and unknown types or versions. |
-| Flow control | At most 8 frames and 8 MiB can be in flight. With frames outstanding, the stream closes after about 3 seconds without ACK progress or when the oldest frame reaches 3 seconds. |
+| Flow control | At most 3 seconds of frames at the configured frame rate, and 8 MiB, can be in flight. With frames outstanding, the stream closes after about 3 seconds without ACK progress or when the oldest frame reaches 3 seconds. |
 | Frame size | An access unit is at most 8 MiB; the complete message is at most 8,388,640 bytes. Decode frames in order. |
 | Counters | Reconnect when the frame sequence reaches 4294967295. If the generation reaches that value, restart the session before connecting again. |
 | Cursor | At most 256 by 256 pixels, with the hotspot inside the image. Eight zero bytes restore the local arrow; a transparent image hides the cursor. The cursor does not follow pointer jumps made by the desktop. |
