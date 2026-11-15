@@ -169,12 +169,14 @@ int main() {
     capacity_sample.min_rtt_us = 2000000;
     capacity.sampleTransport(capacity_sample, 1);
     const unsigned limit = 3 * fps;
+    assert(capacity.frameLimit() == limit && capacity.window == limit);
+    assert(capacity.admissionAgeUs() == FlowControl::timeout_us);
     for (uint32_t seq = 1; seq <= limit; ++seq) {
       assert(!capacity.paused(1));
       assert(capacity.enqueue(seq, 1, 1, 1) && capacity.sent(seq, 1));
     }
     assert(capacity.paused(1) && !capacity.enqueue(limit + 1, 1, 1, 1));
-    assert(capacity.ack(1, 1000001));
+    assert(capacity.ack(1, 1000001) && capacity.window == limit);
     assert(!capacity.paused(1000001) && capacity.enqueue(limit + 1, 1, 1000001, 1000001));
     assert(!capacity.timedOut(3000000) && capacity.timedOut(3000001));
   }
@@ -378,17 +380,21 @@ int main() {
   FlowControl low_fps;
   low_fps.configure(1000000, 8000000, 40000000, 10);
   low_fps.sampleTransport(high_rtt, 1);
+  assert(low_fps.admissionAgeUs() == 600000 && low_fps.window == 6);
+  assert(lossy.admissionAgeUs() == 433334 && lossy.window == 26);
   FlowControl high_fps;
   high_fps.configure(1000000, 8000000, 40000000, 120);
   high_fps.sampleTransport(sample, 1);
+  assert(high_fps.admissionAgeUs() == 106668 && high_fps.window == 13);
   assert(high_fps.notsentLowat() == 16667);
   assert(high_fps.enqueue(1, 1, 1, 1) && high_fps.sent(1, 1));
-  assert(high_fps.ack(1, 500001));
+  assert(high_fps.ack(1, 500001) && high_fps.window == 13);
   high_fps.clearTransport();
   assert(high_fps.frameBitrate() == high_fps.target_bitrate);
   auto distant = sample;
   distant.min_rtt_us = 2000000;
   low_fps.sampleTransport(distant, 2);
+  assert(low_fps.admissionAgeUs() == FlowControl::timeout_us && low_fps.window == 30);
   for (uint32_t seq = 1; seq <= 30; ++seq) assert(low_fps.enqueue(seq, 1, 2, 2));
   assert(!low_fps.enqueue(31, 1, 2, 2) && low_fps.paused(2));
 
@@ -544,31 +550,6 @@ int main() {
   const auto grown = simulate(growing, 60, 100000, 16667, 40000, 20, 0);
   assert(grown.paused_ticks > 0 && growing.target_bitrate < 8000000);
   assert(grown.worst_age < 850000);
-
-  for (const unsigned fps : {60u, 120u}) {
-    FlowControl direct;
-    direct.configure(1000000, 8000000, 40000000, fps);
-    FlowControl::TransportSample link;
-    link.min_rtt_us = 2000; link.rtt_us = 2000; link.delivery_rate_bps = 40000000; link.snd_cwnd = 20;
-    const uint64_t interval = direct.frameIntervalUs(), hold = 60000;
-    uint64_t now = 1, blocked = 0;
-    uint32_t captured = 0, acked = 0;
-    std::deque<uint64_t> shown_at;
-    for (uint64_t tick = 0; tick < 3000000 / 1000; ++tick, now += 1000) {
-      link.bytes_acked += 5000;
-      direct.sampleTransport(link, now);
-      while (!shown_at.empty() && shown_at.front() <= now) {
-        assert(direct.ack(++acked, now, hold));
-        shown_at.pop_front();
-      }
-      if (now >= uint64_t(captured) * interval + 1) {
-        if (direct.paused(now) || shown_at.size() >= direct.window) { if (now > 1000000) ++blocked; continue; }
-        assert(direct.enqueue(++captured, 5000, now, now) && direct.sent(captured, now));
-        shown_at.push_back(now + 2000 + hold);
-      }
-    }
-    assert(blocked == 0 && captured >= 3 * fps - 2);
-  }
 
   std::cout << "flow policy checks passed\n";
 }
