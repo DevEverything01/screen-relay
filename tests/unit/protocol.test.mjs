@@ -105,4 +105,5 @@ test('ACK carries the viewer wait as saturating big-endian microseconds', () => 
   assert.deepEqual(bytes(1e9), [0, 0, 0, 4, 255, 255, 255, 255]);
   assert.deepEqual(bytes(-3), [0, 0, 0, 4, 0, 0, 0, 0]);
   assert.deepEqual(bytes(NaN), [0, 0, 0, 4, 0, 0, 0, 0]);
+  assert.deepEqual(Array.from(encodeAck(1, 7)).slice(16), [0, 0, 0, 0]);
 });
