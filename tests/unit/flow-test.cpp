@@ -540,6 +540,10 @@ int main() {
   assert(hidden_run.paused_ticks > 0);
   assert(hidden_run.worst_age < 900000);
 
+  FlowControl budget;
+  for (uint32_t seq = 1; seq <= 4; ++seq) assert(!budget.paused(1) && budget.enqueue(seq, 1536 * 1024, 1, 1));
+  assert(!budget.paused(1) && budget.enqueue(5, 1536 * 1024, 1, 1) && budget.paused(1));
+
   FlowControl untrusted;
   assert(untrusted.enqueue(1, 100, 1, 1) && untrusted.sent(1, 1));
   assert(untrusted.ack(1, 100001, 4294967295ULL));

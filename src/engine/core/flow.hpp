@@ -59,6 +59,8 @@ struct FlowControl {
   struct Frame { uint32_t sequence; size_t bytes; uint64_t captured_us; bool sent = false; uint64_t sent_us = 0; };
   std::deque<Frame> frames;
   size_t bytes = 0;
+  /** Largest frame this generation; capture pauses while the byte budget left could not hold one, since enqueue rejects a frame that does not fit and the server then closes the stream. */
+  size_t largest_frame = 0;
   uint32_t last_encoded = 0;
   uint64_t acknowledged = 0, encoded = 0, last_progress_us = 0;
   uint64_t target_bitrate = initial_bitrate;
@@ -172,7 +174,7 @@ struct FlowControl {
     return levelOf(standingQueueUs(now)) == Pressure::paused;
   }
   bool paused(uint64_t now) const {
-    return bytes >= max_bytes || (transport_available ? pausedWithTransport(now) : pausedWithoutTransport(now));
+    return bytes + largest_frame > max_bytes || (transport_available ? pausedWithTransport(now) : pausedWithoutTransport(now));
   }
   bool timedOut(uint64_t now) const {
     return !frames.empty() && (now - std::min(now, last_progress_us) >= timeout_us ||
@@ -182,7 +184,7 @@ struct FlowControl {
     if (!seq || seq != last_encoded + 1 || frames.size() >= frameLimit() ||
         !size || size > max_bytes || size > max_bytes - bytes) return false;
     if (frames.empty()) last_progress_us = now;
-    frames.push_back({seq, size, captured}); bytes += size; last_encoded = seq; ++encoded;
+    frames.push_back({seq, size, captured}); bytes += size; largest_frame = std::max(largest_frame, size); last_encoded = seq; ++encoded;
     return true;
   }
   bool sent(uint32_t seq, uint64_t now) {
