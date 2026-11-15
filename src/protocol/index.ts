@@ -10,7 +10,6 @@ export const MAX_INPUT_BATCH = 256;
 export const MAX_INPUT_PENDING = 32;
 export const MAX_WIDTH = 65535;
 export const MAX_HEIGHT = 65535;
-export const MAX_FRAMES_IN_FLIGHT = 8;
 export const MAX_BYTES_IN_FLIGHT = 8388608;
 export const SUBPROTOCOL = 'nsl1';
 export const MESSAGE_TYPES = { frame: 1, ack: 2, input: 3, controlReady: 4, inputResponse: 5, cursor: 6 } as const;
