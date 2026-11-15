@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { encodeInputRecord, encodeInput, encodeInputBatch, comboEvents, textEvents, batches, baseUrl, parseHeader, parseMessage, header, RelayError } from '../../dist/protocol/index.js';
+import { encodeInputRecord, encodeAck, encodeInput, encodeInputBatch, comboEvents, textEvents, batches, baseUrl, parseHeader, parseMessage, header, RelayError } from '../../dist/protocol/index.js';
 const hex = bytes => Buffer.from(bytes).toString('hex');
 
 test('input records and WebSocket envelope match golden bytes', () => {
@@ -96,4 +96,13 @@ test('frame parsing accepts wire dimensions beyond 1080p and rejects unsafe head
   view.setUint32(12, 1);
   view.setUint32(16, 12);
   invalid();
+});
+
+test('ACK carries the viewer wait as saturating big-endian microseconds', () => {
+  const bytes = (wait) => Array.from(encodeAck(1, 7, wait)).slice(16);
+  assert.deepEqual(bytes(0), [0, 0, 0, 4, 0, 0, 0, 0]);
+  assert.deepEqual(bytes(2.5), [0, 0, 0, 4, 0, 0, 9, 196]);
+  assert.deepEqual(bytes(1e9), [0, 0, 0, 4, 255, 255, 255, 255]);
+  assert.deepEqual(bytes(-3), [0, 0, 0, 4, 0, 0, 0, 0]);
+  assert.deepEqual(bytes(NaN), [0, 0, 0, 4, 0, 0, 0, 0]);
 });

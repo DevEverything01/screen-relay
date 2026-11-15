@@ -20,14 +20,14 @@ function viewer({ devicePixelRatio = 1, storage, decode = true, deferDecode = fa
   class Socket {
     static OPEN = 1;
     static CLOSING = 2;
-    constructor() { this.readyState = Socket.OPEN; this.events = []; this.inputs = []; sockets.push(this); }
+    constructor() { this.readyState = Socket.OPEN; this.events = []; this.inputs = []; this.waits = []; sockets.push(this); }
     send(data) {
       const offset = data instanceof ArrayBuffer ? 0 : data.byteOffset;
       const length = data instanceof ArrayBuffer ? data.byteLength : data.byteLength;
       const view = new DataView(data instanceof ArrayBuffer ? data : data.buffer, offset, length), type = view.getUint8(5);
       if (type === 2 && this.failAck === view.getUint32(12)) throw new Error('send failed');
       this.events.push([type, view.getUint32(12)]);
-      if (type === 2) trace.push(['ack', view.getUint32(12)]);
+      if (type === 2) { trace.push(['ack', view.getUint32(12)]); this.waits.push(length > 20 ? view.getUint32(20) : 0); }
       if (type === 3) this.inputs.push({ event: view.getUint8(20), code: view.getUint16(22), modifiers: view.getUint16(34) });
     }
     close() { this.events.push('close'); this.readyState = Socket.CLOSING; }
@@ -463,4 +463,13 @@ test('pending decoder frames allow 360 entries before reconnecting', () => {
   assert.equal(app.context.window.nativeStats.decodeerrors, 1);
   assert.equal(app.document.querySelector('#status').textContent, 'Unexpected frame sequence or queue limit');
   assert.equal(app.sockets[0].events.at(-1), 'close');
+});
+
+test('an ACK reports how long the frame sat in the viewer, in microseconds', () => {
+  const app = viewer({ deferDecode: true });
+  app.frame(1);
+  app.setTime(40);
+  app.decodeAll();
+  assert.deepEqual(app.trace.filter((event) => event[0] === 'ack'), [['ack', 1]]);
+  assert.deepEqual(app.sockets[0].waits, [40000]);
 });

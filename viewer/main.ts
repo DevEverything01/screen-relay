@@ -155,7 +155,7 @@ function schedulePresent() {
 function ackFrame(item: any): boolean {
   try {
     if (socket?.readyState !== WebSocket.OPEN) throw new Error('Connection closed before ACK');
-    socket.send(encodeAck(item.gen, item.seq));
+    socket.send(encodeAck(item.gen, item.seq, performance.now() - item.arrived));
     return true;
   } catch (error: any) {
     fail(`ACK failed: ${error.message}`);
@@ -298,7 +298,7 @@ function connect() {
               pending.delete(frame.timestamp);
               stats.pendingBytes -= item.bytes;
               stats.outstanding = pending.size;
-              if (!presentDecoded({ gen: item.gen, seq: item.seq, frame })) return;
+              if (!presentDecoded({ gen: item.gen, seq: item.seq, arrived: item.arrived, frame })) return;
               watchPending(current);
             } catch (error: any) {
               fail(`Draw failed: ${error.message}`);

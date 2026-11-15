@@ -54,7 +54,7 @@ When the session has a token, offer both `nsl1` and `bearer.TOKEN` as subprotoco
 | Type | Direction | Payload and sequence |
 | ---: | --- | --- |
 | 1 | Server to `/stream` | Width and height (2 bytes each), capture time in microseconds (8 bytes), and an H.264 Annex B access unit. Sequence starts at 1 and increases per frame. The first and recovery frames are keyframes with SPS and PPS. |
-| 2 | `/stream` to server | Empty payload. ACK each frame in order after drawing it or dropping it for a newer frame; use its generation and sequence. Only the oldest outstanding frame earns credit. |
+| 2 | `/stream` to server | Optional 4-byte payload: how long the frame waited inside the viewer, from its arrival to the draw or drop, as big-endian microseconds that saturate at 4294967295. An empty payload counts as no wait, and the server counts a wait longer than the frame's whole capture-to-ACK time as no wait. ACK each frame in order after drawing it or dropping it for a newer frame; use its generation and sequence. Only the oldest outstanding frame earns credit. |
 | 3 | Client to either endpoint | One 16-byte input record. Sequence is zero on `/stream` or a nonzero request ID on `/control`. |
 | 4 | Server to `/control` | Desktop width and height, 2 bytes each. Sequence is zero. |
 | 5 | Server to `/control` | One status byte: 0 accepted, 1 invalid, 2 unsupported. Sequence echoes the request ID. A status of 0 does not report a later backend failure. |
