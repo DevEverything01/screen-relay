@@ -468,12 +468,23 @@ export function desktopEnv(directory: string): NodeJS.ProcessEnv {
   return env;
 }
 
-/** Turns the xfwm4 compositor off in a session's own config dir, because it caps repaints at 60 a second. */
+/** Turns the xfwm4 compositor off in a session's own config dir, because it caps repaints at 60 a second. Other saved xfwm4 settings are kept. */
 export function writeCompositorOff(configHome: string | undefined): void {
   if (!configHome) return;
   const dir = join(configHome, 'xfce4', 'xfconf', 'xfce-perchannel-xml');
+  const file = join(dir, 'xfwm4.xml');
+  const off = '<property name="use_compositing" type="bool" value="false"/>';
+  const general = `  <property name="general" type="empty">\n    ${off}\n  </property>\n`;
+  let saved = '';
+  try { saved = readFileSync(file, 'utf8'); } catch {}
+  const setting = /<property name="use_compositing"[^>]*\/>/;
+  const group = /<property name="general" type="empty">/;
+  const next = setting.test(saved) ? saved.replace(setting, off)
+    : group.test(saved) ? saved.replace(group, (open) => `${open}\n    ${off}`)
+    : saved.includes('</channel>') ? saved.replace('</channel>', `${general}</channel>`)
+    : `<?xml version="1.0" encoding="UTF-8"?>\n<channel name="xfwm4" version="1.0">\n${general}</channel>\n`;
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, 'xfwm4.xml'), '<?xml version="1.0" encoding="UTF-8"?>\n<channel name="xfwm4" version="1.0">\n  <property name="general" type="empty">\n    <property name="use_compositing" type="bool" value="false"/>\n  </property>\n</channel>\n');
+  writeFileSync(file, next);
 }
 
 export function findEngine(): string | null {
