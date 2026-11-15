@@ -545,5 +545,30 @@ int main() {
   assert(grown.paused_ticks > 0 && growing.target_bitrate < 8000000);
   assert(grown.worst_age < 850000);
 
+  for (const unsigned fps : {60u, 120u}) {
+    FlowControl direct;
+    direct.configure(1000000, 8000000, 40000000, fps);
+    FlowControl::TransportSample link;
+    link.min_rtt_us = 2000; link.rtt_us = 2000; link.delivery_rate_bps = 40000000; link.snd_cwnd = 20;
+    const uint64_t interval = direct.frameIntervalUs(), hold = 60000;
+    uint64_t now = 1, blocked = 0;
+    uint32_t captured = 0, acked = 0;
+    std::deque<uint64_t> shown_at;
+    for (uint64_t tick = 0; tick < 3000000 / 1000; ++tick, now += 1000) {
+      link.bytes_acked += 5000;
+      direct.sampleTransport(link, now);
+      while (!shown_at.empty() && shown_at.front() <= now) {
+        assert(direct.ack(++acked, now, hold));
+        shown_at.pop_front();
+      }
+      if (now >= uint64_t(captured) * interval + 1) {
+        if (direct.paused(now) || shown_at.size() >= direct.window) { if (now > 1000000) ++blocked; continue; }
+        assert(direct.enqueue(++captured, 5000, now, now) && direct.sent(captured, now));
+        shown_at.push_back(now + 2000 + hold);
+      }
+    }
+    assert(blocked == 0 && captured >= 3 * fps - 2);
+  }
+
   std::cout << "flow policy checks passed\n";
 }

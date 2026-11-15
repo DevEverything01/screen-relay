@@ -14,6 +14,7 @@ struct FlowControl {
   static constexpr uint64_t timeout_us = 3000000;
   static constexpr size_t max_frames = timeout_us * 120 / 1000000;
   static constexpr uint64_t base_window_us = 10000000;
+  static constexpr uint64_t viewer_hold_limit_us = 100000;
   enum class Pressure { clear, building, congested, paused };
   static constexpr uint64_t delivery_window_us = 1000000;
   static constexpr uint64_t bitrate_smoothing_us = 500000;
@@ -47,7 +48,7 @@ struct FlowControl {
     }
     uint64_t forgotten_us = 0;
   };
-  WindowExtreme depth, network, peak{{}, false};
+  WindowExtreme depth, network, peak{{}, false}, held{{}, false};
   /** Age of the oldest unacknowledged frame, sampled on service ticks; lets a stall be seen while no acknowledgements arrive. */
   WindowExtreme waiting;
   TransportSample transport;
@@ -109,10 +110,12 @@ struct FlowControl {
   uint64_t admissionAgeUs() const {
     return transport_available ? transportAgeLimitUs() : baseDepthUs() + pauseQueueUs();
   }
-  /** Oldest-frame age at which capture stops with TCP statistics: twice the minimum round trip plus two frame intervals, capped at 3 s, or 250 ms before a round trip is known. */
+  /** Longest wait a viewer reported for a frame in the last 10 s, up to the 100 ms a viewer may hold one. A longer wait is a viewer falling behind and must not widen the limits. */
+  uint64_t viewerWaitUs() const { return std::min(viewer_hold_limit_us, held.overall(0)); }
+  /** Oldest-frame age at which capture stops with TCP statistics: twice the minimum round trip plus two frame intervals plus the viewer's wait, capped at 3 s, or 250 ms before a round trip is known. */
   uint64_t transportAgeLimitUs() const {
     if (!transport.min_rtt_us) return pause_age_us;
-    return std::min(timeout_us, 2 * std::min(transport.min_rtt_us, timeout_us) + 2 * frameIntervalUs());
+    return std::min(timeout_us, 2 * std::min(transport.min_rtt_us, timeout_us) + 2 * frameIntervalUs() + viewerWaitUs());
   }
   /** Queueing delay present for the whole recent window: the smallest oldest-frame age or acknowledgement time in it, above the given base. */
   uint64_t standingAbove(uint64_t now, const WindowExtreme& acknowledged_depths, uint64_t base) const {
@@ -212,11 +215,13 @@ struct FlowControl {
   }
   void recordDepth(uint64_t captured, uint64_t now, uint64_t viewer_wait_us) {
     const uint64_t total = now - std::min(now, captured);
+    const uint64_t wait = viewer_wait_us <= total ? viewer_wait_us : 0;
     const uint64_t kept_before = transport_available ? 2 * frameIntervalUs() : standingWindowUs();
     network.forget(now, kept_before);
     depth.push(now, total, base_window_us);
     peak.push(now, total, base_window_us);
-    network.push(now, total - (viewer_wait_us <= total ? viewer_wait_us : 0), base_window_us);
+    held.push(now, wait, base_window_us);
+    network.push(now, total - wait, base_window_us);
     depth.forget(now, transport_available ? 2 * frameIntervalUs() : standingWindowUs());
   }
   void expireDelivery(uint64_t now) {
@@ -250,7 +255,7 @@ struct FlowControl {
   }
   void windowWithTransport() {
     const uint64_t count = transport.min_rtt_us ?
-        (2 * std::min(transport.min_rtt_us, timeout_us) * frame_rate + 999999) / 1000000 + 2 :
+        ((2 * std::min(transport.min_rtt_us, timeout_us) + viewerWaitUs()) * frame_rate + 999999) / 1000000 + 2 :
         (pause_age_us * frame_rate + 999999) / 1000000;
     window = unsigned(std::clamp<uint64_t>(count, 2, frameLimit()));
   }
