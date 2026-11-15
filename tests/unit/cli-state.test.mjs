@@ -113,24 +113,28 @@ test('the regular lock file serializes concurrent acquisitions', { skip: !lockTo
   await (await state.lock('desk', lockDir)).close();
 });
 
-test('turning the compositor off keeps the other saved xfwm4 settings', async () => {
-  const { writeCompositorOff } = await import(pathToFileURL(supervisorPath).href);
+test('setting the compositor keeps the other saved xfwm4 settings', async () => {
+  const { writeCompositing, compositing } = await import(pathToFileURL(supervisorPath).href);
+  assert.deepEqual([compositing('auto', 60), compositing('auto', 61), compositing('on', 120), compositing('off', 30)], [true, false, true, false]);
   const home = mkdtempSync(join(directory, 'config-'));
   const file = join(home, 'xfce4', 'xfconf', 'xfce-perchannel-xml', 'xfwm4.xml');
   const off = '<property name="use_compositing" type="bool" value="false"/>';
-  writeCompositorOff(home);
+  writeCompositing(home, false);
   assert.ok(readFileSync(file, 'utf8').includes(off));
   const theme = '<property name="theme" type="string" value="Greybird"/>';
   const focus = '<property name="click_to_focus" type="bool" value="false"/>';
   const wrap = (body) => `<?xml version="1.0" encoding="UTF-8"?>\n<channel name="xfwm4" version="1.0">\n  <property name="general" type="empty">\n${body}  </property>\n</channel>\n`;
   writeFileSync(file, wrap(`    ${theme}\n    <property name="use_compositing" type="bool" value="true"/>\n    ${focus}\n`));
-  writeCompositorOff(home);
+  writeCompositing(home, false);
   let saved = readFileSync(file, 'utf8');
   assert.ok(saved.includes(theme) && saved.includes(focus) && saved.includes(off));
   assert.ok(!saved.includes('value="true"'));
   writeFileSync(file, wrap(`    ${theme}\n`));
-  writeCompositorOff(home);
+  writeCompositing(home, false);
   saved = readFileSync(file, 'utf8');
   assert.ok(saved.includes(theme) && saved.includes(off));
   assert.equal(saved.match(/use_compositing/g).length, 1);
+  writeCompositing(home, true);
+  saved = readFileSync(file, 'utf8');
+  assert.ok(saved.includes(theme) && saved.includes('name="use_compositing" type="bool" value="true"') && !saved.includes(off));
 });

@@ -39,7 +39,7 @@ The engine uses the acknowledgements to adapt:
 
 The stream runs at up to `stream.fps` frames per second, from 10 to 120. The default is 60. An idle desktop sends no frames, because the engine only captures when the screen changes.
 
-Relay's own XFCE desktop runs without a compositor so apps can update the screen faster than 60 times a second. That also means no window shadows or transparency. A desktop you attach to with `--display` keeps its own settings.
+The compositor in relay's own XFCE desktop repaints at most 60 times a second. When `stream.fps` is above 60, relay turns it off so apps can update the screen faster, which also removes window shadows and transparency. Set `display.compositor` to `on` or `off` to decide this yourself; see [Configuration](/docs/configuration). A desktop you attach to with `--display` keeps its own settings.
 
 ## Picture quality on a slow or long link
 

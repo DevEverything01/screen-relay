@@ -6,9 +6,10 @@ import { parseDocument } from 'yaml';
 import { Failure } from './output.js';
 
 export const BACKENDS = ['x11', 'wayland', 'macos'] as const;
+export const COMPOSITORS = ['auto', 'on', 'off'] as const;
 
 export type ConfigSettings = {
-  display: { resolution: string };
+  display: { resolution: string; compositor: (typeof COMPOSITORS)[number] };
   stream: { fps: number; bitrate: { min: number; start: number; max: number } };
   server: { port: number; bind: string; public: string | null; tls_cert: string | null; tls_key: string | null };
   keyboard: { layout: string };
@@ -20,7 +21,7 @@ type Mapping = Record<string, unknown>;
 type ConfigSection = 'display' | 'stream' | 'server' | 'keyboard';
 
 const SECTIONS: Record<ConfigSection, readonly string[]> = {
-  display: ['resolution'],
+  display: ['resolution', 'compositor'],
   stream: ['fps', 'bitrate'],
   server: ['port', 'bind', 'public', 'tls_cert', 'tls_key'],
   keyboard: ['layout'],
@@ -128,6 +129,12 @@ export function backendValue(value: unknown, path: string): (typeof BACKENDS)[nu
   return backend;
 }
 
+function compositorValue(value: unknown, path: string): (typeof COMPOSITORS)[number] {
+  const compositor = COMPOSITORS.find((candidate) => candidate === value);
+  if (!compositor) wrong(path, value, COMPOSITORS.join(' or '));
+  return compositor;
+}
+
 function resolution(value: unknown, path: string): string {
   if (typeof value !== 'string') wrong(path, value, 'WIDTHxHEIGHT such as 1280x720');
   const match = RESOLUTION.exec(value.trim());
@@ -193,6 +200,7 @@ function checkBitrateOrder(settings: ConfigSettings): void {
 type Validator = (value: unknown, path: string) => unknown;
 const validators = {
   'display.resolution': resolution,
+  'display.compositor': compositorValue,
   'stream.fps': (value, path) => integer(value, path, 10, 120),
   'server.port': (value, path) => integer(value, path, 1, 65535),
   'server.bind': textValue,
@@ -215,6 +223,7 @@ const validators = {
 const validatorFor: Record<string, Validator> = validators;
 const assign: Record<string, (settings: ConfigSettings, value: unknown, path: string) => void> = {
   'display.resolution': (settings, value, path) => { settings.display.resolution = validators['display.resolution'](value, path); },
+  'display.compositor': (settings, value, path) => { settings.display.compositor = validators['display.compositor'](value, path); },
   'stream.fps': (settings, value, path) => { settings.stream.fps = validators['stream.fps'](value, path); },
   'server.port': (settings, value, path) => { settings.server.port = validators['server.port'](value, path); },
   'server.bind': (settings, value, path) => { settings.server.bind = validators['server.bind'](value, path); },
@@ -228,7 +237,7 @@ export function loadConfig(path?: string): [ConfigSettings, string | null, Set<s
   const [source, required] = locate(path);
   let loadedSource = source;
   const settings: ConfigSettings = {
-    display: { resolution: '1280x720' },
+    display: { resolution: '1280x720', compositor: 'auto' },
     stream: { fps: 60, bitrate: { min: 1000000, start: 8000000, max: 40000000 } },
     server: { port: 8080, bind: '127.0.0.1', public: null, tls_cert: null, tls_key: null },
     keyboard: { layout: 'us' },
@@ -285,6 +294,7 @@ export function applyTo(args: Record<string, unknown>, settings: ConfigSettings,
     ['desktop', 'RELAY_DESKTOP', 'desktop', present.has('desktop') ? settings.desktop : undefined],
     ['backend', 'RELAY_BACKEND', 'backend', settings.backend],
     ['resolution', 'RELAY_RESOLUTION', 'display.resolution', settings.display.resolution],
+    ['compositor', 'RELAY_COMPOSITOR', 'display.compositor', settings.display.compositor],
     ['fps', 'RELAY_FPS', 'stream.fps', settings.stream.fps],
     ['bitrateMin', 'RELAY_BITRATE_MIN', 'stream.bitrate.min', settings.stream.bitrate.min],
     ['bitrateStart', 'RELAY_BITRATE_START', 'stream.bitrate.start', settings.stream.bitrate.start],

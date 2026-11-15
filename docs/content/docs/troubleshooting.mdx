@@ -43,23 +43,19 @@ Stopping a session also stops the processes it started. Save your work before ru
 | WebCodecs unavailable or a decoder error | Check the viewer status. Use a browser with H.264 WebCodecs and open the viewer over `https://` or `http://127.0.0.1`. |
 | The viewer cannot connect through a proxy | Forward WebSocket upgrades, preserve `Host` and `Origin`, and use the `--public` URL. See [Remote access](/docs/remote-access). |
 | The picture is too small or blurry | Under **Scaling**, choose **Actual size** or **Sharp pixels**. To resize the desktop, set `display.resolution` and restart. With `--display`, relay uses the existing screen size. See [Configuration](/docs/configuration). |
-| The desktop streams at about 60 fps although `stream.fps` is higher | XFCE compositing caps repaints at the display refresh rate. Turn it off as described in [The desktop holds at 60 fps](#the-desktop-holds-at-60-fps). |
+| The desktop streams at about 60 fps although `stream.fps` is higher | A compositor is repainting the screen at most 60 times a second. See [The desktop holds at 60 fps](#the-desktop-holds-at-60-fps). |
 | The picture is blocky although the desktop fills the viewer | The stream may sit at its minimum bitrate. Read `target_bitrate_bps` from the engine's `/metrics` endpoint, which `relay status --url URL --json` reports for a remote engine, then raise `stream.bitrate.min` if the link can carry more. See [Configuration](/docs/configuration). |
 | `resources_available: false` | Relay cannot read valid cgroup v2 counters. Ensure `/sys/fs/cgroup/cpu.stat`, `/sys/fs/cgroup/memory.current`, and `/sys/fs/cgroup/memory.stat` are readable. Streaming is unaffected. |
 
 ### The desktop holds at 60 fps
 
-A compositing window manager repaints at the display refresh rate, so the engine captures at most one frame per refresh however high `stream.fps` is set. The XFCE desktop that `relay up` starts enables compositing.
+A compositing window manager repaints at the display refresh rate, which is 60 times a second on the display relay creates. The engine then captures at most 60 frames a second however high `stream.fps` is set.
 
-Turn compositing off from inside the running session. Replace `NAME` with the session name, or omit `--name` for the `default` session:
+In the XFCE desktop that `relay up` starts, `display.compositor` decides whether the compositor runs. The default, `auto`, turns it off when `stream.fps` is above 60. If the stream still holds at 60 fps, check that `display.compositor` or `RELAY_COMPOSITOR` isn't set to `on`, then restart the session. See [Configuration](/docs/configuration).
 
-```sh
-relay run --name NAME -- xfconf-query -c xfwm4 -p /general/use_compositing -n -t bool -s false
-```
+Relay applies the setting each time a session starts. A change you make inside the session, for example with `xfconf-query`, lasts until the session restarts.
 
-The window manager applies the change within a few seconds, without a restart. To turn compositing back on, run the command with `-s true`.
-
-Relay keeps each session's XFCE settings in that session's [state directory](/docs/cli#state-directory). The setting therefore stays off when you stop the session and start it again under the same name, and a session with a different name starts with compositing on. Run `xfconf-query` through `relay run`: from a plain shell it changes the settings in `~/.config/xfce4`, which the session doesn't read.
+Another desktop command, or a display you attach to with `--display`, keeps its own compositor. Turn it off in that desktop's settings.
 
 Compare the result in the viewer's **Stream statistics**, which reports the frames actually drawn. With compositing off, a 1280x720 session set to 120 fps draws at the configured rate while the encoder uses a fraction of one core.
 
