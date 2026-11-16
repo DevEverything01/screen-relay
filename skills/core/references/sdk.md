@@ -25,7 +25,7 @@ import { createClient, connect, RelayError } from 'screen-relay';
 `createClient(options)` returns a client. Each call sends its own request. Coordinates are fractions of the screen from 0 to 1, the same as the CLI.
 
 ```ts
-status(): Promise<Status>
+status(): Promise<Status>                          // engine metrics, not the CLI's session record
 capabilities(): Promise<Capabilities>
 screenshot(): Promise<Uint8Array>                  // PNG bytes
 click(x, y, { button?: 'left' | 'middle' | 'right' })

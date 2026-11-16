@@ -36,7 +36,7 @@ Run these steps in order. The port must be published before the first `up`, so t
    screen-relay up -d --public https://<id>.vercel.run
    ```
 
-   `/` must resolve to `https://<id>.vercel.run`, because the engine accepts only the `--public` host. Piped, `up -d` prints the viewer URL with its `#token=` fragment. Treat the whole URL as a secret, and share it only through the user's secret channel.
+   `--public` makes the session listen on `0.0.0.0` and creates a token. `/` must resolve to `https://<id>.vercel.run`, because the engine accepts only the `--public` host. Piped, `up -d` prints the viewer URL with its `#token=` fragment. Treat the whole URL as a secret, and share it only through the user's secret channel.
 
 5. Check the session:
 
