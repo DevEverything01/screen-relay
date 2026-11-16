@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstring>
+#include <filesystem>
 #include <iostream>
 #include <limits>
 #ifdef __linux__
@@ -397,7 +398,11 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
       }
       if (path == "/viewer.js") { file=s->config.viewer+"/viewer.js"; mime="application/javascript"; }
       if (file.empty()) return errorResponse(wsi, response, HTTP_STATUS_NOT_FOUND, "not_found");
-      return lws_serve_http_file(wsi, file.c_str(), mime, headers, headerCount) < 0 ? -1 : 0;
+      std::error_code fileError; const auto fileSize = std::filesystem::file_size(file, fileError);
+      const int served = lws_serve_http_file(wsi, file.c_str(), mime, headers, headerCount);
+      std::cerr << "serve " << path << " -> " << file << " size " << fileSize << " result " << served
+                << " errno " << errno << " " << fileError.message() << '\n';
+      return served < 0 ? -1 : 0;
     }
     case LWS_CALLBACK_HTTP_WRITEABLE: {
       auto* response = static_cast<HttpResponse*>(user);
