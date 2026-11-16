@@ -104,6 +104,23 @@ socket.on('close', () => {
 });
 NODE
 
+step 'viewer refuses framing'
+node - "$port" <<'NODE' || fail 'viewer HTML allows framing'
+const assert = require('node:assert/strict');
+const http = require('node:http');
+const port = Number(process.argv[2]);
+const headers = (path) => new Promise((resolve, reject) => {
+  http.get({ host: '127.0.0.1', port, path }, (response) => { response.resume(); resolve(response.headers); }).on('error', reject);
+});
+(async () => {
+  for (const path of ['/', '/index.html']) {
+    const value = await headers(path);
+    assert.match(value['content-security-policy'] ?? '', /(^|;)\s*frame-ancestors 'none'(\s*;|$)/);
+    assert.equal(value['x-frame-options'], 'DENY');
+  }
+})().catch((error) => { console.error(error.message); process.exit(1); });
+NODE
+
 step screenshot
 "$relay" screenshot --name "$name" --json "$work/screen.png" > "$work/screenshot.json" 2> "$work/stderr" || fail screenshot
 [ ! -s "$work/stderr" ] || fail 'screenshot JSON wrote stderr'

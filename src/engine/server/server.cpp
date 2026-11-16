@@ -303,6 +303,9 @@ int jsonResponse(lws* wsi, HttpResponse* response, unsigned status, const std::s
 int errorResponse(lws* wsi, HttpResponse* response, unsigned status, const char* error) {
   return jsonResponse(wsi, response, status, "{\"error\":\"" + std::string(error) + "\"}");
 }
+constexpr char viewerFrameHeaders[] =
+    "content-security-policy: frame-ancestors 'none'\r\n"
+    "x-frame-options: DENY\r\n";
 void closeScreenshot(Server* server, lws* wsi, HttpResponse* response) {
   if (server->screenshot_client == wsi) {
     server->screenshot_client = nullptr;
@@ -387,11 +390,14 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
             ",\"audio\":false,\"clipboard\":false,\"resize\":false,\"ime\":false}";
         return jsonResponse(wsi, response, HTTP_STATUS_OK, json);
       }
-      std::string file; const char* mime = nullptr;
-      if (path == "/" || path == "/index.html") { file=s->config.viewer+"/index.html"; mime="text/html"; }
+      std::string file; const char* mime = nullptr; const char* headers = nullptr; int headerCount = 0;
+      if (path == "/" || path == "/index.html") {
+        file=s->config.viewer+"/index.html"; mime="text/html";
+        headers=viewerFrameHeaders; headerCount=int(sizeof(viewerFrameHeaders)-1);
+      }
       if (path == "/viewer.js") { file=s->config.viewer+"/viewer.js"; mime="application/javascript"; }
       if (file.empty()) return errorResponse(wsi, response, HTTP_STATUS_NOT_FOUND, "not_found");
-      return lws_serve_http_file(wsi, file.c_str(), mime, nullptr, 0) < 0 ? -1 : 0;
+      return lws_serve_http_file(wsi, file.c_str(), mime, headers, headerCount) < 0 ? -1 : 0;
     }
     case LWS_CALLBACK_HTTP_WRITEABLE: {
       auto* response = static_cast<HttpResponse*>(user);
