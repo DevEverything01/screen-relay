@@ -11,7 +11,7 @@ The docs site in `docs/content/docs/` is for people who use screen-relay:
 
 Neither group reads screen-relay's source. Write every page so a reader can act without opening the repository.
 
-Contributor material lives outside the site. Source layout, threads, class and function names, build internals, and how to add a backend go in `CONTRIBUTING.md` at the repository root. The `README.md` is a short front door: what screen-relay is, a quickstart, and a link to the docs site.
+Contributor material lives outside the site. Source layout, threads, class and function names, build internals, and how to add a backend go in `CONTRIBUTING.md` at the repository root. The `README.md` is the front door: what screen-relay is, install, a quick start, how it works, agent setup, the command groups, platforms, development, and links to the docs site.
 
 ## Describe behavior, not implementation
 
