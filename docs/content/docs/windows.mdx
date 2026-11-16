@@ -3,9 +3,9 @@ title: Windows
 description: Build the engine on Windows, stream the signed-in desktop, and control it from another machine.
 ---
 
-The relay engine runs on Windows. It captures a display of the signed-in user's desktop session with Desktop Duplication and injects input with `SendInput`.
+The screen-relay engine runs on Windows. It captures a display of the signed-in user's desktop session with Desktop Duplication and injects input with `SendInput`.
 
-On Windows, build and start the engine by hand. `relay up` and `relay down` are not supported, and `relay doctor` reports the platform as unsupported. To install the CLI, run `./install.sh --client-only` in a shell with Node 26 or newer. The [client commands](/docs/cli#client-target) work from any machine with `--url` and a token file.
+On Windows, build and start the engine by hand. `screen-relay up` and `screen-relay down` are not supported, and `screen-relay doctor` reports the platform as unsupported. To install the CLI, run `npm install -g screen-relay` in a shell with Node 22 or newer. The [client commands](/docs/cli#client-target) work from any machine with `--url` and a token file.
 
 ## Build the engine
 
@@ -18,7 +18,7 @@ make
 
 On Windows, `make` builds the Windows backend by default and produces `relay-engine.exe`.
 
-The engine serves the viewer from a folder of built assets. Build them with Node 26 or newer:
+The engine serves the viewer from a folder of built assets. Build them with Node 22 or newer:
 
 ```sh
 npm ci && npm run build
@@ -28,7 +28,7 @@ This writes the viewer to `dist/viewer`. The engine looks for a `viewer` folder 
 
 ## Start the engine
 
-Start `relay-engine.exe` from the UCRT64 shell in the signed-in user's desktop session, which puts the libraries it needs on `PATH`. Desktop Duplication works only in that session, so an SSH or service session fails with `Desktop Duplication is unavailable; start relay in the signed-in user's desktop session` or `No display is attached to this session`.
+Start `relay-engine.exe` from the UCRT64 shell in the signed-in user's desktop session, which puts the libraries it needs on `PATH`. Desktop Duplication works only in that session, so an SSH or service session fails with `Desktop Duplication is unavailable; start screen-relay in the signed-in user's desktop session` or `No display is attached to this session`.
 
 ```sh
 ./relay-engine.exe --viewer-dir dist/viewer
@@ -72,15 +72,15 @@ Open `https://desktop.example.com/#token=TOKEN` and keep that link secret. The v
 Install the CLI on any machine, then pass the engine's URL and the same token file:
 
 ```sh
-relay status --url https://desktop.example.com --token-file ./token
-relay screenshot screen.png --url https://desktop.example.com --token-file ./token
+screen-relay status --url https://desktop.example.com --token-file ./token
+screen-relay screenshot screen.png --url https://desktop.example.com --token-file ./token
 ```
 
-[Remote access](/docs/remote-access#control-a-session-from-your-laptop) explains the URL rules and the `RELAY_URL` and `RELAY_TOKEN_FILE` variables. The [CLI reference](/docs/cli) lists the client commands.
+[Remote access](/docs/remote-access#control-a-session-from-your-laptop) explains the URL rules and the `SCREEN_RELAY_URL` and `SCREEN_RELAY_TOKEN_FILE` variables. The [CLI reference](/docs/cli) lists the client commands.
 
 ## Limits
 
 - The engine captures one display, the primary one unless you pass `--output`. A display wider or taller than 16384 pixels is scaled down by halves until it fits. The streamed size must be 320 to 16384 pixels wide and 240 to 16384 pixels high, with even dimensions.
-- If the display's size or position changes, the stream stops with `The display changed from WxH to WxH or moved; restart relay to stream it`. Restart the engine.
+- If the display's size or position changes, the stream stops with `The display changed from WxH to WxH or moved; restart screen-relay to stream it`. Restart the engine.
 - Windows refuses input to elevated (administrator) windows, and the engine reports that input as not applied.
 - Text typing uses the keyboard layout of the foreground window. Characters that layout cannot type are sent as Unicode input.

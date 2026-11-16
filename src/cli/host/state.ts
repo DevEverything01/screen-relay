@@ -12,7 +12,7 @@ export function stateDir(name: string): string {
   if (!/^[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}$/.test(name)) {
     throw new Failure('invalid_input', `Invalid session name "${name}"`, 'Use letters, digits, ".", "_" or "-".');
   }
-  return join(process.env.XDG_STATE_HOME || join(homedir(), '.local', 'state'), 'relay', name);
+  return join(process.env.XDG_STATE_HOME || join(homedir(), '.local', 'state'), 'screen-relay', name);
 }
 
 export function readSession(name: string): SessionData | null {
@@ -81,10 +81,10 @@ export function identity(pid: number): ProcessIdentity {
   return { pid, start: startTime(pid) };
 }
 
-/** Signals every Linux process carrying this session's RELAY_SESSION marker; on macOS the app watcher stops each app it holds. */
+/** Signals every Linux process carrying this session's SCREEN_RELAY_SESSION marker; on macOS the app watcher stops each app it holds. */
 export async function sweep(directory: string, signal?: AbortSignal): Promise<void> {
   if (process.platform === 'darwin') return;
-  const marker = Buffer.from(`RELAY_SESSION=${directory}`);
+  const marker = Buffer.from(`SCREEN_RELAY_SESSION=${directory}`);
   for (const killSignal of ['SIGTERM', 'SIGKILL'] as const) {
     signal?.throwIfAborted();
     const found: number[] = [];
@@ -126,7 +126,7 @@ export async function reap(directory: string, session: SessionData | null, signa
 export async function lock(name: string, directory: string): Promise<{ close(): Promise<void> }> {
   const file = join(directory, 'lock');
   const busy = () => new Failure('already_running', `Session "${name}" is already running`,
-    'Stop it with `relay down --name ' + name + '` or pick another --name.');
+    'Stop it with `screen-relay down --name ' + name + '` or pick another --name.');
   const [command, args] = process.platform === 'darwin'
     ? ['lockf', ['-k', '-s', '-t', '0', file, 'sh', '-c', 'printf .; cat']]
     : ['flock', ['--exclusive', '--nonblock', '--conflict-exit-code', '75', file, 'sh', '-c', 'printf .; cat']];
@@ -137,14 +137,14 @@ export async function lock(name: string, directory: string): Promise<{ close(): 
       if (!ready) { ready = true; resolve(); }
     });
     child.once('error', reject);
-    child.once('exit', (code) => reject(code === 75 ? busy() : new Failure('internal', `Cannot lock ${file}`, 'Check the state directory permissions with `relay doctor`.')));
+    child.once('exit', (code) => reject(code === 75 ? busy() : new Failure('internal', `Cannot lock ${file}`, 'Check the state directory permissions with `screen-relay doctor`.')));
   });
   try {
     await acquired;
   } catch (error) {
     child.stdin.destroy();
     if (error instanceof Failure) throw error;
-    throw new Failure('internal', `Cannot lock ${file}: ${String(error)}`, 'Check the state directory permissions with `relay doctor`.');
+    throw new Failure('internal', `Cannot lock ${file}: ${String(error)}`, 'Check the state directory permissions with `screen-relay doctor`.');
   }
   return {
     close() {

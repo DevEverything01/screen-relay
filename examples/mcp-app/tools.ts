@@ -15,10 +15,10 @@ export function registerTools(server: McpServer): void {
     "open_desktop",
     {
       title: "Open desktop",
-      description: "Show a relay desktop stream in an interactive viewer.",
+      description: "Show a screen-relay desktop stream in an interactive viewer.",
       inputSchema: z.object({
-        url: z.string().describe("Relay viewer URL, for example http://localhost:18080/"),
-        token: z.string().optional().describe("Relay access token. Omit to use RELAY_TOKEN."),
+        url: z.string().describe("screen-relay viewer URL, for example http://localhost:18080/"),
+        token: z.string().optional().describe("screen-relay access token. Omit to use SCREEN_RELAY_TOKEN."),
       }),
       _meta: { ui: { resourceUri: RESOURCE_URI } },
     },
@@ -52,7 +52,7 @@ export function registerTools(server: McpServer): void {
     "desktop_action",
     {
       title: "Desktop action",
-      description: "Run an agent-desktop command against the relay desktop, for example [\"snapshot\"].",
+      description: "Run an agent-desktop command against the screen-relay desktop, for example [\"snapshot\"].",
       inputSchema: z.object({
         args: z.array(z.string()).describe("Arguments for agent-desktop"),
       }),
@@ -64,7 +64,7 @@ export function registerTools(server: McpServer): void {
     "browser_action",
     {
       title: "Browser action",
-      description: "Run an agent-browser command inside the relay sandbox, for example [\"open\", \"https://example.com\"].",
+      description: "Run an agent-browser command inside the screen-relay sandbox, for example [\"open\", \"https://example.com\"].",
       inputSchema: z.object({
         args: z.array(z.string()).describe("Arguments for agent-browser"),
       }),

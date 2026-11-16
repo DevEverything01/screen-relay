@@ -9,9 +9,9 @@ import { loadConfig } from '../config.js';
 import { emit, Failure, formatDoctor } from '../output.js';
 import { DEFAULT_PORT, clearedCommand, isLinux, run, spawnCleared, which } from './common.js';
 import type { HostArgs } from './common.js';
-import { detectFamily, installCommand, packagesFor, type Family } from './packages.js';
+import { detectFamily, installCommand as packageCommand, packagesFor, type Family } from './packages.js';
 import { stateDir } from './state.js';
-import { BACKEND_PROGRAMS, findEngine, resolveBackend, startXvfb, xQuery } from './supervisor.js';
+import { BACKEND_PROGRAMS, findEngine, installCommand, resolveBackend, startXvfb, xQuery } from './supervisor.js';
 
 const TINY_SVG = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>');
 function crc32(data: Buffer): number {
@@ -104,7 +104,7 @@ export async function cmdDoctor(args: HostArgs): Promise<number> {
     let family: Family | undefined;
     if (linux) try { family = detectFamily(readFileSync('/etc/os-release', 'utf8')); } catch {}
     const packageHint = (names: string[]) => family
-      ? installCommand(family, packagesFor(family, names), sudo)
+      ? packageCommand(family, packagesFor(family, names), sudo)
       : `Install ${names.join(' ')} with your system package manager.`;
     let configuredBackend: string | undefined;
     try {
@@ -113,7 +113,7 @@ export async function cmdDoctor(args: HostArgs): Promise<number> {
       if (!(error instanceof Failure)) throw error;
       check('config', false, error.message, error.hint);
     }
-    const requestedBackend = process.env.RELAY_BACKEND ?? configuredBackend;
+    const requestedBackend = process.env.SCREEN_RELAY_BACKEND ?? configuredBackend;
     let backend: 'x11' | 'wayland' | 'macos';
     let backendResolved = true;
     try {
@@ -125,7 +125,7 @@ export async function cmdDoctor(args: HostArgs): Promise<number> {
     }
     const x11 = backend === 'x11';
     check('user', true, root ? 'root' : `uid ${process.getuid?.() ?? -1}`);
-    check('node', Number(process.versions.node.split('.')[0]) >= 26, process.versions.node, './install.sh');
+    check('node', Number(process.versions.node.split('.')[0]) >= 22, process.versions.node, 'Install Node 22 or newer.');
     if (linux) check('setpriv', Boolean(which('setpriv')), which('setpriv') ?? 'not found', packageHint(['setpriv']));
     let homeWritable = true;
     try { accessSync(homedir(), constants.W_OK); } catch { homeWritable = false; }
@@ -135,7 +135,7 @@ export async function cmdDoctor(args: HostArgs): Promise<number> {
     try { mkdirSync(state, { recursive: true }); accessSync(state, constants.W_OK); } catch { writable = false; }
     check('state dir', writable, state, 'export XDG_STATE_HOME=/path/to/a/writable/dir');
     const engine = findEngine();
-    const engineRuns = check('engine', Boolean(engine && run([engine, '--help']).status === 0), engine ?? 'relay-engine not found', './install.sh');
+    const engineRuns = check('engine', Boolean(engine && run([engine, '--help']).status === 0), engine ?? 'relay-engine not found', installCommand(backend));
     if (!linux) {
       if (engineRuns && backendResolved && engine) {
         const result = run([engine, '--backend', 'macos', '--check'], { timeout: 20000 });
@@ -147,7 +147,7 @@ export async function cmdDoctor(args: HostArgs): Promise<number> {
       const x264 = findLibrary('x264');
       const rpmFusionCommand = `${sudo}dnf -y install https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm`;
       const x264Hint = family === 'apt'
-        ? installCommand(family, ["$(apt-cache search --names-only '^libx264-[0-9]+$' | cut -d' ' -f1)"], sudo)
+        ? packageCommand(family, ["$(apt-cache search --names-only '^libx264-[0-9]+$' | cut -d' ' -f1)"], sudo)
         : family === 'dnf'
           ? `Enable RPM Fusion Free with ${rpmFusionCommand}, then install with ${packageHint(['x264-dev'])}`
           : packageHint(['x264-dev']);
@@ -158,7 +158,7 @@ export async function cmdDoctor(args: HostArgs): Promise<number> {
       if (x11) {
         check('dbus-run-session', Boolean(which('dbus-run-session')), which('dbus-run-session') ?? 'not found', packageHint(['dbus-run-session']), 'warn');
         const xfcePackages = ['xfce4-session', 'xfwm4', 'xfce4-panel', 'xfdesktop'];
-        check('xfce4-session', Boolean(which('xfce4-session')), which('xfce4-session') ?? 'not found (use --desktop none)', `./install.sh (or ${packageHint(xfcePackages)})`, 'warn');
+        check('xfce4-session', Boolean(which('xfce4-session')), which('xfce4-session') ?? 'not found (use --desktop none)', `${installCommand(backend)} (or ${packageHint(xfcePackages)})`, 'warn');
         let socketUsable = false;
         try {
           const info = statSync('/tmp/.X11-unix');
@@ -174,7 +174,7 @@ export async function cmdDoctor(args: HostArgs): Promise<number> {
       server.once('error', () => resolve(false));
       server.listen(DEFAULT_PORT, '127.0.0.1', () => server.close(() => resolve(true)));
     });
-    check('port', free, `127.0.0.1:${DEFAULT_PORT} ${free ? 'free' : 'in use'}`, `relay up --port ${DEFAULT_PORT + 1}`, 'warn');
+    check('port', free, `127.0.0.1:${DEFAULT_PORT} ${free ? 'free' : 'in use'}`, `screen-relay up --port ${DEFAULT_PORT + 1}`, 'warn');
     if (linux) {
       if (x11 && which('Xvfb') && which('xauth') && which('xdpyinfo')) {
         const scratch = mkdtempSync(join(tmpdir(), 'relay-doctor-'));
@@ -202,18 +202,18 @@ export async function cmdDoctor(args: HostArgs): Promise<number> {
         }
       }
       const capLine = readFileSync('/proc/self/status', 'utf8').split(/\r?\n/).find((line) => line.startsWith('CapAmb:'))?.split(/\s+/)[1] ?? '0';
-      check('ambient caps', BigInt(`0x${capLine}`) === 0n, capLine === '0' ? 'none' : `${capLine}: apps that inherit them crash on icons`, 'Start apps with `relay run -- APP`, which clears them; the desktop and its menus already do.', 'warn');
+      check('ambient caps', BigInt(`0x${capLine}`) === 0n, capLine === '0' ? 'none' : `${capLine}: apps that inherit them crash on icons`, 'Start apps with `screen-relay run -- APP`, which clears them; the desktop and its menus already do.', 'warn');
       if (x11) {
         const library = findLibrary('gdk_pixbuf-2.0');
         const tool = iconTool();
-        const gdkPixbufHint = family === 'apt' ? './install.sh' : packageHint(['gdk-pixbuf-bin']);
+        const gdkPixbufHint = family === 'apt' ? installCommand(backend) : packageHint(['gdk-pixbuf-bin']);
         if (!library) check('icon decoding', false, 'gdk-pixbuf not installed (desktop not installed)', gdkPixbufHint, 'warn');
         else if (!tool) check('icon decoding', false, `gdk-pixbuf tools not installed (${Object.keys(ICON_TOOLS).join(' or ')})`, gdkPixbufHint, 'warn');
         else {
           let [ok, message] = iconProbe(tool, '.png', tinyPng());
           let kind = 'PNG';
           if (ok) { [ok, message] = iconProbe(tool, '.svg', TINY_SVG); kind = 'SVG'; }
-          const defaultFix = 'See the detail; read `relay logs desktop` after a failed start.';
+          const defaultFix = 'See the detail; read `screen-relay logs desktop` after a failed start.';
           let aptGlycinMissing = false;
           if (!ok && family === 'apt') {
             const glycinPackage = packagesFor(family, ['glycin-loaders'])[0];
@@ -232,7 +232,7 @@ export async function cmdDoctor(args: HostArgs): Promise<number> {
           if (aptGlycinMissing) {
             fix = packageHint(['glycin-loaders']);
           } else if (bubblewrapNeedsUserNamespaces) {
-            fix = 'Image loaders sandbox with bubblewrap, which needs unprivileged user namespaces: allow them for bwrap (AppArmor profile or kernel.unprivileged_userns_clone=1). relay never disables sandboxing.';
+            fix = 'Image loaders sandbox with bubblewrap, which needs unprivileged user namespaces: allow them for bwrap (AppArmor profile or kernel.unprivileged_userns_clone=1). screen-relay never disables sandboxing.';
           } else if (!ok && family !== 'apt' && kind === 'SVG') {
             fix = packageHint(['glycin-loaders']);
           } else {

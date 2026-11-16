@@ -1,9 +1,9 @@
 ---
 title: Vercel Sandbox
-description: Run relay in a Vercel Sandbox and open the desktop in your browser.
+description: Run screen-relay in a Vercel Sandbox and open the desktop in your browser.
 ---
 
-Run relay in a Vercel Sandbox, publish port 8080, and open the desktop in your browser. The sandbox is the VM that runs the desktop.
+Run screen-relay in a Vercel Sandbox, publish port 8080, and open the desktop in your browser. The sandbox is the VM that runs the desktop.
 
 ## With the Sandbox CLI
 
@@ -17,41 +17,40 @@ Run relay in a Vercel Sandbox, publish port 8080, and open the desktop in your b
 2. Create a sandbox and publish port 8080:
 
    ```sh
-   sandbox create --name relay --timeout 45m -p 8080
+   sandbox create --name screen-relay --timeout 45m -p 8080
    ```
 
-   The command prints a URL like `https://sb-xxxx.vercel.run`. Replace that example URL in the commands below with your URL. Hobby plans cap the sandbox timeout at 45 minutes. On plans that allow longer runtimes, `sandbox extend relay 30m` adds 30 minutes.
+   The command prints a URL like `https://sb-xxxx.vercel.run`. Replace that example URL in the commands below with your URL. Hobby plans cap the sandbox timeout at 45 minutes. On plans that allow longer runtimes, `sandbox extend screen-relay 30m` adds 30 minutes.
 
-3. From your clone of relay, copy it into the sandbox and install it:
+3. Install screen-relay in the sandbox from npm, then set up the machine:
 
    ```sh
-   git archive --format=tar.gz -o relay.tgz HEAD
-   sandbox cp relay.tgz relay:/tmp/relay.tgz
-   sandbox exec relay sh -c 'mkdir -p ~/relay && tar -xzf /tmp/relay.tgz -C ~/relay && cd ~/relay && ./install.sh'
+   sandbox exec screen-relay sh -c 'npm install -g screen-relay'
+   sandbox exec screen-relay sh -c 'screen-relay install --yes'
    ```
 
-   Installation takes a few minutes. The sandbox runs Ubuntu 26.04 on x86_64 as the `ubuntu` user, which has passwordless sudo.
+   Installation takes a few minutes. The sandbox needs Node 22 or newer with npm. It runs Ubuntu 26.04 on x86_64 as the `ubuntu` user, which has passwordless sudo.
 
-4. Start relay using your public URL:
+4. Start screen-relay using your public URL:
 
    ```sh
-   sandbox exec relay sh -c '$HOME/.local/bin/relay up -d --public https://sb-xxxx.vercel.run'
+   sandbox exec screen-relay sh -c 'screen-relay up -d --public https://sb-xxxx.vercel.run'
    ```
 
    Open the printed viewer link in your browser. It includes `#token=` and grants access to the desktop, so keep it secret.
 
-   For Wayland, add `--backend wayland` to both `./install.sh` and `relay up`. See [Wayland](/docs/wayland).
+   For Wayland, add `--backend wayland` to the `screen-relay install` command and to `screen-relay up`. See [Wayland](/docs/wayland).
 
 5. Take a screenshot inside the sandbox:
 
    ```sh
-   sandbox exec relay sh -c '$HOME/.local/bin/relay screenshot /tmp/screen.png'
+   sandbox exec screen-relay sh -c 'screen-relay screenshot /tmp/screen.png'
    ```
 
-   The PNG is saved inside the sandbox. To control the desktop from your laptop, [install the relay CLI](/docs/remote-access) and save the token from the viewer link in a local file:
+   The PNG is saved inside the sandbox. To control the desktop from your laptop, [install the screen-relay CLI](/docs/remote-access) and save the token from the viewer link in a local file:
 
    ```sh
-   relay screenshot screen.png --url https://sb-xxxx.vercel.run --token-file ./token
+   screen-relay screenshot screen.png --url https://sb-xxxx.vercel.run --token-file ./token
    ```
 
    See [Tokens](/docs/remote-access#tokens) and the [Node SDK options](/docs/sdk#options) for remote access.
@@ -59,12 +58,12 @@ Run relay in a Vercel Sandbox, publish port 8080, and open the desktop in your b
 6. When finished, remove the sandbox and its sessions:
 
    ```sh
-   sandbox rm relay
+   sandbox rm screen-relay
    ```
 
    Existing snapshots are kept.
 
-Agents can load these instructions with `relay skills get vercel-sandbox`.
+Agents can load these instructions with `screen-relay skills get vercel-sandbox`.
 
 ## With the Sandbox SDK
 
@@ -76,8 +75,6 @@ Agents can load these instructions with `relay skills get vercel-sandbox`.
    vercel env pull
    ```
 
-   Add a `GITHUB_TOKEN` with read access to the relay repository to `.env.local`. The sandbox clones relay with it.
-
 2. Save this as `relay-sandbox.mjs`:
 
    ```js
@@ -85,31 +82,25 @@ Agents can load these instructions with `relay skills get vercel-sandbox`.
 
    const sandbox = await Sandbox.create({
      name: 'relay-sdk',
-     source: {
-       type: 'git',
-       url: 'https://github.com/vercel-labs/relay.git',
-       username: 'x-access-token',
-       password: process.env.GITHUB_TOKEN,
-     },
      ports: [8080],
      timeout: 45 * 60 * 1000,
    });
 
    const install = await sandbox.runCommand({
      cmd: 'sh',
-     args: ['-c', './install.sh'],
+     args: ['-c', 'npm install -g screen-relay && screen-relay install --yes'],
      stdout: process.stdout,
      stderr: process.stderr,
    });
-   if (install.exitCode !== 0) throw new Error('Relay installation failed');
+   if (install.exitCode !== 0) throw new Error('screen-relay installation failed');
 
    const start = await sandbox.runCommand({
      cmd: 'sh',
-     args: ['-c', '$HOME/.local/bin/relay up -d --public "$1"', 'sh', sandbox.domain(8080)],
+     args: ['-c', 'screen-relay up -d --public "$1"', 'sh', sandbox.domain(8080)],
      stdout: process.stdout,
      stderr: process.stderr,
    });
-   if (start.exitCode !== 0) throw new Error('Relay failed to start');
+   if (start.exitCode !== 0) throw new Error('screen-relay failed to start');
    ```
 
 3. Run it:

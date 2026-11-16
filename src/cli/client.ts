@@ -42,7 +42,7 @@ function checkUrl(url: string, token?: string): string {
     throw invalidUrl(url);
   }
   if ((token !== undefined && !validToken(token)) || (!local && !token)) {
-    throw new Failure('invalid_input', 'Remote servers need a 64-character lowercase hex token', 'Pass --token-file FILE or set RELAY_TOKEN_FILE.');
+    throw new Failure('invalid_input', 'Remote servers need a 64-character lowercase hex token', 'Pass --token-file FILE or set SCREEN_RELAY_TOKEN_FILE.');
   }
   return url.replace(/\/$/, '');
 }
@@ -50,9 +50,9 @@ function checkUrl(url: string, token?: string): string {
 /** Resolves the engine a client command talks to from flags, the environment, or the local session. */
 export function resolveTarget(args: Args): Target {
   let url: string | undefined = typeof args.url === 'string' && args.url ? args.url : undefined;
-  if (!url && process.env.RELAY_URL) url = process.env.RELAY_URL;
+  if (!url && process.env.SCREEN_RELAY_URL) url = process.env.SCREEN_RELAY_URL;
   const explicit = Boolean(url);
-  let tokenFile = typeof args['token-file'] === 'string' ? args['token-file'] : process.env.RELAY_TOKEN_FILE;
+  let tokenFile = typeof args['token-file'] === 'string' ? args['token-file'] : process.env.SCREEN_RELAY_TOKEN_FILE;
   let ca: string | undefined, connect: string | undefined;
   if (!url) {
     const session = readSession(String(args.name));
@@ -78,9 +78,9 @@ export function resolveTarget(args: Args): Target {
 
 const RECOVERY: Partial<Record<string, string>> = {
   busy: 'Close the other viewer or client, then retry.',
-  unauthorized: 'Pass the token with --token-file FILE or set RELAY_TOKEN_FILE.',
+  unauthorized: 'Pass the token with --token-file FILE or set SCREEN_RELAY_TOKEN_FILE.',
   forbidden: 'Use the --public origin, or connect through loopback.',
-  unsupported_input: 'Use relay type for layout-neutral text.',
+  unsupported_input: 'Use screen-relay type for layout-neutral text.',
   disconnected: 'Retry the command.',
 };
 
@@ -103,8 +103,8 @@ export function clientFailure(error: unknown, target: Target): Failure {
 
 function remoteRecovery(target: Target): { next?: ReturnType<typeof nextFor>; label: string } {
   return target.explicit
-    ? { next: nextFor(`relay status --url ${quote(target.url)}`), label: 'Check the remote session' }
-    : { next: nextFor('relay up -d'), label: 'Start a session' };
+    ? { next: nextFor(`screen-relay status --url ${quote(target.url)}`), label: 'Check the remote session' }
+    : { next: nextFor('screen-relay up -d'), label: 'Start a session' };
 }
 
 function open(target: Target): Client {
@@ -133,9 +133,9 @@ function finish(args: Args, events: number, what: string, target: Target): numbe
 }
 
 export async function cmdScreenshot(args: Args): Promise<number> {
-  if (args.json && args.file === '-') throw new Failure('invalid_input', '--json cannot be combined with PNG output on stdout', 'Run `relay screenshot --help`.');
+  if (args.json && args.file === '-') throw new Failure('invalid_input', '--json cannot be combined with PNG output on stdout', 'Run `screen-relay screenshot --help`.');
   const data = await withClient(args, (client) => client.screenshot());
-  if (data.length < 24 || !Buffer.from(data).subarray(0, 8).equals(PNG)) throw new Failure('internal', 'Engine did not return a PNG', 'Run `relay doctor`.');
+  if (data.length < 24 || !Buffer.from(data).subarray(0, 8).equals(PNG)) throw new Failure('internal', 'Engine did not return a PNG', 'Run `screen-relay doctor`.');
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
   const width = view.getUint32(16), height = view.getUint32(20);
   if (args.file === '-') {

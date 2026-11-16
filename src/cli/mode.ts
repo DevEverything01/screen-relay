@@ -3,7 +3,7 @@ import { determineAgent } from '@vercel/detect-agent';
 export interface OutputOptions { json?: boolean; 'no-color'?: boolean; color?: boolean }
 
 const detection = await determineAgent();
-const override = process.env.RELAY_AGENT;
+const override = process.env.SCREEN_RELAY_AGENT;
 
 export const agent = override === '1' ? true : override === '0' ? false : detection.isAgent;
 
@@ -13,4 +13,9 @@ export function outputMode(args: OutputOptions = {}, stream: NodeJS.WriteStream 
   const color = args['no-color'] || args.color === false || process.env.NO_COLOR
     ? false : forced !== undefined ? forced !== '0' : !plain;
   return { tty: Boolean(stream.isTTY), plain, color: color && !plain && !args.json, pretty: Boolean(process.stdout.isTTY) };
+}
+
+/** Whether the CLI may prompt: a person at a terminal, not an agent, CI, or a JSON caller. */
+export function interactive(args: OutputOptions = {}): boolean {
+  return Boolean(process.stdin.isTTY && process.stderr.isTTY) && !args.json && !agent && !process.env.CI && process.env.TERM !== 'dumb';
 }

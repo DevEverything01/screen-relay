@@ -32,7 +32,7 @@ function present(record) {
   try { process.kill(record.pid, 0); return true; } catch (error) { return error.code === 'EPERM'; }
 }
 function sessionSupervisor() {
-  try { return JSON.parse(fs.readFileSync(process.env.RELAY_SESSION + '/session.json', 'utf8')).supervisor; }
+  try { return JSON.parse(fs.readFileSync(process.env.SCREEN_RELAY_SESSION + '/session.json', 'utf8')).supervisor; }
   catch { return null; }
 }
 function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
@@ -92,7 +92,7 @@ async function hold(supervisor) {
       sendReady({ error: String(error) });
       return 1;
     }
-    console.log('relay: cannot start ' + command[0] + ': ' + String(error));
+    console.log('screen-relay: cannot start ' + command[0] + ': ' + String(error));
     return 1;
   }
   const exited = child.exitCode !== null ? child.exitCode : child.signalCode !== null ? 1 : await Promise.race([
@@ -100,7 +100,7 @@ async function hold(supervisor) {
     sleep(1000).then(() => null),
   ]);
   if (readyFd >= 0) sendReady(exited === null ? { pid: child.pid } : { pid: child.pid, exited });
-  else if (exited === null) console.log('relay: started ' + command[0] + ' (pid ' + child.pid + ')');
+  else if (exited === null) console.log('screen-relay: started ' + command[0] + ' (pid ' + child.pid + ')');
   let checked = 0;
   let counted = 0;
   let members = 1;
@@ -140,14 +140,14 @@ async function main() {
           sendReady({ error: String(error) });
           return 1;
         }
-        console.log('relay: cannot restart ' + command[0] + ': ' + String(error));
+        console.log('screen-relay: cannot restart ' + command[0] + ': ' + String(error));
       }
       if (processChild && processChild.pid) {
         if (readyFd >= 0) sendReady({ pid: processChild.pid });
-        else console.log('relay: restarted ' + command[0] + ' (pid ' + processChild.pid + ')');
+        else console.log('screen-relay: restarted ' + command[0] + ' (pid ' + processChild.pid + ')');
         while (!stopping.value && alive(supervisor) && processChild.exitCode === null && processChild.signalCode === null) await sleep(100);
         if (!stopping.value && alive(supervisor) && Date.now() - started >= 60000) delay = 1000;
-        if (!stopping.value && alive(supervisor)) console.log('relay: ' + command[0] + ' exited with code ' + processChild.exitCode + '; restarting in ' + delay / 1000 + 's');
+        if (!stopping.value && alive(supervisor)) console.log('screen-relay: ' + command[0] + ' exited with code ' + processChild.exitCode + '; restarting in ' + delay / 1000 + 's');
       }
       if (stopping.value || !alive(supervisor)) break;
       await sleep(delay);
@@ -211,16 +211,16 @@ export async function startWatcher(command: string[], env: NodeJS.ProcessEnv, lo
   if (!result) {
     watcher.kill('SIGTERM');
     if (!exited) await new Promise<void>((resolve) => watcher.once('exit', () => resolve()));
-    throw new Failure('timeout', 'App watcher did not report startup', 'Read `relay logs apps`.');
+    throw new Failure('timeout', 'App watcher did not report startup', 'Read `screen-relay logs apps`.');
   }
   let response: { pid?: number; exited?: number; error?: string };
   try {
     response = JSON.parse(result) as { pid?: number; exited?: number; error?: string };
   } catch {
-    throw new Failure('spawn_failed', 'App watcher exited before starting the app', 'Read `relay logs apps`.');
+    throw new Failure('spawn_failed', 'App watcher exited before starting the app', 'Read `screen-relay logs apps`.');
   }
   if (response.error) throw new Failure('spawn_failed', `Cannot start ${command[0]}: ${response.error}`);
-  if (typeof response.pid !== 'number') throw new Failure('spawn_failed', 'App watcher exited before starting the app', 'Read `relay logs apps`.');
+  if (typeof response.pid !== 'number') throw new Failure('spawn_failed', 'App watcher exited before starting the app', 'Read `screen-relay logs apps`.');
   watcher.unref();
   return { pid: response.pid, exited: response.exited };
 }

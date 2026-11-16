@@ -38,7 +38,7 @@ test('detectFamily maps os-release ID and ID_LIKE to a package family', () => {
 test('packagesFor maps logical names to distro packages, skipping unavailable cells', () => {
   assert.deepEqual(packagesFor('apt', ['xprop', 'xwininfo']), ['x11-utils']);
   assert.deepEqual(packagesFor('pacman', ['wayland-dev']), ['wayland', 'wayland-protocols']);
-  assert.deepEqual(packagesFor('apt', ['libstdc++']), []);
+  assert.deepEqual(packagesFor('apt', ['linux-headers']), []);
   assert.throws(() => packagesFor('apt', ['no-such-package']), /unknown package name: no-such-package/);
 });
 

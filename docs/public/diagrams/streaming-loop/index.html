@@ -64,7 +64,7 @@
 <body>
 <svg viewBox="0 0 720 368" role="img" aria-labelledby="t d">
   <title id="t">How streaming works</title>
-  <desc id="d">Along the top, an app paints the Desktop on the Linux VM. The relay engine captures only the changed part of the screen, encodes it at the current bitrate, and sends frames over the network to the Viewer in the browser. The Viewer holds each frame for up to 100 milliseconds so motion stays even. Along the bottom, the browser sends an acknowledgement with each frame's wait time back over the network. Rate control on the VM learns the link's round trip and whether a queue is building, then sets the bitrate, how many frames are in flight, and whether to pause capture.</desc>
+  <desc id="d">Along the top, an app paints the Desktop on the Linux VM. The screen-relay engine captures only the changed part of the screen, encodes it at the current bitrate, and sends frames over the network to the Viewer in the browser. The Viewer holds each frame for up to 100 milliseconds so motion stays even. Along the bottom, the browser sends an acknowledgement with each frame's wait time back over the network. Rate control on the VM learns the link's round trip and whether a queue is building, then sets the bitrate, how many frames are in flight, and whether to pause capture.</desc>
   <defs>
     <marker id="arrow" viewBox="0 0 8 8" refX="6" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
       <path d="M2 1.5 L6 4 L2 6.5"/>
@@ -91,7 +91,7 @@
     <rect x="3" y="3" width="10" height="10" rx="1.5"/>
     <path d="M6 0v3M10 0v3M6 13v3M10 13v3M0 6h3M0 10h3M13 6h3M13 10h3"/>
   </g>
-  <text class="label" x="240" y="84">relay engine</text>
+  <text class="label" x="240" y="84">screen-relay engine</text>
   <text class="sub" x="216" y="110">captures only changed</text>
   <text class="sub" x="216" y="128">areas, then encodes at</text>
   <text class="sub" x="216" y="146">the current bitrate</text>

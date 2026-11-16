@@ -54,10 +54,10 @@ test('desktop command parsing preserves quoted empty arguments', () => {
   assert.deepEqual(splitCommand('my-desktop --profile "" --fullscreen'), ['my-desktop', '--profile', '', '--fullscreen']);
 });
 
-test('session sweep does not match a longer RELAY_SESSION value', { skip: !existsSync('/proc/self/environ') }, async () => {
+test('session sweep does not match a longer SCREEN_RELAY_SESSION value', { skip: !existsSync('/proc/self/environ') }, async () => {
   const session = join(directory, 'desk');
   const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
-    env: { ...process.env, RELAY_SESSION: `${session}2` },
+    env: { ...process.env, SCREEN_RELAY_SESSION: `${session}2` },
     stdio: 'ignore',
   });
   try {

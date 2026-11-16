@@ -33,38 +33,38 @@ test('every metadata example parses through the command parser', () => {
     for (const example of command.examples) {
       const argv = [...example.command.matchAll(/"([^"]*)"|'([^']*)'|(\S+)/g)]
         .map(match => match[1] ?? match[2] ?? match[3]);
-      assert.equal(argv.shift(), 'relay', example.command);
+      assert.equal(argv.shift(), 'screen-relay', example.command);
       assert.equal(parseCommand(argv, {}).command, name, example.command);
     }
   }
 });
 
-test('an empty RELAY_CONFIG is treated as unset', () => {
-  assert.equal(parseCommand(['up'], { RELAY_CONFIG: '' }).config, undefined);
+test('an empty SCREEN_RELAY_CONFIG is treated as unset', () => {
+  assert.equal(parseCommand(['up'], { SCREEN_RELAY_CONFIG: '' }).config, undefined);
 });
 
 test('macOS attaches with its backend and starts apps without display variables', { skip: process.platform !== 'darwin' }, async () => {
   const platform = Object.getOwnPropertyDescriptor(process, 'platform');
-  const keys = ['DISPLAY', 'WAYLAND_DISPLAY', 'XAUTHORITY', 'XDG_STATE_HOME', 'XDG_CONFIG_HOME', 'RELAY_TEST_BACKENDS'];
+  const keys = ['DISPLAY', 'WAYLAND_DISPLAY', 'XAUTHORITY', 'XDG_STATE_HOME', 'XDG_CONFIG_HOME', 'SCREEN_RELAY_TEST_BACKENDS'];
   const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
   const engine = join(directory, 'relay-engine');
   const stateHome = join(directory, 'state');
-  const sessionDir = join(stateHome, 'relay', 'desk');
+  const sessionDir = join(stateHome, 'screen-relay', 'desk');
   let session;
   try {
     Object.defineProperty(process, 'platform', { value: 'darwin' });
-    Object.assign(process.env, { DISPLAY: ':9', WAYLAND_DISPLAY: 'wayland-9', XAUTHORITY: '/tmp/auth', XDG_STATE_HOME: stateHome, XDG_CONFIG_HOME: join(directory, 'session-config'), RELAY_TEST_BACKENDS: 'macos' });
+    Object.assign(process.env, { DISPLAY: ':9', WAYLAND_DISPLAY: 'wayland-9', XAUTHORITY: '/tmp/auth', XDG_STATE_HOME: stateHome, XDG_CONFIG_HOME: join(directory, 'session-config'), SCREEN_RELAY_TEST_BACKENDS: 'macos' });
     mkdirSync(sessionDir, { recursive: true });
     writeFileSync(engine, `#!/usr/bin/env node
 import { createServer } from 'node:http';
 import { writeFileSync } from 'node:fs';
 if (process.argv.includes('--help')) {
-  console.log('Compiled backends: ' + process.env.RELAY_TEST_BACKENDS);
+  console.log('Compiled backends: ' + process.env.SCREEN_RELAY_TEST_BACKENDS);
 } else if (process.argv.includes('invalid-output')) {
   console.error('Display invalid-output not found; active displays: 77 (1x1 points)');
   process.exitCode = 1;
 } else {
-  writeFileSync(process.env.RELAY_SESSION + '/engine-invocation.json', JSON.stringify({ args: process.argv.slice(2), env: process.env }));
+  writeFileSync(process.env.SCREEN_RELAY_SESSION + '/engine-invocation.json', JSON.stringify({ args: process.argv.slice(2), env: process.env }));
   const image = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64');
   const port = Number(process.argv[process.argv.indexOf('--port') + 1]);
   createServer((req, res) => { res.writeHead(200, { 'Content-Type': 'image/png' }); res.end(image); }).listen(port, '127.0.0.1', () => console.log(JSON.stringify({ ready: true, pid: process.pid })));
@@ -73,9 +73,9 @@ if (process.argv.includes('--help')) {
 
     assert.equal(resolveBackend(undefined), 'macos');
     for (const backend of ['x11', 'wayland']) assert.throws(() => resolveBackend(backend), { reason: 'invalid_input' });
-    process.env.RELAY_TEST_BACKENDS = 'x11';
+    process.env.SCREEN_RELAY_TEST_BACKENDS = 'x11';
     assert.throws(() => resolveBackend(undefined), { reason: 'missing_dependency' });
-    process.env.RELAY_TEST_BACKENDS = 'macos';
+    process.env.SCREEN_RELAY_TEST_BACKENDS = 'macos';
     Object.defineProperty(process, 'platform', { value: 'linux' });
     assert.throws(() => resolveBackend('macos'), { reason: 'invalid_input' });
     Object.defineProperty(process, 'platform', { value: 'darwin' });
@@ -96,14 +96,14 @@ if (process.argv.includes('--help')) {
     for (const key of ['DISPLAY', 'WAYLAND_DISPLAY', 'XAUTHORITY']) assert.equal(invocation.env[key], undefined);
 
     process.env.XDG_CONFIG_HOME = join(directory, 'different-config');
-    const app = "process.stdout.write(JSON.stringify({ DISPLAY: process.env.DISPLAY, WAYLAND_DISPLAY: process.env.WAYLAND_DISPLAY, XAUTHORITY: process.env.XAUTHORITY, RELAY_SESSION: process.env.RELAY_SESSION, XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME }))";
+    const app = "process.stdout.write(JSON.stringify({ DISPLAY: process.env.DISPLAY, WAYLAND_DISPLAY: process.env.WAYLAND_DISPLAY, XAUTHORITY: process.env.XAUTHORITY, SCREEN_RELAY_SESSION: process.env.SCREEN_RELAY_SESSION, XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME }))";
     assert.equal(await cmdRun({ command: 'run', json: true, name: 'desk', app: process.execPath, args: ['-e', app] }), 0);
     const appEnv = JSON.parse(readFileSync(join(sessionDir, 'apps.log'), 'utf8'));
-    assert.deepEqual(appEnv, { RELAY_SESSION: sessionDir, XDG_CONFIG_HOME: join(directory, 'session-config') });
+    assert.deepEqual(appEnv, { SCREEN_RELAY_SESSION: sessionDir, XDG_CONFIG_HOME: join(directory, 'session-config') });
     await session.cleanup();
     session = undefined;
 
-    const badDir = join(stateHome, 'relay', 'bad');
+    const badDir = join(stateHome, 'screen-relay', 'bad');
     mkdirSync(badDir, { recursive: true });
     session = new Session({ command: 'up', json: true, name: 'bad', port, output: 'invalid-output', resolution: '1280x720', fps: 60, bitrateMin: 1000000, bitrateStart: 8000000, bitrateMax: 40000000, timeout: 5 }, badDir);
     await assert.rejects(session.start(), { reason: 'component_failed', message: /Display invalid-output not found; active displays: 77/ });
@@ -127,7 +127,7 @@ test('--json failures write one JSON line to stderr and nothing to stdout', () =
     const result = spawnSync(process.execPath, [cli, ...argv, '--json'], {
       encoding: 'utf8',
       timeout: 15000,
-      env: { ...process.env, RELAY_URL: '', RELAY_TOKEN_FILE: '' },
+      env: { ...process.env, SCREEN_RELAY_URL: '', SCREEN_RELAY_TOKEN_FILE: '' },
     });
     assert.ifError(result.error);
     assert.equal(result.status, exit, `${argv.join(' ')}: ${result.stderr}`);
@@ -159,7 +159,7 @@ test('invalid URL diagnostics redact credentials and query strings', () => {
 });
 
 test('invalid URL recovery is a sentence in human mode and has no next command in --json', () => {
-  const env = { ...process.env, RELAY_URL: '', RELAY_TOKEN_FILE: '' };
+  const env = { ...process.env, SCREEN_RELAY_URL: '', SCREEN_RELAY_TOKEN_FILE: '' };
   const json = spawnSync(process.execPath, [cli, 'status', '--url', 'ftp://example.com', '--json'], { encoding: 'utf8', timeout: 15000, env });
   assert.ifError(json.error);
   assert.equal(json.status, 2);
@@ -170,8 +170,25 @@ test('invalid URL recovery is a sentence in human mode and has no next command i
   assert.match(human.stderr, /\n {2}Use an HTTPS origin or a local address:\n {4}Pass --url https:\/\/desktop\.example\.com or --url http:\/\/127\.0\.0\.1:8080\.\n$/);
 });
 
+test('up and install refuse to install system packages without a terminal unless --yes is passed', { skip: process.platform !== 'linux' && process.platform !== 'darwin' }, () => {
+  const empty = join(directory, 'no-tools');
+  mkdirSync(empty, { recursive: true });
+  const env = { ...process.env, PATH: empty, XDG_DATA_HOME: join(directory, 'data'), XDG_STATE_HOME: join(directory, 'setup-state'), XDG_CONFIG_HOME: join(directory, 'setup-config'), SCREEN_RELAY_AGENT: '1' };
+  delete env.SCREEN_RELAY_BACKEND;
+  const flag = process.platform === 'darwin' ? '' : ' --backend x11';
+  for (const argv of [['up', '-d', '--json'], ['install', '--json']]) {
+    const result = spawnSync(process.execPath, [cli, ...argv], { encoding: 'utf8', timeout: 15000, env });
+    assert.ifError(result.error);
+    assert.equal(result.status, 2, result.stderr);
+    assert.equal(result.stdout, '');
+    const failure = JSON.parse(result.stderr);
+    assert.equal(failure.reason, 'missing_input');
+    assert.equal(failure.next[0].command, `screen-relay install${flag} --yes`);
+  }
+});
+
 test('a skill name used as the skills action points at its get command', () => {
-  const env = { ...process.env, RELAY_AGENT: '0', RELAY_URL: '', RELAY_TOKEN_FILE: '' };
+  const env = { ...process.env, SCREEN_RELAY_AGENT: '0', SCREEN_RELAY_URL: '', SCREEN_RELAY_TOKEN_FILE: '' };
   const human = spawnSync(process.execPath, [cli, 'skills', 'core'], { encoding: 'utf8', timeout: 15000, env });
   assert.ifError(human.error);
   assert.equal(human.status, 2);
@@ -179,13 +196,13 @@ test('a skill name used as the skills action points at its get command', () => {
   const json = spawnSync(process.execPath, [cli, 'skills', 'core', '--json'], { encoding: 'utf8', timeout: 15000, env });
   assert.ifError(json.error);
   assert.equal(json.status, 2);
-  assert.deepEqual(JSON.parse(json.stderr).next, [{ command: 'relay skills get core', argv: ['relay', 'skills', 'get', 'core'] }]);
+  assert.deepEqual(JSON.parse(json.stderr).next, [{ command: 'screen-relay skills get core', argv: ['screen-relay', 'skills', 'get', 'core'] }]);
 });
 
 const help = (value, argv = ['--help']) => spawnSync(process.execPath, [cli, ...argv], {
   encoding: 'utf8',
   timeout: 15000,
-  env: { ...process.env, RELAY_AGENT: value },
+  env: { ...process.env, SCREEN_RELAY_AGENT: value },
 });
 
 test('human help is piped plain text with the command hint', () => {
@@ -197,10 +214,10 @@ test('human help is piped plain text with the command hint', () => {
     assert.doesNotMatch(result.stdout, /Start here \(for AI agents\):/);
   }
   const root = help('0');
-  assert.match(root.stdout, /^relay \d+\.\d+\.\d+\n\n▲ relay \[options\] <command>\n\nFor command help, run `relay <command> --help`\n\nHost commands \(run on the Linux or macOS machine that shows the desktop\):\n\n {4}up /);
+  assert.match(root.stdout, /^screen-relay \d+\.\d+\.\d+\n\n▲ screen-relay \[options\] <command>\n\nFor command help, run `screen-relay <command> --help`\n\nHost commands \(run on the Linux or macOS machine that shows the desktop\):\n\n {4}up /);
   const click = help('0', ['click', '--help']);
-  assert.match(click.stdout, /^click\n\n▲ relay click <x> <y> \[options\]\n\nClick at screen coordinates\nRuns on the host, or on another machine with --url and a token file\.\n\nOptions:\n\n {4}--button <BUTTON> +Select the mouse button\. Values: left, middle, right \[default: left\]\n/);
-  assert.match(click.stdout, /– Click the center\n\n {2}\$ relay click 0\.5 0\.5\n\n$/);
+  assert.match(click.stdout, /^click\n\n▲ screen-relay click <x> <y> \[options\]\n\nClick at screen coordinates\nRuns on the host, or on another machine with --url and a token file\.\n\nOptions:\n\n {4}--button <BUTTON> +Select the mouse button\. Values: left, middle, right \[default: left\]\n/);
+  assert.match(click.stdout, /– Click the center\n\n {2}\$ screen-relay click 0\.5 0\.5\n\n$/);
 });
 
 test('human help lists up under the host section and click under the client section', () => {
@@ -223,7 +240,7 @@ test('human help shows command notes before the examples', () => {
   assert.ok(result.stdout.indexOf('Notes:') < result.stdout.indexOf('Examples:'));
 });
 
-test('RELAY_AGENT=1 help keeps the agent block as plain text', () => {
+test('SCREEN_RELAY_AGENT=1 help keeps the agent block as plain text', () => {
   const result = help('1');
   assert.ifError(result.error);
   assert.equal(result.status, 0);
@@ -236,7 +253,7 @@ test('agent detection changes help only', () => {
   const run = (value) => spawnSync(process.execPath, [cli, 'status', '--url', 'ftp://example.com'], {
     encoding: 'utf8',
     timeout: 15000,
-    env: { ...process.env, RELAY_AGENT: value, RELAY_URL: '', RELAY_TOKEN_FILE: '' },
+    env: { ...process.env, SCREEN_RELAY_AGENT: value, SCREEN_RELAY_URL: '', SCREEN_RELAY_TOKEN_FILE: '' },
   });
   const off = run('0');
   const on = run('1');
@@ -252,7 +269,7 @@ test('piped help and errors contain no ANSI escape codes', () => {
     const result = spawnSync(process.execPath, [cli, ...argv], {
       encoding: 'utf8',
       timeout: 15000,
-      env: { ...process.env, RELAY_AGENT: '0' },
+      env: { ...process.env, SCREEN_RELAY_AGENT: '0' },
     });
     assert.ifError(result.error);
     assert.doesNotMatch(result.stdout + result.stderr, /\u001b\[/);

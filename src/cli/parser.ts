@@ -2,7 +2,7 @@ import { commands, globalOptions, type Args, type Parameter } from './commands.j
 import { Failure } from './output.js';
 
 export function usageFailure(message: string, command = '', reason = 'invalid_input'): Failure {
-  return new Failure(reason, message, `Run \`relay help${command ? ` ${command}` : ''}\`.`);
+  return new Failure(reason, message, `Run \`screen-relay help${command ? ` ${command}` : ''}\`.`);
 }
 
 function distance(left: string, right: string): number {
@@ -76,7 +76,7 @@ export function parseCommand(argv: string[], environment: NodeJS.ProcessEnv = pr
   const early = command.validate?.(args);
   if (early instanceof Failure) throw early;
   for (const parameter of [...globalOptions, ...command.options, ...command.arguments]) {
-    const environmentValue = parameter.environment === 'RELAY_CONFIG' ? environment.RELAY_CONFIG || undefined : parameter.environment ? environment[parameter.environment] : undefined;
+    const environmentValue = parameter.environment === 'SCREEN_RELAY_CONFIG' ? environment.SCREEN_RELAY_CONFIG || undefined : parameter.environment ? environment[parameter.environment] : undefined;
     const raw = args[parameter.name] ?? environmentValue ?? (parameter.deferredDefault ? undefined : parameter.default);
     if (raw === undefined) {
       if (parameter.required) throw usageFailure(`Missing argument ${parameter.valueHint ?? parameter.name}.`, name, parameter.missingReason ?? 'missing_input');

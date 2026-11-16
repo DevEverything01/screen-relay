@@ -1,6 +1,6 @@
 # Wayland
 
-Relay runs a headless sway desktop with `relay up -d --backend wayland`, or attaches to a compositor you already run.
+screen-relay runs a headless sway desktop with `screen-relay up -d --backend wayland`, or attaches to a compositor you already run.
 
 ## Compositors
 
@@ -12,11 +12,11 @@ A compositor must provide `wlr-screencopy` version 3 with XRGB8888 or ARGB8888 s
 
 ## Start a headless desktop
 
-Install the Wayland packages first, then start the session as a normal user:
+Set up the Wayland backend first, then start the session as a normal user:
 
 ```sh
-./install.sh --backend wayland
-relay up -d --backend wayland
+screen-relay install --backend wayland --yes
+screen-relay up -d --backend wayland
 ```
 
 The session runs sway with XWayland and foot, without a GPU. Add `--desktop none` to run without foot.
@@ -28,21 +28,21 @@ Run these steps from a terminal inside the compositor session:
 1. Find the output to capture:
    - sway: `swaymsg -t get_outputs`
    - Hyprland: `hyprctl monitors`
-2. Start relay with the Wayland socket from your environment:
+2. Start screen-relay with the Wayland socket from your environment:
 
    ```sh
-   relay up -d --backend wayland --display "$WAYLAND_DISPLAY" --output OUTPUT
+   screen-relay up -d --backend wayland --display "$WAYLAND_DISPLAY" --output OUTPUT
    ```
 
    Replace `OUTPUT` with the output name from step 1. Omit `--output` to capture the first output. `--output` needs the Wayland backend; on x11, `up` fails.
 
-Attach mode needs `XDG_RUNTIME_DIR`, which a terminal in a Wayland session normally sets. If relay reports that it is missing, export the compositor's runtime directory, usually `/run/user/$(id -u)`.
+Attach mode needs `XDG_RUNTIME_DIR`, which a terminal in a Wayland session normally sets. If screen-relay reports that it is missing, export the compositor's runtime directory, usually `/run/user/$(id -u)`.
 
-Attach mode does not set `DISPLAY`. X11 apps need it, so export `DISPLAY` in the shell that runs `relay up` when your compositor provides XWayland.
+Attach mode does not set `DISPLAY`. X11 apps need it, so export `DISPLAY` in the shell that runs `screen-relay up` when your compositor provides XWayland.
 
 ## Limits
 
 - Output width must be 320 to 16384 pixels and height 240 to 16384 pixels, both even. For a larger screen, create a headless output of a supported size on your compositor, then attach to it.
 - Selecting an output with `--output` needs `wl_output` version 4.
-- The output size cannot change during a session. Run `relay down` and start again to use another size.
+- The output size cannot change during a session. Run `screen-relay down` and start again to use another size.
 - The cursor image is not streamed. The viewer shows its own arrow.

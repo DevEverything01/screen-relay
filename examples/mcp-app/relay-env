@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Runs a command with the display, authority, and D-Bus address of a relay desktop session."""
+"""Runs a command with the display, authority, and D-Bus address of a screen-relay desktop session."""
 import json
 import os
 import re
@@ -9,17 +9,17 @@ SESSION_NAME = re.compile(r"[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}")
 
 
 def session_state():
-    """Returns the session state file and the session name it belongs to, or None if RELAY_STATE points at it."""
-    override = os.environ.get("RELAY_STATE")
+    """Returns the session state file and the session name it belongs to, or None if SCREEN_RELAY_STATE points at it."""
+    override = os.environ.get("SCREEN_RELAY_STATE")
     if override:
         return override, None
-    name = os.environ.get("RELAY_SESSION_NAME") or "default"
+    name = os.environ.get("SCREEN_RELAY_SESSION_NAME") or "default"
     if not SESSION_NAME.fullmatch(name):
         sys.stderr.write(f'relay-env: invalid session name "{name}"\n')
         sys.stderr.write('relay-env: use 1 to 64 characters from letters, digits, ".", "_" or "-"\n')
         sys.exit(2)
     root = os.environ.get("XDG_STATE_HOME") or os.path.join(os.path.expanduser("~"), ".local", "state")
-    return os.path.join(root, "relay", name, "session.json"), name
+    return os.path.join(root, "screen-relay", name, "session.json"), name
 
 
 path, name = session_state()

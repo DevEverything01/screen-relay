@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>How relay works</title>
+<title>How screen-relay works</title>
 <script>
   var t = new URLSearchParams(location.search).get("theme");
   if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
@@ -63,8 +63,8 @@
 </head>
 <body>
 <svg viewBox="0 0 720 288" role="img" aria-labelledby="t d">
-  <title id="t">How relay works</title>
-  <desc id="d">Inside a Linux VM, the X11 or Wayland desktop sends its screen to the relay engine. The engine streams video to the browser and receives mouse and keyboard input. An agent uses the CLI, SDK, or HTTP API to get screenshots and send input through the engine.</desc>
+  <title id="t">How screen-relay works</title>
+  <desc id="d">Inside a Linux VM, the X11 or Wayland desktop sends its screen to the screen-relay engine. The engine streams video to the browser and receives mouse and keyboard input. An agent uses the CLI, SDK, or HTTP API to get screenshots and send input through the engine.</desc>
   <defs>
     <marker id="arrow" viewBox="0 0 8 8" refX="6" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
       <path d="M2 1.5 L6 4 L2 6.5"/>
@@ -87,7 +87,7 @@
     <rect x="3" y="3" width="10" height="10" rx="2"/>
     <path d="M6 1v2m4-2v2M6 13v2m4-2v2M1 6h2m-2 4h2m10-4h2m-2 4h2M6 6h4v4H6z"/>
   </g>
-  <text class="label" x="280" y="84">relay engine</text>
+  <text class="label" x="280" y="84">screen-relay engine</text>
   <text class="sub" x="256" y="108">streams the screen</text>
 
   <rect class="box node" x="544" y="56" width="160" height="72" rx="6"/>

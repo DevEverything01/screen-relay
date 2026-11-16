@@ -43,7 +43,7 @@ ENGINE_SRCS = $(CORE_SRCS) $(wildcard src/engine/server/*.cpp) $(BACKEND_SRCS)
 HEADERS = $(wildcard src/engine/*/*.hpp src/engine/backends/linux/*.hpp) $(foreach dir,$(BACKEND_DIRS),$(wildcard src/engine/backends/$(dir)/*.hpp))
 
 WAYLAND_PROTOCOLS = wlr-screencopy-unstable-v1 wlr-virtual-pointer-unstable-v1 virtual-keyboard-unstable-v1
-.PHONY: all install test test-color test-flow test-capture-bucket test-cpu-budget test-input test-backend test-server test-keymap test-macos-keys clean FORCE
+.PHONY: all deps install test test-color test-flow test-capture-bucket test-cpu-budget test-input test-backend test-server test-keymap test-macos-keys clean FORCE
 all: relay-engine
 
 ifeq ($(HAS_WAYLAND),wayland)
@@ -66,6 +66,10 @@ $(WAYLAND_PROTOCOL_OBJECTS): build/protocols/%-protocol.o: build/protocols/%-pro
 
 $(ENGINE_SRCS): $(WAYLAND_PROTOCOL_HEADERS)
 endif
+
+deps:
+	@$(CXX) --version >/dev/null 2>&1
+	@pkg-config --exists --print-errors $(PKGS) $(if $(HAS_WAYLAND),wayland-scanner)
 
 PREFIX ?= /usr/local
 

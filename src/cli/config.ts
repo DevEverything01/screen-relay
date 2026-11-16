@@ -46,10 +46,10 @@ function isFile(path: string): boolean {
 
 export function locate(path?: string): [string | null, boolean] {
   if (path !== undefined) return [expandUser(path), true];
-  const environment = process.env.RELAY_CONFIG;
+  const environment = process.env.SCREEN_RELAY_CONFIG;
   if (environment) return [expandUser(environment), true];
   const configHome = process.env.XDG_CONFIG_HOME || join(homedir(), '.config');
-  const defaultPath = join(configHome, 'relay', 'config.yaml');
+  const defaultPath = join(configHome, 'screen-relay', 'config.yaml');
   return [isFile(defaultPath) ? defaultPath : null, false];
 }
 
@@ -74,7 +74,7 @@ function readConfig(source: string): Mapping {
     text = new TextDecoder('utf-8', { fatal: true }).decode(readFileSync(source));
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
-    throw new Failure('invalid_input', `Cannot read config file ${source}: ${detail}`, 'Check --config or RELAY_CONFIG.');
+    throw new Failure('invalid_input', `Cannot read config file ${source}: ${detail}`, 'Check --config or SCREEN_RELAY_CONFIG.');
   }
   let data: unknown;
   try {
@@ -246,7 +246,7 @@ export function loadConfig(path?: string): [ConfigSettings, string | null, Set<s
   const present = new Set<string>();
   if (source !== null) {
     if (!isFile(source)) {
-      if (required) throw new Failure('invalid_config', `${source}: Config file not found.`, 'Check --config or RELAY_CONFIG.');
+      if (required) throw new Failure('invalid_config', `${source}: Config file not found.`, 'Check --config or SCREEN_RELAY_CONFIG.');
       loadedSource = null;
     } else {
       const errors: Failure[] = [];
@@ -286,20 +286,20 @@ function applyConfig(settings: ConfigSettings, data: Mapping, present: Set<strin
 
 export function applyTo(args: Record<string, unknown>, settings: ConfigSettings, present: Set<string>): void {
   const fields: [string, string, string, unknown][] = [
-    ['port', 'RELAY_PORT', 'server.port', settings.server.port],
-    ['bind', 'RELAY_BIND', 'server.bind', present.has('server.bind') ? settings.server.bind : undefined],
-    ['public', 'RELAY_PUBLIC', 'server.public', settings.server.public],
-    ['tls-cert', 'RELAY_TLS_CERT', 'server.tls_cert', settings.server.tls_cert],
-    ['tls-key', 'RELAY_TLS_KEY', 'server.tls_key', settings.server.tls_key],
-    ['desktop', 'RELAY_DESKTOP', 'desktop', present.has('desktop') ? settings.desktop : undefined],
-    ['backend', 'RELAY_BACKEND', 'backend', settings.backend],
-    ['resolution', 'RELAY_RESOLUTION', 'display.resolution', settings.display.resolution],
-    ['compositor', 'RELAY_COMPOSITOR', 'display.compositor', settings.display.compositor],
-    ['fps', 'RELAY_FPS', 'stream.fps', settings.stream.fps],
-    ['bitrateMin', 'RELAY_BITRATE_MIN', 'stream.bitrate.min', settings.stream.bitrate.min],
-    ['bitrateStart', 'RELAY_BITRATE_START', 'stream.bitrate.start', settings.stream.bitrate.start],
-    ['bitrateMax', 'RELAY_BITRATE_MAX', 'stream.bitrate.max', settings.stream.bitrate.max],
-    ['keyboardLayout', 'RELAY_KEYBOARD_LAYOUT', 'keyboard.layout', settings.keyboard.layout],
+    ['port', 'SCREEN_RELAY_PORT', 'server.port', settings.server.port],
+    ['bind', 'SCREEN_RELAY_BIND', 'server.bind', present.has('server.bind') ? settings.server.bind : undefined],
+    ['public', 'SCREEN_RELAY_PUBLIC', 'server.public', settings.server.public],
+    ['tls-cert', 'SCREEN_RELAY_TLS_CERT', 'server.tls_cert', settings.server.tls_cert],
+    ['tls-key', 'SCREEN_RELAY_TLS_KEY', 'server.tls_key', settings.server.tls_key],
+    ['desktop', 'SCREEN_RELAY_DESKTOP', 'desktop', present.has('desktop') ? settings.desktop : undefined],
+    ['backend', 'SCREEN_RELAY_BACKEND', 'backend', settings.backend],
+    ['resolution', 'SCREEN_RELAY_RESOLUTION', 'display.resolution', settings.display.resolution],
+    ['compositor', 'SCREEN_RELAY_COMPOSITOR', 'display.compositor', settings.display.compositor],
+    ['fps', 'SCREEN_RELAY_FPS', 'stream.fps', settings.stream.fps],
+    ['bitrateMin', 'SCREEN_RELAY_BITRATE_MIN', 'stream.bitrate.min', settings.stream.bitrate.min],
+    ['bitrateStart', 'SCREEN_RELAY_BITRATE_START', 'stream.bitrate.start', settings.stream.bitrate.start],
+    ['bitrateMax', 'SCREEN_RELAY_BITRATE_MAX', 'stream.bitrate.max', settings.stream.bitrate.max],
+    ['keyboardLayout', 'SCREEN_RELAY_KEYBOARD_LAYOUT', 'keyboard.layout', settings.keyboard.layout],
   ];
   const resolved: Mapping = {};
   const errors: Failure[] = [];

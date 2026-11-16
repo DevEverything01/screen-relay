@@ -1,6 +1,6 @@
 {
-  "title": "Relay documentation",
-  "description": "Stream a Linux or Windows desktop to a browser and control it from a CLI or a Node SDK.",
+  "title": "screen-relay documentation",
+  "description": "Stream a Linux, macOS, or Windows desktop to a browser and control it from a CLI or a Node SDK.",
   "root": true,
   "pages": [
     "index",

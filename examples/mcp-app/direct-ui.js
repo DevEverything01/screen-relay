@@ -16,10 +16,10 @@ function show(stream) {
   try {
     const url = new URL(stream.url);
     if (url.origin !== relayOrigin || url.username || url.password || url.search || url.hash) {
-      throw new Error("Unexpected relay origin.");
+      throw new Error("Unexpected screen-relay origin.");
     }
     if (stream.token && !/^[0-9a-f]{64}$/.test(stream.token)) {
-      throw new Error("Invalid relay token.");
+      throw new Error("Invalid screen-relay token.");
     }
     if (!window.isSecureContext) throw new Error("The MCP App needs a secure browser context.");
     if (started) {

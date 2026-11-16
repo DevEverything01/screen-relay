@@ -3,25 +3,26 @@ title: Wayland
 description: Start a headless Wayland desktop or attach to an existing compositor.
 ---
 
-Wayland is the newer Linux display server. Relay starts a headless sway desktop, or attaches to a wlroots-based compositor you already run. Relay calls this the backend: choose it with `--backend wayland`.
+Wayland is the newer Linux display server. screen-relay starts a headless sway desktop, or attaches to a wlroots-based compositor you already run. screen-relay calls this the backend: choose it with `--backend wayland`.
 
 ## Install
 
-From a [repository clone](/docs/getting-started#install-relay), run:
+Install the CLI as described in [Getting started](/docs/getting-started#install-screen-relay), then set up Wayland:
 
 ```sh
-./install.sh --backend wayland
+npm install -g screen-relay
+screen-relay install --backend wayland
 ```
 
-The installer includes sway, XWayland, and foot. Use `./install.sh --backend all` to install both backends. Reinstalling at the same prefix keeps the backends already in the engine. If `relay` is not on your `PATH`, run `export PATH="$HOME/.local/bin:$PATH"` for the default install prefix.
+Setup installs sway, XWayland, and foot, then builds the engine. To set up both backends, run `screen-relay install --backend all`. Adding a backend keeps the ones the engine already has.
 
 ## Start a desktop
 
 ```sh
-relay up -d --backend wayland
+screen-relay up -d --backend wayland
 ```
 
-Relay starts headless sway with XWayland and a foot terminal by default. It needs no GPU. Use `--desktop none` to skip the terminal, or `--desktop COMMAND` to start another command. The output uses `display.resolution` from your [configuration](/docs/configuration), or `1280x720` by default.
+screen-relay starts headless sway with XWayland and a foot terminal by default. It needs no GPU. Use `--desktop none` to skip the terminal, or `--desktop COMMAND` to start another command. The output uses `display.resolution` from your [configuration](/docs/configuration), or `1280x720` by default.
 
 To open the viewer, follow [Getting started](/docs/getting-started#open-the-viewer).
 
@@ -30,19 +31,19 @@ To open the viewer, follow [Getting started](/docs/getting-started#open-the-view
 From a terminal in your compositor session, run:
 
 ```sh
-relay up -d --backend wayland --display "$WAYLAND_DISPLAY"
+screen-relay up -d --backend wayland --display "$WAYLAND_DISPLAY"
 ```
 
-Relay captures the first output at its existing size and starts no desktop by default. To choose an output, add `--output OUTPUT`, replacing `OUTPUT` with its name. On sway, list outputs with `swaymsg -t get_outputs`; on Hyprland, use `hyprctl monitors`.
+screen-relay captures the first output at its existing size and starts no desktop by default. To choose an output, add `--output OUTPUT`, replacing `OUTPUT` with its name. On sway, list outputs with `swaymsg -t get_outputs`; on Hyprland, use `hyprctl monitors`.
 
-Relay needs the compositor's `XDG_RUNTIME_DIR`. If it is unset and the compositor uses `/run/user/$(id -u)`, run `export XDG_RUNTIME_DIR=/run/user/$(id -u)` before starting relay. Stopping relay leaves the compositor running.
+screen-relay needs the compositor's `XDG_RUNTIME_DIR`. If it is unset and the compositor uses `/run/user/$(id -u)`, run `export XDG_RUNTIME_DIR=/run/user/$(id -u)` before starting screen-relay. Stopping screen-relay leaves the compositor running.
 
-If the output is outside the [size limits](#limits), create a headless output with `swaymsg create_output` or `hyprctl output create headless relay`, configure it to a supported size, and select it with `--output`. Move a window or workspace onto that output to see it in the viewer.
+If the output is outside the [size limits](#limits), create a headless output with `swaymsg create_output` or `hyprctl output create headless screen-relay`, configure it to a supported size, and select it with `--output`. Move a window or workspace onto that output to see it in the viewer.
 
 ## Check the machine
 
 ```sh
-RELAY_BACKEND=wayland relay doctor
+SCREEN_RELAY_BACKEND=wayland screen-relay doctor
 ```
 
 The checks cover:
@@ -50,7 +51,7 @@ The checks cover:
 - The engine, required libraries, and default port.
 - `sway`, `swaymsg`, `Xwayland`, and `foot`.
 
-Doctor does not check the protocols of an existing compositor. If sway fails to start, run `relay logs display`.
+Doctor does not check the protocols of an existing compositor. If sway fails to start, run `screen-relay logs display`.
 
 ## Limits
 
@@ -63,6 +64,6 @@ Doctor does not check the protocols of an existing compositor. If sway fails to 
 | GNOME, KDE | Not supported |
 
 - The compositor must provide `wlr-screencopy` version 3, `wl_shm` with XRGB8888 or ARGB8888 frames, the virtual keyboard protocol, and virtual pointer version 2.
-- The output must be 320 to 16384 pixels wide and 240 to 16384 pixels high, with even dimensions. Its size is fixed for the session; restart relay after changing it.
+- The output must be 320 to 16384 pixels wide and 240 to 16384 pixels high, with even dimensions. Its size is fixed for the session; restart screen-relay after changing it.
 - Selecting an output by name requires `wl_output` version 4.
 - The cursor image is not streamed. The viewer shows its own arrow.

@@ -1,10 +1,10 @@
 #!/bin/sh
 set -eu
-relay=${RELAY:-relay}
+relay=${SCREEN_RELAY:-screen-relay}
 name=smoke-$$
 port=${SMOKE_PORT:-18090}
-backend=${RELAY_BACKEND:-}
-wayland_display=${RELAY_DISPLAY:-}
+backend=${SCREEN_RELAY_BACKEND:-}
+wayland_display=${SCREEN_RELAY_DISPLAY:-}
 work=$(mktemp -d)
 xterm_pid=''
 
@@ -24,11 +24,10 @@ fail() {
 }
 
 step 'engine backends'
-engine=$(command -v relay-engine || true)
-[ -n "$engine" ] || fail 'relay-engine is not on PATH; run ./install.sh'
-"$engine" --help > "$work/engine-help" 2> "$work/stderr" || fail "relay-engine --help: $(cat "$work/stderr")"
-grep -q '^Compiled backends: ' "$work/engine-help" ||
-  fail 'relay-engine --help printed no "Compiled backends: " line; run ./install.sh --backend all'
+set -- install --json
+[ -z "$backend" ] || set -- "$@" --backend "$backend"
+"$relay" "$@" > "$work/install.json" 2> "$work/stderr" || fail "the machine is not set up; run screen-relay install --yes: $(cat "$work/stderr")"
+[ "$(field "$work/install.json" outcome)" = unchanged ] || fail 'install changed a machine that was already set up'
 
 step 'offline help and usage errors'
 "$relay" --help > "$work/help" 2> "$work/stderr" || fail 'root help'
@@ -190,7 +189,7 @@ for (const options of [[], ['--restart']]) {
   }
   if (!options.length) continue;
   const watcher = Number(fs.readFileSync(`/proc/${app.pid}/stat`, 'utf8').split(') ')[1].split(' ')[1]);
-  if (environment(watcher).RELAY_SESSION !== path.dirname(record)) throw new Error('watcher has no session marker');
+  if (environment(watcher).SCREEN_RELAY_SESSION !== path.dirname(record)) throw new Error('watcher has no session marker');
   process.kill(app.pid, 'SIGTERM');
   const deadline = Date.now() + 10000;
   let restarted = false;
@@ -220,7 +219,7 @@ step 'nothing left running'
 "$relay" status --name "$name" --json > "$work/status.json" 2> "$work/stderr" || fail 'stopped session status must exit 0'
 [ ! -s "$work/stderr" ] || fail 'stopped status JSON wrote stderr'
 [ "$(field "$work/status.json" session.running session.state)" = 'false stopped' ] || fail 'status did not report stopped'
-left=$(grep -ls "RELAY_SESSION=$logs" /proc/[0-9]*/environ 2>/dev/null || true)
+left=$(grep -ls "SCREEN_RELAY_SESSION=$logs" /proc/[0-9]*/environ 2>/dev/null || true)
 [ -z "$left" ] || fail "processes left: $left"
 if [ "$backend" = wayland ]; then
   step 'wayland cleanup'

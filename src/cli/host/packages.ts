@@ -60,6 +60,22 @@ export function packagesFor(family: Family, names: string[]): string[] {
   return [...packages];
 }
 
+/** Distro package names for every row in the given groups, in table order, deduplicated. */
+export function groupPackages(family: Family, groups: string[], skip: string[] = []): string[] {
+  const packages = new Set<string>();
+  for (const row of rows().filter((entry) => groups.includes(entry[0]) && !skip.includes(entry[1]))) {
+    for (const cell of row[columns[family]].split(' ')) {
+      if (cell !== '-') packages.add(cell);
+    }
+  }
+  return [...packages];
+}
+
+/** Whether packages.tsv has a row that provides this program or library. */
+export function provides(name: string): boolean {
+  return rows().some((row) => row[1] === name);
+}
+
 /** The non-interactive install command to paste, with prefix '' or 'sudo '. */
 export function installCommand(family: Family, packages: string[], prefix: string): string {
   const list = packages.join(' ');

@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const browserBin = join(root, 'node_modules/.bin/agent-browser');
-const image = process.env.RELAY_E2E_IMAGE ?? 'relay-e2e';
+const image = process.env.SCREEN_RELAY_E2E_IMAGE ?? 'relay-e2e';
 const container = `relay-e2e-${process.pid}`;
 const work = mkdtempSync(join(tmpdir(), 'relay-e2e-'));
 let browserSession = null;
@@ -60,7 +60,7 @@ async function poll(read, accept, timeout, message) {
 }
 function appsLog() {
   try {
-    return text(execIn(['relay', 'logs', 'apps'])).trim().split('\n').slice(-20).join('\n');
+    return text(execIn(['screen-relay', 'logs', 'apps'])).trim().split('\n').slice(-20).join('\n');
   } catch {
     return 'unavailable';
   }
@@ -74,7 +74,7 @@ try {
   } catch {}
   console.log(`browser session ${browserSession}`);
 
-  if (!process.env.RELAY_E2E_IMAGE) {
+  if (!process.env.SCREEN_RELAY_E2E_IMAGE) {
     console.log(`building ${image}`);
     docker(['build', '-t', image, '.'], { stdio: 'inherit' });
   }
@@ -83,7 +83,7 @@ try {
   writeFileSync(config, 'display:\n  resolution: 1920x1080\n');
 
   docker(['run', '-d', '--name', container, '-p', '127.0.0.1::8080', '-e', 'LANG=C.UTF-8',
-    '-v', `${config}:/relay-config.yaml:ro`, '-e', 'RELAY_CONFIG=/relay-config.yaml', image], { stdio: 'inherit' });
+    '-v', `${config}:/relay-config.yaml:ro`, '-e', 'SCREEN_RELAY_CONFIG=/relay-config.yaml', image], { stdio: 'inherit' });
   const published = text(docker(['port', container, '8080'])).trim().split('\n')[0];
   const port = Number(published.slice(published.lastIndexOf(':') + 1));
   assert.ok(Number.isInteger(port) && port > 0, `could not read the published port from "${published}"`);
@@ -93,7 +93,7 @@ try {
     { stdio: ['ignore', 'ignore', 'inherit'] });
 
   const relay = await poll(
-    () => JSON.parse(text(execIn(['relay', 'status', '--show-token', '--json']))).session,
+    () => JSON.parse(text(execIn(['screen-relay', 'status', '--show-token', '--json']))).session,
     (value) => value?.running === true && /^[0-9a-f]{64}$/.test(value?.token ?? ''),
     120000,
     'the session did not become ready with a token',
@@ -160,7 +160,7 @@ try {
   console.log('click landed at 480,810');
 
   async function openTerminal(command) {
-    text(execIn(['relay', 'run', '--json', '--', 'xfce4-terminal', '-x', 'sh', '-c', command]));
+    text(execIn(['screen-relay', 'run', '--json', '--', 'xfce4-terminal', '-x', 'sh', '-c', command]));
     let id;
     try {
       id = await poll(
@@ -229,13 +229,13 @@ try {
   browser(['open', 'about:blank']);
   await sleep(1000);
 
-  text(execIn(['relay', 'type', 'héllo €']));
-  text(execIn(['relay', 'key', 'Enter']));
+  text(execIn(['screen-relay', 'type', 'héllo €']));
+  text(execIn(['screen-relay', 'key', 'Enter']));
   await poll(
     () => execIn(['cat', '/tmp/out'], { encoding: null }),
     (value) => value.includes(Buffer.from('héllo €')),
     10000,
-    'relay type from the CLI did not deliver the UTF-8 text "héllo €"',
+    'screen-relay type from the CLI did not deliver the UTF-8 text "héllo €"',
   );
   console.log('CLI typed héllo €');
   console.log('PASS');

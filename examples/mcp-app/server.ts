@@ -44,7 +44,7 @@ const sweeper = setInterval(() => {
 }, Math.max(1_000, Math.min(sessionIdleMs, 60_000)));
 sweeper.unref();
 
-/** Builds a server with the relay tools and viewer resource. */
+/** Builds a server with the screen-relay tools and viewer resource. */
 export function createServer(): McpServer {
   const server = new McpServer({ name: "relay-mcp-app", version: "0.1.0" });
   registerTools(server);

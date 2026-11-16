@@ -1,7 +1,8 @@
 {
-  "name": "relay-docs",
-  "description": "Documentation site for relay.",
+  "name": "screen-relay-docs",
+  "description": "Documentation site for screen-relay.",
   "version": "0.0.0",
+  "license": "Apache-2.0",
   "private": true,
   "scripts": {
     "build": "next build && geistdocs search sync",

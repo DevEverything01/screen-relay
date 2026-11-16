@@ -52,7 +52,7 @@ export function hintStep(instruction: string, hint: string): string {
 }
 
 export function sessionCommand(command: string, name: string): string {
-  return `relay ${command}${name === 'default' ? '' : ` --name ${quote(name)}`}`;
+  return `screen-relay ${command}${name === 'default' ? '' : ` --name ${quote(name)}`}`;
 }
 
 export function count(value: number, noun: string): string {

@@ -1,6 +1,27 @@
 ---
 title: Changelog
-description: What changed in each relay release.
+description: What changed in each screen-relay release.
+---
+
+## v0.1.0
+
+<p className="text-[#888] text-sm">November 16, 2026</p>
+
+### New Features
+
+- Added the **install command**: `screen-relay install` installs the system packages and builds the engine on Linux and macOS. It replaces `./install.sh` (#52)
+- Added **first-run setup to `up`**: on a machine that is not set up, `screen-relay up` asks which backend to use at a terminal, installs the packages, builds the engine, and then starts the session. Without a terminal it needs `--yes` (#52)
+
+### Improvements
+
+- Renamed the npm package, the CLI command, and the SDK import from `desktop-relay` and `relay` to **screen-relay**. Environment variables now start with `SCREEN_RELAY_`, the config file is `~/.config/screen-relay/config.yaml`, and session state is under `~/.local/state/screen-relay` (#52)
+- The npm package now ships the **engine source**, so `npm install -g screen-relay` is the only install step. It needs Node 22 or newer (#52)
+- Added the **Apache-2.0 license** and third-party notices (#52)
+
+### Documentation
+
+- Replaced the clone-and-install instructions with the npm commands in the docs and the agent skills (#52)
+
 ---
 
 ## v0.0.1

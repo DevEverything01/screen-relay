@@ -1,25 +1,26 @@
 ---
 title: SDK
-description: Control a relay desktop from Node.
+description: Control a screen-relay desktop from Node.
 ---
 
-Use Node 26 or newer to send input and take screenshots. Start a desktop on the same machine with [relay up -d](/docs/getting-started#start-a-session).
+Use Node 22 or newer to send input and take screenshots. Start a desktop on the same machine with [screen-relay up -d](/docs/getting-started#start-a-session).
 
 ## Install and import
 
-Clone the [relay repository](/docs/getting-started#install-relay), then build and install it in your Node project:
+Install the package in your Node project:
 
 ```sh
-(cd /absolute/path/to/this/repo && npm install && npm run build)
-npm install /absolute/path/to/this/repo
+npm install screen-relay
 ```
+
+The examples below import `createClient` and `connect` from `screen-relay`.
 
 ### One-shot calls
 
 Close the viewer, then click and save a screenshot:
 
 ```js
-import { createClient } from 'desktop-relay';
+import { createClient } from 'screen-relay';
 import { writeFile } from 'node:fs/promises';
 const desktop = createClient();
 await desktop.click(0.5, 0.5);
@@ -35,7 +36,7 @@ Use `createClient(options)` for one-shot actions such as `click` and `type`. Use
 Close the session to release input:
 
 ```js
-import { connect } from 'desktop-relay';
+import { connect } from 'screen-relay';
 
 const desktop = await connect();
 try {
@@ -120,7 +121,7 @@ Match `RelayError.reason`, not the message. `createClient` can throw during opti
 | `disconnected` | The control session closed or was lost. Connect again. |
 | `invalid_input`, `invalid_option` | Check the URL, token, input, and options. |
 | `unsupported_input` | The backend cannot apply the event or type the character. Change the input or keyboard layout. |
-| `component_failed` | The engine could not complete the request. For screenshots, check `relay logs engine` and [Wayland requirements](/docs/wayland#compositors). |
+| `component_failed` | The engine could not complete the request. For screenshots, check `screen-relay logs engine` and [Wayland requirements](/docs/wayland#compositors). |
 | `canceled` | The `signal` aborted the request or session. Use a fresh signal to retry. |
 | `protocol_error`, `io_error` | The response was invalid or too large, or a local certificate or screenshot file could not be read or written. |
 

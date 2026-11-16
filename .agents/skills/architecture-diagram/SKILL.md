@@ -1,6 +1,6 @@
 ---
 name: architecture-diagram
-description: Create or update architecture and flow diagrams for relay's docs. Use when a docs page needs a diagram of components, data flow, or a pipeline, or when an existing diagram in docs/public/diagrams changes.
+description: Create or update architecture and flow diagrams for screen-relay's docs. Use when a docs page needs a diagram of components, data flow, or a pipeline, or when an existing diagram in docs/public/diagrams changes.
 metadata:
   internal: true
 ---
@@ -25,7 +25,7 @@ Use orthogonal connectors only, and never rotate text. Align nodes on shared row
 ## Embed it
 
 ```mdx
-<Diagram name="architecture" title="Relay architecture" aspectRatio="720 / 288" />
+<Diagram name="architecture" title="screen-relay architecture" aspectRatio="720 / 288" />
 ```
 
 Set `aspectRatio` to the SVG `viewBox` width and height. The component passes the site theme to the diagram.

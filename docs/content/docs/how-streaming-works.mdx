@@ -1,9 +1,9 @@
 ---
 title: How streaming works
-description: How relay gets each frame from the desktop to your browser, and how it adapts the frame rate, bitrate, and smoothness to your connection.
+description: How screen-relay gets each frame from the desktop to your browser, and how it adapts the frame rate, bitrate, and smoothness to your connection.
 ---
 
-Relay streams frames from the VM to your browser and uses what the browser reports back to match the stream to your connection. This page explains that loop so you know which settings change what you see and what to expect on a slow, long, or unsteady link.
+screen-relay streams frames from the VM to your browser and uses what the browser reports back to match the stream to your connection. This page explains that loop so you know which settings change what you see and what to expect on a slow, long, or unsteady link.
 
 ## The streaming loop
 
@@ -12,11 +12,11 @@ Relay streams frames from the VM to your browser and uses what the browser repor
 The same flow in text:
 
 ```text
-Linux VM: Desktop -> relay engine (paints)
-relay engine -> Viewer in the browser (frames)
+Linux VM: Desktop -> screen-relay engine (paints)
+screen-relay engine -> Viewer in the browser (frames)
 Viewer -> Acknowledgement (after showing)
 Acknowledgement -> Rate control on the VM (wait time)
-Rate control -> relay engine (bitrate, frames on the way, pause)
+Rate control -> screen-relay engine (bitrate, frames on the way, pause)
 ```
 
 Each frame takes this path:
@@ -39,11 +39,11 @@ The engine uses the acknowledgements to adapt:
 
 The stream runs at up to `stream.fps` frames per second, from 10 to 120. The default is 60. An idle desktop sends no frames, because the engine only captures when the screen changes.
 
-The compositor in relay's own XFCE desktop repaints at most 60 times a second. When `stream.fps` is above 60, relay turns it off so apps can update the screen faster, which also removes window shadows and transparency. Set `display.compositor` to `on` or `off` to decide this yourself; see [Configuration](/docs/configuration). A desktop you attach to with `--display` keeps its own settings.
+The compositor in screen-relay's own XFCE desktop repaints at most 60 times a second. When `stream.fps` is above 60, screen-relay turns it off so apps can update the screen faster, which also removes window shadows and transparency. Set `display.compositor` to `on` or `off` to decide this yourself; see [Configuration](/docs/configuration). A desktop you attach to with `--display` keeps its own settings.
 
 ## Picture quality on a slow or long link
 
-The bitrate starts at `stream.bitrate.start` (8 Mbps by default). While the link is clear, relay raises it toward `stream.bitrate.max` (40 Mbps). When a queue stands in the network, it lowers the bitrate toward `stream.bitrate.min` (1 Mbps), which makes the picture softer but keeps motion current.
+The bitrate starts at `stream.bitrate.start` (8 Mbps by default). While the link is clear, screen-relay raises it toward `stream.bitrate.max` (40 Mbps). When a queue stands in the network, it lowers the bitrate toward `stream.bitrate.min` (1 Mbps), which makes the picture softer but keeps motion current.
 
 On a long link, the engine allows more frames on the way at once, based on the link's round trip, so the stream keeps its frame rate instead of waiting for each acknowledgement.
 
@@ -59,7 +59,7 @@ If the engine has frames outstanding and receives no acknowledgement for about 3
 
 ## Inside the engine
 
-This section is for readers who want to see how the engine decides. You do not need it to run relay.
+This section is for readers who want to see how the engine decides. You do not need it to run screen-relay.
 
 ### One frame inside the engine
 

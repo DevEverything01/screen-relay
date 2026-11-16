@@ -23,15 +23,15 @@ function write(text) {
   return path;
 }
 
-test('empty RELAY_CONFIG selects the optional default config', () => {
-  const previous = { relayConfig: process.env.RELAY_CONFIG, configHome: process.env.XDG_CONFIG_HOME };
-  process.env.RELAY_CONFIG = '';
+test('empty SCREEN_RELAY_CONFIG selects the optional default config', () => {
+  const previous = { relayConfig: process.env.SCREEN_RELAY_CONFIG, configHome: process.env.XDG_CONFIG_HOME };
+  process.env.SCREEN_RELAY_CONFIG = '';
   process.env.XDG_CONFIG_HOME = directory;
   try {
     assert.deepEqual(config.locate(), [null, false]);
   } finally {
-    if (previous.relayConfig === undefined) delete process.env.RELAY_CONFIG;
-    else process.env.RELAY_CONFIG = previous.relayConfig;
+    if (previous.relayConfig === undefined) delete process.env.SCREEN_RELAY_CONFIG;
+    else process.env.SCREEN_RELAY_CONFIG = previous.relayConfig;
     if (previous.configHome === undefined) delete process.env.XDG_CONFIG_HOME;
     else process.env.XDG_CONFIG_HOME = previous.configHome;
   }
@@ -82,23 +82,23 @@ test('validates the FPS range in YAML and keeps the default at 60', () => {
   }
 });
 
-test('validates FPS overrides from arguments and RELAY_FPS', () => {
+test('validates FPS overrides from arguments and SCREEN_RELAY_FPS', () => {
   const [settings, , present] = config.loadConfig(write('{}\n'));
-  const previous = process.env.RELAY_FPS;
+  const previous = process.env.SCREEN_RELAY_FPS;
   try {
-    process.env.RELAY_FPS = '120';
+    process.env.SCREEN_RELAY_FPS = '120';
     const args = {};
     config.applyTo(args, settings, present);
     assert.equal(args.fps, 120);
-    process.env.RELAY_FPS = '121';
-    assert.throws(() => config.applyTo({}, settings, present), /RELAY_FPS.*allowed 10\.\.120/);
+    process.env.SCREEN_RELAY_FPS = '121';
+    assert.throws(() => config.applyTo({}, settings, present), /SCREEN_RELAY_FPS.*allowed 10\.\.120/);
     const explicit = { fps: 120 };
     config.applyTo(explicit, settings, present);
     assert.equal(explicit.fps, 120);
     assert.throws(() => config.applyTo({ fps: 121 }, settings, present), /--fps.*allowed 10\.\.120/);
   } finally {
-    if (previous === undefined) delete process.env.RELAY_FPS;
-    else process.env.RELAY_FPS = previous;
+    if (previous === undefined) delete process.env.SCREEN_RELAY_FPS;
+    else process.env.SCREEN_RELAY_FPS = previous;
   }
 });
 
@@ -173,15 +173,15 @@ test('backend from the config file accepts supported names and reports invalid o
   assert.throws(() => config.loadConfig(write('backend: mir\n')), /backend.*x11 or wayland or macos/);
 });
 
-test('doctor reports an invalid RELAY_BACKEND as a failed check', { skip: process.platform !== 'linux' }, () => {
+test('doctor reports an invalid SCREEN_RELAY_BACKEND as a failed check', { skip: process.platform !== 'linux' }, () => {
   const path = write('backend: x11\n');
   const result = spawnSync(process.execPath, [cli, 'doctor', '--config', path, '--json'], {
-    encoding: 'utf8', timeout: 15000, env: { ...process.env, RELAY_BACKEND: 'wayl' },
+    encoding: 'utf8', timeout: 15000, env: { ...process.env, SCREEN_RELAY_BACKEND: 'wayl' },
   });
   assert.ifError(result.error);
   assert.equal(result.status, 1);
   const { checks } = JSON.parse(result.stdout);
   const backend = checks.find((item) => item.name === 'backend');
   assert.equal(backend.status, 'fail');
-  assert.match(backend.detail, /RELAY_BACKEND.*wayl.*x11 or wayland/);
+  assert.match(backend.detail, /SCREEN_RELAY_BACKEND.*wayl.*x11 or wayland/);
 });
