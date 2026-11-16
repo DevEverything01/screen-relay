@@ -3,9 +3,7 @@ title: Agent skills
 description: Print the instructions that let an AI agent drive a screen-relay desktop from the CLI.
 ---
 
-`screen-relay skills` prints the agent instructions that ship with the CLI. The `core` skill tells an agent how to start a session, take screenshots, send input, and recover from an error.
-
-Skills ship inside the CLI, so their instructions match the installed version. Reading them never contacts a session.
+Skills are instruction files that ship inside the CLI. The `core` skill tells an agent how to start a session, take screenshots, send input, and recover from an error. Skills match the installed version, and reading them never contacts a session.
 
 ## Load the core skill
 
@@ -13,13 +11,13 @@ Skills ship inside the CLI, so their instructions match the installed version. R
 screen-relay skills get core
 ```
 
-An agent should start there. `screen-relay skills list` shows the other skills, and `screen-relay skills get <name>` loads one.
+An agent should start there. The other skills are listed by `screen-relay skills list`.
 
-| Command | What it does |
-| --- | --- |
-| `screen-relay skills list` | Lists the visible skills. This is the default action. |
-| `screen-relay skills get <name>` | Prints one skill's workflow. `--full` appends its reference and template files. A hidden skill loads when you name it. |
-| `screen-relay skills path [name]` | Prints the skills directory, or the directory of a named skill. |
+- `screen-relay skills list` lists the visible skills. It is the default action.
+- `screen-relay skills get <name>` prints one skill's workflow. A hidden skill loads when you name it.
+- `screen-relay skills path [name]` prints the skills directory, or the directory of a named skill.
+
+The `--full` option, which adds reference and template files, is covered in the [CLI reference](/docs/cli#skills).
 
 ```console
 $ screen-relay skills list
@@ -41,11 +39,11 @@ With `--json`, `list` returns `{"skills":[...]}`, `get` returns `{"skill":{"name
 
 ## Agent-aware help
 
-When screen-relay detects an AI agent, `screen-relay --help` opens with a `Start here (for AI agents):` block that lists the `screen-relay skills` commands, and each command's help says where it runs. Detection changes help text only. Set `SCREEN_RELAY_AGENT=1` or `SCREEN_RELAY_AGENT=0` to force either layout; the [CLI reference](/docs/cli#help-layouts) describes both.
+When screen-relay detects an AI agent, `screen-relay --help` opens with a `Start here (for AI agents):` block that lists the skills commands. Each command's help says where it runs. The [CLI reference](/docs/cli#help-layouts) explains how detection works and how to force either layout.
 
 ## Agent loop
 
-Start the session on the VM that shows the desktop with `screen-relay up -d`, which returns once the desktop and engine are ready. Then work in a loop: take a screenshot, decide from the image, act, then take another screenshot to verify.
+Start the session on the VM with `screen-relay up -d`. It returns once the desktop and engine are ready. Then repeat: take a screenshot, decide from the image, act, and take another screenshot to verify.
 
 ```sh
 screen-relay up -d
@@ -57,14 +55,18 @@ screen-relay screenshot /tmp/after.png
 ```
 
 - `up` and `run` run on the VM. `status`, `screenshot`, `click`, `move`, `scroll`, `key`, `type`, and `input` reach the engine from anywhere with `--url` and a token file. See [Remote access](/docs/remote-access).
-- Coordinates are fractions of the screen from `0` to `1`, measured from the top-left. Pixel `480,810` on a 1920x1080 screenshot is `screen-relay click 0.25 0.75`. `screen-relay screenshot file.png --json` returns `width` and `height`.
+- Coordinates are fractions of the screen, from `0` to `1`, measured from the top-left. Pixel `480,810` on a 1920x1080 screenshot is `screen-relay click 0.25 0.75`. `screen-relay screenshot file.png --json` returns `width` and `height`.
 - A screenshot writes a PNG, default `screen.png`, or PNG bytes to stdout with `-`. Success means the engine saved the frame, not that an app responded.
-- Click a window to focus it before typing into it. Use `type` for text and `key` for shortcuts and Escape.
-- Input success means the engine applied the events, not that the application reacted. Take another screenshot to confirm.
-- A long `screen-relay type` is split into batches. When a batch fails, `data.applied` in the JSON error counts the events the engine confirmed. After `busy`, `invalid_input`, or `unsupported_input`, resend only the remaining text. After `timeout`, `unreachable`, or `disconnected`, take a screenshot first, because the last batch may already be on screen.
+- Click a window to focus it before typing. Use `type` for text, and `key` for shortcuts and Escape.
+- Input success means the engine applied the events, not that the application reacted. Take a screenshot to confirm.
 - Only one controller sends input at a time. A second one gets `busy` with `Another controller holds control of the desktop.` Screenshots still work. Wait for the other controller to close, then retry once.
+- `screen-relay run -- APP` returns the app's pid at once, before its window appears. Poll screenshots until the window shows, and read the app's output with `screen-relay logs apps`.
 
-`screen-relay run -- APP` starts an app and returns its pid at once, before its window appears. Poll screenshots until you can see the window, and read the app's output with `screen-relay logs apps`.
+A long `screen-relay type` is split into batches. When one fails:
+
+- `data.applied` in the JSON error counts the events the engine confirmed.
+- After `busy`, `invalid_input`, or `unsupported_input`, resend only the remaining text.
+- After `timeout`, `unreachable`, or `disconnected`, take a screenshot first. The last batch may already be on screen.
 
 ## JSON and errors
 

@@ -15,6 +15,15 @@ const config: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
 
+  redirects() {
+    return Promise.resolve(
+      ["x11", "wayland"].flatMap((page) => [
+        { source: `/docs/${page}`, destination: "/docs/linux", permanent: true },
+        { source: `/:lang/docs/${page}`, destination: "/:lang/docs/linux", permanent: true },
+      ])
+    );
+  },
+
   rewrites() {
     if (!favicon) {
       return Promise.resolve([]);

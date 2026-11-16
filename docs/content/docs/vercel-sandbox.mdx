@@ -3,7 +3,9 @@ title: Vercel Sandbox
 description: Run screen-relay in a Vercel Sandbox and open the desktop in your browser.
 ---
 
-Run screen-relay in a Vercel Sandbox, publish port 8080, and open the desktop in your browser. The sandbox is the VM that runs the desktop.
+Run screen-relay in a Vercel Sandbox and open its desktop in your browser. The sandbox is the VM that runs the desktop.
+
+The sandbox runs Ubuntu 26.04 on x86_64 as the `ubuntu` user, which has passwordless sudo. It needs Node 22 or newer with npm.
 
 ## With the Sandbox CLI
 
@@ -20,26 +22,24 @@ Run screen-relay in a Vercel Sandbox, publish port 8080, and open the desktop in
    sandbox create --name screen-relay --timeout 45m -p 8080
    ```
 
-   The command prints a URL like `https://sb-xxxx.vercel.run`. Replace that example URL in the commands below with your URL. Hobby plans cap the sandbox timeout at 45 minutes. On plans that allow longer runtimes, `sandbox extend screen-relay 30m` adds 30 minutes.
+   The command prints a URL like `https://sb-xxxx.vercel.run`. Use your URL in place of the example in the commands below. Hobby plans cap the sandbox timeout at 45 minutes. On plans that allow longer runtimes, `sandbox extend screen-relay 30m` adds 30 minutes.
 
-3. Install screen-relay in the sandbox from npm, then set up the machine:
+3. Install screen-relay from npm, then set up the machine. Setup can take several minutes.
 
    ```sh
    sandbox exec screen-relay sh -c 'npm install -g screen-relay'
    sandbox exec screen-relay sh -c 'screen-relay install --yes'
    ```
 
-   Installation takes a few minutes. The sandbox needs Node 22 or newer with npm. It runs Ubuntu 26.04 on x86_64 as the `ubuntu` user, which has passwordless sudo.
-
-4. Start screen-relay using your public URL:
+4. Start screen-relay with your public URL:
 
    ```sh
    sandbox exec screen-relay sh -c 'screen-relay up -d --public https://sb-xxxx.vercel.run'
    ```
 
-   Open the printed viewer link in your browser. It includes `#token=` and grants access to the desktop, so keep it secret.
+   Open the viewer link that the command prints in your browser. It includes `#token=` and grants access to the desktop, so keep it secret.
 
-   For Wayland, add `--backend wayland` to the `screen-relay install` command and to `screen-relay up`. See [Wayland](/docs/wayland).
+   For Wayland, add `--backend wayland` to both the `screen-relay install` and `screen-relay up` commands. See [Linux](/docs/linux).
 
 5. Take a screenshot inside the sandbox:
 
@@ -47,7 +47,7 @@ Run screen-relay in a Vercel Sandbox, publish port 8080, and open the desktop in
    sandbox exec screen-relay sh -c 'screen-relay screenshot /tmp/screen.png'
    ```
 
-   The PNG is saved inside the sandbox. To control the desktop from your laptop, [install the screen-relay CLI](/docs/remote-access) and save the token from the viewer link in a local file:
+   The PNG is saved inside the sandbox. To control the desktop from your laptop, [install the screen-relay CLI](/docs/remote-access) and save the token from the viewer link into a local file named `token`:
 
    ```sh
    screen-relay screenshot screen.png --url https://sb-xxxx.vercel.run --token-file ./token
@@ -55,7 +55,7 @@ Run screen-relay in a Vercel Sandbox, publish port 8080, and open the desktop in
 
    See [Tokens](/docs/remote-access#tokens) and the [Node SDK options](/docs/sdk#options) for remote access.
 
-6. When finished, remove the sandbox and its sessions:
+6. Remove the sandbox and its sessions:
 
    ```sh
    sandbox rm screen-relay
@@ -67,7 +67,11 @@ Agents can load these instructions with `screen-relay skills get vercel-sandbox`
 
 ## With the Sandbox SDK
 
-1. In a Node.js 24 project with the [Vercel CLI](https://vercel.com/docs/cli) installed, install the Sandbox SDK and authenticate:
+Prerequisites:
+
+- Node.js 24, and a project with the [Vercel CLI](https://vercel.com/docs/cli) installed.
+
+1. In the project, install the Sandbox SDK, link the project, and pull its environment:
 
    ```sh
    npm install @vercel/sandbox
@@ -103,10 +107,12 @@ Agents can load these instructions with `screen-relay skills get vercel-sandbox`
    if (start.exitCode !== 0) throw new Error('screen-relay failed to start');
    ```
 
-3. Run it:
+3. Run the script:
 
    ```sh
    node --env-file=.env.local relay-sandbox.mjs
    ```
 
-   After installation, the script prints the viewer link. Open it in your browser and keep it secret. When finished, remove the sandbox with `sandbox rm relay-sdk` or use [`sandbox.delete()`](https://vercel.com/docs/sandbox/sdk-reference#sandbox.delete) in your application. Removal keeps existing snapshots.
+The script prints the viewer link after installation. Open it in your browser, and keep it secret.
+
+To clean up, remove the sandbox with `sandbox rm relay-sdk`, or call [`sandbox.delete()`](https://vercel.com/docs/sandbox/sdk-reference#sandbox.delete) in your application. Removal keeps existing snapshots.

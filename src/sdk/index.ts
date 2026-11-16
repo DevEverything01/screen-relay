@@ -12,6 +12,7 @@ export { RelayError, ERROR_REASONS } from '../protocol/index.js';
 export type { ErrorClass, ErrorReason, ErrorOptions, NextCommand } from '../protocol/index.js';
 export type { InputEvent };
 export type Input = InputEvent;
+/** Connection settings. `url` is the engine origin (default `http://127.0.0.1:8080`), `token` is the 64-character session token that remote hosts require, and `timeout` is in milliseconds (default 10000). */
 export interface ClientOptions { url?: string; token?: string; timeout?: number; ca?: string; connect?: string; signal?: AbortSignal }
 export type Options = ClientOptions;
 export interface InputResult { events: number }
@@ -23,6 +24,7 @@ export interface Capabilities {
   input_endpoint: string; max_input_batch: number;
   cursor: boolean; audio: boolean; clipboard: boolean; resize: boolean; ime: boolean;
 }
+/** Sends each call as its own request. Coordinates are fractions of the screen from 0 to 1, and `screenshot` resolves to PNG bytes. */
 export interface Client {
   status(): Promise<Status>;
   capabilities(): Promise<Capabilities>;
@@ -34,6 +36,7 @@ export interface Client {
   type(text: string): Promise<InputResult>;
   input(events: InputEvent[]): Promise<InputResult>;
 }
+/** A control connection that owns input until `close()`. `input` sends one raw event. */
 export interface Session {
   surface: { width: number; height: number };
   capabilities(): Promise<Capabilities>;

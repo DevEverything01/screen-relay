@@ -214,7 +214,7 @@ export async function ensureSetup(args: Args): Promise<string[]> {
   if (!requested) {
     const compiled = compiledBackends();
     if (compiled.length) backends = [compiled.includes('x11') ? 'x11' : 'wayland'];
-    else if (!interactive(args)) backends = ['x11'];
+    else if (args.display || !interactive(args)) backends = ['x11'];
     else {
       const running = process.env.WAYLAND_DISPLAY || process.env.DISPLAY;
       const attach = running ? await answer(select({

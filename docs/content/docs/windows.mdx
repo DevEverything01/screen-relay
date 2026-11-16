@@ -3,28 +3,29 @@ title: Windows
 description: Build the engine on Windows, stream the signed-in desktop, and control it from another machine.
 ---
 
-The screen-relay engine runs on Windows. It captures a display of the signed-in user's desktop session with Desktop Duplication and injects input with `SendInput`.
-
-On Windows, build and start the engine by hand. `screen-relay up` and `screen-relay down` are not supported, and `screen-relay doctor` reports the platform as unsupported. To install the CLI, run `npm install -g screen-relay` in a shell with Node 22 or newer. The [client commands](/docs/cli#client-target) work from any machine with `--url` and a token file.
+On Windows, you build and start the engine by hand. `screen-relay up` and `screen-relay down` are not supported, and `screen-relay doctor` reports the platform as unsupported. To use the CLI on this machine, run `npm install -g screen-relay` in a shell with Node 22 or newer. The [client commands](/docs/cli#client-target) work from any machine with `--url` and a token file.
 
 ## Build the engine
 
-Build in [MSYS2](https://www.msys2.org/) with the UCRT64 environment. In a UCRT64 shell, from a repository clone, install the packages and build:
+1. Install [MSYS2](https://www.msys2.org/), open its UCRT64 shell, and install the packages from a repository clone:
 
-```sh
-pacman -S make diffutils mingw-w64-ucrt-x86_64-{gcc,pkgconf,libwebsockets,x264,ffmpeg}
-make
-```
+   ```sh
+   pacman -S make diffutils mingw-w64-ucrt-x86_64-{gcc,pkgconf,libwebsockets,x264,ffmpeg}
+   ```
 
-On Windows, `make` builds the Windows backend by default and produces `relay-engine.exe`.
+2. Build the engine with `make`. On Windows, it builds the Windows backend by default and produces `relay-engine.exe`.
 
-The engine serves the viewer from a folder of built assets. Build them with Node 22 or newer:
+   ```sh
+   make
+   ```
 
-```sh
-npm ci && npm run build
-```
+3. Build the viewer with Node 22 or newer. The engine serves it from a folder of built assets.
 
-This writes the viewer to `dist/viewer`. The engine looks for a `viewer` folder next to `relay-engine.exe`, so pass `--viewer-dir` to point it at `dist/viewer`.
+   ```sh
+   npm ci && npm run build
+   ```
+
+   This writes the viewer to `dist/viewer`. The engine looks for a `viewer` folder next to `relay-engine.exe`, so pass `--viewer-dir` to point it at `dist/viewer`.
 
 ## Start the engine
 

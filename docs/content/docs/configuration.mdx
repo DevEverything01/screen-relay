@@ -3,7 +3,14 @@ title: Configuration
 description: Set screen-relay's display, stream, server, keyboard, backend, and desktop options with a YAML file, flags, or environment variables.
 ---
 
-Change how `screen-relay up` starts a session with an optional YAML file on the VM. Every key is optional. A flag beats its environment variable, which beats the file, which beats the default.
+Set how `screen-relay up` starts a session with an optional YAML file on the VM. Every key is optional.
+
+Precedence, highest first:
+
+1. Flag
+2. Environment variable
+3. Config file
+4. Default
 
 ## Where the file lives
 
@@ -15,7 +22,9 @@ Change how `screen-relay up` starts a session with an optional YAML file on the 
 | 2 | `SCREEN_RELAY_CONFIG` |
 | 3 | `${XDG_CONFIG_HOME:-~/.config}/screen-relay/config.yaml`, when it exists |
 
-If `--config` or `SCREEN_RELAY_CONFIG` names a file that does not exist, `screen-relay up` fails. Only `screen-relay up` reads the file. The viewer and the client commands do not.
+If `--config` or `SCREEN_RELAY_CONFIG` names a file that does not exist, `screen-relay up` fails.
+
+`up`, `install`, and `doctor` read the file. The viewer and the client commands do not.
 
 ## Default configuration
 
@@ -80,17 +89,27 @@ nano ~/.config/screen-relay/config.yaml
 | `server.tls_cert` | unset | Path to a certificate file. Set with `tls_key`. | `--tls-cert` | `SCREEN_RELAY_TLS_CERT` |
 | `server.tls_key` | unset | Path to the private key file. Set with `tls_cert`. | `--tls-key` | `SCREEN_RELAY_TLS_KEY` |
 | `keyboard.layout` | `us` | A layout name such as `de` or `fr`, or a comma-separated list such as `us,de`, using letters, digits, `_`, and `-`. On X11 it needs `setxkbmap`, which `screen-relay doctor` checks. | None | `SCREEN_RELAY_KEYBOARD_LAYOUT` |
-| `backend` | `x11` when the engine includes it, else `wayland`; `macos` on macOS | `x11`, `wayland`, or `macos`. See [X11](/docs/x11), [Wayland](/docs/wayland), and [macOS](/docs/macos). | `--backend` | `SCREEN_RELAY_BACKEND` |
-| `desktop` | `xfce` on X11, `foot` on Wayland, or `none` with `--display` | `xfce`, `none`, or a command. See [X11](/docs/x11) and [Wayland](/docs/wayland). | `--desktop` | `SCREEN_RELAY_DESKTOP` |
+| `backend` | `x11` when the engine includes it, else `wayland`; `macos` on macOS | `x11`, `wayland`, or `macos`. See [X11](/docs/linux), [Wayland](/docs/linux), and [macOS](/docs/macos). | `--backend` | `SCREEN_RELAY_BACKEND` |
+| `desktop` | `xfce` on X11, `foot` on Wayland, or `none` with `--display` | `xfce`, `none`, or a command. See [X11](/docs/linux) and [Wayland](/docs/linux). | `--desktop` | `SCREEN_RELAY_DESKTOP` |
 
-`stream.bitrate` needs `min <= start <= max`, including when you change one value. `server.tls_cert` and `server.tls_key` must be set together.
+Rules that span keys:
+
+- `stream.bitrate` needs `min <= start <= max`, including when you change one value.
+- `server.tls_cert` and `server.tls_key` must be set together.
 
 To reach the session from outside the VM, set `server.public` or serve it through a TLS proxy. In a container, publish the port to the host loopback. See [Remote access](/docs/remote-access) and [Docker](/docs/docker).
 
 ## Bad values
 
-`screen-relay up` refuses to start and names the file and key when a value is wrong. It does not fall back to a default. Unknown keys, wrong types, and values outside the allowed range are all errors, and a bad value from a flag or environment variable fails the same way.
+`screen-relay up` refuses to start when a value is wrong. It names the file and key, and it does not fall back to a default.
+
+- Unknown keys, wrong types, and values outside the allowed range are errors.
+- A bad value from a flag or environment variable fails the same way.
 
 ## Apply changes
 
-Settings apply when `screen-relay up` starts. There is no live reload and no live resize. To change a setting, stop the session with `screen-relay down`, edit the file, and run `screen-relay up` again.
+Settings apply when `screen-relay up` starts. There is no live reload and no live resize. To change a setting:
+
+1. Stop the session with `screen-relay down`.
+2. Edit the file.
+3. Run `screen-relay up` again.

@@ -3,21 +3,17 @@ title: SDK
 description: Control a screen-relay desktop from Node.
 ---
 
-Use Node 22 or newer to send input and take screenshots. Start a desktop on the same machine with [screen-relay up -d](/docs/getting-started#start-a-session).
+The Node SDK requires Node 22 or newer. Start a desktop on the same machine with [screen-relay up -d](/docs/getting-started#start-a-session) first.
 
 ## Install and import
-
-Install the package in your Node project:
 
 ```sh
 npm install screen-relay
 ```
 
-The examples below import `createClient` and `connect` from `screen-relay`.
-
 ### One-shot calls
 
-Close the viewer, then click and save a screenshot:
+Close the viewer first. A viewer that owns input makes `click` return `busy`.
 
 ```js
 import { createClient } from 'screen-relay';
@@ -29,7 +25,8 @@ await writeFile('screen.png', await desktop.screenshot());
 
 ## Two ways to connect
 
-Use `createClient(options)` for one-shot actions such as `click` and `type`. Use `await connect(options)` to hold a WebSocket control session and send individual input events until `close()`.
+- `createClient(options)` makes one-shot calls such as `click` and `type`.
+- `await connect(options)` opens a WebSocket control session. It sends individual input events until `close()`.
 
 ### A control session
 
@@ -46,15 +43,21 @@ try {
 }
 ```
 
-The session exposes `surface: { width, height }` and allows 32 pending input requests. An acknowledgement timeout closes the session. Input is not replayed after disconnecting, and an acknowledgement does not guarantee the application reacted.
+- The session exposes `surface: { width, height }`.
+- It allows 32 pending input requests.
+- An acknowledgement timeout closes the session.
+- Input is not replayed after disconnecting.
+- An acknowledgement does not guarantee the application reacted.
 
 ## One input owner at a time
 
-A viewer, control session, or CLI can own input. Close the viewer or session before sending client input, or it returns `busy`. A control connection can return `unreachable` when input is held. Status, capabilities, and screenshots do not require input control.
+- A viewer, control session, or CLI can own input. Close the viewer or session before sending client input, or the call returns `busy`.
+- A control connection can return `unreachable` while input is held.
+- Status, capabilities, and screenshots do not need input control.
 
 ## Methods
 
-Coordinates are fractions from `0` to `1`, measured from the top-left. Client input methods return `{ events: number }`.
+Coordinates are fractions from `0` to `1`, measured from the top-left. See [Input rules](/docs/cli#input-rules). Client input methods return `{ events: number }`.
 
 | Method | Result or action |
 | --- | --- |
@@ -68,9 +71,14 @@ Coordinates are fractions from `0` to `1`, measured from the top-left. Client in
 | `status()` | Transport metrics; unavailable resource counters are `null`. |
 | `screenshot()` | PNG bytes, without the viewer's cursor overlay. |
 
-`capabilities(options)`, `status(options)`, and `screenshot(options, path?)` are also standalone exports. The latter returns PNG bytes and writes them to `path` if provided.
+`capabilities(options)`, `status(options)`, and `screenshot(options, path?)` are also standalone exports. `screenshot` returns PNG bytes and writes them to `path` when one is given.
 
-Input batches contain at most `max_input_batch` events, up to 256. A key combination or scroll must fit in one batch. Held keys and buttons are released at each boundary. Batches run in order and are not retried; await each call to keep actions in order.
+Input batches:
+
+- Hold at most `max_input_batch` events, up to 256.
+- Keep a key combination or scroll inside one batch.
+- Release held keys and buttons at each batch boundary.
+- Run in order and are not retried. Await each call to keep actions in order.
 
 ### Session methods
 
@@ -96,7 +104,7 @@ Optional `buttons` (0 to 31) and `modifiers` (0 to 255) default to 0. Both must 
 
 ## Options
 
-Pass these options to `createClient`, standalone functions, or `connect`. Control sessions reject nonempty `ca` or `connect` with `invalid_option`.
+Pass these options to `createClient`, the standalone functions, or `connect`. Control sessions reject a nonempty `ca` or `connect` with `invalid_option`.
 
 | Option | Meaning |
 | --- | --- |
@@ -107,11 +115,15 @@ Pass these options to `createClient`, standalone functions, or `connect`. Contro
 | `connect` | Address to dial instead of the URL host; the URL host remains the `Host` header. |
 | `signal` | `AbortSignal` that cancels requests or the control session. |
 
-Redirects are not followed. The engine closes screenshot requests after 5 seconds; screenshots larger than 8 MiB are rejected.
+- Redirects are not followed.
+- The engine closes screenshot requests after 5 seconds.
+- Screenshots larger than 8 MiB are rejected.
 
 ## Errors
 
-Match `RelayError.reason`, not the message. `createClient` can throw during option validation; async calls reject. Errors also expose `code`, `message`, `class`, `exitCode`, `status`, and optional `hint`, `data`, and `next`. See [error reasons](/docs/cli#error-reasons).
+- Match `RelayError.reason`, not the message.
+- `createClient` can throw during option validation. Async calls reject.
+- Errors also expose `code`, `message`, `class`, `exitCode`, `status`, and optional `hint`, `data`, and `next`. See [error reasons](/docs/cli#error-reasons).
 
 | Reason | Cause and action |
 | --- | --- |
@@ -121,8 +133,12 @@ Match `RelayError.reason`, not the message. `createClient` can throw during opti
 | `disconnected` | The control session closed or was lost. Connect again. |
 | `invalid_input`, `invalid_option` | Check the URL, token, input, and options. |
 | `unsupported_input` | The backend cannot apply the event or type the character. Change the input or keyboard layout. |
-| `component_failed` | The engine could not complete the request. For screenshots, check `screen-relay logs engine` and [Wayland requirements](/docs/wayland#compositors). |
+| `component_failed` | The engine could not complete the request. For screenshots, check `screen-relay logs engine` and [Wayland requirements](/docs/linux#compositors). |
 | `canceled` | The `signal` aborted the request or session. Use a fresh signal to retry. |
 | `protocol_error`, `io_error` | The response was invalid or too large, or a local certificate or screenshot file could not be read or written. |
 
-When an input request fails, `error.data?.applied` counts confirmed events. Some validation and protocol errors do not include it. If a reply was lost or invalid, the last batch may also have been applied: check a screenshot before retrying. Otherwise, resend only the events after the confirmed count.
+When an input request fails:
+
+- `error.data?.applied` counts confirmed events. Some validation and protocol errors do not include it.
+- If a reply was lost or invalid, the last batch may also have been applied. Check a screenshot before retrying.
+- Otherwise, resend only the events after the confirmed count.

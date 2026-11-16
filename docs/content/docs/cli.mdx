@@ -10,27 +10,25 @@ screen-relay up -d
 screen-relay screenshot screen.png
 ```
 
-VM commands run on the Linux VM or Mac hosting the desktop, including a container or sandbox. Client commands also run remotely with a URL and token. [Global options](#global-options) include `--json`.
+VM commands run on the Linux VM or Mac that hosts the desktop, including a container or sandbox. Client commands also run remotely with a URL and token. [Global options](#global-options) include `--json`.
 
 ## VM commands
 
 ### up
 
-Starts a desktop session and waits for it to be ready. On a machine that is not set up, it sets the machine up first. See [Getting started](/docs/getting-started#install-screen-relay).
+Starts a desktop session and waits for it to be ready. A machine that is not set up is set up first. See [Getting started](/docs/getting-started#install-screen-relay).
 
 ```sh
 screen-relay up -d --name demo --port 8084
 ```
 
-For backend-specific usage, see [X11](/docs/x11), [Wayland](/docs/wayland), and [macOS](/docs/macos).
-
 | Option | Meaning |
 | --- | --- |
 | `-d`, `--detach` | Run in the background. Otherwise, Ctrl+C stops the session. |
 | `--config FILE` | YAML config. Default: `SCREEN_RELAY_CONFIG`, then `${XDG_CONFIG_HOME:-~/.config}/screen-relay/config.yaml` if present. |
-| `--port N` | Listen port, 1–65535. Default `8080`. |
+| `--port N` | Listen port, 1 to 65535. Default `8080`. |
 | `--desktop CMD` | `xfce`, `none`, or a command. Default: `xfce` on X11, `foot` on Wayland, or `none` when attaching. Always `none` on macOS. |
-| `--display DISPLAY` | Attach to an existing display at its size. Not supported on macOS. |
+| `--display DISPLAY` | Attach to an existing display at its size: `:0` (X display) or `wayland-1` (Wayland socket) on Linux. Not supported on macOS. |
 | `--backend x11\|wayland\|macos` | On Linux, default `x11` when available, else `wayland`. Without a configured backend, a display without a colon selects Wayland. On macOS, `macos`. |
 | `--output NAME` | Wayland output name, or a macOS display ID. Default: first output, or the main display. Not valid on X11. |
 | `--public URL` | HTTPS origin. Generates a token. Requires a TLS proxy unless direct TLS is configured. |
@@ -39,9 +37,15 @@ For backend-specific usage, see [X11](/docs/x11), [Wayland](/docs/wayland), and 
 | `--timeout S` | Engine and desktop readiness timeout in seconds. Default `30`; must be positive. |
 | `--yes`, `-y` | Install missing packages without asking. Required when there is no terminal. |
 
-Default display: 1280x720 at 60 fps. On macOS, screen-relay attaches to the existing display and ignores `display.resolution`. screen-relay does not stop an attached display. Treat viewer URLs containing `#token=` and JSON tokens as secrets. See [Configuration](/docs/configuration) and [Remote access](/docs/remote-access).
+- Default display: 1280x720 at 60 fps.
+- On macOS, screen-relay attaches to the existing display and ignores `display.resolution`. It does not stop an attached display.
+- To become ready, a desktop command must open a window on X11 or a new Wayland display. Startup failures include the component's log.
+- If the display, desktop, or engine exits later, the session stops. Check `screen-relay status` and `screen-relay logs`.
+- Foreground `up --json` prints after supervision ends. An interrupt prints no success document.
+- Treat viewer URLs containing `#token=` and JSON tokens as secrets.
+- See [Configuration](/docs/configuration) and [Remote access](/docs/remote-access).
 
-To become ready, a desktop command must open a window on X11 or a new Wayland display. Startup failures include the component's log. If the display, desktop, or engine exits later, the session stops; check `screen-relay status` and `screen-relay logs`. Foreground `up --json` prints after supervision ends; an interrupt prints no success document.
+For backend-specific usage, see [X11](/docs/linux), [Wayland](/docs/linux), and [macOS](/docs/macos).
 
 ### down
 
@@ -51,11 +55,11 @@ Stops the session and its apps. Safe to repeat.
 screen-relay down --name demo
 ```
 
-The JSON outcome is `stopped` or `unchanged`.
+The JSON `outcome` is `stopped` or `unchanged`.
 
 ### logs
 
-Prints the last 200 lines of each log or one component.
+Prints the last 200 lines of each log, or of one component.
 
 ```sh
 screen-relay logs engine --follow
@@ -66,7 +70,7 @@ screen-relay logs engine --follow
 | `component` | `display`, `dbus`, `desktop`, `engine`, or `apps`. Omit to show all. |
 | `-f`, `--follow` | Follow new lines. Incompatible with `--json`. |
 
-Detached sessions write `supervisor.log` in the [state directory](#state-directory).
+- Detached sessions write `supervisor.log` in the [state directory](#state-directory).
 
 ### run
 
@@ -80,9 +84,13 @@ screen-relay run --name demo --restart -- mousepad notes.txt
 | --- | --- |
 | `--restart` | Restart the app whenever it exits, until the session stops. |
 
-Put screen-relay options before `--`; everything after it goes to the app. Read output with `screen-relay logs apps`. Without `--restart`, a nonzero exit within one second reports `component_failed`. Restarts get new process IDs. Retry delays start at one second, double to 30 seconds, and reset after 60 seconds of uptime.
-
-Apps share the display and D-Bus session when available; attached displays use the caller's environment. On Linux, apps run without ambient capabilities. On macOS, apps start in your user session without `DISPLAY`, `WAYLAND_DISPLAY`, or `XAUTHORITY`.
+- Put screen-relay options before `--`. Everything after it goes to the app.
+- Read app output with `screen-relay logs apps`.
+- Without `--restart`, a nonzero exit within one second reports `component_failed`.
+- Restarts get new process IDs. Retry delays start at one second, double to 30 seconds, and reset after 60 seconds of uptime.
+- Apps share the display and D-Bus session when available. Attached displays use the caller's environment.
+- On Linux, apps run without ambient capabilities.
+- On macOS, apps start in your user session without `DISPLAY`, `WAYLAND_DISPLAY`, or `XAUTHORITY`.
 
 ### doctor
 
@@ -96,7 +104,10 @@ SCREEN_RELAY_BACKEND=wayland screen-relay doctor
 | --- | --- |
 | `--config FILE` | Load a YAML config, using the same default as `up`. |
 
-The backend comes from `SCREEN_RELAY_BACKEND`, config, or the engine default. On macOS, doctor checks the macOS version, the engine, and the Screen Recording and Accessibility permissions. Failures exit 1; warnings do not. JSON checks include `name`, `status`, `detail`, and `fix`.
+- On Linux, doctor checks the `x11` backend unless `SCREEN_RELAY_BACKEND` or the config `backend` key says otherwise.
+- On macOS, doctor checks the macOS version, the engine, and the Screen Recording and Accessibility permissions.
+- Failures exit 1. Warnings do not.
+- JSON checks include `name`, `status`, `detail`, and `fix`.
 
 ### install
 
@@ -113,17 +124,21 @@ screen-relay install --backend wayland --yes
 | `--config FILE` | Read `backend` and `desktop` from this config file. |
 | `--yes`, `-y` | Install packages without asking. Required when there is no terminal. |
 
-The outcome is `installed` after it sets something up, or `unchanged` when nothing was missing. Adding a backend keeps the ones the engine already has. On Linux, package installation uses the system package manager and uses `sudo` unless you are root. See [Getting started](/docs/getting-started) for supported distributions.
+- Installs packages with the system package manager, using `sudo` unless you are root.
+- Builds the engine into `~/.local/share/screen-relay/engine/<version>/`. Builds for earlier versions stay there until deleted.
+- At a terminal, it asks before installing packages. Anywhere else, it needs `--yes`.
+- The outcome is `installed` after it sets something up, or `unchanged` when nothing was missing. Adding a backend keeps the ones the engine already has.
+- See [Getting started](/docs/getting-started) for supported distributions.
 
 ## Client commands
 
-Client commands share these options and the [client target rules](#client-target):
+Client commands share these options and follow the [client target](#client-target) rules.
 
 | Option | Meaning |
 | --- | --- |
 | `--url URL` | Engine origin. Default: the local session. Env: `SCREEN_RELAY_URL`. |
-| `--token-file FILE` | Read a token from a file. Env: `SCREEN_RELAY_TOKEN_FILE`. See [Client target](#client-target). |
-| `--timeout S` | Reply timeout in seconds. Default `10`; `0.001`–`2147483.647` in whole milliseconds. |
+| `--token-file FILE` | Read a token from a file. Env: `SCREEN_RELAY_TOKEN_FILE`. |
+| `--timeout S` | Reply timeout in seconds. Default `10`; `0.001` to `2147483.647` in whole milliseconds. |
 
 ### status
 
@@ -137,7 +152,11 @@ screen-relay status --name demo
 | --- | --- |
 | `--show-token` | Include the running local session's token. Hidden by default. |
 
-Local states are `starting`, `ready`, `stopped`, and `failed`. Existing sessions exit 0 even when stopped or failed; missing sessions return `not_running`. JSON includes `session.running`, `url`, `localUrl`, `display`, `resolution`, `logs`, and, when running, `capabilities` or a `health` error. Other fields can include `backend`, `fps`, `desktop`, `tokenFile`, `tlsCert`, `ready`, `stopped`, `supervisor`, `ownsDisplay`, `runtimeDir`, and `waylandDisplay`. Failed sessions include `error`; remote status includes `url`, `capabilities`, and `metrics`.
+- Local states are `starting`, `ready`, `stopped`, and `failed`.
+- Existing sessions exit 0 even when stopped or failed. A missing session returns `not_running`.
+- JSON includes `session.running`, `url`, `localUrl`, `display`, `resolution`, `logs`, and, when running, `capabilities` or a `health` error.
+- Other fields can include `backend`, `fps`, `desktop`, `tokenFile`, `tlsCert`, `ready`, `stopped`, `supervisor`, `ownsDisplay`, `runtimeDir`, and `waylandDisplay`.
+- Failed sessions include `error`. Remote status includes `url`, `capabilities`, and `metrics`.
 
 ### screenshot
 
@@ -153,7 +172,7 @@ screen-relay screenshot /tmp/relay.png
 
 ### click
 
-Clicks at the given screen coordinates.
+Clicks at the given [screen coordinates](#input-rules).
 
 ```sh
 screen-relay click 0.5 0.5 --button right
@@ -165,7 +184,7 @@ screen-relay click 0.5 0.5 --button right
 
 ### move
 
-Moves the pointer to the given screen coordinates.
+Moves the pointer to the given [screen coordinates](#input-rules).
 
 ```sh
 screen-relay move 0.5 0.5
@@ -173,7 +192,7 @@ screen-relay move 0.5 0.5
 
 ### scroll
 
-Moves to a point and scrolls by whole wheel notches.
+Moves to a [screen coordinate](#input-rules) and scrolls by whole wheel notches.
 
 ```sh
 screen-relay scroll 0.5 0.5 --dy 3
@@ -184,7 +203,7 @@ screen-relay scroll 0.5 0.5 --dy 3
 | `--dx N` | Horizontal notches; positive is right. Default `0`. |
 | `--dy N` | Vertical notches; positive is down. Default `0`. |
 
-At least one value must be nonzero.
+- At least one value must be nonzero.
 
 ### key
 
@@ -194,7 +213,10 @@ Presses physical key combinations in order.
 screen-relay key ctrl+l Enter
 ```
 
-Join keys with `+`, for example `alt+Tab` or `ctrl++`. Modifiers are `ctrl`, `shift`, `alt`, and `super`; aliases include `control`, `meta`, `cmd`, and `win`. Keys include US-layout characters, navigation keys, and `F1`–`F24`.
+- Join keys with `+`, for example `alt+Tab` or `ctrl++`.
+- Modifiers are `ctrl`, `shift`, `alt`, and `super`.
+- Aliases: `control` for `ctrl`; `meta`, `cmd`, and `win` for `super`.
+- Keys include US-layout characters, navigation keys, and `F1` to `F24`.
 
 ### type
 
@@ -208,11 +230,11 @@ screen-relay type "Hello, 世界"
 | --- | --- |
 | `--stdin` | Read text from stdin instead of an argument. |
 
-An unavailable character returns `unsupported_input`.
+- An unavailable character returns `unsupported_input`.
 
 ### input
 
-Sends 1–256 raw [input events](/docs/sdk#input-events) as a JSON array.
+Sends 1 to 256 raw [input events](/docs/sdk#input-events) as a JSON array.
 
 ```sh
 screen-relay input '[{"type":"keyDown","key":4},{"type":"keyUp","key":4}]'
@@ -224,9 +246,14 @@ screen-relay input '[{"type":"keyDown","key":4},{"type":"keyUp","key":4}]'
 
 ### Input rules
 
-Coordinates are fractions from `0` to `1`, measured from the top-left. Success means the engine applied the events, not that the app reacted; take a screenshot to check.
+Coordinates are fractions from `0` to `1`, measured from the top-left.
 
-Only one input owner can send input: a viewer, SDK control session, or CLI. Batches use the engine's limit, up to 256 events; key combinations are never split. Keys and buttons are released after each batch. Another owner, a batch exceeding the 1024-event queue, or a session ending during input can return `busy`. No retries; partial failures report `data.applied`.
+- Success means the engine applied the events, not that the app reacted. Take a screenshot to check.
+- Only one input owner can send input: a viewer, an SDK control session, or the CLI.
+- Batches hold up to 256 events. A key combination is never split across batches.
+- Keys and buttons are released after each batch.
+- `busy` means another owner holds input, a batch exceeds the 1024-event queue, or the session ends during input.
+- No retries. Partial failures report `data.applied`.
 
 ## Other commands
 
@@ -244,7 +271,9 @@ screen-relay skills path core
 | --- | --- |
 | `--full` | Append references and templates to `skills get`. |
 
-`list` is the default; `path` accepts an optional skill name. See [Agent skills](/docs/agent-skills).
+- `list` is the default action. `path` takes an optional skill name.
+- Skills ship with the CLI, so their instructions match the installed version.
+- See [Agent skills](/docs/agent-skills).
 
 ### help
 
@@ -261,7 +290,7 @@ screen-relay help --all --json
 
 ## Global options
 
-These options work before or after a command, but not after `--`:
+These options work before or after a command, but not after `--`.
 
 | Option | Meaning |
 | --- | --- |
@@ -271,17 +300,41 @@ These options work before or after a command, but not after `--`:
 | `--no-color` | Disable color. |
 | `--name NAME` | Select a session; default `default`. Up to 64 characters, starting with a letter, digit, `_`, or `-`; later characters can also include `.`. |
 
-Options accept `--name VALUE` or `--name=VALUE`. Boolean options accept `--no-OPTION`; `--` ends option parsing.
+- Options accept `--name VALUE` or `--name=VALUE`.
+- Boolean options accept `--no-OPTION`. `--` ends option parsing.
 
 ### Help layouts
 
-Help detects agents and changes its layout. Set `SCREEN_RELAY_AGENT=1` or `SCREEN_RELAY_AGENT=0` to choose the agent or human layout. See [Agent-aware help](/docs/agent-skills#agent-aware-help).
+Set `SCREEN_RELAY_AGENT=1` for the agent layout or `SCREEN_RELAY_AGENT=0` for the human layout. See [Agent-aware help](/docs/agent-skills#agent-aware-help).
 
 ## Client target
 
-The target is `--url`, then `SCREEN_RELAY_URL`, then the ready local session. If the default session is missing and no name was selected, clients try `http://127.0.0.1:8080`. Without a URL, other client commands return `not_running` for an explicitly selected missing session or a stopped session. Local `status` never falls back.
+The target is:
 
-The token comes from `--token-file`, then `SCREEN_RELAY_TOKEN_FILE`, then the local session only when no URL is set. Local `status` uses its stored token for health checks. Remote origins require HTTPS and a 64-character lowercase hexadecimal token. HTTP works only for `localhost` and `127.0.0.1`. URLs cannot contain a path, query, fragment, or credentials; redirects are refused. Local sessions trust their TLS certificate without a hostname check. See [Remote access](/docs/remote-access).
+1. `--url`
+2. `SCREEN_RELAY_URL`
+3. The ready local session.
+
+- If the default session is missing and no name was selected, clients try `http://127.0.0.1:8080`.
+- Without a URL, other client commands return `not_running` for an explicitly selected missing session or a stopped session. Local `status` never falls back.
+
+The token comes from:
+
+1. `--token-file`
+2. `SCREEN_RELAY_TOKEN_FILE`
+3. The local session, only when no URL is set.
+
+Local `status` uses its stored token for health checks.
+
+URL rules:
+
+- Remote origins require HTTPS and a 64-character lowercase hexadecimal token.
+- HTTP works only for `localhost` and `127.0.0.1`.
+- URLs cannot contain a path, query, fragment, or credentials.
+- Redirects are refused.
+- Local sessions trust their TLS certificate without a hostname check.
+
+See [Remote access](/docs/remote-access).
 
 ```sh
 screen-relay screenshot desk.png --url https://desk.example.com --token-file ./token
@@ -289,13 +342,24 @@ screen-relay screenshot desk.png --url https://desk.example.com --token-file ./t
 
 ## Output
 
-Queries write to stdout; receipts and recovery steps go to stderr. When piped, `up` writes the viewer URL, `screenshot` the saved path, `run` the process ID, and input commands nothing. A viewer URL can contain a token.
+- Queries write to stdout. Receipts and recovery steps go to stderr.
+- When piped, `up` writes the viewer URL, `screenshot` writes the saved path, `run` writes the process ID, and input commands write nothing.
 
-Color follows `--no-color`, `NO_COLOR`, `FORCE_COLOR`, then terminal detection; `TERM=dumb` disables it.
+Color follows, in order:
+
+1. `--no-color`
+2. `NO_COLOR`
+3. `FORCE_COLOR`
+4. Terminal detection
+
+`TERM=dumb` disables color.
 
 ## JSON output
 
-`--json` writes a success document to stdout and structured errors to stderr. Success can include `warnings` and `next`. `doctor --json` writes checks to stdout even when a check fails. An interrupted command can exit without a document.
+- `--json` writes a success document to stdout and structured errors to stderr.
+- Success can include `warnings` and `next`.
+- `doctor --json` writes checks to stdout even when a check fails.
+- An interrupted command can exit without a document.
 
 | Command | Success fields |
 | --- | --- |
@@ -312,7 +376,14 @@ Color follows `--no-color`, `NO_COLOR`, `FORCE_COLOR`, then terminal detection; 
 
 ### Error document
 
-Errors contain `status` (`error` or `action_required`), `reason`, `message`, and optional `next` commands and `data`. Match `reason`, not `message`. Each `next` entry has `command` and `argv`; `data` can contain `component`, `log`, `logs`, `applied`, or `httpStatus`.
+Errors contain:
+
+- `status`: `error` or `action_required`.
+- `reason`: match this field, not `message`.
+- `message`.
+- Optional `next` commands and `data`.
+
+Each `next` entry has `command` and `argv`. `data` can contain `component`, `log`, `logs`, `applied`, or `httpStatus`.
 
 ### Error reasons
 
@@ -358,7 +429,7 @@ Options override environment variables, then config values, then defaults. Inval
 
 | Variable | Applies to |
 | --- | --- |
-| `SCREEN_RELAY_CONFIG` | `up` and `doctor` config file. |
+| `SCREEN_RELAY_CONFIG` | Config file for `up`, `install`, and `doctor`. |
 | `SCREEN_RELAY_PORT`, `SCREEN_RELAY_BIND`, `SCREEN_RELAY_PUBLIC`, `SCREEN_RELAY_TLS_CERT`, `SCREEN_RELAY_TLS_KEY`, `SCREEN_RELAY_DESKTOP`, `SCREEN_RELAY_BACKEND` | Matching `up` options; `SCREEN_RELAY_BACKEND` also selects the backend for `doctor` and `install`. |
 | `SCREEN_RELAY_RESOLUTION`, `SCREEN_RELAY_COMPOSITOR`, `SCREEN_RELAY_FPS`, `SCREEN_RELAY_BITRATE_MIN`, `SCREEN_RELAY_BITRATE_START`, `SCREEN_RELAY_BITRATE_MAX`, `SCREEN_RELAY_KEYBOARD_LAYOUT` | Display, stream, and keyboard settings. |
 | `SCREEN_RELAY_URL`, `SCREEN_RELAY_TOKEN_FILE` | Client URL and token file. |
@@ -367,4 +438,4 @@ Options override environment variables, then config values, then defaults. Inval
 
 ### State directory
 
-Session files and logs are in `${XDG_STATE_HOME:-~/.local/state}/screen-relay/<name>/`. The directory has mode `0700`; its token file has mode `0600`.
+Session files and logs are in `${XDG_STATE_HOME:-~/.local/state}/screen-relay/<name>/`. The directory has mode `0700`. Its token file has mode `0600`.

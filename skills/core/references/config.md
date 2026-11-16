@@ -2,7 +2,14 @@
 
 The published reference is at https://relay.labs.vercel.dev/docs/configuration.
 
-`screen-relay up` reads `--config FILE`, then `SCREEN_RELAY_CONFIG`, then `${XDG_CONFIG_HOME:-~/.config}/screen-relay/config.yaml` when it exists. A flag beats its `SCREEN_RELAY_*` variable, which beats the file, which beats the default. `screen-relay install --config FILE` reads `backend` and `desktop` from that file. A missing explicitly selected file, an unknown key, an invalid type or an out-of-range value stops startup before any process starts, and every problem is reported at once.
+Precedence, highest first:
+
+1. Flag.
+2. `SCREEN_RELAY_*` environment variable.
+3. Config file.
+4. Default.
+
+`screen-relay up` reads `--config FILE`, then `SCREEN_RELAY_CONFIG`, then `${XDG_CONFIG_HOME:-~/.config}/screen-relay/config.yaml` when it exists. `screen-relay install --config FILE` reads `backend` and `desktop` from that file. A missing explicitly selected file, an unknown key, an invalid type or an out-of-range value stops startup before any process starts. Every problem is reported at once.
 
 | Key | Default | Range or meaning | Environment |
 | --- | --- | --- | --- |
@@ -38,4 +45,4 @@ keyboard:
   layout: us
 ```
 
-There is no live reload or resize. Run `screen-relay down`, edit the file, then `screen-relay up -d`. `--display` ignores `display.resolution` and uses the existing display's size; `up` warns about this. macOS ignores `display.resolution` the same way and warns. Client commands use `SCREEN_RELAY_URL` and `SCREEN_RELAY_TOKEN_FILE` instead of the config file.
+There is no live reload or resize. Run `screen-relay down`, edit the file, then run `screen-relay up -d`. With `--display`, `display.resolution` is ignored and `up` uses the existing display's size, with a warning. macOS ignores `display.resolution` the same way. Client commands use `SCREEN_RELAY_URL` and `SCREEN_RELAY_TOKEN_FILE` instead of the config file.

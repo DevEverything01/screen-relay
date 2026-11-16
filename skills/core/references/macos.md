@@ -9,7 +9,10 @@ npm install -g screen-relay
 screen-relay install --yes
 ```
 
-`screen-relay install` uses Homebrew to install `pkgconf`, `x264` and `libwebsockets`, then builds the `macos` backend. `--backend` accepts only `macos`. Without Homebrew, it stops and says so. Install the Xcode Command Line Tools as well. screen-relay requires macOS 13.5 or later and Node 22 or newer; install Node first, because the install does not install it. `screen-relay up -d --yes` runs the same setup when it is needed.
+- Requires macOS 13.5 or later and Node 22 or newer. Install Node first; the install does not install it.
+- Requires Homebrew and the Xcode Command Line Tools. Without Homebrew, `install` stops and says so.
+- `install` uses Homebrew to install `pkgconf`, `x264` and `libwebsockets`, then builds the `macos` backend. `--backend` accepts only `macos`.
+- `up -d --yes` runs the same setup when it is needed.
 
 ## Permissions
 
@@ -27,13 +30,14 @@ screen-relay up -d
 screen-relay run -- open -a Terminal
 ```
 
-- `--display` fails with `invalid_input`, and `display.resolution` is ignored with a warning.
-- `--desktop` has no effect; the desktop is always `none`.
-- `screen-relay run` starts apps on your display and clears `DISPLAY`, `WAYLAND_DISPLAY` and `XAUTHORITY`.
+- `--display` fails with `invalid_input`.
+- `display.resolution` is ignored with a warning.
+- `--desktop` has no effect. The desktop is always `none`.
+- `run` clears `DISPLAY`, `WAYLAND_DISPLAY` and `XAUTHORITY`.
 
 ## Choose a display
 
-Without `--output`, screen-relay streams the main display. `--output` takes a CGDirectDisplayID, a number. If the ID is not an active display, `up` fails and the engine log lists the active display IDs.
+Without `--output`, screen-relay streams the main display. `--output` takes a CGDirectDisplayID, a number. If the ID is not an active display, `up` fails, and the engine log lists the active display IDs.
 
 ```sh
 screen-relay up -d --output 69733382
@@ -43,4 +47,4 @@ screen-relay up -d --output 69733382
 
 - The stream uses the display's native pixel size, halved until it fits the engine's maximum frame size.
 - The pointer is not drawn into the video. The viewer shows its own arrow.
-- If the display's size, position or ID changes, the engine stops the stream. Run `screen-relay down` and `screen-relay up -d` again.
+- If the display's size, position or ID changes, the engine stops the stream. Run `screen-relay down`, then `screen-relay up -d`.

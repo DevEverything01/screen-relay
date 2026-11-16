@@ -3,7 +3,7 @@ title: HTTP API
 description: Control a screen-relay session over HTTP.
 ---
 
-Call screen-relay over HTTP from any language, or use the [CLI](/docs/cli) or [Node SDK](/docs/sdk) for most tasks.
+Call screen-relay over HTTP from any language. For most tasks, use the [CLI](/docs/cli) or [Node SDK](/docs/sdk).
 
 ## Read the screen
 
@@ -14,9 +14,13 @@ curl -fsS http://127.0.0.1:8080/capabilities
 curl -fsS http://127.0.0.1:8080/screenshot.png -o screen.png
 ```
 
-These commands use the default address and a session bound to `127.0.0.1` without `--public`, which has no token. The screenshot is saved as `screen.png`.
+These commands assume the default address and a session bound to `127.0.0.1` without `--public`. That session has no token.
 
-For a session with a token, run `screen-relay status --json` on the VM to find its `tokenFile` path; add `--name NAME` for a named session. Replace `/path/to/token` with that path and add `-H "Authorization: Bearer $(cat /path/to/token)"` to each request. Use the HTTPS origin if the session uses TLS.
+For a session with a token:
+
+1. Run `screen-relay status --json` on the VM to find its `tokenFile` path. Add `--name NAME` for a named session.
+2. Replace `/path/to/token` with that path, and add `-H "Authorization: Bearer $(cat /path/to/token)"` to each request.
+3. Use the HTTPS origin if the session uses TLS.
 
 ## Send input
 
@@ -24,7 +28,7 @@ For a session with a token, run `screen-relay status --json` on the VM to find i
 <span id="input-events" />
 <span id="input-records" />
 
-Use the [CLI](/docs/cli) from any machine with `--url` and `--token-file`, or use the [Node SDK](/docs/sdk). Close the viewer or control session first; either blocks HTTP input.
+Close the viewer or control session first. Either one blocks HTTP input. Then send input from any machine with the [CLI](/docs/cli), passing `--url` and `--token-file`, or with the [Node SDK](/docs/sdk).
 
 ```sh
 screen-relay click 0.5 0.5 --url https://desktop.example.com --token-file ./token
@@ -32,7 +36,7 @@ screen-relay click 0.5 0.5 --url https://desktop.example.com --token-file ./toke
 
 Replace the URL and securely copy the session token into `./token`. For a local session, omit `--url` and `--token-file`. Text input uses the desktop's keyboard layout and can type characters absent from it.
 
-`POST /input` takes binary records; see the [wire protocol](https://github.com/vercel-labs/screen-relay/blob/main/PROTOCOL.md) to write your own client.
+`POST /input` takes binary records. To write your own client, see the [wire protocol](https://github.com/vercel-labs/screen-relay/blob/main/PROTOCOL.md).
 
 ## Endpoints
 
@@ -48,9 +52,9 @@ Replace the URL and securely copy the session token into `./token`. For a local 
 
 ## Authentication
 
-When the session has a token, send `Authorization: Bearer TOKEN`. Do not put the token in a request URL. See [Tokens](/docs/remote-access#tokens).
-
-The `Host` must be `localhost`, `127.0.0.1`, or the authority configured with `--public`, with its port if specified. `Origin` is optional. When the session has a token, any `Origin` is accepted. Without a token, a sent `Origin` must be a loopback origin with a loopback `Host`.
+- When the session has a token, send `Authorization: Bearer TOKEN`. Do not put the token in a request URL. See [Tokens](/docs/remote-access#tokens).
+- The `Host` must be `localhost`, `127.0.0.1`, or the authority configured with `--public`, with its port if specified.
+- `Origin` is optional. When the session has a token, any `Origin` is accepted. Without a token, a sent `Origin` must be a loopback origin with a loopback `Host`.
 
 ## Errors
 
@@ -70,4 +74,4 @@ The `Host` must be `localhost`, `127.0.0.1`, or the authority configured with `-
 | 503 `busy` | Wait for the other screenshot to finish. |
 | 503 `screenshot_unavailable` | Check `screen-relay logs engine` and try again. |
 
-Errors are JSON with an `error` field. Input errors can include the failed record's zero-based `index` or an `applied` count. Do not use `applied` as a retry offset; check the desktop before retrying a partial batch.
+Errors are JSON with an `error` field. Input errors can include the failed record's zero-based `index` or an `applied` count. Do not use `applied` as a retry offset. Check the desktop before retrying a partial batch.
