@@ -74,4 +74,7 @@ Replace the URL and securely copy the session token into `./token`. For a local 
 | 503 `busy` | Wait for the other screenshot to finish. |
 | 503 `screenshot_unavailable` | Check `screen-relay logs engine` and try again. |
 
-Errors are JSON with an `error` field. Input errors can include the failed record's zero-based `index` or an `applied` count. Do not use `applied` as a retry offset. Check the desktop before retrying a partial batch.
+Errors are JSON with an `error` field.
+
+- A rejected input record returns its zero-based `index`. The records before it were applied, and that record and the ones after it were not.
+- A `busy` input reply returns an `applied` count. Text-only input can resume from it. For other input it is not a retry offset, because the engine drops queued text, pointer moves, and scrolls but still applies key and button events. Check the desktop before retrying.

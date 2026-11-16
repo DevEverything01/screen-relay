@@ -139,6 +139,7 @@ Pass these options to `createClient`, the standalone functions, or `connect`. Co
 
 When an input request fails:
 
-- `error.data?.applied` counts confirmed events. Some validation and protocol errors do not include it.
+- `error.data?.applied` counts the events the engine applied. Some validation and protocol errors do not include it.
+- After `invalid_input` or `unsupported_input`, the events before that count were applied, and the rejected event and the ones after it were not. Fix the rejected event and send from there.
+- After `busy`, text-only input can resume from the count. For other input the count is not an offset, because the engine drops queued text, pointer moves, and scrolls but still applies key and button events. Check a screenshot before sending anything again.
 - If a reply was lost or invalid, the last batch may also have been applied. Check a screenshot before retrying.
-- Otherwise, resend only the events after the confirmed count.

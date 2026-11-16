@@ -9,7 +9,7 @@ npm install -g screen-relay
 screen-relay install --yes
 ```
 
-- Requires macOS 13.5 or later and Node 22 or newer. Install Node first; the install does not install it.
+- Requires macOS 12.3 or later and Node 22 or newer. Node 24 and newer need macOS 13.5, so use Node 22 on macOS 12.3 through 13.4. Install Node first; the install does not install it.
 - Requires Homebrew and the Xcode Command Line Tools. Without Homebrew, `install` stops and says so.
 - `install` uses Homebrew to install `pkgconf`, `x264` and `libwebsockets`, then builds the `macos` backend. `--backend` accepts only `macos`.
 - `up -d --yes` runs the same setup when it is needed.

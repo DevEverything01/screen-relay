@@ -220,7 +220,7 @@ screen-relay key ctrl+l Enter
 
 ### type
 
-Types text using the remote keyboard layout.
+Types text on the desktop. It uses the desktop's keyboard layout and also types characters that the layout lacks.
 
 ```sh
 screen-relay type "Hello, 世界"
@@ -230,7 +230,7 @@ screen-relay type "Hello, 世界"
 | --- | --- |
 | `--stdin` | Read text from stdin instead of an argument. |
 
-- An unavailable character returns `unsupported_input`.
+- A character the desktop cannot produce returns `unsupported_input`.
 
 ### input
 
