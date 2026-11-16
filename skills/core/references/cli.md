@@ -73,7 +73,7 @@ relay skills path [name]
 
 ## Global options
 
-At any position: `-h`/`--help`, `-v`/`--version` (prints only the version, `0.1.0`), `--json`, `--no-color`, `--name NAME`. `--` ends option parsing. Booleans accept `--no-<name>`. Short options are only `-h`, `-v`, `-f` and `-d` (`up -d`).
+At any position: `-h`/`--help`, `-v`/`--version` (prints only the version), `--json`, `--no-color`, `--name NAME`. `--` ends option parsing. Booleans accept `--no-<name>`. Short options are only `-h`, `-v`, `-f` and `-d` (`up -d`).
 
 ## Output
 

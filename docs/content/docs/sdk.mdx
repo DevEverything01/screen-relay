@@ -19,7 +19,7 @@ npm install /absolute/path/to/this/repo
 Close the viewer, then click and save a screenshot:
 
 ```js
-import { createClient } from 'relay';
+import { createClient } from 'desktop-relay';
 import { writeFile } from 'node:fs/promises';
 const desktop = createClient();
 await desktop.click(0.5, 0.5);
@@ -35,7 +35,7 @@ Use `createClient(options)` for one-shot actions such as `click` and `type`. Use
 Close the session to release input:
 
 ```js
-import { connect } from 'relay';
+import { connect } from 'desktop-relay';
 
 const desktop = await connect();
 try {

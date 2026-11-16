@@ -9,3 +9,62 @@ Use the `technical-writer` skill (`.agents/skills/technical-writer/SKILL.md`) wh
 ## Diagrams
 
 Use the `architecture-diagram` skill (`.agents/skills/architecture-diagram/SKILL.md`) to create or update diagrams in the docs.
+
+## Releasing
+
+A release is one PR, prepared by hand. The maintainer controls the changelog's voice and format.
+
+To prepare a release:
+
+1. Create a branch, such as `laf/prepare-v0.2.0`.
+2. Bump `version` in `package.json`, then run `npm install --package-lock-only` to update `package-lock.json`.
+3. Write the entry at the top of `CHANGELOG.md`, under a new `## <version>` heading, wrapped in `<!-- release:start -->` and `<!-- release:end -->` markers. Remove the markers from the previous entry so that only the new release has them.
+4. Add a matching entry at the top of `docs/content/docs/changelog.mdx`, below the frontmatter.
+5. Run `node scripts/check-version-sync.mjs`. CI runs the same check on every PR.
+6. Open a PR and merge it to `main`.
+
+When the PR merges, the Release workflow checks whether npm already has the version in `package.json`. If it doesn't, it builds `relay-engine` for Linux x64 and ARM64, macOS ARM64 and x64, and Windows x64, publishes `desktop-relay` to npm, and creates the `v<version>` GitHub release with the binaries attached. The release body is the text between the markers in `CHANGELOG.md`.
+
+If npm already has the version but the GitHub release is missing, the workflow rebuilds the binaries and creates only the release. To retry a failed run, start the workflow from the Actions tab on `main`.
+
+Publishing uses npm trusted publishing from the `Release` environment, so the workflow needs no npm token.
+
+### Writing the changelog
+
+Review the git log since the last release tag and write the entry in `CHANGELOG.md`. Group changes under `### New Features`, `### Bug Fixes`, `### Improvements`, and `### Documentation`, and leave out a group that has no changes. Bold the name of the feature or fix, describe it in one sentence, and put the PR numbers in parentheses.
+
+```markdown
+## 0.2.1
+
+<!-- release:start -->
+
+### Bug Fixes
+
+- Fixed **baz** failing when qux is enabled (#1235)
+
+### Contributors
+
+- @lahfir
+
+<!-- release:end -->
+
+## 0.2.0
+
+### New Features
+
+- Added the **foo command**, which does bar (#1234)
+```
+
+End the entry with a `### Contributors` section that lists the GitHub username, with an `@` prefix, of everyone who contributed to the release. Find them in the git log between the previous tag and `HEAD`.
+
+Do not prefix entries with commit hashes.
+
+### Docs changelog
+
+`docs/content/docs/changelog.mdx` mirrors `CHANGELOG.md` with these differences:
+
+- The version has a `v` prefix, such as `## v0.2.0`.
+- A date line follows the heading: `<p className="text-[#888] text-sm">November 14, 2026</p>`.
+- A `---` line separates entries.
+- It has no release markers and no `### Contributors` section.
+

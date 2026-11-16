@@ -1,0 +1,229 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+permissions:
+  contents: read
+
+jobs:
+  check-release:
+    name: Check for new version
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      should_release: ${{ steps.check.outputs.should_release }}
+      needs_github_release: ${{ steps.check.outputs.needs_github_release }}
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+      - name: Compare package.json version to npm and check GitHub release
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PACKAGE_NAME=$(node -p "require('./package.json').name")
+          LOCAL_VERSION=$(node -p "require('./package.json').version")
+          if ! NPM_VERSION=$(npm view "$PACKAGE_NAME@$LOCAL_VERSION" version 2>npm-view.err); then
+            grep -q E404 npm-view.err || { cat npm-view.err; exit 1; }
+            NPM_VERSION=""
+          fi
+          echo "Local version: $LOCAL_VERSION"
+
+          if [ "$LOCAL_VERSION" != "$NPM_VERSION" ]; then
+            echo "$LOCAL_VERSION is not on npm"
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            echo "needs_github_release=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "$LOCAL_VERSION is already on npm, skipping publish"
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            if gh release view "v$LOCAL_VERSION" >/dev/null 2>&1; then
+              echo "GitHub release v$LOCAL_VERSION exists"
+              echo "needs_github_release=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "GitHub release v$LOCAL_VERSION is missing, will rebuild and create it"
+              echo "needs_github_release=true" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+          echo "version=$LOCAL_VERSION" >> "$GITHUB_OUTPUT"
+
+  build-binaries:
+    name: Build ${{ matrix.name }}
+    needs: check-release
+    if: needs.check-release.outputs.needs_github_release == 'true'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x64
+            os: ubuntu-24.04
+            binary: relay-engine-linux-x64
+          - name: Linux ARM64
+            os: ubuntu-24.04-arm
+            binary: relay-engine-linux-arm64
+          - name: macOS ARM64
+            os: macos-15
+            binary: relay-engine-darwin-arm64
+          - name: macOS x64
+            os: macos-15-intel
+            binary: relay-engine-darwin-x64
+          - name: Windows x64
+            os: windows-2025
+            binary: relay-engine-win32-x64.exe
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential pkg-config \
+            libx11-dev libxext-dev libxdamage-dev libxfixes-dev libxtst-dev \
+            libx264-dev libwebsockets-dev zlib1g-dev \
+            libwayland-dev libwayland-bin wayland-protocols libxkbcommon-dev
+          make -j"$(nproc)" BACKENDS="x11 wayland" relay-engine
+
+      - name: Build (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install pkgconf x264 libwebsockets
+          make -j"$(sysctl -n hw.ncpu)" relay-engine
+
+      - uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2.33.0
+        if: runner.os == 'Windows'
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            make diffutils
+            mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-pkgconf
+            mingw-w64-ucrt-x86_64-libwebsockets mingw-w64-ucrt-x86_64-x264
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: make -j"$(nproc)" relay-engine
+
+      - name: Copy binary
+        shell: bash
+        env:
+          BINARY: ${{ matrix.binary }}
+        run: |
+          mkdir -p artifacts
+          if [ -f relay-engine.exe ]; then
+            cp relay-engine.exe "artifacts/$BINARY"
+          else
+            cp relay-engine "artifacts/$BINARY"
+            chmod +x "artifacts/$BINARY"
+          fi
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ matrix.binary }}
+          path: artifacts/${{ matrix.binary }}
+          retention-days: 7
+
+  publish-npm:
+    name: Publish to npm
+    needs: [check-release, build-binaries]
+    if: needs.check-release.outputs.should_release == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: Release
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+          registry-url: 'https://registry.npmjs.org'
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      - name: Publish
+        env:
+          VERSION: ${{ needs.check-release.outputs.version }}
+        run: |
+          set -euo pipefail
+          PACKAGE_NAME=$(node -p "require('./package.json').name")
+          if npm view "${PACKAGE_NAME}@${VERSION}" version >/dev/null 2>&1; then
+            echo "${PACKAGE_NAME}@${VERSION} is already published; skipping"
+          else
+            npm publish --access public
+          fi
+
+  github-release:
+    name: Create GitHub Release
+    needs: [check-release, build-binaries, publish-npm]
+    if: >-
+      always() &&
+      needs.build-binaries.result == 'success' &&
+      needs.check-release.outputs.needs_github_release == 'true' &&
+      (needs.publish-npm.result == 'success' || needs.publish-npm.result == 'skipped')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: bin/
+          merge-multiple: true
+
+      - name: Verify binaries exist
+        run: |
+          BINARY_COUNT=$(ls bin/relay-engine-* 2>/dev/null | wc -l)
+          if [ "$BINARY_COUNT" -lt 5 ]; then
+            echo "Error: Expected 5 binaries, found $BINARY_COUNT"
+            ls -la bin/
+            exit 1
+          fi
+          echo "Found $BINARY_COUNT binaries"
+
+      - name: Extract changelog entry
+        run: |
+          awk '/<!-- release:start -->/{found=1; next} /<!-- release:end -->/{found=0} found{print}' CHANGELOG.md > /tmp/release-notes.md
+          LINES=$(wc -l < /tmp/release-notes.md | tr -d ' ')
+          if [ "$LINES" -lt 2 ]; then
+            echo "Error: No release notes found between <!-- release:start --> and <!-- release:end --> markers in CHANGELOG.md"
+            exit 1
+          fi
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v${{ needs.check-release.outputs.version }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists, uploading assets..."
+            gh release upload "$TAG" bin/relay-engine-* --clobber
+          else
+            echo "Creating release $TAG..."
+            gh release create "$TAG" \
+              --target "$GITHUB_SHA" \
+              --title "$TAG" \
+              --notes-file /tmp/release-notes.md \
+              bin/relay-engine-*
+          fi

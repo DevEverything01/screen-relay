@@ -151,6 +151,10 @@ The build targets macOS 12.3, the first release with ScreenCaptureKit, and fails
 
 [tests/README.md](tests/README.md) describes every test layer, including the smoke test and the viewer end-to-end test.
 
+## Releasing
+
+To cut a release, follow the "Releasing" section of [AGENTS.md](AGENTS.md).
+
 ## Conventions
 
 - Write no code comments. A short docstring on a function, method, type, or module is the only exception.
