@@ -20,7 +20,7 @@ const getFeed = async (lang: string) => {
     id: siteUrl,
     link: siteUrl,
     language: lang,
-    copyright: `All rights reserved ${new Date().getFullYear()}, Vercel`,
+    copyright: `Copyright ${new Date().getFullYear()} Vercel, Inc.`,
   });
 
   for (const page of source.getPages(lang)) {
