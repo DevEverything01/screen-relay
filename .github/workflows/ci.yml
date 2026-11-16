@@ -268,3 +268,18 @@ jobs:
           persist-credentials: false
       - run: docker build -t screen-relay .
       - run: docker run --rm --entrypoint screen-relay screen-relay doctor
+
+  ci:
+    name: CI
+    if: always()
+    needs: [version-sync, engine, windows, macos, node, smoke, smoke-wayland, smoke-wayland-attach, macos-token-acl, install, image]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Every job passed
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          for result in $RESULTS; do
+            [ "$result" = success ] || { echo "A job ended as $result"; exit 1; }
+          done
