@@ -5,9 +5,7 @@ Desktop streaming and control for people and AI agents: watch a desktop in a bro
 <p>
   <a href="https://vercel.com/labs#labs-products"><img alt="Vercel Labs Product" src="https://img.shields.io/badge/LABS-PRODUCT-0a0a0a.svg?style=for-the-badge&amp;logo=Vercel&amp;labelColor=000000" height="28"></a>
   <a href="https://www.npmjs.com/package/screen-relay"><img alt="npm version: screen-relay" src="https://img.shields.io/npm/v/screen-relay.svg?style=for-the-badge&amp;labelColor=000000" height="28"></a>
-  <a href="https://github.com/vercel-labs/screen-relay/blob/main/LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/github/license/vercel-labs/screen-relay.svg?style=for-the-badge&amp;labelColor=000000" height="28"></a>
-  <a href="https://www.npmjs.com/package/screen-relay"><img alt="npm downloads per month: screen-relay" src="https://img.shields.io/npm/dm/screen-relay.svg?style=for-the-badge&amp;labelColor=000000&amp;label=npm%20downloads" height="28"></a>
-  <a href="https://skills.sh/vercel-labs/screen-relay"><img alt="skills.sh" src="https://skills.sh/b/vercel-labs/screen-relay?style=for-the-badge" height="28"></a>
+  <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/LICENSE-APACHE--2.0-97ca00.svg?style=for-the-badge&amp;labelColor=000000" height="28"></a>
 </p>
 
 screen-relay starts a desktop on a Linux VM, sandbox, or container, or attaches to the display of a Mac, and streams it to a browser as H.264. An agent controls the same desktop one command at a time: it takes a screenshot, clicks or types, and takes another screenshot to check the result. The `screen-relay` CLI, a Node SDK, and an HTTP and WebSocket API all reach the same session.
