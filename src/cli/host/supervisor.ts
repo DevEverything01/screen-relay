@@ -517,8 +517,8 @@ export function sessionNeeds(backend: (typeof BACKENDS)[number], args: { display
   const desktopCommand = desktop === 'xfce' ? ['xfce4-session'] : desktop === 'none' ? [] : splitCommand(desktop);
   const layout = args.keyboardLayout ?? 'us';
   const needed = backend === 'macos' ? [] : backend === 'wayland'
-    ? [...(args.display ? [] : BACKEND_PROGRAMS.wayland.filter((program) => program !== 'foot')), ...(desktopCommand.length ? [desktopCommand[0]] : [])]
-    : [...(args.display ? [] : ['Xvfb', 'xauth']), ...(desktopCommand.length ? ['xprop', 'xwininfo', desktopCommand[0]] : []), ...(!args.display && layout !== 'us' ? ['setxkbmap'] : [])];
+    ? ['setpriv', ...(args.display ? [] : BACKEND_PROGRAMS.wayland.filter((program) => program !== 'foot')), ...(desktopCommand.length ? [desktopCommand[0]] : [])]
+    : ['setpriv', ...(args.display ? [] : ['Xvfb', 'xauth']), ...(desktopCommand.length ? ['xprop', 'xwininfo', desktopCommand[0]] : []), ...(!args.display && layout !== 'us' ? ['setxkbmap'] : [])];
   const missing = needed.filter((program) => !which(program));
   const ownBus = Boolean(desktopCommand.length && !args.display && which('dbus-daemon'));
   if (desktop === 'xfce' && !args.display && !ownBus && !which('dbus-run-session')) missing.push('dbus-run-session');

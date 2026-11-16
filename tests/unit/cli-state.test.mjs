@@ -18,7 +18,21 @@ const state = await import(pathToFileURL(bundlePath).href);
 const supervisorBundle = buildSync({ entryPoints: [join(root, 'src/cli/host/supervisor.ts')], bundle: true, platform: 'node', format: 'esm', banner: nodeBanner, write: false });
 const supervisorPath = join(directory, 'supervisor.mjs');
 writeFileSync(supervisorPath, supervisorBundle.outputFiles[0].contents);
-const { resolveBackend, splitCommand } = await import(pathToFileURL(supervisorPath).href);
+const { resolveBackend, sessionNeeds, splitCommand } = await import(pathToFileURL(supervisorPath).href);
+
+test('a Linux session needs setpriv even when it attaches to a display with no desktop', () => {
+  const previous = process.env.PATH;
+  const empty = join(directory, 'no-tools');
+  mkdirSync(empty, { recursive: true });
+  try {
+    process.env.PATH = empty;
+    assert.deepEqual(sessionNeeds('x11', { display: ':0', desktop: 'none' }).missing, ['setpriv']);
+    assert.deepEqual(sessionNeeds('wayland', { display: 'wayland-1', desktop: 'none' }).missing, ['setpriv']);
+    assert.deepEqual(sessionNeeds('macos', {}).missing, []);
+  } finally {
+    process.env.PATH = previous;
+  }
+});
 
 test('backend follows the display unless explicitly selected', { skip: process.platform === 'darwin' }, () => {
   const engine = join(directory, 'relay-engine');
