@@ -29,7 +29,7 @@ screen-relay up -d
 - `--desktop none` skips the XFCE desktop packages on x11.
 - `screen-relay up -d --yes` runs setup and starts the session in one command.
 
-Setup is safe to repeat. When nothing is missing, `install` reports `unchanged`. After an upgrade of `screen-relay`, the next `up` rebuilds the engine. That takes well under a minute and needs no `sudo`.
+Setup is safe to repeat. When nothing is missing, `install` reports `unchanged`. After an upgrade of `screen-relay`, the next `up` rebuilds the engine. That needs no `sudo`.
 
 On Linux, automatic setup supports Debian, Ubuntu, Fedora, Arch Linux, and Alpine on x64 and arm64. It needs root or passwordless `sudo`. On another distribution, install the build tools and libraries yourself, then run `screen-relay install` to build the engine.
 

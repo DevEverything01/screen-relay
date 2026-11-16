@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -185,6 +185,56 @@ test('up and install refuse to install system packages without a terminal unless
     assert.equal(failure.reason, 'missing_input');
     assert.equal(failure.next[0].command, `screen-relay install${flag} --yes`);
   }
+});
+
+test('install reports a failed build as one JSON error, builds once when two run together, and leaves other files alone', { skip: process.platform !== 'linux' && process.platform !== 'darwin' }, async () => {
+  const tools = join(directory, 'fake-tools');
+  mkdirSync(tools, { recursive: true });
+  writeFileSync(join(tools, 'make'), `#!/bin/sh
+dir=.; backends=; target=
+while [ $# -gt 0 ]; do
+  case "$1" in -C) dir=$2; shift ;; BACKENDS=*) backends=\${1#BACKENDS=} ;; -*) ;; *) target=$1 ;; esac
+  shift
+done
+[ "$target" = deps ] && exit 0
+[ -z "$FAKE_MAKE_FAIL" ] || { echo 'fake compiler error'; exit 2; }
+sleep "\${FAKE_MAKE_SLEEP:-0}"
+printf '#!/bin/sh\\necho "Compiled backends: %s"\\n' "$(echo "$backends" | sed 's/ /, /g')" > "$dir/relay-engine"
+chmod +x "$dir/relay-engine"
+`, { mode: 0o755 });
+  for (const program of ['setpriv', 'Xvfb', 'xauth']) writeFileSync(join(tools, program), '#!/bin/sh\n', { mode: 0o755 });
+  const data = join(directory, 'install-data');
+  const engines = join(data, 'screen-relay', 'engine');
+  mkdirSync(join(engines, '9.9.9'), { recursive: true });
+  writeFileSync(join(engines, '9.9.9', 'relay-engine'), 'old');
+  writeFileSync(join(engines, 'notes.txt'), 'keep');
+  const env = { ...process.env, PATH: `${tools}:/bin:/usr/bin`, XDG_DATA_HOME: data, XDG_CONFIG_HOME: join(directory, 'install-config'), SCREEN_RELAY_AGENT: '1' };
+  for (const key of ['SCREEN_RELAY_BACKEND', 'SCREEN_RELAY_DESKTOP', 'SCREEN_RELAY_CONFIG']) delete env[key];
+  const argv = [cli, 'install', '--json', ...(process.platform === 'darwin' ? [] : ['--backend', 'x11', '--desktop', 'none'])];
+  const install = (extra = {}) => new Promise((resolve) => {
+    const child = spawn(process.execPath, argv, { env: { ...env, ...extra } });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    child.on('close', (status) => resolve({ status, stdout, stderr }));
+  });
+
+  const failed = await install({ FAKE_MAKE_FAIL: '1' });
+  assert.equal(failed.status, 1, failed.stderr);
+  assert.equal(failed.stdout, '');
+  const failure = JSON.parse(failed.stderr);
+  assert.equal(failure.reason, 'missing_dependency');
+  assert.match(failure.data.log, /fake compiler error/);
+
+  const both = await Promise.all([install({ FAKE_MAKE_SLEEP: '1' }), install({ FAKE_MAKE_SLEEP: '1' })]);
+  for (const result of both) assert.deepEqual([result.status, result.stderr], [0, '']);
+  assert.deepEqual(both.map((result) => JSON.parse(result.stdout).outcome).sort(), ['installed', 'unchanged']);
+  const { version } = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
+  assert.deepEqual(readdirSync(engines).sort(), ['9.9.9', version, 'notes.txt'].sort());
+  assert.equal(readFileSync(join(engines, 'notes.txt'), 'utf8'), 'keep');
+  assert.equal(readFileSync(join(engines, '9.9.9', 'relay-engine'), 'utf8'), 'old');
+  assert.equal(existsSync(join(data, 'screen-relay', 'setup.lock')), false);
 });
 
 test('a skill name used as the skills action points at its get command', () => {

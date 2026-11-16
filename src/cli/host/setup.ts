@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import { confirm, isCancel, select } from '@clack/prompts';
 import { BACKENDS, loadConfig } from '../config.js';
 import { interactive } from '../mode.js';
@@ -35,22 +36,28 @@ export function planSetup(request: Request): Plan {
   return { state: packages ? 'needs-packages' : build ? 'needs-build' : 'ready', backends, build };
 }
 
-/** Runs one shell command with its output on stderr and reports how long it took; a step that is not required only warns when it fails. */
+/** Runs one shell command and reports how long it took. With --json it prints nothing and puts the end of the output in the error; a step that is not required only warns when it fails. */
 async function step(title: string, done: string, command: string, args: Args, required = true): Promise<void> {
   const style = theme(args);
   const started = Date.now();
-  process.stderr.write(`${style.strong(title)}\n${style.muted(`  ${command}`)}\n`);
+  const quiet = Boolean(args.json);
+  if (!quiet) process.stderr.write(`${style.strong(title)}\n${style.muted(`  ${command}`)}\n`);
+  let output = '';
   const code = await new Promise<number | null>((resolveExit, reject) => {
-    const child = spawn('sh', ['-c', command], { stdio: ['inherit', 2, 2], signal: args.signal });
+    const child = spawn('sh', ['-c', command], { stdio: quiet ? ['ignore', 'pipe', 'pipe'] : ['inherit', 2, 2], signal: args.signal });
+    for (const stream of [child.stdout, child.stderr]) stream?.on('data', (chunk: Buffer) => { output = (output + chunk.toString()).slice(-16000); });
     child.once('error', reject);
-    child.once('exit', resolveExit);
+    child.once('close', resolveExit);
   });
   if (code !== 0) {
-    if (required) throw new Failure('missing_dependency', `${title} failed`, 'Fix the error above, then run `screen-relay install` again.');
+    if (required) {
+      throw new Failure('missing_dependency', `${title} failed`, 'Fix the cause, then run `screen-relay install` again.',
+        quiet ? { command, log: output.trim().split('\n').slice(-40).join('\n') } : {});
+    }
     printWarning(`${title} reported errors; continuing`, args);
     return;
   }
-  process.stderr.write(`${style.success ? `${style.success} ` : ''}${done} (${duration((Date.now() - started) / 1000)})\n`);
+  if (!quiet) process.stderr.write(`${style.success ? `${style.success} ` : ''}${done} (${duration((Date.now() - started) / 1000)})\n`);
 }
 
 /** The sudo prefix for package commands: none as root, a prompting sudo at a terminal, otherwise passwordless sudo. */
@@ -110,22 +117,66 @@ function packageWork(request: Request, backends: Backend[], args: Args): { manag
   return { manager: { apt: 'apt-get', dnf: 'dnf', pacman: 'pacman', apk: 'apk' }[family], packages, run: install };
 }
 
-/** Builds the engine from the source in this install and replaces any earlier build. */
+/** Builds the engine from the source in this install in its own scratch directory, then replaces this version's earlier build. */
 async function buildEngine(backends: Backend[], args: Args): Promise<void> {
   if (!existsSync(join(SOURCE, 'src', 'engine'))) {
     throw new Failure('missing_dependency', 'The engine source is missing from this install', 'Reinstall it with `npm install -g screen-relay`.');
   }
   const target = engineDirectory();
-  const scratch = `${target}.build`;
-  rmSync(scratch, { recursive: true, force: true });
-  mkdirSync(join(scratch, 'src'), { recursive: true });
-  cpSync(join(SOURCE, 'Makefile'), join(scratch, 'Makefile'));
-  cpSync(join(SOURCE, 'src', 'engine'), join(scratch, 'src', 'engine'), { recursive: true });
-  await step(`Building the engine (${backends.join(', ')})`, 'Built the engine', `make -C ${quote(scratch)} BACKENDS=${quote(backends.join(' '))} relay-engine`, args);
-  for (const entry of readdirSync(dirname(target))) {
-    if (join(dirname(target), entry) !== scratch) rmSync(join(dirname(target), entry), { recursive: true, force: true });
+  mkdirSync(dirname(target), { recursive: true });
+  const scratch = mkdtempSync(join(dirname(target), 'build-'));
+  try {
+    mkdirSync(join(scratch, 'src'));
+    cpSync(join(SOURCE, 'Makefile'), join(scratch, 'Makefile'));
+    cpSync(join(SOURCE, 'src', 'engine'), join(scratch, 'src', 'engine'), { recursive: true });
+    await step(`Building the engine (${backends.join(', ')})`, 'Built the engine', `make -C ${quote(scratch)} BACKENDS=${quote(backends.join(' '))} relay-engine`, args);
+    for (const name of ['src', 'build', 'Makefile']) rmSync(join(scratch, name), { recursive: true, force: true });
+    rmSync(target, { recursive: true, force: true });
+    renameSync(scratch, target);
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
   }
-  renameSync(scratch, target);
+}
+
+/** Runs work while this process holds the machine's setup lock, waiting first for another setup to finish. */
+async function withSetupLock<T>(args: Args, work: () => Promise<T>): Promise<T> {
+  const directory = dirname(dirname(engineDirectory()));
+  mkdirSync(directory, { recursive: true });
+  const file = join(directory, 'setup.lock');
+  let announced = false;
+  for (;;) {
+    try {
+      writeFileSync(file, String(process.pid), { flag: 'wx' });
+      break;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+    }
+    let running = true;
+    try { process.kill(Number(readFileSync(file, 'utf8')), 0); } catch (error) { running = (error as NodeJS.ErrnoException).code === 'EPERM'; }
+    if (!running) {
+      rmSync(file, { force: true });
+      continue;
+    }
+    if (!announced && !args.json) process.stderr.write('Waiting for another screen-relay setup to finish\n');
+    announced = true;
+    await delay(500, undefined, { signal: args.signal });
+  }
+  try {
+    return await work();
+  } finally {
+    rmSync(file, { force: true });
+  }
+}
+
+/** Sets the machine up for the request under the setup lock and says whether this process had to change anything. */
+async function setUp(request: Request, args: Args): Promise<boolean> {
+  if (planSetup(request).state === 'ready') return false;
+  return withSetupLock(args, async () => {
+    const plan = planSetup(request);
+    if (plan.state === 'ready') return false;
+    await applySetup(request, plan, args);
+    return true;
+  });
 }
 
 async function answer<T>(prompt: Promise<T | symbol>): Promise<T> {
@@ -188,9 +239,7 @@ export async function ensureSetup(args: Args): Promise<string[]> {
       }
     }
   }
-  const request: Request = { backends, display: args.display, desktop: args.desktop, keyboardLayout: args.keyboardLayout };
-  const plan = planSetup(request);
-  if (plan.state !== 'ready') await applySetup(request, plan, args);
+  await setUp({ backends, display: args.display, desktop: args.desktop, keyboardLayout: args.keyboardLayout }, args);
   return extra;
 }
 
@@ -201,14 +250,13 @@ export async function cmdInstall(args: Args): Promise<number> {
   if (chosen === 'all' && !isLinux()) throw new Failure('invalid_input', '--backend all is only supported on Linux', 'Use --backend macos on macOS.');
   const backends: Backend[] = chosen === 'all' ? ['x11', 'wayland'] : [requestedBackend(chosen) ?? 'x11'];
   const request: Request = { backends, desktop: args.desktop ?? (present.has('desktop') ? settings.desktop : undefined) };
-  const plan = planSetup(request);
-  if (plan.state !== 'ready') await applySetup(request, plan, args);
+  const label = await setUp(request, args) ? 'Installed' : 'Unchanged';
   const install = { backends: compiledBackends(), engine: findEngine() };
-  const label = plan.state === 'ready' ? 'Unchanged' : 'Installed';
+  const start = ['screen-relay up -d', ...(chosen === 'wayland' ? ['--backend wayland'] : []), ...(request.desktop ? [`--desktop ${quote(request.desktop)}`] : [])].join(' ');
   emit(args, { install, outcome: label.toLowerCase() }, [
     receipt(label, install.backends.join(', '), args),
     row('Engine', install.engine, args),
-    nextStep('Start a session', 'screen-relay up -d', args),
+    nextStep('Start a session', start, args),
   ].join('\n'), {});
   return 0;
 }

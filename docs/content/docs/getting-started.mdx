@@ -27,7 +27,7 @@ This installs the `screen-relay` command, the Node SDK, the viewer, and the agen
 
 The first `screen-relay up` sets the machine up before it starts a session. On a terminal, it asks which backend to set up: X11 with the XFCE desktop (the default), Wayland with sway, or both. If a desktop is already running in your shell, it first asks whether to stream that desktop or start a new virtual one, unless you pass `--display`. It then lists the system packages it needs, asks you to confirm, and installs them with the system package manager, using `sudo` unless you are root. Finally, it builds the engine. Pass `--backend`, set `SCREEN_RELAY_BACKEND`, or set `backend` in the config file to skip the backend question.
 
-The built engine is stored in `~/.local/share/screen-relay/engine/<version>/`. After you upgrade screen-relay, the next `up` rebuilds the engine without sudo. That takes well under a minute.
+The built engine is stored in `~/.local/share/screen-relay/engine/<version>/`. After you upgrade screen-relay, the next `up` rebuilds the engine without sudo. Builds for earlier versions stay in that directory until you delete them.
 
 On Fedora, setup stops when RPM Fusion Free is not enabled, because x264 comes from it. Run the printed command, then run `screen-relay install` again. For a user with `sudo`, the command is:
 
