@@ -105,21 +105,6 @@ socket.on('close', () => {
 NODE
 
 step 'viewer refuses framing'
-node - "$port" <<'NODE' || fail 'raw viewer request failed'
-const net = require('node:net');
-const port = Number(process.argv[2]);
-const socket = net.connect(port, '127.0.0.1');
-let response = '';
-const timer = setTimeout(() => { console.error('raw timeout'); socket.destroy(); process.exit(1); }, 5000);
-socket.on('connect', () => socket.write('GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n'));
-socket.on('data', (chunk) => { response += chunk; });
-socket.on('error', (error) => { console.error(`raw error ${error.message}`); process.exit(1); });
-socket.on('close', () => {
-  clearTimeout(timer);
-  console.log(JSON.stringify(response.slice(0, 400)));
-  process.exit(/frame-ancestors 'none'/.test(response) && /x-frame-options: DENY/i.test(response) ? 0 : 1);
-});
-NODE
 node - "$port" <<'NODE' || fail 'viewer HTML allows framing'
 const assert = require('node:assert/strict');
 const http = require('node:http');

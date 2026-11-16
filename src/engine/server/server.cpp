@@ -6,7 +6,6 @@
 #include <chrono>
 #include <cstddef>
 #include <cstring>
-#include <filesystem>
 #include <iostream>
 #include <limits>
 #ifdef __linux__
@@ -304,7 +303,9 @@ int jsonResponse(lws* wsi, HttpResponse* response, unsigned status, const std::s
 int errorResponse(lws* wsi, HttpResponse* response, unsigned status, const char* error) {
   return jsonResponse(wsi, response, status, "{\"error\":\"" + std::string(error) + "\"}");
 }
-constexpr char viewerFrameHeaders[] =
+constexpr char fileCloseHeaders[] = "connection: close\r\n";
+constexpr char viewerHtmlHeaders[] =
+    "connection: close\r\n"
     "content-security-policy: frame-ancestors 'none'\r\n"
     "x-frame-options: DENY\r\n";
 void closeScreenshot(Server* server, lws* wsi, HttpResponse* response) {
@@ -394,15 +395,14 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
       std::string file; const char* mime = nullptr; const char* headers = nullptr; int headerCount = 0;
       if (path == "/" || path == "/index.html") {
         file=s->config.viewer+"/index.html"; mime="text/html";
-        headers=viewerFrameHeaders; headerCount=int(sizeof(viewerFrameHeaders)-1);
+        headers=viewerHtmlHeaders; headerCount=int(sizeof(viewerHtmlHeaders)-1);
       }
-      if (path == "/viewer.js") { file=s->config.viewer+"/viewer.js"; mime="application/javascript"; }
+      if (path == "/viewer.js") {
+        file=s->config.viewer+"/viewer.js"; mime="application/javascript";
+        headers=fileCloseHeaders; headerCount=int(sizeof(fileCloseHeaders)-1);
+      }
       if (file.empty()) return errorResponse(wsi, response, HTTP_STATUS_NOT_FOUND, "not_found");
-      std::error_code fileError; const auto fileSize = std::filesystem::file_size(file, fileError);
-      const int served = lws_serve_http_file(wsi, file.c_str(), mime, headers, headerCount);
-      std::cerr << "serve " << path << " -> " << file << " size " << fileSize << " result " << served
-                << " errno " << errno << " " << fileError.message() << '\n';
-      return served < 0 ? -1 : 0;
+      return lws_serve_http_file(wsi, file.c_str(), mime, headers, headerCount) < 0 ? -1 : 0;
     }
     case LWS_CALLBACK_HTTP_WRITEABLE: {
       auto* response = static_cast<HttpResponse*>(user);
