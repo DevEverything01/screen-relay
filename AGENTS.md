@@ -27,7 +27,7 @@ When the PR merges, the Release workflow checks whether npm already has the vers
 
 If npm already has the version but the GitHub release is missing, the workflow rebuilds the binaries and creates only the release. To retry a failed run, start the workflow from the Actions tab on `main`.
 
-Publishing uses npm trusted publishing from the `Release` environment, so the workflow needs no npm token.
+Publishing uses npm trusted publishing from the `Release` environment, so the workflow needs no npm token. The `Release` environment has required reviewers, so the publish job waits in the Actions run until one of them approves it.
 
 ### Writing the changelog
 
