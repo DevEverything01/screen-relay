@@ -228,10 +228,13 @@ jobs:
       matrix:
         include:
           - image: debian:trixie
+            setup: apt-get update && apt-get install -y --no-install-recommends libatomic1 &&
           - image: ubuntu:24.04
+            setup: apt-get update && apt-get install -y --no-install-recommends libatomic1 &&
           - image: ubuntu:26.04
+            setup: apt-get update && apt-get install -y --no-install-recommends libatomic1 &&
           - image: fedora:44
-            setup: dnf -y install https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-44.noarch.rpm &&
+            setup: dnf -y install libatomic https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-44.noarch.rpm &&
           - image: archlinux:latest
           - image: alpine:3.24
             setup: apk add --no-cache nodejs npm &&

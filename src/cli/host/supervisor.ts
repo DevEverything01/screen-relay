@@ -336,7 +336,7 @@ export class Session {
     const engineCommand = [engine, '--bind', bind, '--port', String(this.args.port), '--fps', String(this.args.fps), '--bitrate-min', String(this.args.bitrateMin), '--bitrate-start', String(this.args.bitrateStart), '--bitrate-max', String(this.args.bitrateMax)];
     engineCommand.push('--backend', backend);
     const viewer = join(LAUNCHER_DIR, '..', 'viewer');
-    if (!existsSync(join(dirname(engine), 'viewer')) && existsSync(viewer)) engineCommand.push('--viewer-dir', viewer);
+    if (!existsSync(join(dirname(engine), 'viewer')) && existsSync(join(viewer, 'viewer.js'))) engineCommand.push('--viewer-dir', viewer);
     if (this.args.output) engineCommand.push('--output', this.args.output);
     if (bind !== '127.0.0.1' || this.args.public || backend === 'macos') {
       token = randomBytes(32).toString('hex');
