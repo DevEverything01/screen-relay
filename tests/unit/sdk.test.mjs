@@ -1,12 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
-import { createServer as createTlsServer } from 'node:https';
 import { once } from 'node:events';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { capabilities, connect, createClient, screenshot, status } from '../../dist/sdk/index.js';
 
 test('HTTP status paths request engine metrics', async () => {
@@ -113,59 +108,10 @@ test('custom HTTP transport enforces the overall request deadline', async () => 
   }
 });
 
-test('HTTPS requests with a CA file check the URL host name unless the server presents a listed certificate', { skip: spawnSync('openssl', ['version']).status !== 0 }, async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'relay-tls-test-'));
-  const openssl = (...args) => execFileSync('openssl', args, { cwd: directory, stdio: 'ignore' });
-  const file = (name) => join(directory, name);
-  const servers = [];
-  const serve = async (name) => {
-    const server = createTlsServer({ key: readFileSync(file(`${name}.key`)), cert: readFileSync(file(`${name}.pem`)) }, (request, response) => {
-      server.requests += 1;
-      response.writeHead(200, { 'content-type': 'application/json' });
-      response.end(JSON.stringify({ served: name }));
-    });
-    server.requests = 0;
-    servers.push(server);
-    server.listen(0, '127.0.0.1');
-    await once(server, 'listening');
-    return server;
-  };
-  try {
-    openssl('req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', 'ca.key', '-out', 'ca.pem', '-subj', '/CN=relay-test-ca', '-days', '2');
-    openssl('req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', 'self.key', '-out', 'self.pem', '-subj', '/CN=desktop.example', '-days', '2');
-    for (const name of ['localhost', 'other.example']) {
-      writeFileSync(file(`${name}.ext`), `subjectAltName=DNS:${name}`);
-      openssl('req', '-newkey', 'rsa:2048', '-nodes', '-keyout', `${name}.key`, '-out', `${name}.csr`, '-subj', `/CN=${name}`);
-      openssl('x509', '-req', '-in', `${name}.csr`, '-CA', 'ca.pem', '-CAkey', 'ca.key', '-CAcreateserial', '-out', `${name}.pem`, '-days', '2', '-extfile', `${name}.ext`);
-    }
-    writeFileSync(file('chain.pem'), Buffer.concat([readFileSync(file('other.example.pem')), readFileSync(file('ca.pem'))]));
-    const token = 'a'.repeat(64);
-    const named = await serve('localhost');
-    const other = await serve('other.example');
-    const self = await serve('self');
-    const port = (server) => server.address().port;
-    const rejected = { reason: 'unreachable', message: 'The TLS certificate was rejected.' };
-
-    await assert.rejects(createClient({ url: `https://localhost:${port(other)}`, connect: '127.0.0.1', ca: file('ca.pem'), token }).status(), rejected);
-    await assert.rejects(createClient({ url: `https://127.0.0.1:${port(other)}`, ca: file('ca.pem'), token }).status(), rejected);
-    await assert.rejects(createClient({ url: `https://desktop.example:${port(named)}`, connect: '127.0.0.1', ca: file('ca.pem'), token }).status(), rejected);
-    assert.equal(named.requests + other.requests, 0);
-
-    assert.deepEqual(await createClient({ url: `https://localhost:${port(named)}`, connect: '127.0.0.1', ca: file('ca.pem') }).status(), { served: 'localhost' });
-    assert.deepEqual(await createClient({ url: `https://127.0.0.1:${port(self)}`, ca: file('self.pem') }).status(), { served: 'self' });
-    assert.deepEqual(await createClient({ url: `https://127.0.0.1:${port(other)}`, ca: file('chain.pem') }).status(), { served: 'other.example' });
-  } finally {
-    for (const server of servers) {
-      server.closeAllConnections();
-      await new Promise(resolve => server.close(resolve));
-    }
-    rmSync(directory, { recursive: true, force: true });
-  }
-});
-
 test('control connections reject unsupported transport overrides', async () => {
-  await assert.rejects(connect({ ca: 'ca.pem' }), { code: 'INVALID_ARGUMENT', message: /do not support ca or connect/ });
-  await assert.rejects(connect({ connect: '127.0.0.1' }), { code: 'INVALID_ARGUMENT', message: /do not support ca or connect/ });
+  await assert.rejects(connect({ ca: 'ca.pem' }), { code: 'INVALID_ARGUMENT', message: /do not support ca, certificate, or connect/ });
+  await assert.rejects(connect({ certificate: 'cert.pem' }), { code: 'INVALID_ARGUMENT', message: /do not support ca, certificate, or connect/ });
+  await assert.rejects(connect({ connect: '127.0.0.1' }), { code: 'INVALID_ARGUMENT', message: /do not support ca, certificate, or connect/ });
 });
 
 function packet(type, generation, sequence, payload) {

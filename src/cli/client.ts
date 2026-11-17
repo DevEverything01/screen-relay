@@ -9,7 +9,7 @@ import { count, emit, Failure, nextFor, nextStep, quote, receipt, row, sessionCo
 
 type Args = Record<string, any> & { command: string; json: boolean; name: string };
 
-interface Target { url: string; token?: string; ca?: string; connect?: string; timeout: number; signal?: AbortSignal; explicit: boolean }
+interface Target { url: string; token?: string; certificate?: string; connect?: string; timeout: number; signal?: AbortSignal; explicit: boolean }
 
 const PNG = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 
@@ -53,12 +53,12 @@ export function resolveTarget(args: Args): Target {
   if (!url && process.env.SCREEN_RELAY_URL) url = process.env.SCREEN_RELAY_URL;
   const explicit = Boolean(url);
   let tokenFile = typeof args['token-file'] === 'string' ? args['token-file'] : process.env.SCREEN_RELAY_TOKEN_FILE;
-  let ca: string | undefined, connect: string | undefined;
+  let certificate: string | undefined, connect: string | undefined;
   if (!url) {
     const session = readSession(String(args.name));
     if (session?.state === 'ready' && alive(session.supervisor)) {
       url = String(session.localUrl);
-      ca = session.tlsCert ?? undefined;
+      certificate = session.tlsCert ?? undefined;
       connect = connectHost(session.bind) ?? undefined;
       tokenFile = tokenFile || session.tokenFile;
     } else if (!session && args.name === 'default' && args.nameExplicit === false) {
@@ -73,7 +73,7 @@ export function resolveTarget(args: Args): Target {
     try { token = readFileSync(tokenFile, 'utf8').trim(); }
     catch (error) { throw new Failure('invalid_input', `Cannot read token file: ${detail(error)}`, 'Check --token-file.'); }
   }
-  return { url: checkUrl(url, token), token, ca, connect, timeout: Number(args.timeout ?? 10), signal: args.signal, explicit };
+  return { url: checkUrl(url, token), token, certificate, connect, timeout: Number(args.timeout ?? 10), signal: args.signal, explicit };
 }
 
 const RECOVERY: Partial<Record<string, string>> = {
@@ -108,7 +108,7 @@ function remoteRecovery(target: Target): { next?: ReturnType<typeof nextFor>; la
 }
 
 function open(target: Target): Client {
-  return createClient({ url: target.url, token: target.token, ca: target.ca, connect: target.connect, timeout: target.timeout * 1000, signal: target.signal });
+  return createClient({ url: target.url, token: target.token, certificate: target.certificate, connect: target.connect, timeout: target.timeout * 1000, signal: target.signal });
 }
 
 async function withClient<Result>(args: Args, action: (client: Client) => Promise<Result>, target = resolveTarget(args)): Promise<Result> {
