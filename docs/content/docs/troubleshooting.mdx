@@ -68,7 +68,7 @@ To confirm, compare the frame rate in the viewer's **Stream statistics**, which 
 
 | Symptom | Cause and fix |
 | --- | --- |
-| `busy` from input (HTTP 409) | Another viewer or controller owns input, or the input queue is full. Close the other owner or wait, then retry. `data.applied`, when present, counts events already applied. Screenshots still work. |
+| `busy` from input (HTTP 409) | A viewer that owns input, a control session, or another controller has input, or the input queue is full. A viewer that watches view-only does not block input. Choose **Release control** in the viewer or close the other owner, then retry. `data.applied`, when present, counts events already applied. Screenshots still work. |
 | `busy` from `screenshot` (HTTP 503) | Another screenshot is running. Retry after it finishes. |
 | Text has the wrong case | Local and desktop Caps Lock states differ. Reload the viewer and press Caps Lock to match the state you want. Local Caps Lock does not affect `screen-relay type`. |
 | Characters are wrong, or `unsupported_input` | Set `keyboard.layout` and restart. With `--display`, change the existing desktop's layout instead. Use `screen-relay type` for text and `screen-relay key` for shortcuts. See [Configuration](/docs/configuration). |

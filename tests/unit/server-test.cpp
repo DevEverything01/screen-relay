@@ -47,6 +47,13 @@ int main() {
   assert(inputLength("", length) == HTTP_STATUS_LENGTH_REQUIRED && inputLength("0", length) == HTTP_STATUS_BAD_REQUEST);
   assert(inputLength("17", length) == HTTP_STATUS_BAD_REQUEST && inputLength("-16", length) == HTTP_STATUS_BAD_REQUEST);
   assert(!inputLength("4096", length) && length == 4096 && inputLength("4112", length) == HTTP_STATUS_REQ_ENTITY_TOO_LARGE);
+  bool control = false, viewOnly = false;
+  assert(viewerTarget("/stream", control, viewOnly) && !control && !viewOnly);
+  assert(viewerTarget("/stream?view=1", control, viewOnly) && !control && viewOnly);
+  assert(viewerTarget("/control", control, viewOnly) && control && !viewOnly);
+  for (const char* target : {"/", "/stream?view=0", "/stream?view=1&x=2", "/control?view=1", "/stream?control=1"}) {
+    assert(!viewerTarget(target, control, viewOnly));
+  }
   std::vector<uint8_t> out;
   controlReady(out, 2, 7, 1280, 720);
   const uint8_t ready[] = {0, 0, 'N', 'S', 'L', '1', 1, 4, 0, 0, 0, 0, 0, 7, 0, 0, 0, 0, 0, 0, 0, 4, 5, 0, 2, 208};

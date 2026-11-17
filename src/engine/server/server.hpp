@@ -23,7 +23,7 @@ struct HttpResponse {
   size_t length, input_length, input_expected;
   std::vector<uint8_t>* image;
   size_t offset;
-  bool image_headers, screenshot_error, control, input_reply, input_headers, closing;
+  bool image_headers, screenshot_error, control, view_only, input_reply, input_headers, closing;
   unsigned reply_status;
 };
 /** One viewer session at a time; the capture thread and the lws service thread share it through mutex. */
@@ -51,7 +51,7 @@ struct Server {
   lws* viewer = nullptr;
   Screenshot screenshot;
   lws* screenshot_client = nullptr;
-  bool controller = false, control_ready = false;
+  bool controller = false, viewOnly = false, control_ready = false;
   std::deque<std::shared_ptr<ControlReply>> replies;
   std::mutex reply_mutex;
   std::deque<std::shared_ptr<InputReply>> input_replies;
@@ -73,6 +73,7 @@ struct Server {
   explicit Server(Config settings);
   void release();
   void end();
+  bool holdsInput() const { return viewer && !viewOnly; }
   bool message();
   void updateFlow();
   bool timedOut();

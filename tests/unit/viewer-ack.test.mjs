@@ -7,20 +7,24 @@ function viewer({ devicePixelRatio = 1, storage, decode = true, deferDecode = fa
   const listeners = {}, elements = {}, sockets = [], trace = [], animationFrames = new Map();
   const decodeQueue = [];
   let now = 0, nextAnimationFrame = 1;
-  const element = () => ({
-    style: { setProperty(name, value) { this[name] = value; } }, classList: { toggle() {} }, hidden: false, width: 1280, height: 720,
-    value: '', attributes: {}, handlers: {}, text: '', textWrites: 0,
-    get textContent() { return this.text; },
-    set textContent(value) { this.text = value; this.textWrites++; },
-    getContext: () => ({ drawImage(frame) { trace.push(['draw', frame.timestamp]); } }),
-    addEventListener(name, callback) { this.handlers[name] = callback; },
-    setAttribute(name, value) { this.attributes[name] = String(value); }, focus() {}, querySelector: () => element(),
-    getBoundingClientRect: () => ({ left: 0, top: 0, right: 1280, bottom: 720, width: 1280, height: 720 }),
-  });
+  const element = () => {
+    const children = {};
+    return {
+      style: { setProperty(name, value) { this[name] = value; } }, classList: { toggle() {} }, hidden: false, width: 1280, height: 720,
+      value: '', attributes: {}, handlers: {}, text: '', textWrites: 0,
+      get textContent() { return this.text; },
+      set textContent(value) { this.text = value; this.textWrites++; },
+      getContext: () => ({ drawImage(frame) { trace.push(['draw', frame.timestamp]); } }),
+      addEventListener(name, callback) { this.handlers[name] = callback; },
+      setAttribute(name, value) { this.attributes[name] = String(value); }, focus() {},
+      querySelector: (selector) => children[selector] ||= element(),
+      getBoundingClientRect: () => ({ left: 0, top: 0, right: 1280, bottom: 720, width: 1280, height: 720 }),
+    };
+  };
   class Socket {
     static OPEN = 1;
     static CLOSING = 2;
-    constructor() { this.readyState = Socket.OPEN; this.events = []; this.inputs = []; this.waits = []; sockets.push(this); }
+    constructor(url) { this.url = String(url); this.readyState = Socket.OPEN; this.events = []; this.inputs = []; this.waits = []; sockets.push(this); }
     send(data) {
       const offset = data instanceof ArrayBuffer ? 0 : data.byteOffset;
       const length = data instanceof ArrayBuffer ? data.byteLength : data.byteLength;
@@ -246,8 +250,34 @@ test('drawing updates status only when its text changes', () => {
   app.sockets[0].onerror();
   assert.equal(status.textContent, 'Connection error');
   app.frame(3); app.tick(32);
-  assert.equal(status.textContent, 'Live · click to control');
+  assert.equal(status.textContent, 'Live · view only');
   assert.equal(status.textWrites, liveWrites + 2);
+});
+
+test('the viewer connects view-only and takes control from the toolbar', () => {
+  const app = viewer();
+  const control = () => app.document.querySelector('#toolbar-actions').querySelector('[data-action="control"]');
+  app.frame(1);
+  assert.equal(app.sockets[0].url, 'ws://localhost/stream?view=1');
+  assert.equal(control().attributes['aria-pressed'], 'false');
+  assert.equal(control().attributes['title'], 'Take control');
+  key(app, 'keydown', 'KeyA');
+  assert.deepEqual(app.sockets[0].inputs, []);
+  runInContext('relayViewer.setViewOnly(false)', app.context);
+  assert.equal(app.sockets.at(-1).url, 'ws://localhost/stream');
+  app.frame(1);
+  assert.equal(app.document.querySelector('#status').textContent, 'Live · you have control');
+  assert.equal(control().attributes['aria-pressed'], 'true');
+  assert.equal(control().attributes['title'], 'Release control');
+  key(app, 'keydown', 'KeyA');
+  assert.deepEqual(app.sockets.at(-1).inputs.map(({ event, code }) => [event, code]), [[1, 4]]);
+  runInContext('relayViewer.setViewOnly(true)', app.context);
+  assert.equal(app.sockets.at(-1).url, 'ws://localhost/stream?view=1');
+  const released = app.sockets.at(-2).inputs.map(({ event, code }) => [event, code]);
+  assert.deepEqual(released[0], [1, 4]);
+  assert.ok(released.slice(1).every(([event]) => event === 7), `release did not follow the held key: ${JSON.stringify(released)}`);
+  key(app, 'keydown', 'KeyB');
+  assert.deepEqual(app.sockets.at(-1).inputs, []);
 });
 
 test('voluntary reconnect and hiding ACK queued frames on the old socket', () => {
@@ -312,24 +342,28 @@ function key(app, type, code, capsLock = false) {
   });
 }
 
-const inputBytes = (app) => app.sockets[0].inputs.map(({ event, code }) => [event, code]);
+const inputBytes = (app) => app.sockets.at(-1).inputs.map(({ event, code }) => [event, code]);
+function takeControl(app) {
+  runInContext('relayViewer.setViewOnly(false)', app.context);
+  app.frame(1);
+}
 
 test('a latched modifier stays down through a matching shortcut', () => {
   const app = viewer();
-  app.frame(1);
+  takeControl(app);
   const panel = app.document.querySelector('#keys-panel');
   const hold = { dataset: { hold: 'AltLeft' }, setAttribute(name, value) { this[name] = value; } };
   panel.handlers.click({ target: { closest: (selector) => selector === '[data-hold]' ? hold : null } });
   const shortcut = { dataset: { keys: 'AltLeft+Tab' } };
   panel.handlers.click({ target: { closest: (selector) => selector === '[data-keys]' ? shortcut : null } });
   assert.deepEqual(inputBytes(app), [[1, 226], [1, 43], [2, 43], [2, 226]]);
-  assert.equal(app.sockets[0].inputs[1].modifiers, 4);
+  assert.equal(app.sockets.at(-1).inputs[1].modifiers, 4);
   assert.equal(hold['aria-pressed'], 'false');
 });
 
 test('toolbar keys bypass the physical keyboard mapping', () => {
   const app = viewer();
-  app.frame(1);
+  takeControl(app);
   runInContext('relayViewer.toggleMeta()', app.context);
   const panel = app.document.querySelector('#keys-panel');
   const press = (kind, name) => {
@@ -358,7 +392,7 @@ test('toolbar keys bypass the physical keyboard mapping', () => {
 
 test('macOS Caps Lock keydown and keyup each toggle the remote once', () => {
   const app = viewer();
-  app.frame(1);
+  takeControl(app);
   key(app, 'keydown', 'CapsLock', true);
   key(app, 'keyup', 'CapsLock', false);
   key(app, 'keydown', 'CapsLock', true);
@@ -368,7 +402,7 @@ test('macOS Caps Lock keydown and keyup each toggle the remote once', () => {
 
 test('Windows Caps Lock keydown and keyup per press produce one tap', () => {
   const app = viewer();
-  app.frame(1);
+  takeControl(app);
   key(app, 'keydown', 'CapsLock', true);
   key(app, 'keyup', 'CapsLock', true);
   key(app, 'keydown', 'CapsLock', false);
@@ -378,14 +412,14 @@ test('Windows Caps Lock keydown and keyup per press produce one tap', () => {
 
 test('a letter typed with Caps Lock already on sends the tap before the letter', () => {
   const app = viewer();
-  app.frame(1);
+  takeControl(app);
   key(app, 'keydown', 'KeyA', true);
   assert.deepEqual(inputBytes(app), [[1, 57], [2, 57], [1, 4]]);
 });
 
 test('a held modifier toggle wraps exactly the next key and then releases', () => {
   const app = viewer();
-  app.frame(1);
+  takeControl(app);
   const panel = app.document.querySelector('#keys-panel');
   const button = { dataset: { hold: 'MetaLeft' }, setAttribute(name, value) { this[name] = value; } };
   const toggle = () => panel.handlers.click({ target: { closest: (selector) => selector === '[data-hold]' ? button : null } });
@@ -407,7 +441,7 @@ test('a held modifier toggle wraps exactly the next key and then releases', () =
 
 test('Caps Lock tracking resets with the generation', () => {
   const app = viewer();
-  app.frame(1);
+  takeControl(app);
   key(app, 'keydown', 'CapsLock', true);
   runInContext('relayViewer.reset()', app.context);
   app.frame(1);
@@ -417,6 +451,7 @@ test('Caps Lock tracking resets with the generation', () => {
 
 test('a Caps Lock tap dropped while not ready is retried by the next key', () => {
   const app = viewer();
+  runInContext('relayViewer.setViewOnly(false)', app.context);
   key(app, 'keydown', 'KeyA', true);
   assert.deepEqual(inputBytes(app), []);
   assert.equal(runInContext('relayViewer.capsLock', app.context), false);
@@ -428,7 +463,7 @@ test('a Caps Lock tap dropped while not ready is retried by the next key', () =>
 
 test('keys-panel buttons keep the canvas focus so hold latches survive clicks', () => {
   const app = viewer();
-  app.frame(1);
+  takeControl(app);
   const panel = app.document.querySelector('#keys-panel');
   const canvas = app.document.querySelector('#screen');
   const blocked = (type, button) => {
@@ -452,7 +487,7 @@ test('keys-panel buttons keep the canvas focus so hold latches survive clicks', 
   assert.deepEqual(inputBytes(app), [[1, 224], [1, 225]]);
   key(app, 'keydown', 'KeyA');
   assert.deepEqual(inputBytes(app), [[1, 224], [1, 225], [1, 4], [2, 224], [2, 225]]);
-  assert.equal(app.sockets[0].inputs[2].modifiers, 3);
+  assert.equal(app.sockets.at(-1).inputs[2].modifiers, 3);
   press('hold', 'ControlLeft');
   press('hold', 'ControlLeft');
   assert.deepEqual(inputBytes(app).slice(5), [[1, 224], [2, 224]]);

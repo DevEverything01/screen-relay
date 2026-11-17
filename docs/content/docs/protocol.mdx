@@ -28,7 +28,7 @@ For a session with a token:
 <span id="input-events" />
 <span id="input-records" />
 
-Close the viewer or control session first. Either one blocks HTTP input. Then send input from any machine with the [CLI](/docs/cli), passing `--url` and `--token-file`, or with the [Node SDK](/docs/sdk).
+Close a control session, or a viewer that owns input, before sending HTTP input. A view-only viewer does not block input. Then send input from any machine with the [CLI](/docs/cli), passing `--url` and `--token-file`, or with the [Node SDK](/docs/sdk).
 
 ```sh
 screen-relay click 0.5 0.5 --url https://desktop.example.com --token-file ./token
@@ -47,7 +47,7 @@ Replace the URL and securely copy the session token into `./token`. For a local 
 | `POST` | <span id="post-input" />`/input` | Sends a batch of binary input records. |
 | `GET` | <span id="get-metrics" />`/metrics` | Returns stream and resource metrics as JSON. |
 | `GET` | `/`, `/index.html`, `/viewer.js` | Serves the viewer. |
-| WebSocket | `/stream` | Streams video, sends cursor images when supported, and accepts viewer input. |
+| WebSocket | `/stream` | Streams video, sends cursor images when supported, and accepts viewer input. Add `?view=1` to watch without owning input. |
 | WebSocket | `/control` | Sends input and receives a response for each event, without video. |
 
 The viewer HTML is served with `Content-Security-Policy: frame-ancestors 'none'` and `X-Frame-Options: DENY`, so another site cannot embed it and forward clicks to the desktop.
@@ -69,7 +69,7 @@ The viewer HTML is served with `Content-Security-Policy: frame-ancestors 'none'`
 | 403 `forbidden` | Check the `Host` and `Origin` rules. |
 | 404 `not_found` | Check the endpoint path. |
 | 405 `method_not_allowed` | Use the method listed for the endpoint. |
-| 409 `busy` | Close the input owner or wait, then check for partial input before retrying. |
+| 409 `busy` | Close the input owner or wait, then check for partial input before retrying. A viewer that owns input is one owner; a view-only viewer is not. |
 | 411 `length_required` | Include `Content-Length` on `POST /input`. |
 | 413 `too_large` | Send no more than 256 input records per request. |
 | 422 `unsupported_input` | Change the input or keyboard layout. |

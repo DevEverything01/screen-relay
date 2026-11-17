@@ -80,14 +80,13 @@ Server::Server(Config settings) : config(std::move(settings)), capture([this](En
 }) { flow.configure(config.bitrate_min, config.bitrate_start, config.bitrate_max, config.fps); }
 void Server::release() { if (input) input->releaseAll(); }
 void Server::end() {
-  release();
-  input->cancel();
+  if (holdsInput()) { release(); input->cancel(); }
   uint32_t old;
   { std::lock_guard<std::mutex> lock(mutex); old = generation; generation = 0; pending.clear(); pending_cursor.reset(); flow.reset(); failed = false; }
   last_write_cursor = false;
   buffered_stream_bytes = 0; stream_notsent_lowat = 0; flow_timer_due_us = 0;
   if (old) capture.endSession(old);
-  lastSequence = 0; received.clear(); replies.clear(); control_ready = controller = false; viewer = nullptr;
+  lastSequence = 0; received.clear(); replies.clear(); control_ready = controller = viewOnly = false; viewer = nullptr;
 }
 bool Server::message() {
   const auto& b = received;
@@ -113,6 +112,7 @@ bool Server::message() {
     return true;
   }
   if (b[5] != 3 || b.size() != 36 || seq || gen != generation) return false;
+  if (viewOnly) return true;
   return input->apply(inputEvent(b.data()+20)) != InputStatus::invalid;
 }
 void Server::updateFlow() {
@@ -321,7 +321,7 @@ int inputResponse(lws* wsi, HttpResponse* response, Server* s) {
   const bool complete = response->input_length == response->input_expected;
   response->input_expected = 0;
   if (!complete) return -1;
-  if (s->viewer) return errorResponse(wsi, response, HTTP_STATUS_CONFLICT, "busy");
+  if (s->holdsInput()) return errorResponse(wsi, response, HTTP_STATUS_CONFLICT, "busy");
   const size_t count = response->input_length / 16;
   if (s->input->pending() + count > max_queued_events) return errorResponse(wsi, response, HTTP_STATUS_CONFLICT, "busy");
   size_t index = 0;
@@ -363,7 +363,7 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
           return errorResponse(wsi, response, status, status == HTTP_STATUS_LENGTH_REQUIRED ? "length_required" :
                                status == HTTP_STATUS_REQ_ENTITY_TOO_LARGE ? "too_large" : "invalid_input");
         }
-        if (s->viewer) return errorResponse(wsi, response, HTTP_STATUS_CONFLICT, "busy");
+        if (s->holdsInput()) return errorResponse(wsi, response, HTTP_STATUS_CONFLICT, "busy");
         response->input_length = 0; response->input_expected = length; return 0;
       }
       if (path == "/metrics" || path == "/capabilities" || path == "/screenshot.png") {
@@ -452,25 +452,29 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
     case LWS_CALLBACK_CLOSED_HTTP: closeScreenshot(s, wsi, static_cast<HttpResponse*>(user)); s->forgetInput(wsi); return 0;
     case LWS_CALLBACK_HTTP_FILE_COMPLETION: return completeResponse(wsi, static_cast<HttpResponse*>(user));
     case LWS_CALLBACK_FILTER_PROTOCOL_CONNECTION: {
-      char uri[256] = {};
+      char uri[256] = {}, args[256] = {};
       if (lws_hdr_copy(wsi, uri, sizeof(uri), WSI_TOKEN_GET_URI) <= 0 || !user) return 1;
-      const bool control = !std::strcmp(uri, "/control");
+      std::string target(uri);
+      if (lws_hdr_copy(wsi, args, sizeof(args), WSI_TOKEN_HTTP_URI_ARGS) > 0) { target += '?'; target += args; }
+      bool control = false, viewOnly = false;
+      if (!viewerTarget(target, control, viewOnly)) return 1;
       if (!localRequest(s->config, wsi) || !authenticated(s->config, wsi, true) ||
-          (!control && std::strcmp(uri, "/stream")) ||
           s->viewer || s->nextGeneration == UINT32_MAX) return 1;
-      static_cast<HttpResponse*>(user)->control = control;
+      auto* response = static_cast<HttpResponse*>(user);
+      response->control = control; response->view_only = viewOnly;
       return 0;
     }
     case LWS_CALLBACK_ESTABLISHED: {
       if (s->viewer || s->nextGeneration == UINT32_MAX) return -1;
-      s->viewer = wsi; s->controller = static_cast<HttpResponse*>(user)->control;
+      auto* response = static_cast<HttpResponse*>(user);
+      s->viewer = wsi; s->controller = response->control; s->viewOnly = response->view_only;
 #ifdef __linux__
       if (!s->controller) configureStreamSocket(wsi);
 #endif
       { std::lock_guard<std::mutex> lock(s->mutex); s->generation = ++s->nextGeneration; s->pending.clear(); s->pending_cursor.reset(); s->flow.reset(); s->failed=false; }
       s->last_write_cursor = false;
       s->lastSequence=0; s->received.clear();
-      s->input->resetLocks();
+      if (!s->viewOnly) s->input->resetLocks();
       if (s->controller) { s->control_ready = true; lws_callback_on_writable(wsi); }
       else { s->capture.beginSession(s->generation); s->updateFlow(); }
       return 0;
