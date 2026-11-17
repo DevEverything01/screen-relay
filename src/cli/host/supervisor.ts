@@ -8,7 +8,7 @@ import { BACKENDS, backendValue } from '../config.js';
 import { Failure, nextFor, sessionCommand } from '../output.js';
 import { engineDirectory, HostArgs, isLinux, LAUNCHER_DIR, run, spawnCleared, which } from './common.js';
 import { identity, SessionData, sweep, tail, writeSession } from './state.js';
-import { engineEnvironment } from './windows.js';
+import { engineEnvironment, engineWorkingDirectory } from './windows.js';
 
 export const BACKEND_PROGRAMS = {
   x11: ['Xvfb', 'xauth', 'xprop', 'xwininfo', 'xdpyinfo', 'setxkbmap'],
@@ -352,12 +352,15 @@ export class Session {
       this.data.tokenFile = tokenFile;
     }
     if (this.args.public) engineCommand.push('--public-origin', this.args.public);
-    if (this.args['tls-cert']) engineCommand.push('--tls-cert', this.args['tls-cert'], '--tls-key', this.args['tls-key'] ?? '');
+    if (this.args['tls-cert']) {
+      const absolute = (file: string) => (process.platform === 'win32' && file ? resolve(file) : file);
+      engineCommand.push('--tls-cert', absolute(this.args['tls-cert']), '--tls-key', absolute(this.args['tls-key'] ?? ''));
+    }
     else if (this.args.public) engineCommand.push('--behind-tls-proxy');
     const scheme = this.args['tls-cert'] ? 'https' : 'http';
     const localUrl = `${scheme}://127.0.0.1:${this.args.port}`;
     this.save({ bind, localUrl, url: this.args.public || localUrl, tlsCert: this.args['tls-cert'] ? resolve(String(this.args['tls-cert'])) : null });
-    const engineChild = this.spawn('engine', engineCommand);
+    const engineChild = this.spawn('engine', engineCommand, { cwd: engineWorkingDirectory(engine) });
     await waitSpawn(engineChild);
     await this.waitReady(engineChild.pid!, { url: localUrl, token, certificate: this.data.tlsCert, connect: connectHost(bind) }, desktop);
     this.save({ state: 'ready', ready: Date.now() / 1000 });
@@ -511,7 +514,7 @@ export function attaches(backend: string | undefined): boolean {
 
 /** Backends the engine reports it was built with; empty when there is no engine. */
 export function compiledBackends(engine: string | null = findEngine()): string[] {
-  const compiled = engine ? /^Compiled backends: (.+)$/m.exec(run([engine, '--help'], { env: engineEnvironment() }).stdout ?? '')?.[1] : undefined;
+  const compiled = engine ? /^Compiled backends: (.+)$/m.exec(run([engine, '--help'], { env: engineEnvironment(), cwd: engineWorkingDirectory(engine) }).stdout ?? '')?.[1] : undefined;
   return compiled ? compiled.split(', ') : [];
 }
 

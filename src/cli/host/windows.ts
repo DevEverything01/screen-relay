@@ -1,4 +1,4 @@
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { run } from './common.js';
 
 /** Root of the MSYS2 install that `screen-relay install` sets up on Windows. */
@@ -12,6 +12,11 @@ export function engineEnvironment(env: NodeJS.ProcessEnv = process.env): NodeJS.
   if (process.platform !== 'win32') return env;
   const key = Object.keys(env).find((name) => name.toUpperCase() === 'PATH') ?? 'PATH';
   return { ...env, [key]: [`${MSYS2_ROOT}\\ucrt64\\bin`, env[key]].filter(Boolean).join(';') };
+}
+
+/** The directory to start the engine in on Windows: its own, so Windows does not search the caller's folder for the engine's DLLs. Undefined elsewhere. */
+export function engineWorkingDirectory(engine: string): string | undefined {
+  return process.platform === 'win32' ? dirname(engine) : undefined;
 }
 
 /** Absolute path of a tool in the Windows system folder, so a same-named file in the working directory cannot stand in for it. */
