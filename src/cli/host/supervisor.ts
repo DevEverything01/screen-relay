@@ -8,6 +8,7 @@ import { BACKENDS, backendValue } from '../config.js';
 import { Failure, nextFor, sessionCommand } from '../output.js';
 import { engineDirectory, HostArgs, isLinux, LAUNCHER_DIR, run, spawnCleared, which } from './common.js';
 import { identity, SessionData, sweep, tail, writeSession } from './state.js';
+import { engineEnvironment } from './windows.js';
 
 export const BACKEND_PROGRAMS = {
   x11: ['Xvfb', 'xauth', 'xprop', 'xwininfo', 'xdpyinfo', 'setxkbmap'],
@@ -277,7 +278,7 @@ export class Session {
     const backend = resolveBackend(this.args.backend, this.args.display);
     const attached = attaches(backend) || Boolean(this.args.display);
     this.env = attached
-      ? { ...process.env, SCREEN_RELAY_SESSION: this.dir }
+      ? engineEnvironment({ ...process.env, SCREEN_RELAY_SESSION: this.dir })
       : desktopEnv(this.dir);
     if (attaches(backend)) {
       delete this.env.DISPLAY;
@@ -510,7 +511,7 @@ export function attaches(backend: string | undefined): boolean {
 
 /** Backends the engine reports it was built with; empty when there is no engine. */
 export function compiledBackends(engine: string | null = findEngine()): string[] {
-  const compiled = engine ? /^Compiled backends: (.+)$/m.exec(run([engine, '--help']).stdout ?? '')?.[1] : undefined;
+  const compiled = engine ? /^Compiled backends: (.+)$/m.exec(run([engine, '--help'], { env: engineEnvironment() }).stdout ?? '')?.[1] : undefined;
   return compiled ? compiled.split(', ') : [];
 }
 

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { after, test } from 'node:test';
@@ -17,7 +17,7 @@ after(() => rmSync(directory, { recursive: true, force: true }));
 
 const bundle = buildSync({
   stdin: {
-    contents: "export { cmdDoctor } from './src/cli/host/doctor.ts'; export { cmdDown, cmdLogs, cmdRun, cmdUp } from './src/cli/host/session_commands.ts'; export { engineDirectory, requireHost } from './src/cli/host/common.ts'; export { findEngine, requestedBackend, Session } from './src/cli/host/supervisor.ts'; export { alive, identity, lock, stateDir, writeSession } from './src/cli/host/state.ts'; export { killTree } from './src/cli/host/windows.ts';",
+    contents: "export { cmdDoctor } from './src/cli/host/doctor.ts'; export { cmdInstall } from './src/cli/host/setup.ts'; export { cmdDown, cmdLogs, cmdRun, cmdUp } from './src/cli/host/session_commands.ts'; export { engineDirectory, requireHost } from './src/cli/host/common.ts'; export { findEngine, requestedBackend, Session } from './src/cli/host/supervisor.ts'; export { alive, identity, lock, stateDir, writeSession } from './src/cli/host/state.ts'; export { killTree } from './src/cli/host/windows.ts';",
     resolveDir: root,
   },
   bundle: true,
@@ -29,11 +29,11 @@ const bundle = buildSync({
 });
 const bundlePath = join(directory, 'windows.mjs');
 writeFileSync(bundlePath, bundle.outputFiles[0].contents);
-const { alive, cmdDown, cmdLogs, cmdRun, cmdUp, engineDirectory, findEngine, identity, killTree, lock, requestedBackend, requireHost, Session, stateDir, writeSession } = await import(pathToFileURL(bundlePath).href);
+const { alive, cmdDown, cmdInstall, cmdLogs, cmdRun, cmdUp, engineDirectory, findEngine, identity, killTree, lock, requestedBackend, requireHost, Session, stateDir, writeSession } = await import(pathToFileURL(bundlePath).href);
 
 function onWindowsProcess(script) {
   const probe = `Object.defineProperty(process, 'platform', { value: 'win32' });
-const { cmdDoctor, cmdUp } = await import(${JSON.stringify(pathToFileURL(bundlePath).href)});
+const { cmdDoctor, cmdInstall, cmdUp } = await import(${JSON.stringify(pathToFileURL(bundlePath).href)});
 ${script}`;
   return spawnSync(process.execPath, ['--input-type=module', '-e', probe], { encoding: 'utf8', timeout: 60000 });
 }
@@ -207,4 +207,38 @@ test('logs prints the last 200 lines of a Windows log without a PATH', { skip: p
 await cmdLogs({ command: 'logs', json: false, name: ${JSON.stringify(name)}, component: 'engine', follow: false });`;
   const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], { encoding: 'utf8', env, timeout: 60000 });
   assert.equal(result.stdout, `${Array.from({ length: 200 }, (_, index) => `line ${index + 51}`).join('\n')}\n`);
+});
+
+function withoutEngine() {
+  rmSync(engineDirectory(), { recursive: true, force: true });
+}
+
+test('install on Windows without a terminal needs --yes before it installs anything', async () => {
+  withoutEngine();
+  await onPlatform('win32', () => assert.rejects(cmdInstall({ command: 'install', json: true, name: 'default', backend: 'windows' }), { reason: 'missing_input', hint: /--yes/ }));
+});
+
+test('install on Windows without MSYS2 or winget names MSYS2 and its download page', { skip: process.platform === 'win32' }, async () => {
+  withoutEngine();
+  await onPlatform('win32', () => assert.rejects(cmdInstall({ command: 'install', json: true, name: 'default', backend: 'windows', yes: true }), { reason: 'missing_dependency', message: /MSYS2/, hint: /https:\/\/www\.msys2\.org/ }));
+});
+
+test('install on Windows reports unchanged when the engine already has the windows backend', { skip: process.platform === 'win32' }, () => {
+  writeEngine('#!/bin/sh\nif [ "$1" = --help ]; then echo \'Compiled backends: windows\'; exit 0; fi\nexit 1\n');
+  const result = onWindowsProcess(`await cmdInstall({ command: 'install', json: true, name: 'default', backend: 'windows' });`);
+  assert.equal(JSON.parse(result.stdout).outcome, 'unchanged');
+});
+
+test('install on Windows stops at the winget step and says to run install again', { skip: process.platform === 'win32' }, async () => {
+  withoutEngine();
+  const stub = join(home, 'winget-stub');
+  mkdirSync(stub, { recursive: true });
+  writeFileSync(join(stub, 'winget'), '#!/bin/sh\n[ "$1" = --version ] && exit 0\nexit 1\n', { mode: 0o755 });
+  const path = process.env.PATH;
+  process.env.PATH = `${stub}${delimiter}${path}`;
+  try {
+    await onPlatform('win32', () => assert.rejects(cmdInstall({ command: 'install', json: true, name: 'default', backend: 'windows', yes: true }), { reason: 'missing_dependency', message: /Installing MSYS2/, hint: /run `screen-relay install` again/ }));
+  } finally {
+    process.env.PATH = path;
+  }
 });

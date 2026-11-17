@@ -12,7 +12,7 @@ import type { HostArgs } from './common.js';
 import { detectFamily, installCommand as packageCommand, packagesFor, type Family } from './packages.js';
 import { stateDir } from './state.js';
 import { BACKEND_PROGRAMS, findEngine, installCommand, resolveBackend, startXvfb, xQuery } from './supervisor.js';
-import { MSYS2_ROOT, windowsSessionId } from './windows.js';
+import { engineEnvironment, MSYS2_ROOT, windowsSessionId } from './windows.js';
 
 const TINY_SVG = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>');
 function crc32(data: Buffer): number {
@@ -145,7 +145,7 @@ export async function cmdDoctor(args: HostArgs): Promise<number> {
     try { mkdirSync(state, { recursive: true }); accessSync(state, constants.W_OK); } catch { writable = false; }
     check('state dir', writable, state, 'export XDG_STATE_HOME=/path/to/a/writable/dir');
     const engine = findEngine();
-    const engineRuns = check('engine', Boolean(engine && run([engine, '--help']).status === 0), engine ?? 'relay-engine not found', installCommand(backend));
+    const engineRuns = check('engine', Boolean(engine && run([engine, '--help'], { env: engineEnvironment() }).status === 0), engine ?? 'relay-engine not found', installCommand(backend));
     if (process.platform === 'darwin') {
       if (engineRuns && backendResolved && engine) {
         const result = run([engine, '--backend', 'macos', '--check'], { timeout: 20000 });
