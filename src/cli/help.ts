@@ -3,7 +3,7 @@ import { VERSION } from './host/common.js';
 import { agent, type OutputOptions } from './mode.js';
 import { theme } from './theme.js';
 
-const docs = 'https://relay.labs.vercel.dev/docs/cli';
+const docs = 'https://screen-relay.labs.vercel.dev/docs/cli';
 const summary = 'Start a streamed desktop and control it';
 const width = 80;
 const labelLimit = 24;

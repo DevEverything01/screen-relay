@@ -1,6 +1,6 @@
 # Tests
 
-See the [screen-relay documentation](https://relay.labs.vercel.dev/docs) for installation and usage.
+See the [screen-relay documentation](https://screen-relay.labs.vercel.dev/docs) for installation and usage.
 
 Use disposable desktops. New results go to `tests/results/` (untracked).
 

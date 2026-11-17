@@ -1,6 +1,6 @@
 # Troubleshooting
 
-The published guide is at https://relay.labs.vercel.dev/docs/troubleshooting.
+The published guide is at https://screen-relay.labs.vercel.dev/docs/troubleshooting.
 
 Start with `screen-relay doctor`. For each reason, such as `busy` or `unauthorized`, see [Reasons and recovery](../SKILL.md#reasons-and-recovery). This page covers symptoms that have no reason code.
 
@@ -11,7 +11,7 @@ Start with `screen-relay doctor`. For each reason, such as `busy` or `unauthoriz
 | `unreachable` with `Connection refused.` | Nothing is listening on the address. | For a local session, run `screen-relay up -d`. Otherwise check the port. |
 | `unreachable` with `The TLS certificate was rejected.` | The certificate is not trusted or names another host. | Use a trusted certificate for the public host, or pass the local session's certificate. |
 | Engine log says `Cannot listen on 127.0.0.1:8080` | Another process owns the port. | `screen-relay up --port 8081`, or stop the old session. |
-| Engine log names a missing Wayland protocol (`zwlr_screencopy_manager_v1`, `zwp_virtual_keyboard_manager_v1` or `zwlr_virtual_pointer_manager_v1`) | The compositor from `--display` lacks it. | Attach to a supported compositor. See [Linux](https://relay.labs.vercel.dev/docs/linux). |
+| Engine log names a missing Wayland protocol (`zwlr_screencopy_manager_v1`, `zwp_virtual_keyboard_manager_v1` or `zwlr_virtual_pointer_manager_v1`) | The compositor from `--display` lacks it. | Attach to a supported compositor. See [Linux](https://screen-relay.labs.vercel.dev/docs/linux). |
 | Engine log shows `Unsupported root size` | The attached output is outside 320x240 to 16384x16384, or has an odd side. | Create a headless output of a supported size and pass its name with `--output`. |
 | `missing_input` saying `XDG_RUNTIME_DIR is required` | `--display` on wayland without `XDG_RUNTIME_DIR`. | Export the compositor's runtime directory. If it is `/run/user/$(id -u)`, run `export XDG_RUNTIME_DIR=/run/user/$(id -u)`. |
 | `component_failed` or `timeout` for `display` with `--backend wayland` | sway did not start or did not report its displays. | `SCREEN_RELAY_BACKEND=wayland screen-relay doctor`, then `screen-relay logs display`. |

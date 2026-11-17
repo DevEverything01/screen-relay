@@ -1,6 +1,6 @@
 # CLI reference
 
-The published reference is at https://relay.labs.vercel.dev/docs/cli.
+The published reference is at https://screen-relay.labs.vercel.dev/docs/cli.
 
 Run `screen-relay help` for root help, `screen-relay help <command>` for one command, and `screen-relay help --all --json` for every command's metadata. Help works offline.
 

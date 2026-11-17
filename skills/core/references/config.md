@@ -1,6 +1,6 @@
 # Configuration
 
-The published reference is at https://relay.labs.vercel.dev/docs/configuration.
+The published reference is at https://screen-relay.labs.vercel.dev/docs/configuration.
 
 Precedence, highest first:
 
