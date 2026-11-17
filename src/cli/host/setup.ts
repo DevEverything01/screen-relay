@@ -14,7 +14,7 @@ import { compiledBackends, findEngine, requestedBackend, sessionNeeds } from './
 type Backend = (typeof BACKENDS)[number];
 type Args = HostArgs & Record<string, any>;
 type Request = { backends: Backend[]; display?: string; desktop?: string; keyboardLayout?: string };
-type Plan = { state: 'ready' | 'needs-build' | 'needs-packages'; backends: Backend[]; build: boolean };
+type Plan = { state: 'ready' | 'needs-build' | 'needs-packages'; backends: Backend[]; build: boolean; groups: string[] };
 
 const SOURCE = resolve(LAUNCHER_DIR, '..', '..');
 const BREW_PACKAGES = ['pkgconf', 'x264', 'libwebsockets'];
@@ -25,7 +25,7 @@ function buildable(backends: Backend[]): boolean {
   return existsSync(join(SOURCE, 'Makefile')) && run(['make', '-s', '-C', SOURCE, `BACKENDS=${backends.join(' ')}`, 'deps']).status === 0;
 }
 
-/** Decides what this machine still needs before it can run the requested backends. */
+/** Decides what this machine still needs before it can run the requested backends. The engine is built with every compiled backend, but the desktop packages follow only the requested ones. */
 export function planSetup(request: Request): Plan {
   const compiled = compiledBackends();
   const build = request.backends.some((backend) => !compiled.includes(backend));
@@ -33,7 +33,9 @@ export function planSetup(request: Request): Plan {
   const programs = request.backends.flatMap((backend) => sessionNeeds(backend, request).missing)
     .filter((program) => provides(program === 'swaymsg' ? 'sway' : program));
   const packages = programs.length > 0 || (build && !buildable(backends));
-  return { state: packages ? 'needs-packages' : build ? 'needs-build' : 'ready', backends, build };
+  const xfce = request.backends.includes('x11') && sessionNeeds('x11', request).desktop === 'xfce';
+  const groups = ['core', ...backends, ...(xfce ? ['xfce'] : [])];
+  return { state: packages ? 'needs-packages' : build ? 'needs-build' : 'ready', backends, build, groups };
 }
 
 /** Runs one shell command and reports how long it took. With --json it prints nothing and puts the end of the output in the error; a step that is not required only warns when it fails. */
@@ -71,8 +73,8 @@ function elevation(prompt: boolean): string {
   return 'sudo -n ';
 }
 
-/** Names the package manager and packages for this machine, and returns the work that installs them. */
-function packageWork(request: Request, backends: Backend[], args: Args): { manager: string; packages: string[]; run: () => Promise<void> } {
+/** Names the package manager and the packages in the plan's groups for this machine, and returns the work that installs them. */
+function packageWork(groups: string[], args: Args): { manager: string; packages: string[]; run: () => Promise<void> } {
   if (process.platform === 'darwin') {
     if (!which('brew')) {
       throw new Failure('missing_dependency', 'Homebrew is not installed', `Install it from https://brew.sh, or install ${BREW_PACKAGES.join(', ')} yourself. Then run screen-relay install again.`);
@@ -86,8 +88,6 @@ function packageWork(request: Request, backends: Backend[], args: Args): { manag
     throw new Failure('unsupported_platform', 'Automatic setup supports Debian, Ubuntu, Fedora, Arch Linux, and Alpine',
       'Install the build tools and libraries yourself, then run screen-relay install again to build the engine. screen-relay doctor lists what is missing.');
   }
-  const xfce = backends.includes('x11') && sessionNeeds('x11', request).desktop === 'xfce';
-  const groups = ['core', ...backends, ...(xfce ? ['xfce'] : [])];
   const packages = groupPackages(family, groups, family === 'apt' ? OPTIONAL_APT : []);
   const x264 = packagesFor(family, ['x264-dev'])[0];
   const install = async () => {
@@ -102,7 +102,7 @@ function packageWork(request: Request, backends: Backend[], args: Args): { manag
           `${elevate}sed -i '/^Components:/{/universe/!s/$/ universe/}' ${sources} && ${elevate}apt-get update`, args);
         if (!available(x264)) throw new Failure('missing_dependency', `Cannot install ${x264} after enabling Ubuntu universe`, 'Check the apt sources on this machine.');
       }
-      if (xfce) packages.push(...packagesFor('apt', OPTIONAL_APT).filter((name) => run(['apt-cache', 'show', name]).status === 0));
+      if (groups.includes('xfce')) packages.push(...packagesFor('apt', OPTIONAL_APT).filter((name) => run(['apt-cache', 'show', name]).status === 0));
     }
     if (family === 'dnf') {
       const query = run(['sh', '-c', `${elevate}dnf -q repoquery --available ${x264}`]);
@@ -193,7 +193,7 @@ async function applySetup(request: Request, plan: Plan, args: Args): Promise<voi
       const flag = process.platform === 'darwin' ? '' : ` --backend ${request.backends.length > 1 ? 'all' : request.backends[0]}`;
       throw new Failure('missing_input', `Setting up the ${names} backend installs system packages`, `Run \`screen-relay install${flag} --yes\` to allow it.`);
     }
-    const work = packageWork(request, plan.backends, args);
+    const work = packageWork(plan.groups, args);
     if (!args.yes) {
       process.stderr.write(`Setting up the ${names} backend installs ${count(work.packages.length, 'package')} with ${work.manager}, then builds the engine:\n  ${work.packages.join(' ')}\n`);
       if (!await answer(confirm({ message: 'Install them now?', output: process.stderr, signal: args.signal }))) throw new Failure('canceled', 'Setup canceled.');

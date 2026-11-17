@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -13,7 +13,7 @@ const directory = mkdtempSync(join(root, '.cli-test-'));
 after(() => rmSync(directory, { recursive: true, force: true }));
 const bundle = buildSync({
   stdin: {
-    contents: "export { commands } from './src/cli/commands.ts'; export { parseCommand } from './src/cli/parser.ts'; export { Session, resolveBackend } from './src/cli/host/supervisor.ts'; export { cmdRun } from './src/cli/host/session_commands.ts';",
+    contents: "export { commands } from './src/cli/commands.ts'; export { parseCommand } from './src/cli/parser.ts'; export { Session, resolveBackend } from './src/cli/host/supervisor.ts'; export { cmdRun } from './src/cli/host/session_commands.ts'; export { planSetup } from './src/cli/host/setup.ts';",
     resolveDir: root,
   },
   bundle: true,
@@ -25,7 +25,7 @@ const bundle = buildSync({
 });
 const bundlePath = join(directory, 'parser.mjs');
 writeFileSync(bundlePath, bundle.outputFiles[0].contents);
-const { commands, parseCommand, Session, resolveBackend, cmdRun } = await import(pathToFileURL(bundlePath).href);
+const { commands, parseCommand, Session, resolveBackend, cmdRun, planSetup } = await import(pathToFileURL(bundlePath).href);
 
 test('every metadata example parses through the command parser', () => {
   for (const [name, command] of Object.entries(commands)) {
@@ -184,6 +184,19 @@ test('up and install refuse to install system packages without a terminal unless
     const failure = JSON.parse(result.stderr);
     assert.equal(failure.reason, 'missing_input');
     assert.equal(failure.next[0].command, `screen-relay install${flag} --yes`);
+  }
+});
+
+test('setup installs the XFCE packages only when the requested X11 session uses XFCE', { skip: process.platform !== 'linux' && process.platform !== 'darwin' }, () => {
+  const engine = join(directory, 'relay-engine');
+  writeFileSync(engine, "#!/bin/sh\necho 'Compiled backends: x11'\n", { mode: 0o755 });
+  cpSync(join(root, 'packages.tsv'), join(directory, 'packages.tsv'));
+  try {
+    assert.deepEqual(planSetup({ backends: ['wayland'] }).groups, ['core', 'x11', 'wayland']);
+    assert.deepEqual(planSetup({ backends: ['x11', 'wayland'], desktop: 'none' }).groups, ['core', 'x11', 'wayland']);
+    assert.deepEqual(planSetup({ backends: ['x11', 'wayland'] }).groups, ['core', 'x11', 'wayland', 'xfce']);
+  } finally {
+    rmSync(engine, { force: true });
   }
 });
 
