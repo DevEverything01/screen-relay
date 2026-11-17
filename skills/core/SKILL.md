@@ -166,4 +166,4 @@ Keys, defaults, file location and precedence: [config](references/config.md).
 - `references/macos.md`: macOS install, permissions, display choice and limits.
 - `references/troubleshooting.md`: symptoms and fixes.
 - `screen-relay skills get vercel-sandbox`: run screen-relay in a Vercel Sandbox.
-- https://relay.labs.vercel.dev/docs: the published documentation.
+- https://screen-relay.dev/docs: the published documentation.
