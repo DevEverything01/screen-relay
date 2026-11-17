@@ -1,7 +1,7 @@
-import { readFileSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { request as httpRequest } from 'node:http';
 import { request as httpsRequest, type RequestOptions } from 'node:https';
+import { plan, type Plan } from './transport.js';
 import {
   RelayError, networkError, responseError, baseUrl, integer, encodeInput, encodeInputBatch, comboEvents, textEvents,
   batches, parseMessage, socketTarget, MAX_INPUT_BATCH, MAX_INPUT_PENDING,
@@ -12,8 +12,8 @@ export { RelayError, ERROR_REASONS } from '../protocol/index.js';
 export type { ErrorClass, ErrorReason, ErrorOptions, NextCommand } from '../protocol/index.js';
 export type { InputEvent };
 export type Input = InputEvent;
-/** Connection settings. `url` is the engine origin (default `http://127.0.0.1:8080`), `token` is the 64-character session token that remote hosts require, and `timeout` is in milliseconds (default 10000). */
-export interface ClientOptions { url?: string; token?: string; timeout?: number; ca?: string; connect?: string; signal?: AbortSignal }
+/** Connection settings. `url` is the engine origin (default `http://127.0.0.1:8080`), `token` is the 64-character session token that remote hosts require, and `timeout` is in milliseconds (default 10000). `ca` trusts a CA bundle and still checks the URL host name; `certificate` pins one exact server certificate and skips the host name check. */
+export interface ClientOptions { url?: string; token?: string; timeout?: number; ca?: string; certificate?: string; connect?: string; signal?: AbortSignal }
 export type Options = ClientOptions;
 export interface InputResult { events: number }
 export type Status = Record<string, unknown>;
@@ -46,11 +46,20 @@ export interface Session {
   close(): void;
 }
 
-function target({ url = 'http://127.0.0.1:8080', timeout = 10000, token, ca, connect, signal }: ClientOptions) {
-  return { base: baseUrl(url, token), timeout: integer(timeout, 1, 2147483647, 'timeout'), token, ca, connect, signal };
+function target({ url = 'http://127.0.0.1:8080', timeout = 10000, token, ca, certificate, connect, signal }: ClientOptions) {
+  if (ca && certificate) throw new RelayError('invalid_option', 'Pass ca or certificate, not both.');
+  return {
+    base: baseUrl(url, token), timeout: integer(timeout, 1, 2147483647, 'timeout'), token, ca, certificate, connect, signal,
+    transport: undefined as Plan | undefined,
+  };
 }
 
 type Server = ReturnType<typeof target>;
+
+function transportPlan(server: Server): Plan {
+  server.transport ??= plan({ url: server.base, ca: server.ca, certificate: server.certificate, connect: server.connect, timeout: server.timeout, signal: server.signal });
+  return server.transport;
+}
 
 function headers(server: Server, body?: Uint8Array): Record<string, string> {
   const result: Record<string, string> = server.token ? { Authorization: `Bearer ${server.token}` } : {};
@@ -64,31 +73,22 @@ function decode<Result>(data: Buffer, binary: boolean): Result {
   catch { throw new RelayError('protocol_error', 'Invalid JSON response'); }
 }
 
-function nodeRequest<Result>(server: Server, path: string, binary: boolean, body?: Uint8Array): Promise<Result> {
+function nodeRequest<Result>(server: Server, where: Extract<Plan, { kind: 'node' }>, path: string, binary: boolean, body?: Uint8Array): Promise<Result> {
   const base = server.base;
-  let ca: Buffer | undefined;
-  if (server.ca) {
-    try { ca = readFileSync(server.ca); }
-    catch (error) { return Promise.reject(new RelayError('io_error', `Cannot read certificate ${server.ca}: ${error instanceof Error ? error.message : String(error)}`)); }
-  }
-  const hostname = server.connect ?? base.hostname.replace(/^\[|\]$/g, '');
   const requestHeaders = headers(server, body);
   if (body !== undefined) requestHeaders['Content-Length'] = String(body.length);
   if (server.connect) requestHeaders.Host = base.host;
   const options: RequestOptions = {
     protocol: base.protocol,
-    hostname,
+    hostname: where.dial,
     port: Number(base.port || (base.protocol === 'https:' ? 443 : 80)),
     path: `${base.pathname === '/' ? '' : base.pathname}${path}`,
     method: body === undefined ? 'GET' : 'POST',
     headers: requestHeaders,
     timeout: server.timeout,
     signal: server.signal,
+    agent: where.agent,
   };
-  if (ca) {
-    options.ca = ca;
-    options.checkServerIdentity = () => undefined;
-  }
   return new Promise((resolve, reject) => {
     const transport = base.protocol === 'https:' ? httpsRequest : httpRequest;
     const sent = transport(options, (response) => {
@@ -133,7 +133,8 @@ async function request<Result>(
   server: Server, path: string, binary = false, body?: Uint8Array,
 ): Promise<Result> {
   if (server.signal?.aborted) throw new RelayError('canceled', 'Request canceled.');
-  if (server.ca || server.connect) return nodeRequest<Result>(server, path, binary, body);
+  const transport = transportPlan(server);
+  if (transport.kind === 'node') return nodeRequest<Result>(server, transport, path, binary, body);
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const deadline = new Promise<never>((_, reject) => {
@@ -266,7 +267,7 @@ export function createClient(options: ClientOptions = {}): Client {
 
 export async function connect(options: ClientOptions = {}): Promise<Session> {
   const server = target(options);
-  if (server.ca || server.connect) throw new RelayError('invalid_option', 'Control connections do not support ca or connect options.');
+  if (server.ca || server.certificate || server.connect) throw new RelayError('invalid_option', 'Control connections do not support ca, certificate, or connect options.');
   if (server.signal?.aborted) throw new RelayError('canceled', 'Control connection canceled.');
   if (typeof WebSocket === 'undefined') throw new RelayError('unsupported_platform', 'Control sessions require Node 22 or newer');
   const { url, protocols } = socketTarget(server.base, '/control', server.token);

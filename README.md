@@ -22,7 +22,7 @@ screen-relay install            # system packages and the engine build (first ti
 - **Wayland:** `screen-relay install --backend wayland`. The default backend on Linux is X11.
 - **Client only:** the npm install alone is enough to control a session on another machine.
 
-Requirements, backends, and Windows are covered in [Getting started](https://relay.labs.vercel.dev/docs/getting-started).
+Requirements, backends, and Windows are covered in [Getting started](https://screen-relay.dev/docs/getting-started).
 
 ## Quick start
 
@@ -37,15 +37,15 @@ screen-relay down
 ```
 
 - `up` prints a viewer link. Open it in a browser with H.264 WebCodecs: current Chrome, Edge, or Safari.
-- The engine listens on `127.0.0.1:8080`. From another machine, forward the port with `ssh -N -L 8080:127.0.0.1:8080 user@your-vm`, or see [Remote access](https://relay.labs.vercel.dev/docs/remote-access).
+- The engine listens on `127.0.0.1:8080`. From another machine, forward the port with `ssh -N -L 8080:127.0.0.1:8080 user@your-vm`, or see [Remote access](https://screen-relay.dev/docs/remote-access).
 - On a machine that is not set up yet, `up` runs the same setup as `install` first.
 - A successful input command means the engine applied the input, not that the app reacted. Take a screenshot to check.
 
-The full walkthrough is in [Getting started](https://relay.labs.vercel.dev/docs/getting-started).
+The full walkthrough is in [Getting started](https://screen-relay.dev/docs/getting-started).
 
 ## How it works
 
-`screen-relay up` starts a session: a virtual display, a desktop, and the engine. On Linux the display is X11 with XFCE or headless Wayland with sway. On a Mac the engine attaches to the display you are logged in to. On Windows it attaches to the desktop of the signed-in user. The engine captures the screen, encodes it as H.264, and serves the viewer, the stream, and the input API on one port. It lowers the bitrate on a slow link. See [How streaming works](https://relay.labs.vercel.dev/docs/how-streaming-works).
+`screen-relay up` starts a session: a virtual display, a desktop, and the engine. On Linux the display is X11 with XFCE or headless Wayland with sway. On a Mac the engine attaches to the display you are logged in to. On Windows it attaches to the desktop of the signed-in user. The engine captures the screen, encodes it as H.264, and serves the viewer, the stream, and the input API on one port. It lowers the bitrate on a slow link. See [How streaming works](https://screen-relay.dev/docs/how-streaming-works).
 
 A session listens on loopback with no token by default. Starting it with `--public` or on another address creates a token that every remote request must send. Only one controller sends input at a time: a browser viewer, an SDK control session, or the CLI. Screenshots still work while another controller holds input.
 
@@ -74,16 +74,16 @@ Run `screen-relay --help` for the full list, or `screen-relay <command> --help` 
 
 | Group | Commands | Docs |
 |---|---|---|
-| Session | `up`, `down`, `status`, `logs`, `run` | [CLI reference](https://relay.labs.vercel.dev/docs/cli) |
-| Control | `screenshot`, `click`, `move`, `scroll`, `key`, `type`, `input` | [Client commands](https://relay.labs.vercel.dev/docs/cli#client-commands) |
-| Setup | `install`, `doctor` | [Getting started](https://relay.labs.vercel.dev/docs/getting-started), [Troubleshooting](https://relay.labs.vercel.dev/docs/troubleshooting) |
-| Agents | `skills`, `help` | [Agent skills](https://relay.labs.vercel.dev/docs/agent-skills) |
+| Session | `up`, `down`, `status`, `logs`, `run` | [CLI reference](https://screen-relay.dev/docs/cli) |
+| Control | `screenshot`, `click`, `move`, `scroll`, `key`, `type`, `input` | [Client commands](https://screen-relay.dev/docs/cli#client-commands) |
+| Setup | `install`, `doctor` | [Getting started](https://screen-relay.dev/docs/getting-started), [Troubleshooting](https://screen-relay.dev/docs/troubleshooting) |
+| Agents | `skills`, `help` | [Agent skills](https://screen-relay.dev/docs/agent-skills) |
 
-Flags, environment variables, and `config.yaml` are documented in [Configuration](https://relay.labs.vercel.dev/docs/configuration).
+Flags, environment variables, and `config.yaml` are documented in [Configuration](https://screen-relay.dev/docs/configuration).
 
 ## Platforms
 
-The engine runs on Linux (x64 and ARM64, X11 and Wayland), on macOS 12.3 or later (Apple silicon and Intel), and on Windows 10 or later (x64). `screen-relay install` builds it on your machine. See [Linux](https://relay.labs.vercel.dev/docs/linux), [macOS](https://relay.labs.vercel.dev/docs/macos), and [Windows](https://relay.labs.vercel.dev/docs/windows).
+The engine runs on Linux (x64 and ARM64, X11 and Wayland), on macOS 12.3 or later (Apple silicon and Intel), and on Windows 10 or later (x64). `screen-relay install` builds it on your machine. See [Linux](https://screen-relay.dev/docs/linux), [macOS](https://screen-relay.dev/docs/macos), and [Windows](https://screen-relay.dev/docs/windows).
 
 ## Development
 
@@ -102,11 +102,11 @@ Run the engine tests with `make test`, which also needs the FFmpeg development l
 
 ## Documentation
 
-- [relay.labs.vercel.dev](https://relay.labs.vercel.dev): introduction, guides, and reference
-- [CLI reference](https://relay.labs.vercel.dev/docs/cli) and [Configuration](https://relay.labs.vercel.dev/docs/configuration)
-- [Node SDK](https://relay.labs.vercel.dev/docs/sdk) and [HTTP API](https://relay.labs.vercel.dev/docs/protocol)
-- [Remote access](https://relay.labs.vercel.dev/docs/remote-access): tokens, TLS, and tunnels
-- [Docker](https://relay.labs.vercel.dev/docs/docker) and [Vercel Sandbox](https://relay.labs.vercel.dev/docs/vercel-sandbox)
+- [screen-relay.dev](https://screen-relay.dev): introduction, guides, and reference
+- [CLI reference](https://screen-relay.dev/docs/cli) and [Configuration](https://screen-relay.dev/docs/configuration)
+- [Node SDK](https://screen-relay.dev/docs/sdk) and [HTTP API](https://screen-relay.dev/docs/protocol)
+- [Remote access](https://screen-relay.dev/docs/remote-access): tokens, TLS, and tunnels
+- [Docker](https://screen-relay.dev/docs/docker) and [Vercel Sandbox](https://screen-relay.dev/docs/vercel-sandbox)
 - [Changelog](CHANGELOG.md)
 
 ## License

@@ -104,15 +104,16 @@ Optional `buttons` (0 to 31) and `modifiers` (0 to 255) default to 0. Both must 
 
 ## Options
 
-Pass these options to `createClient`, the standalone functions, or `connect`. Control sessions reject a nonempty `ca` or `connect` with `invalid_option`.
+Pass these options to `createClient`, the standalone functions, or `connect`. Control sessions reject a nonempty `ca`, `certificate`, or `connect` with `invalid_option`.
 
 | Option | Meaning |
 | --- | --- |
 | `url` | Origin only; default `http://127.0.0.1:8080`. HTTP only for `localhost` and `127.0.0.1`; HTTPS elsewhere. No credentials, path, query, or fragment. |
 | `token` | 64 lowercase hexadecimal characters. Required for remote hosts. See [Tokens](/docs/remote-access#tokens). |
 | `timeout` | Integer from 1 to 2147483647 milliseconds; default 10000. Per HTTP request, control connection, and input acknowledgement. |
-| `ca` | Certificate file for HTTPS. Verifies the certificate but skips the hostname check. |
-| `connect` | Address to dial instead of the URL host; the URL host remains the `Host` header. |
+| `ca` | PEM file of CA certificates to trust for HTTPS instead of the system's. The server's certificate must match the URL host name. |
+| `certificate` | PEM file with the exact server certificate to require for HTTPS. The host name is not checked, so a self-signed certificate works even when it names another host. Use this or `ca`, not both. |
+| `connect` | Address to dial instead of the URL host. The URL host remains the `Host` header and, unless the certificate is pinned, the name the certificate must match. |
 | `signal` | `AbortSignal` that cancels requests or the control session. |
 
 - Redirects are not followed.

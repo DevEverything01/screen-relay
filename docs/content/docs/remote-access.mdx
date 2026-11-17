@@ -57,7 +57,7 @@ Without `--tls-cert`, the engine serves plain HTTP and the proxy ends TLS. The p
 
 2. Open the viewer link that `up` printed.
 
-The engine serves HTTPS itself, prints no `TLS proxy` row, and speaks HTTP/1.1 only. Client commands on the VM accept the session's own certificate without a hostname check, so a self-signed certificate works there.
+The engine serves HTTPS itself, prints no `TLS proxy` row, and speaks HTTP/1.1 only. Client commands on the VM accept the session's own certificate even when its host name does not match, so a self-signed certificate works there.
 
 ## Tokens
 
