@@ -17,7 +17,7 @@ after(() => rmSync(directory, { recursive: true, force: true }));
 
 const bundle = buildSync({
   stdin: {
-    contents: "export { cmdDoctor } from './src/cli/host/doctor.ts'; export { cmdInstall } from './src/cli/host/setup.ts'; export { cmdDown, cmdLogs, cmdRun, cmdUp } from './src/cli/host/session_commands.ts'; export { engineDirectory, requireHost } from './src/cli/host/common.ts'; export { findEngine, requestedBackend, Session } from './src/cli/host/supervisor.ts'; export { alive, identity, lock, stateDir, writeSession } from './src/cli/host/state.ts'; export { killTree } from './src/cli/host/windows.ts';",
+    contents: "export { cmdDoctor } from './src/cli/host/doctor.ts'; export { cmdInstall } from './src/cli/host/setup.ts'; export { cmdDown, cmdLogs, cmdRun, cmdUp } from './src/cli/host/session_commands.ts'; export { engineDirectory, requireHost, which } from './src/cli/host/common.ts'; export { findEngine, requestedBackend, Session } from './src/cli/host/supervisor.ts'; export { alive, identity, lock, stateDir, writeSession } from './src/cli/host/state.ts'; export { killTree } from './src/cli/host/windows.ts';",
     resolveDir: root,
   },
   bundle: true,
@@ -29,7 +29,7 @@ const bundle = buildSync({
 });
 const bundlePath = join(directory, 'windows.mjs');
 writeFileSync(bundlePath, bundle.outputFiles[0].contents);
-const { alive, cmdDown, cmdInstall, cmdLogs, cmdRun, cmdUp, engineDirectory, findEngine, identity, killTree, lock, requestedBackend, requireHost, Session, stateDir, writeSession } = await import(pathToFileURL(bundlePath).href);
+const { alive, cmdDown, cmdInstall, cmdLogs, cmdRun, cmdUp, engineDirectory, findEngine, identity, killTree, lock, requestedBackend, requireHost, Session, stateDir, which, writeSession } = await import(pathToFileURL(bundlePath).href);
 
 function onWindowsProcess(script) {
   const probe = `Object.defineProperty(process, 'platform', { value: 'win32' });
@@ -141,7 +141,25 @@ test('a Windows record with another start time is not alive', { skip: process.pl
   }
 });
 
-test('a Windows session lock rejects a second holder until the first closes', { skip: process.platform !== 'win32' }, async () => {
+test('a Windows record with no start time is not alive', async () => {
+  await onPlatform('win32', () => assert.equal(alive({ pid: process.pid, start: null }), false));
+});
+
+test('which on Windows finds the .exe of a bare name, not an extensionless script', async () => {
+  const dir = join(home, 'which-windows');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'tool'), '#!/bin/sh\n', { mode: 0o755 });
+  writeFileSync(join(dir, 'tool.exe'), '', { mode: 0o755 });
+  const path = process.env.PATH;
+  process.env.PATH = `${dir}${delimiter}${path}`;
+  try {
+    assert.equal(await onPlatform('win32', () => which('tool')), join(dir, 'tool.exe'));
+  } finally {
+    process.env.PATH = path;
+  }
+});
+
+test('a Windows session lock rejects a second holder until the first closes',{ skip: process.platform !== 'win32' }, async () => {
   const directory = join(home, 'lock-held');
   mkdirSync(directory, { recursive: true });
   const first = await lock('desk', directory);

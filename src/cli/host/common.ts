@@ -38,7 +38,7 @@ export function which(program: string): string | undefined {
     } catch {}
     return undefined;
   }
-  const names = process.platform === 'win32' && !extname(program) ? [program, `${program}.exe`] : [program];
+  const names = process.platform === 'win32' && !extname(program) ? [`${program}.exe`] : [program];
   for (const directory of (process.env.PATH ?? '').split(delimiter)) {
     for (const name of names) {
       const candidate = join(directory || '.', name);

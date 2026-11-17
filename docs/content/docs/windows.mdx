@@ -44,6 +44,8 @@ To start an app on the signed-in desktop, run:
 screen-relay run -- APP
 ```
 
+APP must be an `.exe` program. A `.cmd` or `.bat` file is started through `cmd /c`, so run it as `screen-relay run -- cmd /c FILE.cmd`.
+
 `--restart` is not supported on Windows. `screen-relay down` leaves apps started with `run` running.
 
 ### Choose a display

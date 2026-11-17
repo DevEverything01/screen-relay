@@ -76,6 +76,7 @@ export function startTime(pid: number): string | null {
 export function alive(record: unknown): boolean {
   if (!record || typeof record !== 'object') return false;
   const value = record as Partial<ProcessIdentity>;
+  if (process.platform === 'win32' && value.start === null) return false;
   return typeof value.pid === 'number' && value.start !== undefined && startTime(value.pid) === value.start;
 }
 

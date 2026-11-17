@@ -116,9 +116,12 @@ async function detach(args: Args, directory: string, timeout: number, warnings: 
     stdio: ['ignore', log, log, 'pipe'],
   });
   const signal = args.signal as AbortSignal | undefined;
-  const cancel = () => { child.kill('SIGTERM'); };
-  signal?.addEventListener('abort', cancel, { once: true });
-  if (signal?.aborted) cancel();
+  const stopChild = () => {
+    if (process.platform !== 'win32') child.kill('SIGTERM');
+    else if (child.pid !== undefined) killTree(child.pid);
+  };
+  signal?.addEventListener('abort', stopChild, { once: true });
+  if (signal?.aborted) stopChild();
   closeSync(log);
   const stream = child.stdio[3] as Readable;
   let data = '';
@@ -129,11 +132,11 @@ async function detach(args: Args, directory: string, timeout: number, warnings: 
     child.once('exit', () => { clearTimeout(timer); resolve(data); });
     child.once('error', () => { clearTimeout(timer); resolve(data); });
   });
-  signal?.removeEventListener('abort', cancel);
+  signal?.removeEventListener('abort', stopChild);
   if (signal?.aborted) throw new Failure('canceled', 'Session startup canceled.');
   if (!result) {
     if (child.exitCode === null) {
-      child.kill('SIGTERM');
+      stopChild();
       throw new Failure('timeout', 'Background supervisor did not report readiness in time', `See ${logPath}.`, { component: 'supervisor', log: tail(logPath), logs: directory });
     }
     throw new Failure('component_failed', 'Background supervisor exited before it was ready', `See ${logPath}.`, { component: 'supervisor', log: tail(logPath), logs: directory });
@@ -165,6 +168,9 @@ export async function cmdDown(args: Args): Promise<number> {
     if (alive(supervisor) && process.platform !== 'win32') {
       process.kill(supervisor.pid, 'SIGKILL');
       while (alive(supervisor)) await delay(50, undefined, { signal: args.signal });
+    }
+    if (alive(supervisor) && process.platform === 'win32') {
+      throw new Failure('timeout', `Session "${args.name}" did not stop`, 'Run `' + sessionCommand('down', args.name) + '` again from a terminal with the same rights as the one that started the session.');
     }
   }
   if (session) {
@@ -237,8 +243,8 @@ async function printWindowsLogs(files: string[], args: Args): Promise<number> {
   const offsets = new Map<string, number>();
   files.forEach((file, index) => {
     if (files.length > 1) process.stdout.write(`${index ? '\n' : ''}==> ${file} <==\n`);
-    const text = tail(file, 200);
-    if (text) process.stdout.write(text.endsWith('\n') ? text : `${text}\n`);
+    const text = tail(file, 201).replace(/\r?\n$/, '');
+    if (text) process.stdout.write(`${text.split(/\r?\n/).slice(-200).join('\n')}\n`);
     offsets.set(file, statSync(file).size);
   });
   if (!args.follow) return 0;
