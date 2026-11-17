@@ -6,13 +6,13 @@ Run `screen-relay help` for root help, `screen-relay help <command>` for one com
 
 ## VM commands
 
-Run these on the Linux or macOS machine that shows the desktop. `up`, `down` and `run` fail with `unsupported_platform` elsewhere.
+Run these on the Linux, macOS or Windows machine that shows the desktop. `up`, `down` and `run` fail with `unsupported_platform` elsewhere.
 
 ```sh
-screen-relay install [--backend x11|wayland|all|macos] [--desktop xfce|none|COMMAND]
+screen-relay install [--backend x11|wayland|all|macos|windows] [--desktop xfce|none|COMMAND]
          [--config FILE] [--yes]
 screen-relay up [-d] [--name NAME] [--config FILE] [--port PORT] [--desktop xfce|none|COMMAND]
-         [--display DISPLAY] [--backend x11|wayland|macos] [--output NAME|DISPLAY_ID]
+         [--display DISPLAY] [--backend x11|wayland|macos|windows] [--output NAME|DISPLAY_ID]
          [--public HTTPS_URL] [--tls-cert FILE --tls-key FILE]
          [--bind ADDRESS] [--timeout SECONDS] [--yes]
 screen-relay down [--name NAME]
@@ -22,23 +22,23 @@ screen-relay doctor [--config FILE]
 ```
 
 - `install` sets up the machine without starting a session. It installs the system packages for the backend and builds the engine. It is safe to repeat. When nothing is missing, it reports `unchanged`.
-  - `--backend`: `x11`, `wayland` or `all` on Linux, `macos` on macOS. The default is `x11` on Linux and `macos` on macOS. The value also comes from `SCREEN_RELAY_BACKEND` and the config `backend` key. Adding a backend keeps the ones already set up.
+  - `--backend`: `x11`, `wayland` or `all` on Linux, `macos` on macOS, `windows` on Windows (the only value there). The default is `x11` on Linux and `macos` on macOS. The value also comes from `SCREEN_RELAY_BACKEND` and the config `backend` key. Adding a backend keeps the ones already set up.
   - `--desktop`: the same values as `up --desktop`. With `xfce` on x11, the XFCE packages are installed. With `none` or a command, they are skipped.
   - `--config FILE`: read `backend` and `desktop` from this file.
   - `--yes`, `-y`: install packages without asking. Required when there is no terminal.
   - JSON outcome: `installed` or `unchanged`, with the backends and the engine path under `install`.
-- `up` starts a display (Xvfb on X11, or sway with XWayland on Wayland) or attaches to an existing one. On macOS it attaches to the logged-in user's display and starts no desktop. It then starts the desktop when enabled and the engine, waits until both are ready, and supervises the session. `--timeout` defaults to 30 seconds.
+- `up` starts a display (Xvfb on X11, or sway with XWayland on Wayland) or attaches to an existing one. On macOS it attaches to the logged-in user's display and starts no desktop. On Windows it attaches to the signed-in user's desktop and starts no virtual display or desktop. It then starts the desktop when enabled and the engine, waits until both are ready, and supervises the session. `--timeout` defaults to 30 seconds.
   - Without `-d`, it runs in the foreground. The first Ctrl+C stops the session (exit 130). Piped, it prints only the viewer URL.
-  - `--display DISPLAY`: attach to an X display (`:0`) or a Wayland socket (`wayland-1`). It keeps the caller's environment. A Wayland socket needs `XDG_RUNTIME_DIR`. macOS rejects it with `invalid_input`.
-  - `--backend x11|wayland|macos`: on Linux, defaults to `x11` when the engine has it, else `wayland`. A `--display` without a colon, such as `wayland-1`, selects `wayland` on its own. On macOS the only backend is `macos`. `x11` and `wayland` fail there with `invalid_input`, and `macos` fails on Linux the same way.
-  - `--output NAME|DISPLAY_ID`: capture this Wayland output by name, or a macOS display by its CGDirectDisplayID. `up` fails on x11.
+  - `--display DISPLAY`: attach to an X display (`:0`) or a Wayland socket (`wayland-1`). It keeps the caller's environment. A Wayland socket needs `XDG_RUNTIME_DIR`. macOS rejects it with `invalid_input`. Windows does not support it.
+  - `--backend x11|wayland|macos|windows`: on Linux, defaults to `x11` when the engine has it, else `wayland`. A `--display` without a colon, such as `wayland-1`, selects `wayland` on its own. On macOS the only backend is `macos`, and on Windows it is `windows`. `x11` and `wayland` fail there with `invalid_input`, and `macos` fails on Linux the same way.
+  - `--output NAME|DISPLAY_ID`: capture this Wayland output by name, a macOS display by its CGDirectDisplayID, or a Windows display such as `'\\.\DISPLAY2'`. `up` fails on x11.
   - `--yes`: when setup is needed, set it up without asking. Without a terminal, `up` never prompts and fails with `missing_input` unless `--yes` is given.
   - `--public HTTPS_URL`: advertises an HTTPS origin. Expects a TLS proxy unless `--tls-cert` is set.
   - Backend setup: [Wayland](wayland.md) and [macOS](macos.md).
-- `down` stops the session and everything it started. It is safe to repeat. JSON outcome: `stopped` or `unchanged`.
+- `down` stops the session and everything it started. On Windows, apps started with `run` keep running. It is safe to repeat. JSON outcome: `stopped` or `unchanged`.
 - `logs` prints the last 200 lines of one component (`display`, `dbus`, `desktop`, `engine`, `apps`), or of every component log. `-f` follows; it cannot be combined with `--json`.
-- `run` starts an app on the session desktop and returns its pid. The app shares the desktop's display, the available D-Bus session bus, runtime, config, cache and X authority settings, and it clears ambient capabilities. On Wayland it also sets `WAYLAND_DISPLAY`. On macOS it clears `DISPLAY`, `WAYLAND_DISPLAY` and `XAUTHORITY`. `--restart` restarts the app until the session stops. App output goes to `screen-relay logs apps`.
-- `doctor` checks the machine it runs on and prints a fix command for each problem. On macOS it checks `platform` (macOS 12.3 or later), `engine` and `permissions`. Off Linux and macOS, the platform check fails. The backend comes from `SCREEN_RELAY_BACKEND`, then the config file's `backend` key (from `--config FILE` or the default config), then the engine's default. Use `SCREEN_RELAY_BACKEND=wayland screen-relay doctor` for a Wayland setup.
+- `run` starts an app on the session desktop and returns its pid. The app shares the desktop's display, the available D-Bus session bus, runtime, config, cache and X authority settings, and it clears ambient capabilities. On Wayland it also sets `WAYLAND_DISPLAY`. On macOS it clears `DISPLAY`, `WAYLAND_DISPLAY` and `XAUTHORITY`. `--restart` restarts the app until the session stops. Windows does not support `--restart`. App output goes to `screen-relay logs apps`.
+- `doctor` checks the machine it runs on and prints a fix command for each problem. On macOS it checks `platform` (macOS 12.3 or later), `engine` and `permissions`. On Windows it checks the Windows version, MSYS2, the engine and whether it runs in a desktop session. Off Linux, macOS and Windows, the platform check fails. The backend comes from `SCREEN_RELAY_BACKEND`, then the config file's `backend` key (from `--config FILE` or the default config), then the engine's default. Use `SCREEN_RELAY_BACKEND=wayland screen-relay doctor` for a Wayland setup.
 
 ## Client commands
 
@@ -59,7 +59,7 @@ screen-relay input --stdin
 
 - `status` with no URL reads the local session and exits 0 for any existing session. With `--url` (or `SCREEN_RELAY_URL`), it queries a remote engine. A missing session is `not_running`, exit 1.
 - `status --json` puts the session under `session`. These fields name the display server:
-  - `backend`: `x11`, `wayland` or `macos`.
+  - `backend`: `x11`, `wayland`, `macos` or `windows`.
   - `waylandDisplay`: the Wayland socket, such as `wayland-1`. Wayland only.
   - `runtimeDir`: the runtime directory of the sway session. Wayland only, when screen-relay starts sway. `down` deletes it.
 - `screenshot` writes `screen.png` by default. `-` writes PNG bytes to stdout (not with `--json`).

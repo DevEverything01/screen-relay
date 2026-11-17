@@ -8,7 +8,7 @@ Desktop streaming and control for people and AI agents: watch a desktop in a bro
   <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/LICENSE-APACHE--2.0-97ca00.svg?style=for-the-badge&amp;labelColor=000000" height="28"></a>
 </p>
 
-screen-relay starts a desktop on a Linux VM, sandbox, or container, or attaches to the display of a Mac, and streams it to a browser as H.264. An agent controls the same desktop one command at a time: it takes a screenshot, clicks or types, and takes another screenshot to check the result. The `screen-relay` CLI, a Node SDK, and an HTTP and WebSocket API all reach the same session.
+screen-relay starts a desktop on a Linux VM, sandbox, or container, or attaches to the display of a Mac or the signed-in desktop of a Windows PC, and streams it to a browser as H.264. An agent controls the same desktop one command at a time: it takes a screenshot, clicks or types, and takes another screenshot to check the result. The `screen-relay` CLI, a Node SDK, and an HTTP and WebSocket API all reach the same session.
 
 ## Install
 
@@ -17,7 +17,7 @@ npm install -g screen-relay
 screen-relay install            # system packages and the engine build (first time only)
 ```
 
-- **Requirements:** Node 22 or newer. On Linux: Debian, Ubuntu, Fedora, Arch Linux, or Alpine. On macOS: Homebrew and the Xcode Command Line Tools.
+- **Requirements:** Node 22 or newer. On Linux: Debian, Ubuntu, Fedora, Arch Linux, or Alpine. On macOS: Homebrew and the Xcode Command Line Tools. On Windows: Windows 10 or later on x64, with a user signed in at the PC's screen.
 - **Scripts and agents:** `screen-relay install --yes` skips the confirmation. At a terminal, `install` asks before it installs packages.
 - **Wayland:** `screen-relay install --backend wayland`. The default backend on Linux is X11.
 - **Client only:** the npm install alone is enough to control a session on another machine.
@@ -45,7 +45,7 @@ The full walkthrough is in [Getting started](https://relay.labs.vercel.dev/docs/
 
 ## How it works
 
-`screen-relay up` starts a session: a virtual display, a desktop, and the engine. On Linux the display is X11 with XFCE or headless Wayland with sway. On a Mac the engine attaches to the display you are logged in to. The engine captures the screen, encodes it as H.264, and serves the viewer, the stream, and the input API on one port. It lowers the bitrate on a slow link. See [How streaming works](https://relay.labs.vercel.dev/docs/how-streaming-works).
+`screen-relay up` starts a session: a virtual display, a desktop, and the engine. On Linux the display is X11 with XFCE or headless Wayland with sway. On a Mac the engine attaches to the display you are logged in to. On Windows it attaches to the desktop of the signed-in user. The engine captures the screen, encodes it as H.264, and serves the viewer, the stream, and the input API on one port. It lowers the bitrate on a slow link. See [How streaming works](https://relay.labs.vercel.dev/docs/how-streaming-works).
 
 A session listens on loopback with no token by default. Starting it with `--public` or on another address creates a token that every remote request must send. Only one controller sends input at a time: a browser viewer, an SDK control session, or the CLI. Screenshots still work while another controller holds input.
 
@@ -83,7 +83,7 @@ Flags, environment variables, and `config.yaml` are documented in [Configuration
 
 ## Platforms
 
-The engine runs on Linux (x64 and ARM64, X11 and Wayland) and on macOS 12.3 or later (Apple silicon and Intel). `screen-relay install` builds it on your machine. On Windows, the npm package provides the client commands, and the engine is built by hand. See [Linux](https://relay.labs.vercel.dev/docs/linux), [macOS](https://relay.labs.vercel.dev/docs/macos), and [Windows](https://relay.labs.vercel.dev/docs/windows).
+The engine runs on Linux (x64 and ARM64, X11 and Wayland), on macOS 12.3 or later (Apple silicon and Intel), and on Windows 10 or later (x64). `screen-relay install` builds it on your machine. See [Linux](https://relay.labs.vercel.dev/docs/linux), [macOS](https://relay.labs.vercel.dev/docs/macos), and [Windows](https://relay.labs.vercel.dev/docs/windows).
 
 ## Development
 
