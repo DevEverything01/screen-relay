@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { confirm, isCancel, select } from '@clack/prompts';
@@ -9,6 +9,7 @@ import { count, duration, emit, Failure, nextStep, printWarning, quote, receipt,
 import { theme } from '../theme.js';
 import { engineDirectory, isLinux, LAUNCHER_DIR, requireHost, run, which, type HostArgs } from './common.js';
 import { detectFamily, groupPackages, installCommand, packagesFor, provides } from './packages.js';
+import { claimLock, lockOwnerAlive } from './state.js';
 import { compiledBackends, findEngine, requestedBackend, sessionNeeds } from './supervisor.js';
 
 type Backend = (typeof BACKENDS)[number];
@@ -138,22 +139,14 @@ async function buildEngine(backends: Backend[], args: Args): Promise<void> {
   }
 }
 
-/** Runs work while this process holds the machine's setup lock, waiting first for another setup to finish. */
+/** Runs work while this process holds the machine's setup lock, waiting first for another setup to finish and taking over a lock whose owner is gone. */
 async function withSetupLock<T>(args: Args, work: () => Promise<T>): Promise<T> {
   const directory = dirname(dirname(engineDirectory()));
   mkdirSync(directory, { recursive: true });
   const file = join(directory, 'setup.lock');
   let announced = false;
-  for (;;) {
-    try {
-      writeFileSync(file, String(process.pid), { flag: 'wx' });
-      break;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-    }
-    let running = true;
-    try { process.kill(Number(readFileSync(file, 'utf8')), 0); } catch (error) { running = (error as NodeJS.ErrnoException).code === 'EPERM'; }
-    if (!running) {
+  while (!claimLock(file)) {
+    if (!lockOwnerAlive(file)) {
       rmSync(file, { force: true });
       continue;
     }

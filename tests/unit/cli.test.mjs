@@ -200,7 +200,7 @@ test('setup installs the XFCE packages only when the requested X11 session uses 
   }
 });
 
-test('install reports a failed build as one JSON error, builds once when two run together, and leaves other files alone', { skip: process.platform !== 'linux' && process.platform !== 'darwin' }, async () => {
+test('install reports a failed build as one JSON error, takes over a setup lock nobody holds, builds once when two run together, and leaves other files alone', { skip: process.platform !== 'linux' && process.platform !== 'darwin', timeout: 120000 }, async () => {
   const tools = join(directory, 'fake-tools');
   mkdirSync(tools, { recursive: true });
   writeFileSync(join(tools, 'make'), `#!/bin/sh
@@ -233,12 +233,15 @@ chmod +x "$dir/relay-engine"
     child.on('close', (status) => resolve({ status, stdout, stderr }));
   });
 
-  const failed = await install({ FAKE_MAKE_FAIL: '1' });
-  assert.equal(failed.status, 1, failed.stderr);
-  assert.equal(failed.stdout, '');
-  const failure = JSON.parse(failed.stderr);
-  assert.equal(failure.reason, 'missing_dependency');
-  assert.match(failure.data.log, /fake compiler error/);
+  for (const abandoned of ['', JSON.stringify({ pid: process.pid, start: 'an earlier process' })]) {
+    writeFileSync(join(data, 'screen-relay', 'setup.lock'), abandoned);
+    const failed = await install({ FAKE_MAKE_FAIL: '1' });
+    assert.equal(failed.status, 1, failed.stderr);
+    assert.equal(failed.stdout, '');
+    const failure = JSON.parse(failed.stderr);
+    assert.equal(failure.reason, 'missing_dependency');
+    assert.match(failure.data.log, /fake compiler error/);
+  }
 
   const both = await Promise.all([install({ FAKE_MAKE_SLEEP: '1' }), install({ FAKE_MAKE_SLEEP: '1' })]);
   for (const result of both) assert.deepEqual([result.status, result.stderr], [0, '']);

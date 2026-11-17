@@ -1,4 +1,4 @@
-import { closeSync, fstatSync, openSync, readFileSync, readdirSync, readSync, renameSync, writeFileSync } from 'node:fs';
+import { closeSync, fstatSync, linkSync, openSync, readFileSync, readdirSync, readSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { execFileSync, spawn } from 'node:child_process';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -79,6 +79,30 @@ export function alive(record: unknown): boolean {
 
 export function identity(pid: number): ProcessIdentity {
   return { pid, start: startTime(pid) };
+}
+
+/** Creates a lock file that names this process as its owner, whole or not at all. Returns false when the file already exists. */
+export function claimLock(file: string): boolean {
+  const claim = `${file}.${process.pid}`;
+  writeFileSync(claim, JSON.stringify(identity(process.pid)));
+  try {
+    linkSync(claim, file);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+    return false;
+  } finally {
+    rmSync(claim, { force: true });
+  }
+}
+
+/** Whether the process that claimed a lock file is still running. A missing, empty, or unreadable file has no owner. */
+export function lockOwnerAlive(file: string): boolean {
+  try {
+    return alive(JSON.parse(readFileSync(file, 'utf8')));
+  } catch {
+    return false;
+  }
 }
 
 /** Signals every Linux process carrying this session's SCREEN_RELAY_SESSION marker; on macOS the app watcher stops each app it holds. */
