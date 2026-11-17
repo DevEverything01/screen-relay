@@ -111,8 +111,8 @@ Pass these options to `createClient`, the standalone functions, or `connect`. Co
 | `url` | Origin only; default `http://127.0.0.1:8080`. HTTP only for `localhost` and `127.0.0.1`; HTTPS elsewhere. No credentials, path, query, or fragment. |
 | `token` | 64 lowercase hexadecimal characters. Required for remote hosts. See [Tokens](/docs/remote-access#tokens). |
 | `timeout` | Integer from 1 to 2147483647 milliseconds; default 10000. Per HTTP request, control connection, and input acknowledgement. |
-| `ca` | Certificate file for HTTPS. Verifies the certificate but skips the hostname check. |
-| `connect` | Address to dial instead of the URL host; the URL host remains the `Host` header. |
+| `ca` | PEM file of certificates to trust for HTTPS, instead of the system's. The server's certificate must match the URL host name, unless it is one of the certificates in the file. |
+| `connect` | Address to dial instead of the URL host. The URL host remains the `Host` header and the name the certificate must match. |
 | `signal` | `AbortSignal` that cancels requests or the control session. |
 
 - Redirects are not followed.

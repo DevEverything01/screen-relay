@@ -1,7 +1,10 @@
+import { X509Certificate } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { request as httpRequest } from 'node:http';
 import { request as httpsRequest, type RequestOptions } from 'node:https';
+import { isIP } from 'node:net';
+import { checkServerIdentity } from 'node:tls';
 import {
   RelayError, networkError, responseError, baseUrl, integer, encodeInput, encodeInputBatch, comboEvents, textEvents,
   batches, parseMessage, socketTarget, MAX_INPUT_BATCH, MAX_INPUT_PENDING,
@@ -64,14 +67,28 @@ function decode<Result>(data: Buffer, binary: boolean): Result {
   catch { throw new RelayError('protocol_error', 'Invalid JSON response'); }
 }
 
+/** The DER form of each certificate in a PEM file. */
+function listedCertificates(pem: Buffer): Buffer[] {
+  return (pem.toString().match(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/g) ?? []).map((block) => new X509Certificate(block).raw);
+}
+
+/** Checks that an HTTPS server is the one the URL names, whatever address was dialed. A server that presents one of the listed certificates is accepted as that certificate under any name. */
+function serverIdentity(hostname: string, listed: Buffer[]): NonNullable<RequestOptions['checkServerIdentity']> {
+  return (_dialed, certificate) => listed.some((raw) => raw.equals(certificate.raw)) ? undefined : checkServerIdentity(hostname, certificate);
+}
+
 function nodeRequest<Result>(server: Server, path: string, binary: boolean, body?: Uint8Array): Promise<Result> {
   const base = server.base;
   let ca: Buffer | undefined;
+  let listed: Buffer[] = [];
   if (server.ca) {
-    try { ca = readFileSync(server.ca); }
-    catch (error) { return Promise.reject(new RelayError('io_error', `Cannot read certificate ${server.ca}: ${error instanceof Error ? error.message : String(error)}`)); }
+    try {
+      ca = readFileSync(server.ca);
+      listed = listedCertificates(ca);
+    } catch (error) { return Promise.reject(new RelayError('io_error', `Cannot read certificate ${server.ca}: ${error instanceof Error ? error.message : String(error)}`)); }
   }
-  const hostname = server.connect ?? base.hostname.replace(/^\[|\]$/g, '');
+  const named = base.hostname.replace(/^\[|\]$/g, '');
+  const hostname = server.connect ?? named;
   const requestHeaders = headers(server, body);
   if (body !== undefined) requestHeaders['Content-Length'] = String(body.length);
   if (server.connect) requestHeaders.Host = base.host;
@@ -85,9 +102,10 @@ function nodeRequest<Result>(server: Server, path: string, binary: boolean, body
     timeout: server.timeout,
     signal: server.signal,
   };
-  if (ca) {
-    options.ca = ca;
-    options.checkServerIdentity = () => undefined;
+  if (ca) options.ca = ca;
+  if (base.protocol === 'https:') {
+    if (!isIP(named)) options.servername = named;
+    options.checkServerIdentity = serverIdentity(named, listed);
   }
   return new Promise((resolve, reject) => {
     const transport = base.protocol === 'https:' ? httpsRequest : httpRequest;
