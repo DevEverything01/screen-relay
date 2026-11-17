@@ -9,6 +9,8 @@ import { RelayError } from '../protocol/index.js';
 
 interface TransportTarget {
   url: URL;
+  timeout: number;
+  signal?: AbortSignal;
   ca?: string;
   certificate?: string;
   connect?: string;
@@ -83,7 +85,7 @@ function verifyPin(pin: PinnedCertificate, peer: PeerCertificate): Error | undef
 class PinnedAgent extends HttpsAgent {
   readonly pin: PinnedCertificate;
 
-  constructor(pin: PinnedCertificate, options: AgentOptions) {
+  constructor(pin: PinnedCertificate, options: AgentOptions, readonly timeout: number, readonly signal?: AbortSignal) {
     super(options);
     this.pin = pin;
   }
@@ -94,19 +96,28 @@ class PinnedAgent extends HttpsAgent {
   ): Duplex | null | undefined {
     const socket = super.createConnection({ ...options, rejectUnauthorized: false }) as TLSSocket | null | undefined;
     if (!socket || !callback) return socket;
-    const finish = callback as (error: Error | null, stream?: Duplex) => void;
-    const fail = (error: Error) => finish(error);
-    socket.once('error', fail);
-    socket.once('secureConnect', () => {
+    let state: 'handshaking' | 'verified' | 'failed' = 'handshaking';
+    const finish = (error: Error | null) => {
+      if (state !== 'handshaking') return;
+      state = error ? 'failed' : 'verified';
+      clearTimeout(timer);
       socket.removeListener('error', fail);
-      const error = verifyPin(this.pin, socket.getPeerCertificate());
-      if (error) {
-        socket.destroy();
-        finish(error);
-        return;
-      }
-      finish(null, socket);
-    });
+      socket.removeListener('close', close);
+      socket.removeListener('secureConnect', verify);
+      this.signal?.removeEventListener('abort', abort);
+      if (error) socket.destroy();
+      callback(error, socket);
+    };
+    const fail = (error: Error) => finish(error);
+    const close = () => finish(new RelayError('unreachable', 'The connection was closed.'));
+    const abort = () => finish(new RelayError('canceled', 'Request canceled.'));
+    const verify = () => finish(verifyPin(this.pin, socket.getPeerCertificate()) ?? null);
+    const timer = setTimeout(() => finish(new RelayError('timeout', 'The request timed out.')), this.timeout);
+    socket.once('error', fail);
+    socket.once('close', close);
+    socket.once('secureConnect', verify);
+    this.signal?.addEventListener('abort', abort, { once: true });
+    if (this.signal?.aborted) abort();
     return undefined;
   }
 }
@@ -117,10 +128,10 @@ function route(target: TransportTarget): Route {
   return { dial: target.connect ?? identity, identity, ...(isIP(identity) ? {} : { servername: identity }) };
 }
 
-function httpsAgent(where: Route, trust: Trust): HttpsAgent {
+function httpsAgent(where: Route, trust: Trust, timeout: number, signal?: AbortSignal): HttpsAgent {
   const servername = where.servername ? { servername: where.servername } : {};
   if (trust.kind === 'certificate') {
-    return new PinnedAgent(trust.certificate, { keepAlive: true, rejectUnauthorized: false, ...servername });
+    return new PinnedAgent(trust.certificate, { keepAlive: true, rejectUnauthorized: false, ...servername }, timeout, signal);
   }
   const verify = (_dialed: string, certificate: PeerCertificate) => checkServerIdentity(where.identity, certificate);
   return new HttpsAgent({
@@ -136,5 +147,5 @@ export function plan(target: TransportTarget): Plan {
   if (!target.ca && !target.certificate && !target.connect) return { kind: 'fetch' };
   const where = route(target);
   if (target.url.protocol !== 'https:') return { kind: 'node', dial: where.dial, agent: new HttpAgent({ keepAlive: true }) };
-  return { kind: 'node', dial: where.dial, agent: httpsAgent(where, trust(target)) };
+  return { kind: 'node', dial: where.dial, agent: httpsAgent(where, trust(target), target.timeout, target.signal) };
 }

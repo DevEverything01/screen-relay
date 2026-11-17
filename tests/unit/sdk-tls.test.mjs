@@ -4,6 +4,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { once } from 'node:events';
 import { createServer, globalAgent } from 'node:https';
+import { createServer as tcpServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { capabilities, createClient } from '../../dist/sdk/index.js';
@@ -65,6 +66,44 @@ test('TLS trust modes', { skip }, async (t) => {
       const before = servers.get('other.example').requests;
       await assert.rejects(createClient({ url: `https://127.0.0.1:${ports['other.example']}`, certificate: file('localhost.pem'), token }).status(), rejected);
       assert.equal(servers.get('other.example').requests, before);
+    });
+
+    for (const [ending, code] of [['timeout', 'TIMEOUT'], ['abort', 'CANCELED'], ['close', 'NETWORK_ERROR']]) await t.test(`pinned TLS handshakes settle and close on ${ending}`, async () => {
+      const sockets = new Set();
+      const closed = [];
+      let connected;
+      const accepted = new Promise((resolve) => { connected = resolve; });
+      const server = tcpServer((socket) => {
+        sockets.add(socket);
+        closed.push(once(socket, 'close'));
+        if (closed.length === 2) connected();
+        socket.on('close', () => sockets.delete(socket));
+        socket.resume();
+        if (ending === 'close') socket.destroy();
+      });
+      server.listen(0, '127.0.0.1');
+      await once(server, 'listening');
+      const controller = new AbortController();
+      const client = createClient({ url: `https://127.0.0.1:${server.address().port}`, certificate: file('self.pem'), timeout: ending === 'timeout' ? 50 : 10_000, signal: controller.signal });
+      let watchdog;
+      const deadline = new Promise((_, reject) => {
+        watchdog = setTimeout(() => reject(new Error('Pinned TLS handshake exceeded the request deadline')), 500);
+      });
+      try {
+        const result = Promise.all([client.status(), client.capabilities()].map((operation) => assert.rejects(operation, { code })));
+        if (ending === 'abort') {
+          await Promise.race([accepted, deadline]);
+          controller.abort();
+        }
+        await Promise.race([result, deadline]);
+        assert.equal(closed.length, 2);
+        await Promise.race([Promise.all(closed), deadline]);
+        assert.equal(sockets.size, 0);
+      } finally {
+        clearTimeout(watchdog);
+        for (const socket of sockets) socket.destroy();
+        await new Promise((resolve) => server.close(resolve));
+      }
     });
 
     await t.test('custom TLS requests do not use the shared HTTPS agent', async () => {

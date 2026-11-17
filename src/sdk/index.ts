@@ -57,7 +57,7 @@ function target({ url = 'http://127.0.0.1:8080', timeout = 10000, token, ca, cer
 type Server = ReturnType<typeof target>;
 
 function transportPlan(server: Server): Plan {
-  server.transport ??= plan({ url: server.base, ca: server.ca, certificate: server.certificate, connect: server.connect });
+  server.transport ??= plan({ url: server.base, ca: server.ca, certificate: server.certificate, connect: server.connect, timeout: server.timeout, signal: server.signal });
   return server.transport;
 }
 
