@@ -10,6 +10,7 @@ import { applyTo, loadConfig } from '../config.js';
 import { emit, Failure, formatReady, formatStarted, formatStatus, formatStopped, nextStep, printNext, printWarning, sessionCommand } from '../output.js';
 import { COMPONENTS, HostArgs, requireHost, spawnCleared, which } from './common.js';
 import { alive, lock, readSession, reap, stateDir, tail, writeSession } from './state.js';
+import { ensureSetup } from './setup.js';
 import { connectHost, desktopEnv, Session } from './supervisor.js';
 import { startWatcher } from './watcher.js';
 
@@ -27,7 +28,7 @@ async function reapSession(directory: string, session: Record<string, any> | nul
 export async function cmdUp(args: Args): Promise<number> {
   requireHost();
   if (process.platform === 'darwin' && args.display !== undefined) {
-    throw new Failure('invalid_input', '--display is not supported on macOS', 'Remove --display; relay attaches to the current display on macOS.');
+    throw new Failure('invalid_input', '--display is not supported on macOS', 'Remove --display; screen-relay attaches to the current display on macOS.');
   }
   const [settings, , present] = loadConfig(typeof args.config === 'string' && args.config ? args.config : undefined);
   const warnings = (args.display || process.platform === 'darwin') && present.has('display.resolution')
@@ -38,17 +39,18 @@ export async function cmdUp(args: Args): Promise<number> {
   applyTo(args, settings, present);
   const port = Number(args.port ?? 8080);
   const timeout = Number(args.timeout ?? 30);
-  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Failure('invalid_input', 'Port must be between 1 and 65535', 'Run `relay up --help`.');
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Failure('invalid_input', 'Port must be between 1 and 65535', 'Run `screen-relay up --help`.');
   if (args.public && !/^https:\/\/[^/?#@\\\s]+$/.test(String(args.public))) {
     throw new Failure('invalid_input', '--public must be an HTTPS origin like https://desk.example.com', 'No path, query or credentials.');
   }
-  if (Boolean(args['tls-cert']) !== Boolean(args['tls-key'])) throw new Failure('invalid_input', '--tls-cert and --tls-key go together', 'Run `relay up --help`.');
+  if (Boolean(args['tls-cert']) !== Boolean(args['tls-key'])) throw new Failure('invalid_input', '--tls-cert and --tls-key go together', 'Run `screen-relay up --help`.');
   const directory = stateDir(args.name);
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   chmodSync(directory, 0o700);
-  const readyFd = Number(process.env.RELAY_READY_FD ?? -1);
-  delete process.env.RELAY_READY_FD;
-  if (args.detach && readyFd < 0) return detach(args, directory, timeout, warnings);
+  const readyFd = Number(process.env.SCREEN_RELAY_READY_FD ?? -1);
+  delete process.env.SCREEN_RELAY_READY_FD;
+  const chosen = readyFd < 0 ? await ensureSetup(args) : [];
+  if (args.detach && readyFd < 0) return detach(args, directory, timeout, warnings, chosen);
   let pipeFd = readyFd;
   const report = (data: unknown): boolean => {
     if (pipeFd < 0) return false;
@@ -87,7 +89,7 @@ export async function cmdUp(args: Args): Promise<number> {
     await session.supervise(() => Boolean(signal?.aborted));
   } catch (error) {
     if (signal?.aborted) return 130;
-    const failure = error instanceof Failure ? error : new Failure('internal', `${error instanceof Error ? error.name : 'Error'}: ${String(error)}`, 'Run `relay doctor`.', { logs: directory });
+    const failure = error instanceof Failure ? error : new Failure('internal', `${error instanceof Error ? error.name : 'Error'}: ${String(error)}`, 'Run `screen-relay doctor`.', { logs: directory });
     final = { state: 'failed', error: failure.payload() };
     report({ error: failure.payload() });
     throw failure;
@@ -102,13 +104,13 @@ export async function cmdUp(args: Args): Promise<number> {
   return signal?.aborted ? 130 : 0;
 }
 
-async function detach(args: Args, directory: string, timeout: number, warnings: Array<{ reason: string; message: string }>): Promise<number> {
+async function detach(args: Args, directory: string, timeout: number, warnings: Array<{ reason: string; message: string }>, chosen: string[]): Promise<number> {
   const probe = await lock(args.name, directory);
   await probe.close();
   const logPath = join(directory, 'supervisor.log');
   const log = openSync(logPath, 'w', 0o600);
-  const child = spawn(process.execPath, [process.argv[1] ?? '', ...process.argv.slice(2)], {
-    cwd: process.cwd(), env: { ...process.env, RELAY_READY_FD: '3' }, detached: true,
+  const child = spawn(process.execPath, [process.argv[1] ?? '', ...process.argv.slice(2), ...chosen], {
+    cwd: process.cwd(), env: { ...process.env, SCREEN_RELAY_READY_FD: '3' }, detached: true,
     stdio: ['ignore', log, log, 'pipe'],
   });
   const signal = args.signal as AbortSignal | undefined;
@@ -182,9 +184,9 @@ export async function cmdDown(args: Args): Promise<number> {
 }
 
 export async function cmdStatus(args: Args): Promise<number> {
-  if (args.url || process.env.RELAY_URL) return cmdRemoteStatus(args);
+  if (args.url || process.env.SCREEN_RELAY_URL) return cmdRemoteStatus(args);
   const session = readSession(args.name);
-  if (!session) throw new Failure('not_running', `No session named "${args.name}"`, 'Start one with `relay up -d`.');
+  if (!session) throw new Failure('not_running', `No session named "${args.name}"`, 'Start one with `screen-relay up -d`.');
   const running = alive(session.supervisor);
   if (['starting', 'ready'].includes(session.state) && !running) session.state = 'failed';
   delete session.components;
@@ -213,9 +215,9 @@ export async function cmdLogs(args: Args): Promise<number> {
   const directory = stateDir(args.name);
   const components = args.component ? [String(args.component)] : COMPONENTS;
   const files = components.map((component) => join(directory, `${component}.log`)).filter(existsSync);
-  if (!files.length) throw new Failure('not_running', `No logs for "${args.name}"`, 'Start a session with `relay up`.');
+  if (!files.length) throw new Failure('not_running', `No logs for "${args.name}"`, 'Start a session with `screen-relay up`.');
   if (args.json) {
-    if (args.follow) throw new Failure('invalid_input', '--follow cannot be combined with --json', 'Run `relay logs --help`.');
+    if (args.follow) throw new Failure('invalid_input', '--follow cannot be combined with --json', 'Run `screen-relay logs --help`.');
     emit(args, { logs: Object.fromEntries(files.map((file) => [file.slice(file.lastIndexOf('/') + 1, -4), tail(file, 200)])) }, '');
     return 0;
   }
@@ -230,13 +232,13 @@ export async function cmdRun(args: Args): Promise<number> {
   requireHost();
   const rest = args.args === undefined ? [] : Array.isArray(args.args) ? args.args : [args.args];
   const command = [args.app, ...rest].filter((value) => value !== undefined).map(String);
-  if (!command.length) throw new Failure('missing_command', 'Name the app to start', 'Run `relay run --help`.');
+  if (!command.length) throw new Failure('missing_command', 'Name the app to start', 'Run `screen-relay run --help`.');
   if (!which(command[0])) throw new Failure('spawn_failed', `${command[0]} was not found`, 'Install it or check the name, then run the command again.');
   const session = readSession(args.name);
-  if (!session || session.state !== 'ready' || !alive(session.supervisor)) throw new Failure('not_found', `No running session named "${args.name}"`, 'Start one with `relay up -d`.');
+  if (!session || session.state !== 'ready' || !alive(session.supervisor)) throw new Failure('not_found', `No running session named "${args.name}"`, 'Start one with `screen-relay up -d`.');
   const directory = stateDir(args.name);
   const env = session.ownsDisplay === false
-    ? { ...process.env, ...(session.backend === 'macos' ? session.environment ?? {} : {}), RELAY_SESSION: directory }
+    ? { ...process.env, ...(session.backend === 'macos' ? session.environment ?? {} : {}), SCREEN_RELAY_SESSION: directory }
     : { ...desktopEnv(directory), ...(session.environment ?? {}) };
   if (session.backend === 'macos') {
     delete env.DISPLAY;
@@ -256,7 +258,7 @@ export async function cmdRun(args: Args): Promise<number> {
     args.signal?.throwIfAborted();
     if (args.restart || session.backend === 'macos') {
       const started = await startWatcher(command, env, log, args.signal, Boolean(args.restart));
-      if (started.exited) throw new Failure('component_failed', `${command[0]} exited with code ${started.exited}`, 'Read `relay logs apps`.', { component: 'apps', log: tail(path) });
+      if (started.exited) throw new Failure('component_failed', `${command[0]} exited with code ${started.exited}`, 'Read `screen-relay logs apps`.', { component: 'apps', log: tail(path) });
       pid = started.pid;
     } else {
       const child = spawnCleared(command, { cwd: homedir(), env, stdio: ['ignore', log, log], detached: true, signal: args.signal });
@@ -266,12 +268,12 @@ export async function cmdRun(args: Args): Promise<number> {
         new Promise<number | null>((resolve) => child.once('exit', (code) => resolve(code ?? 1))),
         delay(1000).then(() => null),
       ]);
-      if (earlyExit) throw new Failure('component_failed', `${command[0]} exited with code ${earlyExit}`, 'Read `relay logs apps`.', { component: 'apps', log: tail(path) });
+      if (earlyExit) throw new Failure('component_failed', `${command[0]} exited with code ${earlyExit}`, 'Read `screen-relay logs apps`.', { component: 'apps', log: tail(path) });
       child.unref();
     }
   } catch (error) {
     if (error instanceof Failure) throw error;
-    throw new Failure('spawn_failed', `Cannot start ${command[0]}: ${error instanceof Error ? error.message : String(error)}`, 'Read `relay logs apps`.');
+    throw new Failure('spawn_failed', `Cannot start ${command[0]}: ${error instanceof Error ? error.message : String(error)}`, 'Read `screen-relay logs apps`.');
   } finally {
     closeSync(log);
   }

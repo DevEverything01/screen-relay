@@ -57,7 +57,7 @@ async function session(name) {
     }
     closeSync(log);
   };
-  return { path, env: { ...process.env, RELAY_SESSION: path }, log, stop };
+  return { path, env: { ...process.env, SCREEN_RELAY_SESSION: path }, log, stop };
 }
 
 test('an app stops when its session supervisor exits', async () => {
@@ -89,9 +89,9 @@ test('an app that ignores SIGTERM is killed with its process group', async () =>
   }
 });
 
-test('relay run hands the app to a holder that stops it with the session', async () => {
+test('screen-relay run hands the app to a holder that stops it with the session', async () => {
   const stateHome = join(directory, 'state');
-  const path = join(stateHome, 'relay', 'desk');
+  const path = join(stateHome, 'screen-relay', 'desk');
   mkdirSync(path, { recursive: true });
   const supervisor = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
   const pidFile = join(directory, 'app.pid');
@@ -111,7 +111,7 @@ test('relay run hands the app to a holder that stops it with the session', async
     await assert.rejects(cmdRun({ command: 'run', json: true, name: 'desk', app: process.execPath, args: ['-e', 'process.exit(3)'] }), { reason: 'component_failed', message: /exited with code 3/ });
     supervisor.kill('SIGKILL');
     await new Promise((resolve) => supervisor.once('exit', resolve));
-    assert.equal(await waitFor(() => !alive(pid)), true, 'relay run app outlived its session');
+    assert.equal(await waitFor(() => !alive(pid)), true, 'screen-relay run app outlived its session');
   } finally {
     if (previous === undefined) delete process.env.XDG_STATE_HOME;
     else process.env.XDG_STATE_HOME = previous;

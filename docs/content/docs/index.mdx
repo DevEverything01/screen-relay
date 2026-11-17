@@ -1,65 +1,60 @@
 ---
 title: Overview
-description: Relay streams a Linux or macOS desktop to a browser and lets people and agents control it from a CLI, a Node SDK, or an HTTP API.
+description: screen-relay streams a Linux, macOS, or Windows desktop to a browser and lets people and agents control it from a CLI, a Node SDK, or an HTTP API.
 ---
 
-Relay streams a Linux or macOS desktop to your browser. Open the link it prints to see the screen and use it with your mouse and keyboard. An agent can also control the same desktop from the `relay` command line, a Node SDK, or an HTTP and WebSocket API, taking screenshots and sending clicks, keys, and text. Relay runs the desktop on a Linux VM, container, or sandbox, or attaches to a Mac's display.
+screen-relay streams a Linux, macOS, or Windows desktop to your browser. Open the viewer link to see the screen and use it with your mouse and keyboard. An agent can control the same desktop from the `screen-relay` CLI, the Node SDK, or the HTTP and WebSocket API, taking screenshots and sending clicks, keys, and text.
 
 ## Quickstart
 
-On a Linux VM with Git and root or passwordless `sudo`, from a clone of the repository:
-
 ```sh
-./install.sh
-export PATH="$HOME/.local/bin:$PATH"
-relay up
+npm install -g screen-relay
+screen-relay up
 ```
 
-`relay up` starts the display, the desktop, and the engine, then prints a viewer link. Open it in a browser with H.264 WebCodecs, such as current Chrome, Edge, or Safari. Without `-d`, `up` stays in the foreground and Ctrl+C stops the session.
+[Getting started](/docs/getting-started) explains each step.
 
 ## How it works
 
-<Diagram name="architecture" title="How relay connects the desktop, browser, and agent" aspectRatio="720 / 288" />
+<Diagram name="architecture" title="How screen-relay connects the desktop, browser, and agent" aspectRatio="720 / 288" />
 
 The same flow in text:
 
 ```text
-Linux VM: Desktop (X11 or Wayland) -> relay engine (screen)
-relay engine -> Browser (video)
-Browser -> relay engine (clicks and keys)
-Your agent (CLI, SDK, or HTTP) <-> relay engine (screenshots and input)
+Linux VM: Desktop (X11 or Wayland) -> screen-relay engine (screen)
+screen-relay engine -> Browser (video)
+Browser -> screen-relay engine (clicks and keys)
+Your agent (CLI, SDK, or HTTP) <-> screen-relay engine (screenshots and input)
 ```
 
-The VM runs a display and a desktop. The engine on the VM captures the screen, encodes it as H.264 video, and streams it to the viewer in the browser. The viewer, or an agent over HTTP or WebSocket, sends input back, and the engine applies it as keyboard and mouse input. Only one client can send input at a time. The stream lowers its bitrate on a slow link; see [How streaming works](/docs/how-streaming-works).
+The engine captures the screen, encodes it as H.264 video, and streams it to the viewer. The viewer, or an agent over HTTP or WebSocket, sends input back. To see how the stream adapts to a slow link, read [How streaming works](/docs/how-streaming-works).
+
+## What works where
+
+| Platform | Backend | Start a desktop | Details |
+| --- | --- | --- | --- |
+| Linux | `x11` (default) or `wayland` | `screen-relay up -d` | [Linux](/docs/linux) |
+| macOS 12.3 or later | `macos` | `screen-relay up -d` | [macOS](/docs/macos) |
+| Windows | Built by hand | Start `relay-engine.exe` in the signed-in session | [Windows](/docs/windows) |
 
 ## Limits
 
-| Area | Limit |
-| --- | --- |
-| Display server | X11 or Wayland on Linux, the logged-in user's display on macOS, or the signed-in desktop on Windows. On Linux, `relay up` uses X11 when the engine includes it, otherwise Wayland. See [Wayland](/docs/wayland) for compositor requirements, [macOS](/docs/macos) for permissions, and [Windows](/docs/windows) for the Windows engine. |
-| Resolution | Up to 16384x16384, set in [Configuration](/docs/configuration). A change applies when the session starts. |
-| Control | One input owner at a time: a viewer or one agent. Screenshots work at any time. |
-| Not supported | Audio, clipboard, IME, relative pointer, and hardware encoding. |
-| Auth | One shared token per session; a session on loopback has none. No separate user identities. |
-| Install | The engine installs on Linux and macOS 13.5 or later. On Windows, build and start it by hand; see [Windows](/docs/windows). On Linux, automatic dependencies cover Debian, Ubuntu, Fedora, Arch Linux, and Alpine. On macOS, dependencies come from Homebrew. See [macOS](/docs/macos) for requirements. `--client-only` installs the CLI on any OS with Node 26 or newer. |
-| Failure | Three capture failures in a row end the session. `relay logs` shows why. |
+- Audio, clipboard, IME, relative pointer, and hardware encoding are not supported.
+- Three capture failures in a row end the session. `screen-relay logs` shows why.
+
+Control, desktop size, and access rules are covered in [CLI reference](/docs/cli), [Configuration](/docs/configuration), and [Remote access](/docs/remote-access).
 
 ## Status
 
 <Callout title="Experimental">
-  CI installs and checks relay on Debian 13, Ubuntu 24.04 and 26.04, Fedora 44,
-  Arch Linux, and Alpine 3.24. Relay also ran end to end in a Vercel Sandbox on
+  CI installs and checks screen-relay on Debian 13, Ubuntu 24.04 and 26.04, Fedora 44,
+  Arch Linux, and Alpine 3.24. screen-relay also ran end to end in a Vercel Sandbox on
   Ubuntu 26.04 (x86_64) and in Docker on Debian 13 (arm64). It has not been
   tested over wide-area links or in long runs.
 </Callout>
 
 ## Next steps
 
-- [Getting started](/docs/getting-started): install relay and open the viewer.
-- [X11](/docs/x11): start an X11 desktop or attach to a display.
-- [Wayland](/docs/wayland): attach to a compositor or capture one output.
-- [macOS](/docs/macos): stream a Mac's display.
-- [Windows](/docs/windows): build the engine and stream a Windows desktop.
 - [CLI reference](/docs/cli): every command, option, output, and error.
 - [SDK](/docs/sdk): control a session from Node.
 - [HTTP API](/docs/protocol): endpoints, input events, and the wire format.

@@ -6,7 +6,7 @@ const run = promisify(execFile);
 
 /** Runs one automation command inside the sandbox that hosts the desktop. */
 export async function runInSandbox(binary: string, args: string[]) {
-  if (!SANDBOX) throw new Error("Set RELAY_SANDBOX to the sandbox name that runs relay");
+  if (!SANDBOX) throw new Error("Set SCREEN_RELAY_SANDBOX to the sandbox name that runs screen-relay");
   const scope = SANDBOX_SCOPE ? ["--scope", SANDBOX_SCOPE] : [];
   try {
     const { stdout, stderr } = await run(

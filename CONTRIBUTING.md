@@ -1,8 +1,8 @@
-# Contributing to relay
+# Contributing to screen-relay
 
-This file is for people changing relay's source. For installing and using relay, read the [documentation](https://relay.labs.vercel.dev/docs). The wire format is documented there too, under "API and protocol".
+This file is for people changing screen-relay's source. For installing and using screen-relay, read the [documentation](https://relay.labs.vercel.dev/docs). The wire format is documented there too, under "API and protocol".
 
-For the wire format, see [Relay wire protocol](PROTOCOL.md).
+For the wire format, see [screen-relay wire protocol](PROTOCOL.md).
 
 ## Source layout
 
@@ -14,9 +14,9 @@ For the wire format, see [Relay wire protocol](PROTOCOL.md).
 | `src/engine/backends/linux/wayland/` | Wayland capture (wlr-screencopy), virtual keyboard and pointer input, Unicode keymap |
 | `src/engine/backends/windows/` | Windows capture (Desktop Duplication, shared per display, mipmap downscaling) and SendInput input primitives |
 | `src/engine/backends/macos/` | macOS capture (ScreenCaptureKit, shared per display), CGEvent input primitives, and display and permission checks |
-| `src/protocol/` | Runtime-neutral wire constants, input encoding, server message parsing, socket targets, HID key table, key-combo and text parsing, origin and token rules. Built without Node imports and exported as `relay/protocol`. |
+| `src/protocol/` | Runtime-neutral wire constants, input encoding, server message parsing, socket targets, HID key table, key-combo and text parsing, origin and token rules. Built without Node imports and exported as `screen-relay/protocol`. |
 | `src/sdk/` | Node client library on top of the protocol |
-| `src/cli/` | The `relay` CLI: argument parsing, output, client commands on the SDK, host commands that supervise the display, desktop, and engine |
+| `src/cli/` | The `screen-relay` CLI: argument parsing, output, client commands on the SDK, host commands that supervise the display, desktop, and engine |
 | `viewer/` | Browser viewer source: `index.html` and `main.ts`; the build bundles it into `dist/viewer/viewer.js` |
 | `tests/` | Unit tests and `tests/smoke.sh`; see [tests/README.md](tests/README.md) |
 
@@ -112,13 +112,33 @@ Color: little-endian BGRA and big-endian ARGB convert to NV12 with limited-range
 5. For Wayland protocols, vendor their XML under `src/engine/backends/linux/wayland/protocols/` and add each protocol name to `WAYLAND_PROTOCOLS` in the `Makefile`. The Wayland build uses `wayland-scanner` to generate client headers and private protocol code under `build/protocols/`.
 6. Implement capture and the input primitives only: map a HID usage to a native key, press and release a native key or button, type a Unicode codepoint, move, scroll, reset locks, flush, `dimensions`, and `name`. Core owns protocol validation, coordinate mapping, held input, and the size limits. `src/engine/core/` and `src/engine/server/` must not include backend headers.
 
+## How install works
+
+`npm install -g screen-relay` installs the package, which ships `dist/`, `skills/`, `packages.tsv`, `Makefile`, and `src/engine/`. Installing the package runs no install script.
+
+`screen-relay install` reads `packages.tsv` to pick the system packages for the machine's package manager. It then builds the engine with the package's `Makefile`, the same one a checkout uses, and stores the result in `~/.local/share/screen-relay/engine/<version>/`. `$XDG_DATA_HOME` is honored. The first `screen-relay up` on a machine runs the same setup.
+
+`make deps` checks that the compiler and every library the engine links are present. `install` uses it to decide whether it has to install packages or can build right away. The CLI looks for `relay-engine` beside itself first, then in that data directory, then on `PATH`.
+
+To try a local change end to end, build and pack the package, install the tarball globally, then set up and start a session:
+
+```sh
+npm run build
+npm pack
+npm install -g ./screen-relay-<version>.tgz
+screen-relay install
+screen-relay up -d
+```
+
+A global install is a copy of the package, so repeat these steps after each change.
+
 ## Build and test
 
-The engine is C++17. Its shared pkg-config dependencies are `x264`, `libwebsockets` with TLS, and `zlib`. X11 adds `x11`, `xext`, `xdamage`, `xfixes`, and `xtst`; Wayland adds `wayland-client`, `xkbcommon`, and `wayland-scanner`. The engine does not link FFmpeg. `install.sh --backend` selects the compiled backends and installs matching packages; it accepts `x11`, `wayland`, or `all` and defaults to `x11`. `install.sh` and `relay doctor` read the package names for each family from `packages.tsv`.
+The engine is C++17. Its shared pkg-config dependencies are `x264`, `libwebsockets` with TLS, and `zlib`. X11 adds `x11`, `xext`, `xdamage`, `xfixes`, and `xtst`; Wayland adds `wayland-client`, `xkbcommon`, and `wayland-scanner`. The engine does not link FFmpeg. `screen-relay install --backend` selects the compiled backends and installs matching packages; it accepts `x11`, `wayland`, or `all` and defaults to `x11`. `screen-relay install` and `screen-relay doctor` read the package names for each family from `packages.tsv`.
 
 ```sh
 make                 # builds relay-engine
-npm ci && npm run build   # dist/cli/relay.mjs, dist/sdk/, dist/viewer/ (Node 26 or newer)
+npm ci && npm run build   # dist/cli/relay.mjs, dist/sdk/, dist/viewer/ (Node 22 or newer)
 make test            # native unit tests: color, flow, input, server, backend
 npm test             # TypeScript unit tests
 ```
@@ -143,11 +163,11 @@ make test
 
 ffmpeg is only needed for `make test-backend`.
 
-The build targets macOS 12.3, the first release with ScreenCaptureKit, and fails on a newer API that has no availability check. Grant **Screen Recording** and **Accessibility** under **Privacy & Security** to the app that starts the engine, such as your terminal. The engine must run in a logged-in user session. A display size or position change stops the stream, so restart relay.
+The build targets macOS 12.3, the first release with ScreenCaptureKit, and fails on a newer API that has no availability check. Grant **Screen Recording** and **Accessibility** under **Privacy & Security** to the app that starts the engine, such as your terminal. The engine must run in a logged-in user session. A display size or position change stops the stream, so restart screen-relay.
 
 `make test-backend` also needs the FFmpeg 7 development libraries (`libavcodec` ABI 61, `libavutil`, `libswscale`; no FFmpeg 8-only APIs) to decode the encoder output.
 
-`make install` puts the engine and built viewer in `<prefix>/lib/relay/` and links `<prefix>/bin/relay-engine`. `./install.sh` also installs the CLI as `<prefix>/lib/relay/relay.mjs` with a `<prefix>/bin/relay` launcher.
+`make install` puts the engine and built viewer in `<prefix>/lib/relay/` and links `<prefix>/bin/relay-engine`.
 
 [tests/README.md](tests/README.md) describes every test layer, including the smoke test and the viewer end-to-end test.
 

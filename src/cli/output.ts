@@ -89,7 +89,7 @@ function nextFromHint(hint?: string): NextCommand[] | undefined {
   if (!hint) return undefined;
   for (const match of hint.matchAll(/`([^`]+)`/g)) {
     const command = match[1].trim();
-    if (/^relay( |$)/.test(command)) return [nextCommand(command)];
+    if (/^screen-relay( |$)/.test(command)) return [nextCommand(command)];
   }
   return undefined;
 }
@@ -103,6 +103,7 @@ function recoveryLabel(command: string): string {
   if (argv[1] === 'status') return argv.includes('--url') ? 'Check the remote session' : 'Check the session';
   if (argv[1] === 'logs') return 'Read the logs';
   if (argv[1] === 'doctor') return 'Check the machine';
+  if (argv[1] === 'install') return 'Set up this machine';
   if (argv[1] === 'screenshot') return 'Take a screenshot';
   if (argv[1] === 'skills') return argv[2] === 'get' ? 'Read the skill' : 'List the skills';
   return 'Run this next';

@@ -64,7 +64,7 @@
 <body>
 <svg viewBox="0 0 720 416" role="img" aria-labelledby="t d">
   <title id="t">Inside the engine: one frame</title>
-  <desc id="d">Inside the relay engine, each frame goes through six stages. The engine waits for a screen change, or for a few sharpening frames after the screen goes quiet. It admits a frame only if fewer frames are on the way than allowed and capture is not paused. It paces capture at the configured frame rate with a reserve of two frames. It captures only the changed region, converts it block by block and marks unchanged blocks, and sends no frame if nothing changed. It encodes at the current bitrate, starting with a keyframe at the beginning and after a recovery. It sends the frame to the viewer with its capture time and sequence number.</desc>
+  <desc id="d">Inside the screen-relay engine, each frame goes through six stages. The engine waits for a screen change, or for a few sharpening frames after the screen goes quiet. It admits a frame only if fewer frames are on the way than allowed and capture is not paused. It paces capture at the configured frame rate with a reserve of two frames. It captures only the changed region, converts it block by block and marks unchanged blocks, and sends no frame if nothing changed. It encodes at the current bitrate, starting with a keyframe at the beginning and after a recovery. It sends the frame to the viewer with its capture time and sequence number.</desc>
   <defs>
     <marker id="arrow" viewBox="0 0 8 8" refX="6" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
       <path d="M2 1.5 L6 4 L2 6.5"/>
@@ -72,7 +72,7 @@
   </defs>
 
   <rect class="box engine" x="16" y="16" width="688" height="384" rx="12"/>
-  <text class="head" x="40" y="40">relay engine, one frame at a time</text>
+  <text class="head" x="40" y="40">screen-relay engine, one frame at a time</text>
   <rect class="box node" x="40" y="56" width="176" height="120" rx="6"/>
   <g class="icon" transform="translate(56 72)" aria-hidden="true"><path d="M1 8h3l2-5 3 10 2-5h4"/></g>
   <text class="label" x="80" y="84">Wait</text>

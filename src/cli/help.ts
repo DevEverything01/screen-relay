@@ -1,4 +1,5 @@
 import { commands, globalOptions, type Command, type Parameter, type RunsOn, type Subcommand } from './commands.js';
+import { VERSION } from './host/common.js';
 import { agent, type OutputOptions } from './mode.js';
 import { theme } from './theme.js';
 
@@ -7,8 +8,7 @@ const summary = 'Start a streamed desktop and control it';
 const width = 80;
 const labelLimit = 24;
 
-declare const __RELAY_VERSION__: string;
-export const version = typeof __RELAY_VERSION__ === 'string' ? __RELAY_VERSION__ : '0.0.0';
+export const version = VERSION;
 
 type Style = ReturnType<typeof theme>;
 type Example = { description: string; command: string };
@@ -110,7 +110,7 @@ export function helpDocument(name = ''): Record<string, unknown> {
   const command = commands[name];
   const publicParameter = ({ validate, deferredDefault, missingReason, brackets, ...parameter }: Parameter) => ({ repeat: 'last', ...parameter });
   return {
-    path: name ? `relay ${name}` : 'relay',
+    path: name ? `screen-relay ${name}` : 'screen-relay',
     summary: command?.summary ?? summary,
     arguments: command?.arguments.map(publicParameter) ?? [],
     options: [...(command?.options ?? []), ...globalOptions].map(publicParameter),
@@ -125,7 +125,7 @@ export function helpDocument(name = ''): Record<string, unknown> {
 
 function agentUsage(name: string, style: Style): string {
   const command = commands[name];
-  const head = `▲ ${style.strong('relay')}`;
+  const head = `▲ ${style.strong('screen-relay')}`;
   if (!command) return `${head} <command> [options]`;
   const tail = command.usageTail ?? command.arguments.map(argumentSyntax).join(' ');
   return `${head} ${name}${command.separator ? ` ${command.separator}` : ''}${tail ? ` ${tail}` : ''} [options]`;
@@ -133,7 +133,7 @@ function agentUsage(name: string, style: Style): string {
 
 function humanUsage(name: string, style: Style): string {
   const command = commands[name];
-  const head = `▲ ${style.strong(name ? `relay ${name}` : 'relay')}`;
+  const head = `▲ ${style.strong(name ? `screen-relay ${name}` : 'screen-relay')}`;
   if (!command) return `${head} [options] <command>`;
   const tail = command.usageTail ?? command.arguments.map(argumentSyntax).join(' ');
   return `${head}${command.separator ? ` ${command.separator}` : ''}${tail ? ` ${tail}` : ''} [options]`;
@@ -153,7 +153,7 @@ const location: Record<RunsOn, string> = {
 
 const startHere = [
   'Start here (for AI agents):',
-  '  relay skills get core',
+  '  screen-relay skills get core',
   '',
   '  Skills ship with the CLI, so their instructions always match the',
   '  installed version. Load one to control the desktop or a sandbox.',
@@ -162,24 +162,24 @@ const startHere = [
   '  commands can run there or on another machine with --url and a',
   '  token file.',
   '',
-  '  relay skills list',
-  '  relay skills get core',
-  '  relay skills get core --full',
-  '  relay skills get <name>',
-  '  relay skills path [name]',
+  '  screen-relay skills list',
+  '  screen-relay skills get core',
+  '  screen-relay skills get core --full',
+  '  screen-relay skills get <name>',
+  '  screen-relay skills path [name]',
 ];
 
 const rootExamples: Example[] = [
-  { description: 'Start a session in the background', command: 'relay up --detach' },
-  { description: 'Take a screenshot', command: 'relay screenshot screen.png' },
-  { description: 'Click the center of the screen', command: 'relay click 0.5 0.5' },
-  { description: 'Load the core agent skill', command: 'relay skills get core' },
+  { description: 'Start a session in the background', command: 'screen-relay up --detach' },
+  { description: 'Take a screenshot', command: 'screen-relay screenshot screen.png' },
+  { description: 'Click the center of the screen', command: 'screen-relay click 0.5 0.5' },
+  { description: 'Load the core agent skill', command: 'screen-relay skills get core' },
 ];
 
 function agentHelp(name: string, args: OutputOptions): string {
   const style = theme({ ...args, color: false }, process.stdout);
   const command = commands[name];
-  const lines = [style.muted(`relay ${version}`), '', agentUsage(name, style), ''];
+  const lines = [style.muted(`screen-relay ${version}`), '', agentUsage(name, style), ''];
   if (command) lines.push(command.summary, location[command.runsOn]);
   else lines.push(summary, '', ...startHere);
   if (command?.arguments.length) lines.push('', 'Arguments:', ...parameterRows(command.arguments, false));
@@ -190,7 +190,7 @@ function agentHelp(name: string, args: OutputOptions): string {
       .map(([key, entry]) => ({ label: key, text: entry.summary }))));
   }
   if (command?.subcommands?.length) lines.push('', 'Commands:', ...subcommandRows(command.subcommands));
-  lines.push('', 'Global Options:', ...(command ? ['  Run relay help for the full list of global options.'] : parameterRows(globalOptions, true)));
+  lines.push('', 'Global Options:', ...(command ? ['  Run screen-relay help for the full list of global options.'] : parameterRows(globalOptions, true)));
   if (command?.examples.length) lines.push('', 'Examples:', ...command.examples.flatMap((entry) => [...wrapWords(entry.description, width - 2).map((line) => `  ${line}`), `    ${entry.command}`]));
   if (command?.notes.length) lines.push('', 'Notes:', ...command.notes.flatMap((note) => wrapWords(note, width - 2).map((line) => `  ${line}`)));
   lines.push('', 'Learn more:', `  ${docs}`);
@@ -200,9 +200,9 @@ function agentHelp(name: string, args: OutputOptions): string {
 function humanHelp(name: string, args: OutputOptions): string {
   const style = theme(args, process.stdout);
   const command = commands[name];
-  const lines = [style.muted(command ? name : `relay ${version}`), '', humanUsage(name, style), ''];
+  const lines = [style.muted(command ? name : `screen-relay ${version}`), '', humanUsage(name, style), ''];
   if (!command) {
-    lines.push(style.dim('For command help, run `relay <command> --help`'));
+    lines.push(style.dim('For command help, run `screen-relay <command> --help`'));
     const groups = sections.map((section) => ({
       section,
       entries: Object.entries(commands)

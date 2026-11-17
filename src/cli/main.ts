@@ -50,7 +50,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       return error.exitCode;
     }
     if (error instanceof Error && error.name === 'AbortError') return 130;
-    printFailure(new Failure('internal', `Unexpected error in relay${command ? ` ${command}` : ''}. This is a bug in relay.`), jsonMode, args);
+    printFailure(new Failure('internal', `Unexpected error in screen-relay${command ? ` ${command}` : ''}. This is a bug in screen-relay.`), jsonMode, args);
     return 1;
   } finally {
     for (const [signal, handler] of handlers) process.off(signal, handler);

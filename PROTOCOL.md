@@ -1,4 +1,4 @@
-# Relay wire protocol
+# screen-relay wire protocol
 
 Use this reference when writing your own viewer or client.
 

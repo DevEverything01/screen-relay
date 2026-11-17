@@ -34,7 +34,7 @@ export function list(): { name: string; description: string }[] {
 }
 
 function missing(name: string): Failure {
-  return new Failure('not_found', `Skill not found: ${name}`, 'List the skills with `relay skills list`.');
+  return new Failure('not_found', `Skill not found: ${name}`, 'List the skills with `screen-relay skills list`.');
 }
 
 /** Returns a skill's Markdown, optionally appending all reference and template files. */
@@ -67,8 +67,8 @@ export function path(name?: string): string {
 
 /** Explains an unknown action; a skill name points at its get command instead. */
 export function unknownAction(action: string): Failure {
-  if (!list().some((skill) => skill.name === action)) return new Failure('invalid_input', `Unknown command '${action}' for relay skills.`, 'Run `relay help skills`.');
-  return new Failure('invalid_input', `Unknown command '${action}' for relay skills. Did you mean \`relay skills get ${action}\`?`, '', {}, { next: nextFor(`relay skills get ${action}`), label: `Show the ${action} skill` });
+  if (!list().some((skill) => skill.name === action)) return new Failure('invalid_input', `Unknown command '${action}' for screen-relay skills.`, 'Run `screen-relay help skills`.');
+  return new Failure('invalid_input', `Unknown command '${action}' for screen-relay skills. Did you mean \`screen-relay skills get ${action}\`?`, '', {}, { next: nextFor(`screen-relay skills get ${action}`), label: `Show the ${action} skill` });
 }
 
 /** Runs skills list, get and path, printing text or the noun-shaped JSON document. */

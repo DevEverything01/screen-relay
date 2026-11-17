@@ -1,10 +1,10 @@
-# Relay
+# screen-relay
 
-Relay streams a Linux desktop to a browser and lets people and agents control it from a CLI and a Node SDK. See [README.md](README.md) and the [documentation site](https://relay.labs.vercel.dev/docs) for how it works.
+screen-relay streams a Linux desktop to a browser and lets people and agents control it from a CLI and a Node SDK. See [README.md](README.md) and the [documentation site](https://relay.labs.vercel.dev/docs) for how it works.
 
 ## Writing
 
-Use the `technical-writer` skill (`.agents/skills/technical-writer/SKILL.md`) whenever you write or edit prose for this repo. That covers the pages in `docs/content/docs/`, the Geistdocs configuration in `docs/`, `README.md`, the agent skills that `relay skills` serves from `skills/`, CLI help and error text, commit messages, PR descriptions, and issues.
+Use the `technical-writer` skill (`.agents/skills/technical-writer/SKILL.md`) whenever you write or edit prose for this repo. That covers the pages in `docs/content/docs/`, the Geistdocs configuration in `docs/`, `README.md`, the agent skills that `screen-relay skills` serves from `skills/`, CLI help and error text, commit messages, PR descriptions, and issues.
 
 ## Diagrams
 
@@ -23,11 +23,11 @@ To prepare a release:
 5. Run `node scripts/check-version-sync.mjs`. CI runs the same check on every PR.
 6. Open a PR and merge it to `main`.
 
-When the PR merges, the Release workflow checks whether npm already has the version in `package.json`. If it doesn't, it builds `relay-engine` for Linux x64 and ARM64, macOS ARM64 and x64, and Windows x64, publishes `desktop-relay` to npm, and creates the `v<version>` GitHub release with the binaries attached. The release body is the text between the markers in `CHANGELOG.md`.
+When the PR merges, the Release workflow checks whether npm already has the version in `package.json`. If it doesn't, it builds `relay-engine` for Linux x64 and ARM64, macOS ARM64 and x64, and Windows x64, publishes `screen-relay` to npm, and creates the `v<version>` GitHub release with the binaries attached. The release body is the text between the markers in `CHANGELOG.md`.
 
 If npm already has the version but the GitHub release is missing, the workflow rebuilds the binaries and creates only the release. To retry a failed run, start the workflow from the Actions tab on `main`.
 
-Publishing uses npm trusted publishing from the `Release` environment, so the workflow needs no npm token.
+Publishing uses npm trusted publishing from the `Release` environment, so the workflow needs no npm token. The `Release` environment has required reviewers, so the publish job waits in the Actions run until one of them approves it.
 
 ### Writing the changelog
 

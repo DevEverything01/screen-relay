@@ -1,19 +1,23 @@
 {
-  "name": "desktop-relay",
-  "version": "0.0.1",
+  "name": "screen-relay",
+  "version": "0.1.0",
   "description": "Stream a desktop to a browser and control it from a CLI and a Node SDK.",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/vercel-labs/desktop-relay.git"
+    "url": "git+https://github.com/vercel-labs/screen-relay.git"
   },
   "type": "module",
   "bin": {
-    "relay": "dist/cli/relay.mjs"
+    "screen-relay": "dist/cli/relay.mjs"
   },
   "files": [
     "dist",
     "skills",
-    "packages.tsv"
+    "packages.tsv",
+    "Makefile",
+    "src/engine",
+    "THIRD-PARTY-NOTICES.md"
   ],
   "exports": {
     ".": {
@@ -26,7 +30,7 @@
     }
   },
   "engines": {
-    "node": ">=26"
+    "node": ">=22"
   },
   "scripts": {
     "build": "node build.mjs",
@@ -41,6 +45,7 @@
     "typescript": "7.0.2"
   },
   "dependencies": {
+    "@clack/prompts": "1.9.0",
     "@vercel/detect-agent": "1.2.7",
     "yaml": "2.9.1"
   }

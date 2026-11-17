@@ -15,7 +15,7 @@ const ui = {
 export function registerViewer(server: McpServer): void {
   registerAppResource(
     server,
-    "Relay desktop viewer",
+    "screen-relay desktop viewer",
     RESOURCE_URI,
     { mimeType: RESOURCE_MIME_TYPE, _meta: { ui } },
     async () => ({

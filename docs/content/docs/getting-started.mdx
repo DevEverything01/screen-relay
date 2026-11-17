@@ -3,47 +3,60 @@ title: Getting started
 description: Start a Linux or macOS desktop and control it from a browser or the CLI.
 ---
 
-Start a desktop on a Linux VM, open it in your browser, and control it with relay.
-
 ## Prerequisites
 
-- A Linux VM, container, or sandbox with Git and root or passwordless `sudo`. On a Mac, use macOS 13.5 or later with Git and Homebrew. See [macOS](/docs/macos) for the other requirements.
-- Debian, Ubuntu, Fedora, Arch Linux, or Alpine for automatic dependency installation. On another distribution, install the dependencies yourself and add `--no-deps` to the install command.
+- A Linux VM, container, or sandbox with root or `sudo`, or a Mac. See [macOS](/docs/macos) for its requirements.
+- Node 22 or newer with npm.
+- Debian, Ubuntu, Fedora, Arch Linux, or Alpine on x64 or arm64 for automatic package installation. On another distribution, install the build tools and libraries yourself, then run `screen-relay install` to build the engine.
 - SSH access to the VM from your laptop.
 - A browser with H.264 WebCodecs, such as current Chrome, Edge, or Safari.
 
 To stream a Windows desktop instead, build the engine by hand and follow [Windows](/docs/windows).
 
-## 1. Install relay
+<span id="install-screen-relay" />
 
-On the VM, clone the repository and run the installer:
+## 1. Install screen-relay
+
+On the VM, install the CLI from npm:
 
 ```sh
-git clone https://github.com/vercel-labs/relay.git
-cd relay
-./install.sh --prefix "$HOME/.local"
-export PATH="$HOME/.local/bin:$PATH"
+npm install -g screen-relay
 ```
 
-The installer installs the dependencies, builds and installs relay, and runs `relay doctor`. It exits with an error if a check fails. Add the `export` line to your shell profile to keep relay on your `PATH`. The installer needs Node 26 or newer and npm; on Linux and macOS, x64 and arm64, it downloads its pinned version if needed.
+This installs the `screen-relay` command, the Node SDK, the viewer, and the agent skills. It installs no system packages.
 
-On Fedora, if the installer asks for RPM Fusion Free, run the printed command and retry. For a user with `sudo`, the command is:
+The first `screen-relay up` sets the machine up before it starts a session:
+
+1. If a desktop is already running in your shell, it asks whether to stream that desktop or start a new virtual one.
+2. It asks which backend to set up: X11 with the XFCE desktop (the default), Wayland with sway, or both.
+3. It lists the system packages it needs, asks you to confirm, and installs them with the system package manager, using `sudo` unless you are root.
+4. It builds the engine.
+
+The questions appear only at a terminal. `--backend`, `SCREEN_RELAY_BACKEND`, `backend` in the config file, or `--display` skips the first two. Outside a terminal, pass `--yes`.
+
+The built engine is stored in `~/.local/share/screen-relay/engine/<version>/`. After you upgrade screen-relay, the next `up` rebuilds the engine without sudo. Builds for earlier versions stay in that directory until you delete them.
+
+On Fedora, setup stops when RPM Fusion Free is not enabled, because x264 comes from it. Run the printed command, then run `screen-relay install` again. For a user with `sudo`, the command is:
 
 ```sh
 sudo dnf -y install https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm
 ```
 
-For backend options, see [X11](/docs/x11), [Wayland](/docs/wayland), and [macOS](/docs/macos). For containers, see [Docker](/docs/docker). The [CLI reference](/docs/cli) lists all installer options.
+To set up the machine without starting a session, run `screen-relay install`. Backend details are on [Linux](/docs/linux) and [macOS](/docs/macos). For containers, see [Docker](/docs/docker). The [CLI reference](/docs/cli) lists the `install` and `up` options.
+
+<span id="start-a-session" />
 
 ## 2. Start a session
 
 On the VM, run:
 
 ```sh
-relay up -d
+screen-relay up -d
 ```
 
-Relay starts the desktop and prints a viewer link when it is ready. By default, the session is named `default` and the desktop is 1280x720 at 60 fps. See [Configuration](/docs/configuration) to change the resolution or frame rate, or [Troubleshooting](/docs/troubleshooting) if startup fails.
+screen-relay starts the desktop and prints a viewer link when it is ready. The session is named `default`. See [Configuration](/docs/configuration) to change the resolution or frame rate, or [Troubleshooting](/docs/troubleshooting) if startup fails.
+
+<span id="open-the-viewer" />
 
 ## 3. Open the viewer
 
@@ -53,7 +66,7 @@ The default session listens on `127.0.0.1:8080` on the VM. From your laptop, for
 ssh -N -L 8080:127.0.0.1:8080 user@your-vm
 ```
 
-Leave the tunnel running and open the viewer link printed by `relay up`. You should see the desktop. The default loopback session needs no token. If a link contains `#token=`, keep the whole link secret.
+Leave the tunnel running and open the viewer link printed by `screen-relay up`. You should see the desktop. The default loopback session needs no token. If a link contains `#token=`, keep the whole link secret.
 
 Use HTTPS or `http://127.0.0.1` for the viewer's secure context. See [Remote access](/docs/remote-access) for other ways to connect.
 
@@ -62,17 +75,17 @@ Use HTTPS or `http://127.0.0.1` for the viewer's secure context. See [Remote acc
 On the VM, start a terminal on the default X11 desktop:
 
 ```sh
-relay run -- xfce4-terminal
+screen-relay run -- xfce4-terminal
 ```
 
 The command prints the process ID. Wait for the terminal to appear in the viewer, then close the viewer tab before sending input. Only one controller can send input at a time, and another gets `busy`.
 
 ```sh
-relay screenshot screen.png
-relay click 0.5 0.5
-relay type "echo hello"
-relay key Enter
-relay screenshot after.png
+screen-relay screenshot screen.png
+screen-relay click 0.5 0.5
+screen-relay type "echo hello"
+screen-relay key Enter
+screen-relay screenshot after.png
 ```
 
 The click is at the center of the screen. If the terminal is elsewhere, replace `0.5 0.5` with a point inside it; coordinates are fractions from 0 to 1 measured from the top-left. Reopen the viewer to check for `hello`. The screenshots are saved on the VM.
@@ -80,7 +93,7 @@ The click is at the center of the screen. If the terminal is elsewhere, replace 
 Ask an agent on the VM to run:
 
 ```sh
-relay skills get core
+screen-relay skills get core
 ```
 
 This prints the agent workflow for screenshots and input. See [Agent skills](/docs/agent-skills) for more.
@@ -90,7 +103,7 @@ This prints the agent workflow for screenshots and input. See [Agent skills](/do
 On the VM, run:
 
 ```sh
-relay down
+screen-relay down
 ```
 
-Relay confirms the session has stopped. This also stops apps started with `relay run`.
+screen-relay confirms the session has stopped. This also stops apps started with `screen-relay run`.

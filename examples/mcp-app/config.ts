@@ -1,14 +1,14 @@
-const relayOrigin = new URL(process.env.RELAY_ORIGIN ?? "http://localhost:18080").origin;
-const envToken = process.env.RELAY_TOKEN;
+const relayOrigin = new URL(process.env.SCREEN_RELAY_ORIGIN ?? "http://localhost:18080").origin;
+const envToken = process.env.SCREEN_RELAY_TOKEN;
 
-/** Origin of the relay server this app may embed and talk to. */
+/** Origin of the screen-relay server this app may embed and talk to. */
 export const ORIGIN = relayOrigin;
 
 /** Name of the sandbox that runs the desktop, for the automation tools. */
-export const SANDBOX = process.env.RELAY_SANDBOX;
+export const SANDBOX = process.env.SCREEN_RELAY_SANDBOX;
 
 /** Scope that owns the sandbox, when it belongs to a team. */
-export const SANDBOX_SCOPE = process.env.RELAY_SANDBOX_SCOPE;
+export const SANDBOX_SCOPE = process.env.SCREEN_RELAY_SANDBOX_SCOPE;
 
 /** Validates a stream URL and returns it, rejecting anything but the configured origin. */
 export function originOf(value: string): URL {
@@ -22,7 +22,7 @@ export function originOf(value: string): URL {
     throw new Error("Stream URL must be an HTTP(S) origin without credentials or query");
   }
   if (url.origin !== ORIGIN) {
-    throw new Error(`Stream URL must use the relay origin ${ORIGIN}`);
+    throw new Error(`Stream URL must use the screen-relay origin ${ORIGIN}`);
   }
   return url;
 }

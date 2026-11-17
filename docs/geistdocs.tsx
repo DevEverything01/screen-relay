@@ -7,7 +7,7 @@ export const navbarBrand: GeistdocsNavbarBrand = "labs";
 
 export const Logo = () => (
   <span className="font-semibold text-gray-1000 text-lg leading-none tracking-[-3%]">
-    Relay
+    screen-relay
   </span>
 );
 
@@ -15,7 +15,7 @@ export const github = {
   branch: "main",
   editPath: "docs/content/docs/{path}",
   owner: "vercel-labs",
-  repo: "relay",
+  repo: "screen-relay",
 };
 
 export const nav = [
@@ -29,7 +29,7 @@ export const nav = [
   },
   {
     label: "GitHub",
-    href: "https://github.com/vercel-labs/relay",
+    href: "https://github.com/vercel-labs/screen-relay",
   },
 ];
 
@@ -37,19 +37,19 @@ export const suggestions = [
   "How do I start a desktop session?",
   "How do I control the desktop from an agent?",
   "How do I expose a session through HTTPS?",
-  "What are relay's limits?",
+  "What are screen-relay's limits?",
 ];
 
-export const title = "Relay";
+export const title = "screen-relay";
 
 export const prompt =
-  "You are a helpful assistant that answers questions about relay, a tool that streams a Linux desktop to a browser and exposes control through a CLI and a Node SDK.";
+  "You are a helpful assistant that answers questions about screen-relay, a tool that streams a Linux desktop to a browser and exposes control through a CLI and a Node SDK.";
 
 export const agent = {
   product: {
-    name: "Relay",
+    name: "screen-relay",
     description:
-      "Relay streams a Linux desktop to a browser and lets people and agents control it from a CLI and a Node SDK.",
+      "screen-relay streams a Linux desktop to a browser and lets people and agents control it from a CLI and a Node SDK.",
     category: "Developer tools",
     audience: ["Developers", "AI agents"],
     useCases: [
@@ -63,9 +63,9 @@ export const agent = {
   },
   links: [
     {
-      label: "Relay source",
-      href: "https://github.com/vercel-labs/relay",
-      description: "Source repository for relay",
+      label: "screen-relay source",
+      href: "https://github.com/vercel-labs/screen-relay",
+      description: "Source repository for screen-relay",
     },
   ],
 } satisfies GeistdocsAgentReadinessConfig;

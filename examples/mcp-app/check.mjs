@@ -6,15 +6,15 @@ import { Script, runInNewContext } from "node:vm";
 import { Client } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 
-const origin = process.env.RELAY_ORIGIN;
-assert(origin, "Set RELAY_ORIGIN to the sandbox HTTPS origin.");
-const token = process.env.RELAY_TOKEN ?? (await readFile(process.env.RELAY_TOKEN_FILE, "utf8")).trim();
+const origin = process.env.SCREEN_RELAY_ORIGIN;
+assert(origin, "Set SCREEN_RELAY_ORIGIN to the sandbox HTTPS origin.");
+const token = process.env.SCREEN_RELAY_TOKEN ?? (await readFile(process.env.SCREEN_RELAY_TOKEN_FILE, "utf8")).trim();
 assert(/^[0-9a-f]{64}$/.test(token), "Set a valid token without putting it in tool arguments.");
 const client = new Client({ name: "relay-app-check", version: "0.1.0" });
 await client.connect(new StdioClientTransport({
   command: process.execPath,
   args: [new URL("./server.ts", import.meta.url).pathname],
-  env: { ...process.env, RELAY_ORIGIN: origin, RELAY_TOKEN: token },
+  env: { ...process.env, SCREEN_RELAY_ORIGIN: origin, SCREEN_RELAY_TOKEN: token },
 }));
 try {
   const tools = await client.listTools();

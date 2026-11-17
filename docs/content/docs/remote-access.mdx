@@ -3,7 +3,7 @@ title: Remote access
 description: Open the viewer or control a session from another machine with an SSH tunnel, a public HTTPS URL, or native TLS.
 ---
 
-A session listens on `127.0.0.1:8080` with no token, so only the VM can reach it. To open the viewer or run client commands from another machine, follow one of the paths below. Anyone with a session's token can see and control its desktop. There is one token per session and no user identity.
+Open a session's viewer and run its client commands from another machine. A session listens on `127.0.0.1:8080` with no token, so only the VM can reach it by default. Anyone with a session's token can see and control its desktop. A session has one token and no user identity.
 
 ## Choose a path
 
@@ -15,57 +15,76 @@ A session listens on `127.0.0.1:8080` with no token, so only the VM can reach it
 
 ## SSH tunnel
 
-Run this on your machine:
+1. On your machine, open the tunnel:
 
-```sh
-ssh -N -L 8080:127.0.0.1:8080 user@your-vm
-```
+   ```sh
+   ssh -N -L 8080:127.0.0.1:8080 user@your-vm
+   ```
 
-Open `http://127.0.0.1:8080`. The session stays on loopback, so nothing needs a token.
+2. Open `http://127.0.0.1:8080` in your browser.
+
+The session stays on loopback, so the tunnel needs no token.
 
 ## Behind a TLS proxy
 
-```sh
-relay up -d --public https://desktop.example.com
-```
+1. On the VM, start the session with the public origin:
 
-`--public` takes a bare HTTPS origin. It makes the session listen on `0.0.0.0` unless you pass `--bind`, creates a token, and accepts requests only for that host. Pages and apps on any origin can connect when they send the token. `up` prints a `TLS proxy` row naming the forwarding target.
+   ```sh
+   screen-relay up -d --public https://desktop.example.com
+   ```
 
-Without `--tls-cert` the engine serves plain HTTP and the proxy ends TLS, so the proxy must be the only thing that can reach the port. It must:
+   `--public` takes a bare HTTPS origin. It makes the session listen on `0.0.0.0` unless you pass `--bind`, creates a token, and accepts requests only for that host. Pages and apps on any origin can connect when they send the token.
 
-- forward every path with no prefix, including `/viewer.js`, `/stream`, and `/control` ([endpoints](/docs/protocol#endpoints))
-- forward WebSocket upgrades over HTTP/1.1
-- pass `Host`, `Origin`, and `Authorization` through unchanged, and keep the WebSocket subprotocol header
-- keep `Authorization` and the subprotocol header out of its logs, because the token travels in both
+2. Configure the proxy to:
+   - forward every path with no prefix, including `/viewer.js`, `/stream`, and `/control` ([endpoints](/docs/protocol#endpoints))
+   - forward WebSocket upgrades over HTTP/1.1
+   - pass `Host`, `Origin`, and `Authorization` through unchanged, and keep the WebSocket subprotocol header
+   - keep `Authorization` and the subprotocol header out of its logs, because the token travels in both
 
-The engine ignores `X-Forwarded-*` headers.
+3. Open the viewer link that `up` printed.
+
+Without `--tls-cert`, the engine serves plain HTTP and the proxy ends TLS. The proxy must be the only thing that can reach the port. The engine ignores `X-Forwarded-*` headers.
+
+`up` prints a `TLS proxy` row that names the forwarding target.
 
 ## Native TLS
 
-```sh
-relay up -d --tls-cert fullchain.pem --tls-key key.pem --public https://desktop.example.com
-```
+1. On the VM, start the session with your certificate:
 
-The engine serves HTTPS itself, prints no `TLS proxy` row, and speaks HTTP/1.1 only. Use a certificate your clients trust with the public URL's hostname. Client commands on the VM accept the session's own certificate without a hostname check, so a self-signed one works there.
+   ```sh
+   screen-relay up -d --tls-cert fullchain.pem --tls-key key.pem --public https://desktop.example.com
+   ```
+
+2. Open the viewer link that `up` printed.
+
+The engine serves HTTPS itself, prints no `TLS proxy` row, and speaks HTTP/1.1 only. Client commands on the VM accept the session's own certificate without a hostname check, so a self-signed certificate works there.
 
 ## Tokens
 
-Relay creates a 64-character lowercase hex token (256 random bits) whenever the session listens anywhere other than `127.0.0.1` or uses `--public`.
+screen-relay creates a 64-character lowercase hex token (256 random bits) whenever the session listens anywhere other than `127.0.0.1`, or uses `--public`.
 
-- Relay stores the token in a `token` file in the session's state directory, readable only by its owner. `relay status --json` shows the path as `tokenFile`.
-- `relay status` hides the token unless you pass `--show-token`.
+- The token is stored in a `token` file in the session's state directory, readable only by its owner. `screen-relay status --json` shows the path as `tokenFile`.
+- `screen-relay status` hides the token unless you pass `--show-token`.
 - The viewer reads `#token=` from the link that `up` prints, removes it from the address bar, and uses it only on `https://` or loopback pages. Browsers never send the fragment to the server.
-- Each `relay up` creates a new token and ends open connections. To rotate one, run `relay down` then `relay up`.
+- Each `screen-relay up` creates a new token and ends open connections. To rotate a token, run `screen-relay down`, then `screen-relay up`.
 
 ## Control a session from your laptop
 
-Install the CLI alone with `./install.sh --client-only` (any OS with Node 26 or newer). Copy the token from `relay status --show-token` into a file, then set the target once per shell:
+1. On your laptop, install the CLI. It needs Node 22 or newer and runs on any OS:
 
-```sh
-export RELAY_URL=https://desktop.example.com
-export RELAY_TOKEN_FILE=./token
-relay status
-relay screenshot screen.png
-```
+   ```sh
+   npm install -g screen-relay
+   ```
 
-Pass `--url` and `--token-file` per command instead. Use HTTPS for any remote host; plain HTTP works only for `localhost` or `127.0.0.1`, and redirects are not followed. The [CLI reference](/docs/cli#client-target) has the URL rules, and in Node you pass the same URL and token to `createClient` ([SDK options](/docs/sdk#options)).
+2. On the VM, run `screen-relay status --show-token`, and copy the token into a file named `token` on your laptop.
+
+3. Set the target once per shell, then run client commands:
+
+   ```sh
+   export SCREEN_RELAY_URL=https://desktop.example.com
+   export SCREEN_RELAY_TOKEN_FILE=./token
+   screen-relay status
+   screen-relay screenshot screen.png
+   ```
+
+To pass the URL and token per command, use `--url` and `--token-file` instead. Use HTTPS for any remote host. Plain HTTP works only for `localhost` or `127.0.0.1`, and redirects are not followed. The [CLI reference](/docs/cli#client-target) lists the URL rules. In Node, pass the same URL and token to `createClient` ([SDK options](/docs/sdk#options)).
