@@ -1,8 +1,9 @@
 import { X509Certificate } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import { Agent as HttpAgent } from 'node:http';
+import { Agent as HttpsAgent } from 'node:https';
 import { isIP } from 'node:net';
-import { checkServerIdentity, type PeerCertificate } from 'node:tls';
-import type { RequestOptions } from 'node:https';
+import { checkServerIdentity, type ConnectionOptions, type PeerCertificate } from 'node:tls';
 import { RelayError } from '../protocol/index.js';
 
 export interface TransportTarget {
@@ -25,11 +26,11 @@ export interface Route {
   servername?: string;
 }
 
-export type TlsOptions = Pick<RequestOptions, 'ca' | 'allowPartialTrustChain' | 'checkServerIdentity' | 'servername'>;
+type TlsOptions = Pick<ConnectionOptions, 'ca' | 'allowPartialTrustChain' | 'checkServerIdentity' | 'servername'>;
 
 export type Plan =
   | { kind: 'fetch' }
-  | { kind: 'node'; dial: string; tls: TlsOptions };
+  | { kind: 'node'; dial: string; agent: HttpAgent | HttpsAgent };
 
 const PEM_CERTIFICATE = /-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/;
 
@@ -93,9 +94,6 @@ function tls(route: Route, trust: Trust): TlsOptions {
 export function plan(target: TransportTarget): Plan {
   if (!target.ca && !target.certificate && !target.connect) return { kind: 'fetch' };
   const where = route(target);
-  return {
-    kind: 'node',
-    dial: where.dial,
-    tls: target.url.protocol === 'https:' ? tls(where, trust(target)) : {},
-  };
+  if (target.url.protocol !== 'https:') return { kind: 'node', dial: where.dial, agent: new HttpAgent({ keepAlive: true }) };
+  return { kind: 'node', dial: where.dial, agent: new HttpsAgent({ keepAlive: true, ...tls(where, trust(target)) }) };
 }

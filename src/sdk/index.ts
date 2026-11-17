@@ -48,10 +48,18 @@ export interface Session {
 
 function target({ url = 'http://127.0.0.1:8080', timeout = 10000, token, ca, certificate, connect, signal }: ClientOptions) {
   if (ca && certificate) throw new RelayError('invalid_option', 'Pass ca or certificate, not both.');
-  return { base: baseUrl(url, token), timeout: integer(timeout, 1, 2147483647, 'timeout'), token, ca, certificate, connect, signal };
+  return {
+    base: baseUrl(url, token), timeout: integer(timeout, 1, 2147483647, 'timeout'), token, ca, certificate, connect, signal,
+    transport: undefined as Plan | undefined,
+  };
 }
 
 type Server = ReturnType<typeof target>;
+
+function transportPlan(server: Server): Plan {
+  server.transport ??= plan({ url: server.base, ca: server.ca, certificate: server.certificate, connect: server.connect });
+  return server.transport;
+}
 
 function headers(server: Server, body?: Uint8Array): Record<string, string> {
   const result: Record<string, string> = server.token ? { Authorization: `Bearer ${server.token}` } : {};
@@ -79,7 +87,7 @@ function nodeRequest<Result>(server: Server, where: Extract<Plan, { kind: 'node'
     headers: requestHeaders,
     timeout: server.timeout,
     signal: server.signal,
-    ...where.tls,
+    agent: where.agent,
   };
   return new Promise((resolve, reject) => {
     const transport = base.protocol === 'https:' ? httpsRequest : httpRequest;
@@ -125,7 +133,7 @@ async function request<Result>(
   server: Server, path: string, binary = false, body?: Uint8Array,
 ): Promise<Result> {
   if (server.signal?.aborted) throw new RelayError('canceled', 'Request canceled.');
-  const transport = plan({ url: server.base, ca: server.ca, certificate: server.certificate, connect: server.connect });
+  const transport = transportPlan(server);
   if (transport.kind === 'node') return nodeRequest<Result>(server, transport, path, binary, body);
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
