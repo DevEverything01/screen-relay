@@ -1,6 +1,6 @@
 import { spawnSync, type ChildProcess } from 'node:child_process';
-import { accessSync, constants, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { accessSync, constants, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { homedir, release, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createServer } from 'node:net';
@@ -12,6 +12,7 @@ import type { HostArgs } from './common.js';
 import { detectFamily, installCommand as packageCommand, packagesFor, type Family } from './packages.js';
 import { stateDir } from './state.js';
 import { BACKEND_PROGRAMS, findEngine, installCommand, resolveBackend, startXvfb, xQuery } from './supervisor.js';
+import { MSYS2_ROOT, windowsSessionId } from './windows.js';
 
 const TINY_SVG = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>');
 function crc32(data: Buffer): number {
@@ -90,7 +91,8 @@ export async function cmdDoctor(args: HostArgs): Promise<number> {
     checks.push(checkProgram(name, ok, detail, fix, level));
     return ok;
   };
-  const linux = process.platform === 'darwin' ? false : check('platform', isLinux(), process.platform, 'Run doctor on the Linux host; this machine can use client commands with --url.');
+  const windows = process.platform === 'win32';
+  const linux = process.platform === 'darwin' || windows ? false : check('platform', isLinux(), process.platform, 'Run doctor on the Linux host; this machine can use client commands with --url.');
   if (process.platform === 'darwin') {
     const versionResult = run(['sw_vers', '-productVersion']);
     const version = versionResult.status === 0 ? versionResult.stdout.trim() : '';
@@ -98,7 +100,15 @@ export async function cmdDoctor(args: HostArgs): Promise<number> {
     const supported = Boolean(parts && (Number(parts[1]) > 12 || (Number(parts[1]) === 12 && Number(parts[2]) >= 3)));
     check('platform', supported, version ? `macOS ${version}` : 'macOS version unavailable', 'Use macOS 12.3 or later.');
   }
-  if (linux || process.platform === 'darwin') {
+  if (windows) {
+    const version = release();
+    check('platform', true, 'Windows');
+    check('windows version', Number(version.split('.')[0]) >= 10, `Windows ${version}`, 'Use Windows 10 or later.');
+    check('msys2', existsSync(join(MSYS2_ROOT, 'usr', 'bin', 'bash.exe')), MSYS2_ROOT, 'Run `screen-relay install`.');
+    const session = windowsSessionId();
+    check('desktop session', session !== null && session !== 0, session === null ? 'session unknown' : `session ${session}`, "Run screen-relay in a terminal on the signed-in user's desktop.");
+  }
+  if (linux || process.platform === 'darwin' || windows) {
     const root = typeof process.getuid === 'function' && process.getuid() === 0;
     const sudo = root ? '' : 'sudo ';
     let family: Family | undefined;
@@ -114,7 +124,7 @@ export async function cmdDoctor(args: HostArgs): Promise<number> {
       check('config', false, error.message, error.hint);
     }
     const requestedBackend = process.env.SCREEN_RELAY_BACKEND ?? configuredBackend;
-    let backend: 'x11' | 'wayland' | 'macos';
+    let backend: 'x11' | 'wayland' | 'macos' | 'windows';
     let backendResolved = true;
     try {
       backend = resolveBackend(requestedBackend);
@@ -124,7 +134,7 @@ export async function cmdDoctor(args: HostArgs): Promise<number> {
       backend = requestedBackend === 'x11' || requestedBackend === 'wayland' ? requestedBackend : 'x11';
     }
     const x11 = backend === 'x11';
-    check('user', true, root ? 'root' : `uid ${process.getuid?.() ?? -1}`);
+    check('user', true, windows ? userInfo().username : root ? 'root' : `uid ${process.getuid?.() ?? -1}`);
     check('node', Number(process.versions.node.split('.')[0]) >= 22, process.versions.node, 'Install Node 22 or newer.');
     if (linux) check('setpriv', Boolean(which('setpriv')), which('setpriv') ?? 'not found', packageHint(['setpriv']));
     let homeWritable = true;
@@ -136,14 +146,14 @@ export async function cmdDoctor(args: HostArgs): Promise<number> {
     check('state dir', writable, state, 'export XDG_STATE_HOME=/path/to/a/writable/dir');
     const engine = findEngine();
     const engineRuns = check('engine', Boolean(engine && run([engine, '--help']).status === 0), engine ?? 'relay-engine not found', installCommand(backend));
-    if (!linux) {
+    if (process.platform === 'darwin') {
       if (engineRuns && backendResolved && engine) {
         const result = run([engine, '--backend', 'macos', '--check'], { timeout: 20000 });
         check('permissions', result.status === 0, result.status === 0 ? 'Screen Recording and Accessibility granted' : 'backend initialization failed', result.stderr?.trim() || result.error?.message || 'Run `relay-engine --backend macos --check` for details.');
       } else {
         check('permissions', false, 'not checked', 'Fix the engine and backend checks first.', 'warn');
       }
-    } else {
+    } else if (linux) {
       const x264 = findLibrary('x264');
       const rpmFusionCommand = `${sudo}dnf -y install https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm`;
       const x264Hint = family === 'apt'

@@ -27,13 +27,14 @@ async function reapSession(directory: string, session: Record<string, any> | nul
 
 export async function cmdUp(args: Args): Promise<number> {
   requireHost();
-  if (process.platform === 'darwin' && args.display !== undefined) {
-    throw new Failure('invalid_input', '--display is not supported on macOS', 'Remove --display; screen-relay attaches to the current display on macOS.');
+  const attachedHost = process.platform === 'darwin' ? 'macOS' : process.platform === 'win32' ? 'Windows' : undefined;
+  if (attachedHost && args.display !== undefined) {
+    throw new Failure('invalid_input', `--display is not supported on ${attachedHost}`, `Remove --display; screen-relay attaches to the current display on ${attachedHost}.`);
   }
   const [settings, , present] = loadConfig(typeof args.config === 'string' && args.config ? args.config : undefined);
-  const warnings = (args.display || process.platform === 'darwin') && present.has('display.resolution')
-    ? [{ reason: 'display_resolution_ignored', message: process.platform === 'darwin'
-      ? 'display.resolution is ignored on macOS; the existing display size is used'
+  const warnings = (args.display || attachedHost) && present.has('display.resolution')
+    ? [{ reason: 'display_resolution_ignored', message: attachedHost
+      ? `display.resolution is ignored on ${attachedHost}; the existing display size is used`
       : 'display.resolution is ignored with --display; the existing display size is used' }] : [];
   for (const warning of warnings) printWarning(warning.message, args);
   applyTo(args, settings, present);

@@ -183,7 +183,7 @@ async function applySetup(request: Request, plan: Plan, args: Args): Promise<voi
   const names = request.backends.join(' and ');
   if (plan.state === 'needs-packages') {
     if (!args.yes && !interactive(args)) {
-      const flag = process.platform === 'darwin' ? '' : ` --backend ${request.backends.length > 1 ? 'all' : request.backends[0]}`;
+      const flag = process.platform === 'darwin' || process.platform === 'win32' ? '' : ` --backend ${request.backends.length > 1 ? 'all' : request.backends[0]}`;
       throw new Failure('missing_input', `Setting up the ${names} backend installs system packages`, `Run \`screen-relay install${flag} --yes\` to allow it.`);
     }
     const work = packageWork(plan.groups, args);
@@ -240,7 +240,7 @@ export async function cmdInstall(args: Args): Promise<number> {
   requireHost();
   const [settings, , present] = loadConfig(typeof args.config === 'string' && args.config ? args.config : undefined);
   const chosen = args.backend ?? settings.backend;
-  if (chosen === 'all' && !isLinux()) throw new Failure('invalid_input', '--backend all is only supported on Linux', 'Use --backend macos on macOS.');
+  if (chosen === 'all' && !isLinux()) throw new Failure('invalid_input', '--backend all is only supported on Linux', process.platform === 'win32' ? 'Use --backend windows on Windows.' : 'Use --backend macos on macOS.');
   const backends: Backend[] = chosen === 'all' ? ['x11', 'wayland'] : [requestedBackend(chosen) ?? 'x11'];
   const request: Request = { backends, desktop: args.desktop ?? (present.has('desktop') ? settings.desktop : undefined) };
   const label = await setUp(request, args) ? 'Installed' : 'Unchanged';

@@ -13,6 +13,7 @@ export const BACKEND_PROGRAMS = {
   x11: ['Xvfb', 'xauth', 'xprop', 'xwininfo', 'xdpyinfo', 'setxkbmap'],
   wayland: ['sway', 'Xwayland', 'swaymsg', 'foot'],
   macos: [],
+  windows: [],
 };
 
 export const HINTS: Record<string, string> = {
@@ -188,7 +189,7 @@ export class Session {
       ? { next: nextFor(sessionCommand(`logs ${name}`, this.args.name)), label: 'Read the logs' } : {};
     const hint = name === 'display' && this.data.backend === 'wayland' ? 'Read `screen-relay logs display`, then run `SCREEN_RELAY_BACKEND=wayland screen-relay doctor`.' : HINTS[name] ?? '';
     const log = tail(join(this.dir, `${name}.log`));
-    const detail = name === 'engine' && this.data.backend === 'macos' && code === 'component_failed' ? log.trim().replace(/\r?\n/g, '; ') : '';
+    const detail = name === 'engine' && attaches(this.data.backend) && code === 'component_failed' ? log.trim().replace(/\r?\n/g, '; ') : '';
     return new Failure(code, detail ? `${message}: ${detail}` : message, hint, { component: name, log, logs: this.dir }, recovery);
   }
 
@@ -273,11 +274,11 @@ export class Session {
     rmSync(runtime, { recursive: true, force: true });
     mkdirSync(runtime, { mode: 0o700 });
     const backend = resolveBackend(this.args.backend, this.args.display);
-    const attached = backend === 'macos' || Boolean(this.args.display);
+    const attached = attaches(backend) || Boolean(this.args.display);
     this.env = attached
       ? { ...process.env, SCREEN_RELAY_SESSION: this.dir }
       : desktopEnv(this.dir);
-    if (backend === 'macos') {
+    if (attaches(backend)) {
       delete this.env.DISPLAY;
       delete this.env.WAYLAND_DISPLAY;
       delete this.env.XAUTHORITY;
@@ -296,7 +297,7 @@ export class Session {
     if (desktopCommand.length && !this.args.display && !ownBus && which('dbus-run-session')) desktopCommand = ['dbus-run-session', '--', ...desktopCommand];
     if (missing.length) throw new Failure('missing_dependency', `Missing ${missing.join(', ')}`, `Run \`${installCommand(backend)}\`, or check with \`${backend === 'wayland' ? 'SCREEN_RELAY_BACKEND=wayland ' : ''}screen-relay doctor\`.`);
     let resolution: string | null;
-    if (backend === 'macos') {
+    if (attaches(backend)) {
       resolution = null;
     } else if (backend === 'wayland') {
       resolution = await this.startWaylandDisplay(layout);
@@ -338,7 +339,7 @@ export class Session {
     const viewer = join(LAUNCHER_DIR, '..', 'viewer');
     if (!existsSync(join(dirname(engine), 'viewer')) && existsSync(join(viewer, 'viewer.js'))) engineCommand.push('--viewer-dir', viewer);
     if (this.args.output) engineCommand.push('--output', this.args.output);
-    if (bind !== '127.0.0.1' || this.args.public || backend === 'macos') {
+    if (bind !== '127.0.0.1' || this.args.public || attaches(backend)) {
       token = randomBytes(32).toString('hex');
       const tokenFile = join(this.dir, 'token');
       const descriptor = openSync(tokenFile, 'w', 0o600);
@@ -377,7 +378,7 @@ export class Session {
             url: where.url, token: where.token ?? undefined, ca: where.caFile ?? undefined, connect: where.connect ?? undefined, timeout: 3000, signal: this.args.signal,
           }).screenshot());
           if (!image.subarray(0, 8).equals(PNG)) return false;
-          if (this.args.display || this.data.backend === 'macos') {
+          if (this.args.display || attaches(this.data.backend)) {
             if (image.length < 24) return false;
             this.save({ resolution: `${image.readUInt32BE(16)}x${image.readUInt32BE(20)}` });
           }
@@ -491,13 +492,19 @@ export function writeCompositing(configHome: string | undefined, enabled: boolea
 
 /** Finds the engine beside the CLI, then the one built for this CLI version, then one on PATH. */
 export function findEngine(): string | null {
-  for (const candidate of [join(LAUNCHER_DIR, 'relay-engine'), join(LAUNCHER_DIR, '..', 'relay-engine'), join(engineDirectory(), 'relay-engine')]) {
+  const name = process.platform === 'win32' ? 'relay-engine.exe' : 'relay-engine';
+  for (const candidate of [join(LAUNCHER_DIR, name), join(LAUNCHER_DIR, '..', name), join(engineDirectory(), name)]) {
     try {
       accessSync(candidate, constants.X_OK);
       return candidate;
     } catch {}
   }
-  return which('relay-engine') ?? null;
+  return which(name) ?? null;
+}
+
+/** Whether a backend attaches to a real desktop instead of starting one. */
+export function attaches(backend: string | undefined): boolean {
+  return backend === 'macos' || backend === 'windows';
 }
 
 /** Backends the engine reports it was built with; empty when there is no engine. */
@@ -513,10 +520,10 @@ export function installCommand(backend: string): string {
 
 /** Resolves the desktop for a session and lists the programs it needs that are not installed. */
 export function sessionNeeds(backend: (typeof BACKENDS)[number], args: { display?: string; desktop?: string; keyboardLayout?: string }) {
-  const desktop = backend === 'macos' ? 'none' : args.desktop || (args.display ? 'none' : backend === 'wayland' ? 'foot' : 'xfce');
+  const desktop = attaches(backend) ? 'none' : args.desktop || (args.display ? 'none' : backend === 'wayland' ? 'foot' : 'xfce');
   const desktopCommand = desktop === 'xfce' ? ['xfce4-session'] : desktop === 'none' ? [] : splitCommand(desktop);
   const layout = args.keyboardLayout ?? 'us';
-  const needed = backend === 'macos' ? [] : backend === 'wayland'
+  const needed = attaches(backend) ? [] : backend === 'wayland'
     ? ['setpriv', ...(args.display ? [] : BACKEND_PROGRAMS.wayland.filter((program) => program !== 'foot')), ...(desktopCommand.length ? [desktopCommand[0]] : [])]
     : ['setpriv', ...(args.display ? [] : ['Xvfb', 'xauth']), ...(desktopCommand.length ? ['xprop', 'xwininfo', desktopCommand[0]] : []), ...(!args.display && layout !== 'us' ? ['setxkbmap'] : [])];
   const missing = needed.filter((program) => !which(program));
@@ -529,10 +536,12 @@ export function sessionNeeds(backend: (typeof BACKENDS)[number], args: { display
 export function requestedBackend(explicit: string | undefined, display?: string): (typeof BACKENDS)[number] | undefined {
   const requested = explicit !== undefined ? backendValue(explicit, 'SCREEN_RELAY_BACKEND')
     : process.platform === 'darwin' ? 'macos'
+    : process.platform === 'win32' ? 'windows'
     : display !== undefined && !display.includes(':') ? 'wayland' : undefined;
-  if (requested && (requested === 'macos' ? process.platform !== 'darwin' : !isLinux())) {
-    throw new Failure('invalid_input', `The ${requested} backend is only supported on ${requested === 'macos' ? 'macOS' : 'Linux'}`,
-      process.platform === 'darwin' ? 'Use --backend macos on macOS.' : 'Use --backend x11 or --backend wayland on Linux.');
+  const owner = requested === 'macos' ? 'darwin' : requested === 'windows' ? 'win32' : 'linux';
+  if (requested && !process.platform.startsWith(owner)) {
+    throw new Failure('invalid_input', `The ${requested} backend is only supported on ${requested === 'macos' ? 'macOS' : requested === 'windows' ? 'Windows' : 'Linux'}`,
+      process.platform === 'darwin' ? 'Use --backend macos on macOS.' : process.platform === 'win32' ? 'Use --backend windows on Windows.' : 'Use --backend x11 or --backend wayland on Linux.');
   }
   if (requested === 'x11' && display !== undefined && !display.includes(':')) {
     throw new Failure('invalid_input', `${display} is a Wayland socket, not an X display`, `Run \`screen-relay up -d --backend wayland --display ${display}\``);
@@ -549,7 +558,8 @@ export function resolveBackend(explicit: string | undefined, display?: string): 
   const available = compiledBackends();
   const backend = requested ?? (!available.length || available.includes('x11') ? 'x11' : 'wayland');
   if (available.length && !available.includes(backend)) {
-    const hint = backend === 'macos' ? 'Rebuild relay-engine with the macos backend.' : `Run \`screen-relay install --backend ${backend}\``;
+    const hint = backend === 'macos' ? 'Rebuild relay-engine with the macos backend.'
+      : backend === 'windows' ? 'Run `screen-relay install`.' : `Run \`screen-relay install --backend ${backend}\``;
     throw new Failure('missing_dependency', `relay-engine was built without the ${backend} backend (compiled: ${available.join(', ')})`, hint);
   }
   return backend;
