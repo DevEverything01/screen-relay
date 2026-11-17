@@ -199,7 +199,7 @@ export async function cmdStatus(args: Args): Promise<number> {
       if (session.tokenFile) token = readFileSync(session.tokenFile, 'utf8').trim();
       const timeout = Number(args.timeout ?? 10);
       session.capabilities = await createClient({
-        url: session.localUrl, token: token ?? undefined, ca: session.tlsCert ?? undefined, connect: connectHost(session.bind) ?? undefined, timeout: timeout * 1000, signal: args.signal,
+        url: session.localUrl, token: token ?? undefined, certificate: session.tlsCert ?? undefined, connect: connectHost(session.bind) ?? undefined, timeout: timeout * 1000, signal: args.signal,
       }).capabilities();
     } catch (error) {
       session.health = clientFailure(error, { url: String(session.localUrl), timeout: Number(args.timeout ?? 10), explicit: false }).payload();

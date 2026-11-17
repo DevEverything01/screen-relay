@@ -5,6 +5,8 @@ const checkTypes = async () => {
   const desktop = await connect({ url: 'http://127.0.0.1:18094', timeout: 5000 });
   const pixels: Uint8Array = await screenshot({ url: 'http://127.0.0.1:18094' });
   const width: number = (await capabilities()).width;
+  await capabilities({ url: 'https://127.0.0.1:18094', ca: 'ca.pem' });
+  await capabilities({ url: 'https://127.0.0.1:18094', certificate: 'cert.pem' });
   await desktop.input({ type: 'pointerMove', x: 0.5, y: 0.5 });
   await desktop.input({ type: 'wheel', axis: 'vertical', delta: 120, x: 0, y: 1 });
   // @ts-expect-error Only the three supported mouse buttons are part of the API.

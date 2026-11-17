@@ -109,8 +109,9 @@ test('custom HTTP transport enforces the overall request deadline', async () => 
 });
 
 test('control connections reject unsupported transport overrides', async () => {
-  await assert.rejects(connect({ ca: 'ca.pem' }), { code: 'INVALID_ARGUMENT', message: /do not support ca or connect/ });
-  await assert.rejects(connect({ connect: '127.0.0.1' }), { code: 'INVALID_ARGUMENT', message: /do not support ca or connect/ });
+  await assert.rejects(connect({ ca: 'ca.pem' }), { code: 'INVALID_ARGUMENT', message: /do not support ca, certificate, or connect/ });
+  await assert.rejects(connect({ certificate: 'cert.pem' }), { code: 'INVALID_ARGUMENT', message: /do not support ca, certificate, or connect/ });
+  await assert.rejects(connect({ connect: '127.0.0.1' }), { code: 'INVALID_ARGUMENT', message: /do not support ca, certificate, or connect/ });
 });
 
 function packet(type, generation, sequence, payload) {

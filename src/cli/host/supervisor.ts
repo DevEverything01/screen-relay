@@ -41,7 +41,7 @@ export type SessionArgs = HostArgs & {
   compositor?: string;
 };
 
-type EngineTarget = { url: string; token?: string | null; caFile?: string | null; connect?: string | null };
+type EngineTarget = { url: string; token?: string | null; certificate?: string | null; connect?: string | null };
 const PNG = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 
 function sleep(ms: number): Promise<void> {
@@ -356,7 +356,7 @@ export class Session {
     this.save({ bind, localUrl, url: this.args.public || localUrl, tlsCert: this.args['tls-cert'] ? resolve(String(this.args['tls-cert'])) : null });
     const engineChild = this.spawn('engine', engineCommand);
     await waitSpawn(engineChild);
-    await this.waitReady(engineChild.pid!, { url: localUrl, token, caFile: this.data.tlsCert, connect: connectHost(bind) }, desktop);
+    await this.waitReady(engineChild.pid!, { url: localUrl, token, certificate: this.data.tlsCert, connect: connectHost(bind) }, desktop);
     this.save({ state: 'ready', ready: Date.now() / 1000 });
     const url = this.data.url as string;
     return {
@@ -374,7 +374,7 @@ export class Session {
         const message = JSON.parse(line);
         if (message.ready === true && message.pid === pid) {
           const image = Buffer.from(await createClient({
-            url: where.url, token: where.token ?? undefined, ca: where.caFile ?? undefined, connect: where.connect ?? undefined, timeout: 3000, signal: this.args.signal,
+            url: where.url, token: where.token ?? undefined, certificate: where.certificate ?? undefined, connect: where.connect ?? undefined, timeout: 3000, signal: this.args.signal,
           }).screenshot());
           if (!image.subarray(0, 8).equals(PNG)) return false;
           if (this.args.display || this.data.backend === 'macos') {

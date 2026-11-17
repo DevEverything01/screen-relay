@@ -332,7 +332,7 @@ URL rules:
 - HTTP works only for `localhost` and `127.0.0.1`.
 - URLs cannot contain a path, query, fragment, or credentials.
 - Redirects are refused.
-- Local sessions trust their TLS certificate without a hostname check.
+- Local sessions accept their own TLS certificate even when its host name does not match, so a self-signed certificate works.
 
 See [Remote access](/docs/remote-access).
 
