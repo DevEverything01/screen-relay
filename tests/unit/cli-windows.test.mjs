@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
+import { once } from 'node:events';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { setTimeout as delay } from 'node:timers/promises';
 import { after, test } from 'node:test';
 import { buildSync } from 'esbuild';
 
@@ -15,7 +17,7 @@ after(() => rmSync(directory, { recursive: true, force: true }));
 
 const bundle = buildSync({
   stdin: {
-    contents: "export { cmdDoctor } from './src/cli/host/doctor.ts'; export { cmdUp } from './src/cli/host/session_commands.ts'; export { engineDirectory, requireHost } from './src/cli/host/common.ts'; export { findEngine, requestedBackend, Session } from './src/cli/host/supervisor.ts';",
+    contents: "export { cmdDoctor } from './src/cli/host/doctor.ts'; export { cmdDown, cmdLogs, cmdRun, cmdUp } from './src/cli/host/session_commands.ts'; export { engineDirectory, requireHost } from './src/cli/host/common.ts'; export { findEngine, requestedBackend, Session } from './src/cli/host/supervisor.ts'; export { alive, identity, lock, stateDir, writeSession } from './src/cli/host/state.ts'; export { killTree } from './src/cli/host/windows.ts';",
     resolveDir: root,
   },
   bundle: true,
@@ -27,7 +29,7 @@ const bundle = buildSync({
 });
 const bundlePath = join(directory, 'windows.mjs');
 writeFileSync(bundlePath, bundle.outputFiles[0].contents);
-const { cmdUp, engineDirectory, findEngine, requestedBackend, requireHost, Session } = await import(pathToFileURL(bundlePath).href);
+const { alive, cmdDown, cmdLogs, cmdRun, cmdUp, engineDirectory, findEngine, identity, killTree, lock, requestedBackend, requireHost, Session, stateDir, writeSession } = await import(pathToFileURL(bundlePath).href);
 
 function onWindowsProcess(script) {
   const probe = `Object.defineProperty(process, 'platform', { value: 'win32' });
@@ -107,6 +109,102 @@ test('doctor on Windows reports the platform, Windows version, MSYS2, engine and
   }
 });
 
+test('run refuses --restart on Windows', async () => {
+  await onPlatform('win32', () => assert.rejects(cmdRun({ command: 'run', json: false, name: 'desk', app: 'notepad', args: [], restart: true }), { reason: 'invalid_input' }));
+});
+
 test('requireHost still refuses other platforms', async () => {
   await onPlatform('freebsd', () => assert.throws(() => requireHost(), { reason: 'unsupported_platform' }));
+});
+
+const sleeper = 'setTimeout(() => {}, 60000)';
+
+test('a Windows process identity is alive until the process exits', { skip: process.platform !== 'win32' }, async () => {
+  const child = spawn(process.execPath, ['-e', sleeper]);
+  await once(child, 'spawn');
+  const record = identity(child.pid);
+  assert.notEqual(record.start, null);
+  assert.equal(alive(record), true);
+  child.kill();
+  await once(child, 'exit');
+  assert.equal(alive(record), false);
+});
+
+test('a Windows record with another start time is not alive', { skip: process.platform !== 'win32' }, async () => {
+  const child = spawn(process.execPath, ['-e', sleeper]);
+  await once(child, 'spawn');
+  try {
+    assert.equal(alive({ pid: child.pid, start: '0' }), false);
+  } finally {
+    child.kill();
+    await once(child, 'exit');
+  }
+});
+
+test('a Windows session lock rejects a second holder until the first closes', { skip: process.platform !== 'win32' }, async () => {
+  const directory = join(home, 'lock-held');
+  mkdirSync(directory, { recursive: true });
+  const first = await lock('desk', directory);
+  await assert.rejects(lock('desk', directory), { reason: 'already_running' });
+  await first.close();
+  await (await lock('desk', directory)).close();
+});
+
+test('a Windows session lock left by a dead process is reclaimed', { skip: process.platform !== 'win32' }, async () => {
+  const directory = join(home, 'lock-stale');
+  mkdirSync(directory, { recursive: true });
+  const exited = spawn(process.execPath, ['-e', '']);
+  await once(exited, 'exit');
+  writeFileSync(join(directory, 'lock'), JSON.stringify({ pid: exited.pid, start: '1' }));
+  await (await lock('desk', directory)).close();
+});
+
+test('killTree ends a Windows process and the child it started', { skip: process.platform !== 'win32' }, async () => {
+  const script = `const child = require('node:child_process').spawn(process.execPath, ['-e', ${JSON.stringify(sleeper)}]);
+console.log(child.pid);
+${sleeper};`;
+  const parent = spawn(process.execPath, ['-e', script], { stdio: ['ignore', 'pipe', 'ignore'] });
+  const grandchild = { pid: 0 };
+  try {
+    const [line] = await once(parent.stdout, 'data');
+    const record = identity(Number(String(line).trim()));
+    grandchild.pid = record.pid;
+    assert.equal(alive(record), true);
+    killTree(parent.pid);
+    for (let attempt = 0; attempt < 50 && alive(record); attempt++) await delay(100);
+    assert.equal(alive(record), false);
+  } finally {
+    parent.kill();
+    if (grandchild.pid) try { process.kill(grandchild.pid); } catch {}
+  }
+});
+
+test('down leaves a Windows process alone when the session records another start time', { skip: process.platform !== 'win32' }, async () => {
+  const child = spawn(process.execPath, ['-e', sleeper]);
+  await once(child, 'spawn');
+  try {
+    const name = 'pid-reuse';
+    const directory = stateDir(name);
+    mkdirSync(directory, { recursive: true });
+    writeSession(directory, { name, state: 'ready', supervisor: { pid: child.pid, start: '0' }, components: {} });
+    const live = identity(child.pid);
+    await cmdDown({ command: 'down', json: true, name });
+    assert.equal(alive(live), true);
+  } finally {
+    child.kill();
+    await once(child, 'exit');
+  }
+});
+
+test('logs prints the last 200 lines of a Windows log without a PATH', { skip: process.platform !== 'win32' }, () => {
+  const name = 'logs-windows';
+  const directory = stateDir(name);
+  mkdirSync(directory, { recursive: true });
+  writeFileSync(join(directory, 'engine.log'), `${Array.from({ length: 250 }, (_, index) => `line ${index + 1}`).join('\n')}\n`);
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => key.toUpperCase() !== 'PATH'));
+  env.PATH = '';
+  const script = `const { cmdLogs } = await import(${JSON.stringify(pathToFileURL(bundlePath).href)});
+await cmdLogs({ command: 'logs', json: false, name: ${JSON.stringify(name)}, component: 'engine', follow: false });`;
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], { encoding: 'utf8', env, timeout: 60000 });
+  assert.equal(result.stdout, `${Array.from({ length: 200 }, (_, index) => `line ${index + 51}`).join('\n')}\n`);
 });

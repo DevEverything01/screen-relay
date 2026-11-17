@@ -167,6 +167,7 @@ export class Session {
       child = spawnCleared(command, {
         env: this.env,
         detached: true,
+        windowsHide: true,
         signal: this.args.signal,
         ...options,
         stdio: ['ignore', log, log, ...((options.stdio as any[] | undefined) ?? []).slice(3)],

@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import type { Readable } from 'node:stream';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createClient } from '../../sdk/index.js';
@@ -11,8 +11,9 @@ import { emit, Failure, formatReady, formatStarted, formatStatus, formatStopped,
 import { COMPONENTS, HostArgs, requireHost, spawnCleared, which } from './common.js';
 import { alive, lock, readSession, reap, stateDir, tail, writeSession } from './state.js';
 import { ensureSetup } from './setup.js';
-import { connectHost, desktopEnv, Session } from './supervisor.js';
+import { attaches, connectHost, desktopEnv, Session } from './supervisor.js';
 import { startWatcher } from './watcher.js';
+import { killTree } from './windows.js';
 
 export { COMPONENTS };
 
@@ -111,7 +112,7 @@ async function detach(args: Args, directory: string, timeout: number, warnings: 
   const logPath = join(directory, 'supervisor.log');
   const log = openSync(logPath, 'w', 0o600);
   const child = spawn(process.execPath, [process.argv[1] ?? '', ...process.argv.slice(2), ...chosen], {
-    cwd: process.cwd(), env: { ...process.env, SCREEN_RELAY_READY_FD: '3' }, detached: true,
+    cwd: process.cwd(), env: { ...process.env, SCREEN_RELAY_READY_FD: '3' }, detached: true, windowsHide: true,
     stdio: ['ignore', log, log, 'pipe'],
   });
   const signal = args.signal as AbortSignal | undefined;
@@ -156,11 +157,12 @@ export async function cmdDown(args: Args): Promise<number> {
   const supervisor = session?.supervisor;
   const running = alive(supervisor);
   if (running) {
-    process.kill(supervisor.pid, 'SIGTERM');
+    if (process.platform === 'win32') killTree(supervisor.pid);
+    else process.kill(supervisor.pid, 'SIGTERM');
     const deadline = Date.now() + 20000;
     while (alive(supervisor) && Date.now() < deadline) await delay(100, undefined, { signal: args.signal });
     args.signal?.throwIfAborted();
-    if (alive(supervisor)) {
+    if (alive(supervisor) && process.platform !== 'win32') {
       process.kill(supervisor.pid, 'SIGKILL');
       while (alive(supervisor)) await delay(50, undefined, { signal: args.signal });
     }
@@ -219,9 +221,10 @@ export async function cmdLogs(args: Args): Promise<number> {
   if (!files.length) throw new Failure('not_running', `No logs for "${args.name}"`, 'Start a session with `screen-relay up`.');
   if (args.json) {
     if (args.follow) throw new Failure('invalid_input', '--follow cannot be combined with --json', 'Run `screen-relay logs --help`.');
-    emit(args, { logs: Object.fromEntries(files.map((file) => [file.slice(file.lastIndexOf('/') + 1, -4), tail(file, 200)])) }, '');
+    emit(args, { logs: Object.fromEntries(files.map((file) => [basename(file, '.log'), tail(file, 200)])) }, '');
     return 0;
   }
+  if (process.platform === 'win32') return printWindowsLogs(files, args);
   const child = spawn('tail', ['-n', '200', ...(args.follow ? ['-F'] : []), ...files], { stdio: 'inherit', signal: args.signal });
   return await new Promise((resolve) => {
     child.once('error', () => resolve(1));
@@ -229,8 +232,40 @@ export async function cmdLogs(args: Args): Promise<number> {
   });
 }
 
+/** Prints the last 200 lines of each log, then follows them by polling when --follow is set. Stops when the signal aborts. */
+async function printWindowsLogs(files: string[], args: Args): Promise<number> {
+  const offsets = new Map<string, number>();
+  files.forEach((file, index) => {
+    if (files.length > 1) process.stdout.write(`${index ? '\n' : ''}==> ${file} <==\n`);
+    const text = tail(file, 200);
+    if (text) process.stdout.write(text.endsWith('\n') ? text : `${text}\n`);
+    offsets.set(file, statSync(file).size);
+  });
+  if (!args.follow) return 0;
+  for (;;) {
+    await delay(200, undefined, { signal: args.signal });
+    for (const file of files) {
+      const size = statSync(file).size;
+      const previous = offsets.get(file) ?? 0;
+      const from = size < previous ? 0 : previous;
+      if (size > from) {
+        const descriptor = openSync(file, 'r');
+        try {
+          const buffer = Buffer.alloc(size - from);
+          readSync(descriptor, buffer, 0, buffer.length, from);
+          process.stdout.write(buffer);
+        } finally {
+          closeSync(descriptor);
+        }
+      }
+      offsets.set(file, size);
+    }
+  }
+}
+
 export async function cmdRun(args: Args): Promise<number> {
   requireHost();
+  if (args.restart && process.platform === 'win32') throw new Failure('invalid_input', '--restart is not supported on Windows', 'Remove --restart and run the app again.');
   const rest = args.args === undefined ? [] : Array.isArray(args.args) ? args.args : [args.args];
   const command = [args.app, ...rest].filter((value) => value !== undefined).map(String);
   if (!command.length) throw new Failure('missing_command', 'Name the app to start', 'Run `screen-relay run --help`.');
@@ -239,9 +274,9 @@ export async function cmdRun(args: Args): Promise<number> {
   if (!session || session.state !== 'ready' || !alive(session.supervisor)) throw new Failure('not_found', `No running session named "${args.name}"`, 'Start one with `screen-relay up -d`.');
   const directory = stateDir(args.name);
   const env = session.ownsDisplay === false
-    ? { ...process.env, ...(session.backend === 'macos' ? session.environment ?? {} : {}), SCREEN_RELAY_SESSION: directory }
+    ? { ...process.env, ...(attaches(session.backend) ? session.environment ?? {} : {}), SCREEN_RELAY_SESSION: directory }
     : { ...desktopEnv(directory), ...(session.environment ?? {}) };
-  if (session.backend === 'macos') {
+  if (attaches(session.backend)) {
     delete env.DISPLAY;
     delete env.WAYLAND_DISPLAY;
     delete env.XAUTHORITY;
@@ -279,6 +314,6 @@ export async function cmdRun(args: Args): Promise<number> {
     closeSync(log);
   }
   emit(args, { app: { pid, command }, outcome: 'started' },
-    formatStarted(command[0], pid, session.backend === 'macos' ? 'macOS' : session.display, path, args) + '\n' + nextStep('Read app output', sessionCommand('logs apps', args.name), args), { identifier: String(pid) });
+    formatStarted(command[0], pid, session.backend === 'macos' ? 'macOS' : session.backend === 'windows' ? 'Windows' : session.display, path, args) + '\n' + nextStep('Read app output', sessionCommand('logs apps', args.name), args), { identifier: String(pid) });
   return 0;
 }

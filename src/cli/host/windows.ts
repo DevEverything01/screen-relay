@@ -5,7 +5,19 @@ export const MSYS2_ROOT = 'C:\\msys64';
 
 /** The Windows session id of this process, or null when PowerShell cannot report it. */
 export function windowsSessionId(): number | null {
-  const result = run(['powershell', '-NoProfile', '-NonInteractive', '-Command', '[System.Diagnostics.Process]::GetCurrentProcess().SessionId'], { timeout: 5000 });
+  const result = run(['powershell', '-NoProfile', '-NonInteractive', '-Command', '[System.Diagnostics.Process]::GetCurrentProcess().SessionId'], { timeout: 15000 });
   const text = result.stdout?.trim() ?? '';
   return result.status === 0 && /^\d+$/.test(text) ? Number(text) : null;
+}
+
+/** The creation time of a Windows process as a FILETIME string, or null when it cannot be read. */
+export function windowsStartTime(pid: number): string | null {
+  const result = run(['powershell', '-NoProfile', '-NonInteractive', '-Command', `(Get-Process -Id ${pid}).StartTime.ToFileTimeUtc()`], { timeout: 15000 });
+  const text = result.stdout?.trim() ?? '';
+  return result.status === 0 && /^\d+$/.test(text) ? text : null;
+}
+
+/** Ends a process and every process it started. A failure is ignored because the process may already be gone. */
+export function killTree(pid: number): void {
+  run(['taskkill', '/PID', String(pid), '/T', '/F'], { timeout: 10000 });
 }
