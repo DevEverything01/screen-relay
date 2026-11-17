@@ -1,6 +1,6 @@
 # screen-relay
 
-screen-relay streams a Linux desktop to a browser and lets people and agents control it from a CLI and a Node SDK. See [README.md](README.md) and the [documentation site](https://screen-relay.labs.vercel.dev/docs) for how it works.
+screen-relay streams a Linux desktop to a browser and lets people and agents control it from a CLI and a Node SDK. See [README.md](README.md) and the [documentation site](https://screen-relay.dev/docs) for how it works.
 
 ## Writing
 
