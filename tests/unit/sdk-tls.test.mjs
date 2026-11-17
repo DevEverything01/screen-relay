@@ -1,9 +1,10 @@
-import { after, before, test } from 'node:test';
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { once } from 'node:events';
-import { createServer, globalAgent } from 'node:https';import { tmpdir } from 'node:os';
+import { createServer, globalAgent } from 'node:https';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { capabilities, createClient } from '../../dist/sdk/index.js';
 
@@ -11,15 +12,9 @@ const skip = spawnSync('openssl', ['version'], { stdio: 'ignore' }).status === 0
 const token = 'ab'.repeat(32);
 const rejected = { reason: 'unreachable', message: 'The TLS certificate was rejected.' };
 
-let directory;
-let servers;
-const ports = {};
-
-const file = (name) => join(directory, name);
-
-before(async () => {
-  if (skip) return;
-  directory = mkdtempSync(join(tmpdir(), 'screen-relay-tls-'));
+test('TLS trust modes', { skip }, async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'screen-relay-tls-'));
+  const file = (name) => join(directory, name);
   const openssl = (...args) => execFileSync('openssl', args, { cwd: directory, stdio: 'ignore' });
   openssl('req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', 'ca.key', '-out', 'ca.pem', '-subj', '/CN=screen-relay-test-ca', '-days', '2');
   openssl('req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', 'self.key', '-out', 'self.pem', '-subj', '/CN=desktop.example', '-days', '2');
@@ -30,7 +25,9 @@ before(async () => {
   }
   writeFileSync(file('fullchain.pem'), Buffer.concat([readFileSync(file('other.example.pem')), readFileSync(file('ca.pem'))]));
   writeFileSync(file('self-leaf.pem'), readFileSync(file('self.pem'), 'utf8').trim());
-  servers = new Map();
+
+  const servers = new Map();
+  const ports = {};
   for (const [label, name] of [['localhost', 'localhost'], ['other.example', 'other.example'], ['self', 'self'], ['self-second', 'self']]) {
     const server = createServer({ key: readFileSync(file(`${name}.key`)), cert: readFileSync(file(`${name}.pem`)) }, (request, response) => {
       server.requests += 1;
@@ -45,72 +42,72 @@ before(async () => {
     servers.set(label, server);
     ports[label] = server.address().port;
   }
-});
 
-after(async () => {
-  if (!servers) return;
-  for (const server of servers.values()) {
-    server.closeAllConnections();
-    await new Promise((resolve) => server.close(resolve));
-  }
-  rmSync(directory, { recursive: true, force: true });
-});
-
-test('a CA file still checks the URL host name', { skip }, async () => {
-  await assert.rejects(createClient({ url: `https://localhost:${ports['other.example']}`, connect: '127.0.0.1', ca: file('ca.pem'), token }).status(), rejected);
-  await assert.rejects(createClient({ url: `https://127.0.0.1:${ports['other.example']}`, ca: file('ca.pem'), token }).status(), rejected);
-  await assert.rejects(createClient({ url: `https://127.0.0.1:${ports['other.example']}`, ca: file('fullchain.pem'), token }).status(), rejected);
-  assert.equal(servers.get('other.example').requests, 0);
-  assert.deepEqual(await createClient({ url: `https://localhost:${ports.localhost}`, connect: '127.0.0.1', ca: file('ca.pem') }).status(), { served: 'localhost' });
-});
-
-test('connect changes the dial address, not the name the certificate must match', { skip }, async () => {
-  const before = servers.get('localhost').requests;
-  await assert.rejects(createClient({ url: `https://desktop.example:${ports.localhost}`, connect: '127.0.0.1', ca: file('ca.pem'), token }).status(), rejected);
-  assert.equal(servers.get('localhost').requests, before);
-});
-
-test('a pinned certificate is required exactly and skips the host name check', { skip }, async () => {
-  assert.deepEqual(await createClient({ url: `https://127.0.0.1:${ports.self}`, certificate: file('self.pem') }).status(), { served: 'self' });
-  assert.deepEqual(await createClient({ url: `https://127.0.0.1:${ports['other.example']}`, certificate: file('fullchain.pem') }).status(), { served: 'other.example' });
-  const before = servers.get('other.example').requests;
-  await assert.rejects(createClient({ url: `https://127.0.0.1:${ports['other.example']}`, certificate: file('localhost.pem'), token }).status(), rejected);
-  assert.equal(servers.get('other.example').requests, before);
-});
-
-test('custom TLS requests do not use the shared HTTPS agent', { skip }, async () => {
-  const addRequest = globalAgent.addRequest;
-  let shared = 0;
-  globalAgent.addRequest = function (...args) {
-    shared += 1;
-    return addRequest.apply(this, args);
-  };
   try {
-    await createClient({ url: `https://127.0.0.1:${ports['self-second']}`, certificate: file('self.pem') }).status();
+    await t.test('a CA file still checks the URL host name', async () => {
+      await assert.rejects(createClient({ url: `https://localhost:${ports['other.example']}`, connect: '127.0.0.1', ca: file('ca.pem'), token }).status(), rejected);
+      await assert.rejects(createClient({ url: `https://127.0.0.1:${ports['other.example']}`, ca: file('ca.pem'), token }).status(), rejected);
+      await assert.rejects(createClient({ url: `https://127.0.0.1:${ports['other.example']}`, ca: file('fullchain.pem'), token }).status(), rejected);
+      assert.equal(servers.get('other.example').requests, 0);
+      assert.deepEqual(await createClient({ url: `https://localhost:${ports.localhost}`, connect: '127.0.0.1', ca: file('ca.pem') }).status(), { served: 'localhost' });
+    });
+
+    await t.test('connect changes the dial address, not the name the certificate must match', async () => {
+      const before = servers.get('localhost').requests;
+      await assert.rejects(createClient({ url: `https://desktop.example:${ports.localhost}`, connect: '127.0.0.1', ca: file('ca.pem'), token }).status(), rejected);
+      assert.equal(servers.get('localhost').requests, before);
+    });
+
+    await t.test('a pinned certificate is required exactly and skips the host name check', async () => {
+      assert.deepEqual(await createClient({ url: `https://127.0.0.1:${ports.self}`, certificate: file('self.pem') }).status(), { served: 'self' });
+      assert.deepEqual(await createClient({ url: `https://127.0.0.1:${ports['other.example']}`, certificate: file('other.example.pem') }).status(), { served: 'other.example' });
+      assert.deepEqual(await createClient({ url: `https://127.0.0.1:${ports['other.example']}`, certificate: file('fullchain.pem') }).status(), { served: 'other.example' });
+      const before = servers.get('other.example').requests;
+      await assert.rejects(createClient({ url: `https://127.0.0.1:${ports['other.example']}`, certificate: file('localhost.pem'), token }).status(), rejected);
+      assert.equal(servers.get('other.example').requests, before);
+    });
+
+    await t.test('custom TLS requests do not use the shared HTTPS agent', async () => {
+      const addRequest = globalAgent.addRequest;
+      let shared = 0;
+      globalAgent.addRequest = function (...args) {
+        shared += 1;
+        return addRequest.apply(this, args);
+      };
+      try {
+        await createClient({ url: `https://127.0.0.1:${ports['self-second']}`, certificate: file('self.pem') }).status();
+      } finally {
+        globalAgent.addRequest = addRequest;
+      }
+      assert.equal(shared, 0);
+    });
+
+    await t.test('a custom TLS client reuses its connection', async () => {
+      const server = servers.get('self-second');
+      const before = server.connections;
+      const client = createClient({ url: `https://127.0.0.1:${ports['self-second']}`, certificate: file('self.pem') });
+      await client.status();
+      await client.status();
+      assert.equal(server.connections, before + 1);
+    });
+
+    await t.test('a reused connection cannot skip a different verification policy', async () => {
+      assert.deepEqual(await createClient({ url: `https://127.0.0.1:${ports.self}`, certificate: file('self-leaf.pem') }).status(), { served: 'self' });
+      await assert.rejects(createClient({ url: `https://127.0.0.1:${ports.self}`, ca: file('self-leaf.pem') }).status(), rejected);
+    });
+
+    await t.test('ca and certificate cannot be combined', async () => {
+      assert.throws(() => createClient({ url: 'https://127.0.0.1:1', ca: 'ca.pem', certificate: 'cert.pem' }), { code: 'INVALID_ARGUMENT', message: /Pass ca or certificate, not both/ });
+    });
+
+    await t.test('an unreadable certificate file is an io error', async () => {
+      await assert.rejects(capabilities({ url: 'https://127.0.0.1:1', certificate: '/nonexistent/relay-cert.pem' }), { code: 'IO_ERROR' });
+    });
   } finally {
-    globalAgent.addRequest = addRequest;
+    for (const server of servers.values()) {
+      server.closeAllConnections();
+      await new Promise((resolve) => server.close(resolve));
+    }
+    rmSync(directory, { recursive: true, force: true });
   }
-  assert.equal(shared, 0);
-});
-
-test('a custom TLS client reuses its connection', { skip }, async () => {
-  const server = servers.get('self-second');
-  const before = server.connections;
-  const client = createClient({ url: `https://127.0.0.1:${ports['self-second']}`, certificate: file('self.pem') });
-  await client.status();
-  await client.status();
-  assert.equal(server.connections, before + 1);
-});
-
-test('a reused connection cannot skip a different verification policy', { skip }, async () => {
-  assert.deepEqual(await createClient({ url: `https://127.0.0.1:${ports.self}`, certificate: file('self-leaf.pem') }).status(), { served: 'self' });
-  await assert.rejects(createClient({ url: `https://127.0.0.1:${ports.self}`, ca: file('self-leaf.pem') }).status(), rejected);
-});
-
-test('ca and certificate cannot be combined', async () => {
-  assert.throws(() => createClient({ url: 'https://127.0.0.1:1', ca: 'ca.pem', certificate: 'cert.pem' }), { code: 'INVALID_ARGUMENT', message: /Pass ca or certificate, not both/ });
-});
-
-test('an unreadable certificate file is an io error', async () => {
-  await assert.rejects(capabilities({ url: 'https://127.0.0.1:1', certificate: '/nonexistent/relay-cert.pem' }), { code: 'IO_ERROR' });
 });
