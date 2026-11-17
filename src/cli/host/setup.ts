@@ -11,7 +11,7 @@ import { engineDirectory, isLinux, LAUNCHER_DIR, requireHost, run, which, type H
 import { detectFamily, groupPackages, installCommand, packagesFor, provides } from './packages.js';
 import { claimLock, lockOwnerAlive } from './state.js';
 import { compiledBackends, findEngine, requestedBackend, sessionNeeds } from './supervisor.js';
-import { MSYS2_SHELL } from './windows.js';
+import { MSYS2_SHELL, wingetPath } from './windows.js';
 
 type Backend = (typeof BACKENDS)[number];
 type Args = HostArgs & Record<string, any>;
@@ -21,7 +21,7 @@ type Plan = { state: 'ready' | 'needs-build' | 'needs-packages'; backends: Backe
 const SOURCE = resolve(LAUNCHER_DIR, '..', '..');
 const BREW_PACKAGES = ['pkgconf', 'x264', 'libwebsockets'];
 const MSYS2_PACKAGES = ['make', 'diffutils', 'mingw-w64-ucrt-x86_64-gcc', 'mingw-w64-ucrt-x86_64-pkgconf', 'mingw-w64-ucrt-x86_64-libwebsockets', 'mingw-w64-ucrt-x86_64-x264'];
-const WINGET_MSYS2 = ['winget', 'install', '--id', 'MSYS2.MSYS2', '-e', '--silent', '--accept-package-agreements', '--accept-source-agreements'];
+const WINGET_MSYS2 = ['install', '--id', 'MSYS2.MSYS2', '-e', '--silent', '--accept-package-agreements', '--accept-source-agreements'];
 const OPTIONAL_APT = ['glycin-loaders', 'gdk-pixbuf-bin'];
 
 /** The environment for MSYS2's shell, which selects the UCRT64 toolchain. */
@@ -106,10 +106,11 @@ function packageWork(groups: string[], args: Args): { manager: string; packages:
       packages: msys2 ? MSYS2_PACKAGES : ['MSYS2', ...MSYS2_PACKAGES],
       run: async () => {
         if (!msys2) {
-          if (run(['winget', '--version']).status !== 0) {
+          const winget = wingetPath();
+          if (!winget || run([winget, '--version']).status !== 0) {
             throw new Failure('missing_dependency', 'MSYS2 is not installed, and winget is not available to install it', 'Install MSYS2 from https://www.msys2.org, then run `screen-relay install` again.');
           }
-          await step('Installing MSYS2', 'Installed MSYS2', WINGET_MSYS2.join(' '), args, true, WINGET_MSYS2);
+          await step('Installing MSYS2', 'Installed MSYS2', `winget ${WINGET_MSYS2.join(' ')}`, args, true, [winget, ...WINGET_MSYS2]);
         }
         await step('Installing MSYS2 packages', 'Installed MSYS2 packages', `pacman -Sy --noconfirm --needed ${MSYS2_PACKAGES.join(' ')}`, args);
       },

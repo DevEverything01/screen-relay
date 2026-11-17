@@ -1,3 +1,4 @@
+import { join } from 'node:path';
 import { run } from './common.js';
 
 /** Root of the MSYS2 install that `screen-relay install` sets up on Windows. */
@@ -13,21 +14,31 @@ export function engineEnvironment(env: NodeJS.ProcessEnv = process.env): NodeJS.
   return { ...env, [key]: [`${MSYS2_ROOT}\\ucrt64\\bin`, env[key]].filter(Boolean).join(';') };
 }
 
+/** Absolute path of a tool in the Windows system folder, so a same-named file in the working directory cannot stand in for it. */
+function systemTool(...parts: string[]): string {
+  return join(process.env.SystemRoot || 'C:\\Windows', 'System32', ...parts);
+}
+
+/** Absolute path of winget, or null when LOCALAPPDATA is not set. */
+export function wingetPath(): string | null {
+  return process.env.LOCALAPPDATA ? join(process.env.LOCALAPPDATA, 'Microsoft', 'WindowsApps', 'winget.exe') : null;
+}
+
 /** The Windows session id of this process, or null when PowerShell cannot report it. */
 export function windowsSessionId(): number | null {
-  const result = run(['powershell', '-NoProfile', '-NonInteractive', '-Command', '[System.Diagnostics.Process]::GetCurrentProcess().SessionId'], { timeout: 15000 });
+  const result = run([systemTool('WindowsPowerShell', 'v1.0', 'powershell.exe'), '-NoProfile', '-NonInteractive', '-Command', '[System.Diagnostics.Process]::GetCurrentProcess().SessionId'], { timeout: 15000 });
   const text = result.stdout?.trim() ?? '';
   return result.status === 0 && /^\d+$/.test(text) ? Number(text) : null;
 }
 
 /** The creation time of a Windows process as a FILETIME string, or null when it cannot be read. */
 export function windowsStartTime(pid: number): string | null {
-  const result = run(['powershell', '-NoProfile', '-NonInteractive', '-Command', `(Get-Process -Id ${pid}).StartTime.ToFileTimeUtc()`], { timeout: 15000 });
+  const result = run([systemTool('WindowsPowerShell', 'v1.0', 'powershell.exe'), '-NoProfile', '-NonInteractive', '-Command', `(Get-Process -Id ${pid}).StartTime.ToFileTimeUtc()`], { timeout: 15000 });
   const text = result.stdout?.trim() ?? '';
   return result.status === 0 && /^\d+$/.test(text) ? text : null;
 }
 
 /** Ends a process and every process it started. A failure is ignored because the process may already be gone. */
 export function killTree(pid: number): void {
-  run(['taskkill', '/PID', String(pid), '/T', '/F'], { timeout: 10000 });
+  run([systemTool('taskkill.exe'), '/PID', String(pid), '/T', '/F'], { timeout: 10000 });
 }

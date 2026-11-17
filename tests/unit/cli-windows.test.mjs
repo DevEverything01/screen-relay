@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { delimiter, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -17,7 +17,7 @@ after(() => rmSync(directory, { recursive: true, force: true }));
 
 const bundle = buildSync({
   stdin: {
-    contents: "export { cmdDoctor } from './src/cli/host/doctor.ts'; export { cmdInstall } from './src/cli/host/setup.ts'; export { cmdDown, cmdLogs, cmdRun, cmdUp } from './src/cli/host/session_commands.ts'; export { engineDirectory, requireHost, which } from './src/cli/host/common.ts'; export { findEngine, requestedBackend, Session } from './src/cli/host/supervisor.ts'; export { alive, identity, lock, stateDir, writeSession } from './src/cli/host/state.ts'; export { killTree } from './src/cli/host/windows.ts';",
+    contents: "export { cmdDoctor } from './src/cli/host/doctor.ts'; export { cmdInstall } from './src/cli/host/setup.ts'; export { cmdDown, cmdLogs, cmdRun, cmdUp } from './src/cli/host/session_commands.ts'; export { engineDirectory, requireHost, which } from './src/cli/host/common.ts'; export { findEngine, requestedBackend, Session } from './src/cli/host/supervisor.ts'; export { alive, identity, lock, stateDir, writeSession } from './src/cli/host/state.ts'; export { killTree, windowsSessionId } from './src/cli/host/windows.ts';",
     resolveDir: root,
   },
   bundle: true,
@@ -29,7 +29,7 @@ const bundle = buildSync({
 });
 const bundlePath = join(directory, 'windows.mjs');
 writeFileSync(bundlePath, bundle.outputFiles[0].contents);
-const { alive, cmdDown, cmdInstall, cmdLogs, cmdRun, cmdUp, engineDirectory, findEngine, identity, killTree, lock, requestedBackend, requireHost, Session, stateDir, which, writeSession } = await import(pathToFileURL(bundlePath).href);
+const { alive, cmdDown, cmdInstall, cmdLogs, cmdRun, cmdUp, engineDirectory, findEngine, identity, killTree, lock, requestedBackend, requireHost, Session, stateDir, which, windowsSessionId, writeSession } = await import(pathToFileURL(bundlePath).href);
 
 function onWindowsProcess(script) {
   const probe = `Object.defineProperty(process, 'platform', { value: 'win32' });
@@ -45,6 +45,18 @@ async function onPlatform(platform, run) {
     return await run();
   } finally {
     Object.defineProperty(process, 'platform', descriptor);
+  }
+}
+
+async function withEnv(name, value, run) {
+  const previous = process.env[name];
+  if (value === undefined) delete process.env[name];
+  else process.env[name] = value;
+  try {
+    return await run();
+  } finally {
+    if (previous === undefined) delete process.env[name];
+    else process.env[name] = previous;
   }
 }
 
@@ -159,6 +171,33 @@ test('which on Windows finds the .exe of a bare name, not an extensionless scrip
   }
 });
 
+test('windowsSessionId runs PowerShell by its system path, not a same-named file on PATH', { skip: process.platform === 'win32' }, async () => {
+  const dir = join(home, 'planted-powershell');
+  mkdirSync(dir, { recursive: true });
+  const marker = join(dir, 'ran');
+  writeFileSync(join(dir, 'powershell'), `#!/bin/sh\ntouch ${marker}\n`, { mode: 0o755 });
+  const path = process.env.PATH;
+  process.env.PATH = `${dir}${delimiter}${path}`;
+  try {
+    await onPlatform('win32', () => windowsSessionId());
+    assert.equal(existsSync(marker), false);
+  } finally {
+    process.env.PATH = path;
+  }
+});
+
+test('windowsSessionId ignores a powershell.exe in the working directory', { skip: process.platform !== 'win32' }, () => {
+  const dir = join(home, 'planted-exe');
+  mkdirSync(dir, { recursive: true });
+  const whoami = join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'whoami.exe');
+  copyFileSync(whoami, join(dir, 'powershell.exe'));
+  copyFileSync(whoami, join(dir, 'taskkill.exe'));
+  const script = `const { windowsSessionId } = await import(${JSON.stringify(pathToFileURL(bundlePath).href)});
+console.log(windowsSessionId());`;
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], { cwd: dir, encoding: 'utf8', timeout: 60000 });
+  assert.match(result.stdout.trim(), /^\d+$/);
+});
+
 test('a Windows session lock rejects a second holder until the first closes',{ skip: process.platform !== 'win32' }, async () => {
   const directory = join(home, 'lock-held');
   mkdirSync(directory, { recursive: true });
@@ -238,7 +277,7 @@ test('install on Windows without a terminal needs --yes before it installs anyth
 
 test('install on Windows without MSYS2 or winget names MSYS2 and its download page', { skip: process.platform === 'win32' }, async () => {
   withoutEngine();
-  await onPlatform('win32', () => assert.rejects(cmdInstall({ command: 'install', json: true, name: 'default', backend: 'windows', yes: true }), { reason: 'missing_dependency', message: /MSYS2/, hint: /https:\/\/www\.msys2\.org/ }));
+  await withEnv('LOCALAPPDATA', undefined, () => onPlatform('win32', () => assert.rejects(cmdInstall({ command: 'install', json: true, name: 'default', backend: 'windows', yes: true }), { reason: 'missing_dependency', message: /MSYS2/, hint: /https:\/\/www\.msys2\.org/ })));
 });
 
 test('install on Windows reports unchanged when the engine already has the windows backend', { skip: process.platform === 'win32' }, () => {
@@ -249,14 +288,8 @@ test('install on Windows reports unchanged when the engine already has the windo
 
 test('install on Windows stops at the winget step and says to run install again', { skip: process.platform === 'win32' }, async () => {
   withoutEngine();
-  const stub = join(home, 'winget-stub');
-  mkdirSync(stub, { recursive: true });
-  writeFileSync(join(stub, 'winget'), '#!/bin/sh\n[ "$1" = --version ] && exit 0\nexit 1\n', { mode: 0o755 });
-  const path = process.env.PATH;
-  process.env.PATH = `${stub}${delimiter}${path}`;
-  try {
-    await onPlatform('win32', () => assert.rejects(cmdInstall({ command: 'install', json: true, name: 'default', backend: 'windows', yes: true }), { reason: 'missing_dependency', message: /Installing MSYS2/, hint: /run `screen-relay install` again/ }));
-  } finally {
-    process.env.PATH = path;
-  }
+  const localAppData = join(home, 'local-app-data');
+  mkdirSync(join(localAppData, 'Microsoft', 'WindowsApps'), { recursive: true });
+  writeFileSync(join(localAppData, 'Microsoft', 'WindowsApps', 'winget.exe'), '#!/bin/sh\n[ "$1" = --version ] && exit 0\nexit 1\n', { mode: 0o755 });
+  await withEnv('LOCALAPPDATA', localAppData, () => onPlatform('win32', () => assert.rejects(cmdInstall({ command: 'install', json: true, name: 'default', backend: 'windows', yes: true }), { reason: 'missing_dependency', message: /Installing MSYS2/, hint: /run `screen-relay install` again/ })));
 });

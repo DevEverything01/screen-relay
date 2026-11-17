@@ -275,7 +275,9 @@ export async function cmdRun(args: Args): Promise<number> {
   const rest = args.args === undefined ? [] : Array.isArray(args.args) ? args.args : [args.args];
   const command = [args.app, ...rest].filter((value) => value !== undefined).map(String);
   if (!command.length) throw new Failure('missing_command', 'Name the app to start', 'Run `screen-relay run --help`.');
-  if (!which(command[0])) throw new Failure('spawn_failed', `${command[0]} was not found`, 'Install it or check the name, then run the command again.');
+  const found = which(command[0]);
+  if (!found) throw new Failure('spawn_failed', `${command[0]} was not found`, 'Install it or check the name, then run the command again.');
+  const spawned = process.platform === 'win32' ? [found, ...command.slice(1)] : command;
   const session = readSession(args.name);
   if (!session || session.state !== 'ready' || !alive(session.supervisor)) throw new Failure('not_found', `No running session named "${args.name}"`, 'Start one with `screen-relay up -d`.');
   const directory = stateDir(args.name);
@@ -303,7 +305,7 @@ export async function cmdRun(args: Args): Promise<number> {
       if (started.exited) throw new Failure('component_failed', `${command[0]} exited with code ${started.exited}`, 'Read `screen-relay logs apps`.', { component: 'apps', log: tail(path) });
       pid = started.pid;
     } else {
-      const child = spawnCleared(command, { cwd: homedir(), env, stdio: ['ignore', log, log], detached: true, signal: args.signal });
+      const child = spawnCleared(spawned, { cwd: homedir(), env, stdio: ['ignore', log, log], detached: true, signal: args.signal });
       await new Promise<void>((resolve, reject) => { child.once('spawn', () => resolve()); child.once('error', reject); });
       pid = child.pid!;
       const earlyExit = child.exitCode !== null ? child.exitCode : child.signalCode !== null ? 1 : await Promise.race([
