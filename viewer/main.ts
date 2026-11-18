@@ -473,14 +473,21 @@ canvas.addEventListener('lostpointercapture', () => {
   if (buttons) release();
 });
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+const WHEEL_NOTCH_PIXELS = 100;
+const wheelPixelsPerUnit = [1, WHEEL_NOTCH_PIXELS / 3, WHEEL_NOTCH_PIXELS * 3];
+const wheelRemainder = [0, 0];
 canvas.addEventListener('wheel', (e) => {
   e.preventDefault();
   position(e);
+  const scale = wheelPixelsPerUnit[e.deltaMode] ?? 1;
   for (const [axis, delta] of [[0, e.deltaY], [1, e.deltaX]] as const) {
-    if (delta) {
-      const notches = Math.max(1, Math.round(Math.abs(delta) / 100));
-      sendInput({ type: 'wheel', axis: axis ? 'horizontal' : 'vertical', delta: clamp(Math.sign(delta) * notches * 120, -1200, 1200), x, y });
-    }
+    if (!delta) continue;
+    if (Math.sign(delta) !== Math.sign(wheelRemainder[axis])) wheelRemainder[axis] = 0;
+    wheelRemainder[axis] += delta * scale;
+    const notches = Math.trunc(wheelRemainder[axis] / WHEEL_NOTCH_PIXELS);
+    if (!notches) continue;
+    wheelRemainder[axis] -= notches * WHEEL_NOTCH_PIXELS;
+    sendInput({ type: 'wheel', axis: axis ? 'horizontal' : 'vertical', delta: clamp(notches * 120, -1200, 1200), x, y });
   }
 }, { passive: false });
 canvas.addEventListener('blur', release);
