@@ -32,7 +32,10 @@ function viewer({ devicePixelRatio = 1, storage, decode = true, deferDecode = fa
       if (type === 2 && this.failAck === view.getUint32(12)) throw new Error('send failed');
       this.events.push([type, view.getUint32(12)]);
       if (type === 2) { trace.push(['ack', view.getUint32(12)]); this.waits.push(length > 20 ? view.getUint32(20) : 0); }
-      if (type === 3) this.inputs.push({ event: view.getUint8(20), code: view.getUint16(22), modifiers: view.getUint16(34) });
+      if (type === 3) {
+        const event = view.getUint8(20);
+        this.inputs.push(event === 6 ? { event, axis: view.getUint16(22), delta: view.getInt32(24) } : { event, code: view.getUint16(22), modifiers: view.getUint16(34) });
+      }
     }
     close() { this.events.push('close'); this.readyState = Socket.CLOSING; }
   }
@@ -343,10 +346,42 @@ function key(app, type, code, capsLock = false) {
 }
 
 const inputBytes = (app) => app.sockets.at(-1).inputs.map(({ event, code }) => [event, code]);
+const wheelSteps = (app) => app.sockets.at(-1).inputs.filter(({ event }) => event === 6).map(({ axis, delta }) => [axis, delta]);
 function takeControl(app) {
   runInContext('relayViewer.setViewOnly(false)', app.context);
   app.frame(1);
 }
+
+function wheel(app, event) {
+  app.document.querySelector('#screen').handlers.wheel({ deltaX: 0, clientX: 640, clientY: 360, deltaMode: 0, preventDefault() {}, ...event });
+}
+
+test('a mouse notch is one notch even when the platform reports it as a few pixels', () => {
+  const app = viewer();
+  takeControl(app);
+  wheel(app, { deltaY: 4, wheelDeltaY: -120 });
+  assert.deepEqual(wheelSteps(app), [[0, 120]]);
+  wheel(app, { deltaY: -4, wheelDeltaY: 120 });
+  assert.deepEqual(wheelSteps(app), [[0, 120], [0, -120]]);
+});
+
+test('pixel deltas that carry no notch still gather into whole notches', () => {
+  const app = viewer();
+  takeControl(app);
+  wheel(app, { deltaY: 50 });
+  assert.deepEqual(wheelSteps(app), []);
+  wheel(app, { deltaY: 50 });
+  assert.deepEqual(wheelSteps(app), [[0, 120]]);
+});
+
+test('line and page deltas from Firefox become notches', () => {
+  const app = viewer();
+  takeControl(app);
+  wheel(app, { deltaY: 3, deltaMode: 1 });
+  assert.deepEqual(wheelSteps(app), [[0, 120]]);
+  wheel(app, { deltaY: 2, deltaMode: 2 });
+  assert.deepEqual(wheelSteps(app), [[0, 120], [0, 240]]);
+});
 
 test('a latched modifier stays down through a matching shortcut', () => {
   const app = viewer();
