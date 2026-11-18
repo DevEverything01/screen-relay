@@ -17,7 +17,7 @@ after(() => rmSync(directory, { recursive: true, force: true }));
 
 const bundle = buildSync({
   stdin: {
-    contents: "export { cmdDoctor } from './src/cli/host/doctor.ts'; export { cmdInstall } from './src/cli/host/setup.ts'; export { cmdDown, cmdLogs, cmdRun, cmdUp } from './src/cli/host/session_commands.ts'; export { engineDirectory, requireHost, which } from './src/cli/host/common.ts'; export { compiledBackends, findEngine, requestedBackend, Session } from './src/cli/host/supervisor.ts'; export { alive, identity, lock, stateDir, writeSession } from './src/cli/host/state.ts'; export { killTree, windowsSessionId } from './src/cli/host/windows.ts';",
+    contents: "export { cmdDoctor } from './src/cli/host/doctor.ts'; export { cmdInstall } from './src/cli/host/setup.ts'; export { cmdDown, cmdLogs, cmdRun, cmdUp } from './src/cli/host/session_commands.ts'; export { engineDirectory, requireHost, which } from './src/cli/host/common.ts'; export { compiledBackends, findEngine, requestedBackend, Session } from './src/cli/host/supervisor.ts'; export { alive, identity, lock, stateDir, writeSession } from './src/cli/host/state.ts'; export { engineEnvironment, killTree, MSYS2_CHECKED, MSYS2_PATH, msys2Fix, msys2Repair, msys2Shell, repairCommand, trustedAcl, windowsSessionId } from './src/cli/host/windows.ts';",
     resolveDir: root,
   },
   bundle: true,
@@ -29,7 +29,7 @@ const bundle = buildSync({
 });
 const bundlePath = join(directory, 'windows.mjs');
 writeFileSync(bundlePath, bundle.outputFiles[0].contents);
-const { alive, cmdDown, cmdInstall, cmdLogs, cmdRun, cmdUp, compiledBackends, engineDirectory, findEngine, identity, killTree, lock, requestedBackend, requireHost, Session, stateDir, which, windowsSessionId, writeSession } = await import(pathToFileURL(bundlePath).href);
+const { alive, cmdDown, cmdInstall, cmdLogs, cmdRun, cmdUp, compiledBackends, engineDirectory, engineEnvironment, findEngine, identity, killTree, lock, MSYS2_CHECKED, MSYS2_PATH, msys2Fix, msys2Repair, msys2Shell, repairCommand, requestedBackend, requireHost, Session, stateDir, trustedAcl, which, windowsSessionId, writeSession } = await import(pathToFileURL(bundlePath).href);
 
 function onWindowsProcess(script) {
   const probe = `Object.defineProperty(process, 'platform', { value: 'win32' });
@@ -126,6 +126,99 @@ test('doctor on Windows reports the platform, Windows version, MSYS2, engine and
   for (const name of ['platform', 'windows version', 'msys2', 'engine', 'desktop session']) {
     assert.ok(names.includes(name), `${name} missing from ${names.join(', ')}`);
   }
+});
+
+const SYSTEM = 'S-1-5-18';
+const ADMINISTRATORS = 'S-1-5-32-544';
+const USERS = 'S-1-5-32-545';
+const ACCOUNT = 'S-1-5-21-1-1001';
+const OTHER = 'S-1-5-21-1-1002';
+const FULL = 2032127;
+const READ = 131241;
+const CREATE_DIRECTORY = 4;
+const MODIFY = 197055;
+
+test('an MSYS2 tree owned by another account is refused, and the owner is named', () => {
+  const verdict = trustedAcl({ current: ACCOUNT, objects: [{ path: 'C:\\msys64', kind: 'directory', owner: OTHER, ownerName: 'DESKTOP\\other', rules: [] }] });
+  assert.deepEqual(verdict, { trusted: false, reason: 'C:\\msys64 is owned by DESKTOP\\other.', owned: false });
+});
+
+test('an MSYS2 tree that another account can write to is refused, and the path and account are named', () => {
+  const rules = [{ sid: USERS, name: 'BUILTIN\\Users', rights: MODIFY }];
+  const verdict = trustedAcl({ current: ACCOUNT, objects: [
+    { path: 'C:\\msys64', kind: 'directory', owner: SYSTEM, ownerName: 'NT AUTHORITY\\SYSTEM', rules },
+    { path: 'C:\\msys64\\usr\\bin', kind: 'directory', owner: SYSTEM, ownerName: 'NT AUTHORITY\\SYSTEM', rules },
+  ] });
+  assert.deepEqual(verdict, { trusted: false, reason: 'C:\\msys64 lets BUILTIN\\Users write to it.', owned: true });
+});
+
+test('a tree that the signed-in account, SYSTEM or Administrators owns and no other account can write to is trusted', () => {
+  const rules = [
+    { sid: SYSTEM, name: 'NT AUTHORITY\\SYSTEM', rights: FULL },
+    { sid: ADMINISTRATORS, name: 'BUILTIN\\Administrators', rights: FULL },
+    { sid: USERS, name: 'BUILTIN\\Users', rights: READ },
+    { sid: 'S-1-3-0', name: 'CREATOR OWNER', rights: FULL },
+  ];
+  const directoryRules = [...rules, { sid: USERS, name: 'BUILTIN\\Users', rights: CREATE_DIRECTORY }];
+  const directories = ['C:\\msys64', 'C:\\msys64\\usr', 'C:\\msys64\\usr\\bin'];
+  for (const owner of [ACCOUNT, SYSTEM, ADMINISTRATORS]) {
+    const objects = [
+      ...directories.map((path) => ({ path, kind: 'directory', owner, ownerName: 'owner', rules: directoryRules })),
+      { path: 'C:\\msys64\\usr\\bin\\bash.exe', kind: 'file', owner, ownerName: 'owner', rules },
+    ];
+    assert.deepEqual(trustedAcl({ current: ACCOUNT, objects }), { trusted: true });
+  }
+});
+
+test('a file that another account can append to is refused, since the login profile runs it', () => {
+  const rules = [{ sid: USERS, name: 'BUILTIN\\Users', rights: CREATE_DIRECTORY }];
+  const verdict = trustedAcl({ current: ACCOUNT, objects: [{ path: 'C:\\msys64\\etc\\profile', kind: 'file', owner: SYSTEM, ownerName: 'NT AUTHORITY\\SYSTEM', rules }] });
+  assert.deepEqual(verdict, { trusted: false, reason: 'C:\\msys64\\etc\\profile lets BUILTIN\\Users write to it.', owned: true });
+});
+
+test('a rule that grants another account a generic write right is refused', () => {
+  for (const rights of [0x40000000, 0x10000000]) {
+    const verdict = trustedAcl({ current: ACCOUNT, objects: [{ path: 'C:\\msys64', kind: 'directory', owner: SYSTEM, ownerName: 'NT AUTHORITY\\SYSTEM', rules: [{ sid: USERS, name: 'BUILTIN\\Users', rights }] }] });
+    assert.equal(verdict.trusted, false);
+  }
+});
+
+test('an MSYS2 tree with trusted owners and a loose rule gets the icacls repair in its fix, with no backticks', () => {
+  const fix = msys2Fix({ state: 'untrusted', root: 'C:\\msys64', reason: 'C:\\msys64 lets BUILTIN\\Users write to it.', repair: repairCommand(ACCOUNT) });
+  assert.match(fix, /lets BUILTIN\\Users write to it\./);
+  assert.ok(fix.includes(`icacls C:\\msys64 /inheritance:r /grant:r "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F" "*${ACCOUNT}:(OI)(CI)F" "*S-1-5-32-545:(OI)(CI)RX"`), fix);
+  assert.match(fix, /delete C:\\msys64 and run screen-relay install again/);
+  assert.ok(!fix.includes('`'));
+});
+
+test('setup searches only the MSYS2 directories it checks, with usr\\local\\bin first', () => {
+  assert.equal(MSYS2_PATH.split(':')[0], '/usr/local/bin');
+  const checked = new Set(MSYS2_CHECKED.map((path) => path.toLowerCase()));
+  for (const directory of MSYS2_PATH.split(':')) {
+    assert.ok(checked.has(`c:\\msys64${directory.replaceAll('/', '\\')}`.toLowerCase()), `${directory} is searched but not checked`);
+  }
+});
+
+test('a tree that an Entra account owns gets the icacls repair', () => {
+  const account = 'S-1-12-1-987654321-1234567890-987654321-1234567890';
+  assert.deepEqual(msys2Repair(true, account), repairCommand(account));
+  assert.equal(msys2Repair(true, ''), undefined);
+  assert.equal(msys2Repair(false, account), undefined);
+});
+
+test('an MSYS2 tree owned by another account can only be deleted', () => {
+  const fix = msys2Fix({ state: 'untrusted', root: 'C:\\msys64', reason: 'C:\\msys64 is owned by DESKTOP\\other.', owned: false });
+  assert.ok(!fix.includes('icacls'));
+  assert.match(fix, /delete C:\\msys64 and run screen-relay install again/);
+});
+
+test('setup refuses an MSYS2 shell it cannot vouch for', { skip: process.platform === 'win32' }, async () => {
+  await onPlatform('win32', () => assert.throws(() => msys2Shell(), { reason: 'missing_dependency' }));
+});
+
+test('the Windows engine environment keeps PATH unchanged while MSYS2 is untrusted', { skip: process.platform === 'win32' }, async () => {
+  const env = await onPlatform('win32', () => engineEnvironment({ PATH: 'C:\\Windows\\System32' }));
+  assert.equal(env.PATH, 'C:\\Windows\\System32');
 });
 
 test('run refuses --restart on Windows', async () => {
