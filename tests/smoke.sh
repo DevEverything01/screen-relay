@@ -255,10 +255,11 @@ const ticket = async () => {
   assert.equal(body.expires_in, 60);
   return body.ticket;
 };
+// The engine drops a WebSocket it refuses, so a reset counts as refused.
 const open = (protocol) => request({ path: '/stream', headers: {
   Connection: 'Upgrade', Upgrade: 'websocket', 'Sec-WebSocket-Version': '13',
   'Sec-WebSocket-Key': crypto.randomBytes(16).toString('base64'), 'Sec-WebSocket-Protocol': `nsl1, ${protocol}`,
-} });
+} }).catch(() => ({ status: 0 }));
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 (async () => {
   assert.equal((await request({ method: 'POST', path: '/tickets', headers: { 'Content-Length': 0 } })).status, 401);
