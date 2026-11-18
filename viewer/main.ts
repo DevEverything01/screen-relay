@@ -473,21 +473,30 @@ canvas.addEventListener('lostpointercapture', () => {
   if (buttons) release();
 });
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-const WHEEL_NOTCH_PIXELS = 100;
-const wheelPixelsPerUnit = [1, WHEEL_NOTCH_PIXELS / 3, WHEEL_NOTCH_PIXELS * 3];
+const WHEEL_LINES_PER_NOTCH = 3;
+const WHEEL_PIXELS_PER_NOTCH = 100;
 const wheelRemainder = [0, 0];
+/** Wheel notches in one event. WebKit and Blink report 120 per notch in wheelDelta however many pixels the platform gives a notch (about 4 on macOS), so that value wins; Firefox reports only deltas, in lines, pages or pixels. */
+function wheelNotches(e: WheelEvent, axis: 0 | 1): number {
+  const legacy = axis ? (e as WheelEvent & { wheelDeltaX?: number }).wheelDeltaX : (e as WheelEvent & { wheelDeltaY?: number }).wheelDeltaY;
+  if (typeof legacy === 'number' && legacy !== 0) return -legacy / 120;
+  const delta = axis ? e.deltaX : e.deltaY;
+  if (e.deltaMode === 1) return delta / WHEEL_LINES_PER_NOTCH;
+  if (e.deltaMode === 2) return delta;
+  return delta / WHEEL_PIXELS_PER_NOTCH;
+}
 canvas.addEventListener('wheel', (e) => {
   e.preventDefault();
   position(e);
-  const scale = wheelPixelsPerUnit[e.deltaMode] ?? 1;
-  for (const [axis, delta] of [[0, e.deltaY], [1, e.deltaX]] as const) {
-    if (!delta) continue;
-    if (Math.sign(delta) !== Math.sign(wheelRemainder[axis])) wheelRemainder[axis] = 0;
-    wheelRemainder[axis] += delta * scale;
-    const notches = Math.trunc(wheelRemainder[axis] / WHEEL_NOTCH_PIXELS);
-    if (!notches) continue;
-    wheelRemainder[axis] -= notches * WHEEL_NOTCH_PIXELS;
-    sendInput({ type: 'wheel', axis: axis ? 'horizontal' : 'vertical', delta: clamp(notches * 120, -1200, 1200), x, y });
+  for (const axis of [0, 1] as const) {
+    if (!(axis ? e.deltaX : e.deltaY)) continue;
+    const notches = wheelNotches(e, axis);
+    if (Math.sign(notches) !== Math.sign(wheelRemainder[axis])) wheelRemainder[axis] = 0;
+    wheelRemainder[axis] += notches;
+    const whole = Math.trunc(wheelRemainder[axis]);
+    if (!whole) continue;
+    wheelRemainder[axis] -= whole;
+    sendInput({ type: 'wheel', axis: axis ? 'horizontal' : 'vertical', delta: clamp(whole * 120, -1200, 1200), x, y });
   }
 }, { passive: false });
 canvas.addEventListener('blur', release);
