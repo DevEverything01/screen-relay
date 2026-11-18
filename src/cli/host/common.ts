@@ -1,7 +1,7 @@
 import { spawn, spawnSync, type ChildProcess, type SpawnOptions } from 'node:child_process';
 import { accessSync, constants, statSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { delimiter, dirname, join } from 'node:path';
+import { delimiter, dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Failure } from '../output.js';
 
@@ -25,34 +25,38 @@ export function isLinux(): boolean {
 }
 
 export function requireHost(): void {
-  if (!isLinux() && process.platform !== 'darwin') {
-    throw new Failure('unsupported_platform', 'Host commands run on Linux or macOS only',
-      'Run this on the Linux or macOS machine; client commands (status, screenshot, click, ...) work anywhere with --url.');
+  if (!isLinux() && process.platform !== 'darwin' && process.platform !== 'win32') {
+    throw new Failure('unsupported_platform', 'Host commands run on Linux, macOS, or Windows only',
+      'Run this on the Linux, macOS, or Windows machine; client commands (status, screenshot, click, ...) work anywhere with --url.');
   }
 }
 
 export function which(program: string): string | undefined {
-  if (program.includes('/')) {
+  if (program.includes('/') || (process.platform === 'win32' && program.includes('\\'))) {
     try {
       if (statSync(program).isFile()) { accessSync(program, constants.X_OK); return program; }
     } catch {}
     return undefined;
   }
+  const names = process.platform === 'win32' && !extname(program) ? [`${program}.exe`] : [program];
   for (const directory of (process.env.PATH ?? '').split(delimiter)) {
-    const candidate = join(directory || '.', program);
-    try {
-      if (statSync(candidate).isFile()) {
-        accessSync(candidate, constants.X_OK);
-        return candidate;
-      }
-    } catch {}
+    if (process.platform === 'win32' && !directory) continue;
+    for (const name of names) {
+      const candidate = join(directory || '.', name);
+      try {
+        if (statSync(candidate).isFile()) {
+          accessSync(candidate, constants.X_OK);
+          return candidate;
+        }
+      } catch {}
+    }
   }
   return undefined;
 }
 
-/** Clears Linux capabilities or leaves the command unchanged on macOS. */
+/** Clears Linux capabilities or leaves the command unchanged on macOS and Windows. */
 export function clearedCommand(command: string[]): [string, ...string[]] {
-  if (process.platform === 'darwin') return command as [string, ...string[]];
+  if (process.platform === 'darwin' || process.platform === 'win32') return command as [string, ...string[]];
   return ['setpriv', '--inh-caps=-all', '--ambient-caps=-all', ...command];
 }
 

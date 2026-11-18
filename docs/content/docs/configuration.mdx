@@ -62,7 +62,7 @@ keyboard:
 # Linux only. xfce, none, or a command. Default: xfce (x11) or foot (wayland), or none with --display.
 # desktop: xfce
 
-# x11, wayland, or macos. Default: x11 when the engine has it, else wayland; macos on macOS.
+# x11, wayland, macos, or windows. Default: x11 when the engine has it, else wayland; macos on macOS; windows on Windows.
 # backend: x11
 ```
 
@@ -77,7 +77,7 @@ nano ~/.config/screen-relay/config.yaml
 
 | Key | Default | Allowed values | Flag | Environment variable |
 | --- | --- | --- | --- | --- |
-| `display.resolution` | `1280x720` | The desktop size as `WIDTHxHEIGHT`, both even. Width 320 to 16384, height 240 to 16384. Ignored with `--display` and on macOS, which use the existing screen's size. | None | `SCREEN_RELAY_RESOLUTION` |
+| `display.resolution` | `1280x720` | The desktop size as `WIDTHxHEIGHT`, both even. Width 320 to 16384, height 240 to 16384. Ignored with `--display` and on macOS and Windows, which use the existing screen's size. | None | `SCREEN_RELAY_RESOLUTION` |
 | `display.compositor` | `auto` | `auto`, `on`, or `off`. Whether the XFCE desktop that screen-relay starts runs its compositor, which draws window shadows and transparency and repaints at most 60 times a second. `auto` turns it off when `stream.fps` is above 60. Ignored with `--display` and for any other desktop. | None | `SCREEN_RELAY_COMPOSITOR` |
 | `stream.fps` | `60` | Whole number from 10 to 120 | None | `SCREEN_RELAY_FPS` |
 | `stream.bitrate.min` | `1M` | 250000 to 100000000, as a whole number or with a `k` (thousand) or `M` (million) suffix. No higher than `start`. | None | `SCREEN_RELAY_BITRATE_MIN` |
@@ -89,8 +89,8 @@ nano ~/.config/screen-relay/config.yaml
 | `server.tls_cert` | unset | Path to a certificate file. Set with `tls_key`. | `--tls-cert` | `SCREEN_RELAY_TLS_CERT` |
 | `server.tls_key` | unset | Path to the private key file. Set with `tls_cert`. | `--tls-key` | `SCREEN_RELAY_TLS_KEY` |
 | `keyboard.layout` | `us` | A layout name such as `de` or `fr`, or a comma-separated list such as `us,de`, using letters, digits, `_`, and `-`. On X11 it needs `setxkbmap`, which `screen-relay doctor` checks. | None | `SCREEN_RELAY_KEYBOARD_LAYOUT` |
-| `backend` | `x11` when the engine includes it, else `wayland`; `macos` on macOS | `x11`, `wayland`, or `macos`. See [X11](/docs/linux), [Wayland](/docs/linux), and [macOS](/docs/macos). | `--backend` | `SCREEN_RELAY_BACKEND` |
-| `desktop` | `xfce` on X11, `foot` on Wayland, or `none` with `--display` | `xfce`, `none`, or a command. See [X11](/docs/linux) and [Wayland](/docs/linux). | `--desktop` | `SCREEN_RELAY_DESKTOP` |
+| `backend` | `x11` when the engine includes it, else `wayland`; `macos` on macOS; `windows` on Windows | `x11`, `wayland`, `macos`, or `windows`. See [X11](/docs/linux), [Wayland](/docs/linux), [macOS](/docs/macos), and [Windows](/docs/windows). | `--backend` | `SCREEN_RELAY_BACKEND` |
+| `desktop` | `xfce` on X11, `foot` on Wayland, or `none` with `--display`. Ignored on macOS and Windows, which start no desktop. | `xfce`, `none`, or a command. See [X11](/docs/linux) and [Wayland](/docs/linux). | `--desktop` | `SCREEN_RELAY_DESKTOP` |
 
 Rules that span keys:
 

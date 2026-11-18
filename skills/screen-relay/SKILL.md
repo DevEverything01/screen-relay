@@ -1,6 +1,6 @@
 ---
 name: screen-relay
-description: Stream a desktop and control it with the screen-relay CLI (screenshot, click, type, key). Use when an agent needs to see and operate a GUI on a Linux VM, sandbox or container, or on a Mac.
+description: Stream a desktop and control it with the screen-relay CLI (screenshot, click, type, key). Use when an agent needs to see and operate a GUI on a Linux VM, sandbox or container, or on a Mac or Windows PC.
 hidden: true
 ---
 

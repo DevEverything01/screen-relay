@@ -32,5 +32,5 @@ keyboard:
 # Linux only. xfce, none, or a command. Default: xfce (x11) or foot (wayland), or none with --display.
 # desktop: xfce
 
-# x11 or wayland. Default: x11 when the engine has it, else wayland.
+# x11, wayland, macos, or windows. Default: x11 when the engine has it, else wayland; macos on macOS; windows on Windows.
 # backend: x11

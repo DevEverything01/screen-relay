@@ -1,17 +1,17 @@
 ---
 title: Getting started
-description: Start a Linux or macOS desktop and control it from a browser or the CLI.
+description: Start a Linux, macOS, or Windows desktop and control it from a browser or the CLI.
 ---
 
 ## Prerequisites
 
-- A Linux VM, container, or sandbox with root or `sudo`, or a Mac. See [macOS](/docs/macos) for its requirements.
+- A Linux VM, container, or sandbox with root or `sudo`, a Mac, or a Windows PC. See [macOS](/docs/macos) and [Windows](/docs/windows) for their requirements.
 - Node 22 or newer with npm.
 - Debian, Ubuntu, Fedora, Arch Linux, or Alpine on x64 or arm64 for automatic package installation. On another distribution, install the build tools and libraries yourself, then run `screen-relay install` to build the engine.
 - SSH access to the VM from your laptop.
 - A browser with H.264 WebCodecs, such as current Chrome, Edge, or Safari.
 
-To stream a Windows desktop instead, build the engine by hand and follow [Windows](/docs/windows).
+To stream a Windows desktop instead, follow [Windows](/docs/windows).
 
 <span id="install-screen-relay" />
 
@@ -42,7 +42,7 @@ On Fedora, setup stops when RPM Fusion Free is not enabled, because x264 comes f
 sudo dnf -y install https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm
 ```
 
-To set up the machine without starting a session, run `screen-relay install`. Backend details are on [Linux](/docs/linux) and [macOS](/docs/macos). For containers, see [Docker](/docs/docker). The [CLI reference](/docs/cli) lists the `install` and `up` options.
+To set up the machine without starting a session, run `screen-relay install`. Backend details are on [Linux](/docs/linux), [macOS](/docs/macos), and [Windows](/docs/windows). For containers, see [Docker](/docs/docker). The [CLI reference](/docs/cli) lists the `install` and `up` options.
 
 <span id="start-a-session" />
 

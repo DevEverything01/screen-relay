@@ -11,6 +11,7 @@ import { engineDirectory, isLinux, LAUNCHER_DIR, requireHost, run, which, type H
 import { detectFamily, groupPackages, installCommand, packagesFor, provides } from './packages.js';
 import { claimLock, lockOwnerAlive } from './state.js';
 import { compiledBackends, findEngine, requestedBackend, sessionNeeds } from './supervisor.js';
+import { MSYS2_SHELL, wingetPath } from './windows.js';
 
 type Backend = (typeof BACKENDS)[number];
 type Args = HostArgs & Record<string, any>;
@@ -19,11 +20,25 @@ type Plan = { state: 'ready' | 'needs-build' | 'needs-packages'; backends: Backe
 
 const SOURCE = resolve(LAUNCHER_DIR, '..', '..');
 const BREW_PACKAGES = ['pkgconf', 'x264', 'libwebsockets'];
+const MSYS2_PACKAGES = ['make', 'diffutils', 'mingw-w64-ucrt-x86_64-gcc', 'mingw-w64-ucrt-x86_64-pkgconf', 'mingw-w64-ucrt-x86_64-libwebsockets', 'mingw-w64-ucrt-x86_64-x264'];
+const WINGET_MSYS2 = ['install', '--id', 'MSYS2.MSYS2', '-e', '--silent', '--accept-package-agreements', '--accept-source-agreements'];
 const OPTIONAL_APT = ['glycin-loaders', 'gdk-pixbuf-bin'];
+
+/** The environment for MSYS2's shell, which selects the UCRT64 toolchain. */
+function msysEnv(): NodeJS.ProcessEnv {
+  return { ...process.env, MSYSTEM: 'UCRT64', CHERE_INVOKING: '1' };
+}
+
+/** A path as MSYS2's shell reads it: forward slashes on Windows, since its shell treats backslashes as escapes. */
+function shellPath(path: string): string {
+  return process.platform === 'win32' ? path.replaceAll('\\', '/') : path;
+}
 
 /** Whether make and every library the engine links are present for these backends. */
 function buildable(backends: Backend[]): boolean {
-  return existsSync(join(SOURCE, 'Makefile')) && run(['make', '-s', '-C', SOURCE, `BACKENDS=${backends.join(' ')}`, 'deps']).status === 0;
+  if (!existsSync(join(SOURCE, 'Makefile'))) return false;
+  if (process.platform !== 'win32') return run(['make', '-s', '-C', SOURCE, `BACKENDS=${backends.join(' ')}`, 'deps']).status === 0;
+  return run([MSYS2_SHELL, '-lc', `make -s -C ${quote(shellPath(SOURCE))} BACKENDS=${quote(backends.join(' '))} deps`], { env: msysEnv() }).status === 0;
 }
 
 /** Decides what this machine still needs before it can run the requested backends. The engine is built with every compiled backend, but the desktop packages follow only the requested ones. */
@@ -39,15 +54,17 @@ export function planSetup(request: Request): Plan {
   return { state: packages ? 'needs-packages' : build ? 'needs-build' : 'ready', backends, build, groups };
 }
 
-/** Runs one shell command and reports how long it took. With --json it prints nothing and puts the end of the output in the error; a step that is not required only warns when it fails. */
-async function step(title: string, done: string, command: string, args: Args, required = true): Promise<void> {
+/** Runs a shell command, or argv directly, and reports how long it took; on Windows the shell is MSYS2's. With --json it prints nothing, and a step that is not required only warns when it fails. */
+async function step(title: string, done: string, command: string, args: Args, required = true, argv?: string[]): Promise<void> {
   const style = theme(args);
   const started = Date.now();
   const quiet = Boolean(args.json);
   if (!quiet) process.stderr.write(`${style.strong(title)}\n${style.muted(`  ${command}`)}\n`);
   let output = '';
+  const msys = process.platform === 'win32' && !argv;
+  const [program, ...programArgs] = argv ?? (msys ? [MSYS2_SHELL, '-lc', command] : ['sh', '-c', command]);
   const code = await new Promise<number | null>((resolveExit, reject) => {
-    const child = spawn('sh', ['-c', command], { stdio: quiet ? ['ignore', 'pipe', 'pipe'] : ['inherit', 2, 2], signal: args.signal });
+    const child = spawn(program, programArgs, { stdio: quiet ? ['ignore', 'pipe', 'pipe'] : ['inherit', 2, 2], env: msys ? msysEnv() : process.env, signal: args.signal });
     for (const stream of [child.stdout, child.stderr]) stream?.on('data', (chunk: Buffer) => { output = (output + chunk.toString()).slice(-16000); });
     child.once('error', reject);
     child.once('close', resolveExit);
@@ -81,6 +98,24 @@ function packageWork(groups: string[], args: Args): { manager: string; packages:
       throw new Failure('missing_dependency', 'Homebrew is not installed', `Install it from https://brew.sh, or install ${BREW_PACKAGES.join(', ')} yourself. Then run screen-relay install again.`);
     }
     return { manager: 'brew', packages: BREW_PACKAGES, run: () => step('Installing Homebrew packages', 'Installed Homebrew packages', `brew install ${BREW_PACKAGES.join(' ')}`, args) };
+  }
+  if (process.platform === 'win32') {
+    const msys2 = existsSync(MSYS2_SHELL);
+    return {
+      manager: 'MSYS2 pacman',
+      packages: msys2 ? MSYS2_PACKAGES : ['MSYS2', ...MSYS2_PACKAGES],
+      run: async () => {
+        if (!msys2) {
+          const winget = wingetPath();
+          if (!winget || run([winget, '--version']).status !== 0) {
+            throw new Failure('missing_dependency', 'MSYS2 is not installed, and winget is not available to install it', 'Install MSYS2 from https://www.msys2.org, then run screen-relay install again.');
+          }
+          await step('Installing MSYS2', 'Installed MSYS2', `winget ${WINGET_MSYS2.join(' ')}`, args, true, [winget, ...WINGET_MSYS2]);
+        }
+        const keyring = '{ [ -d /etc/pacman.d/gnupg ] || { pacman-key --init && pacman-key --populate msys2 && gpgconf --kill all; }; }';
+        await step('Installing MSYS2 packages', 'Installed MSYS2 packages', `${keyring} && pacman -Sy --noconfirm --needed ${MSYS2_PACKAGES.join(' ')}`, args);
+      },
+    };
   }
   let osRelease = '';
   try { osRelease = readFileSync('/etc/os-release', 'utf8'); } catch {}
@@ -130,7 +165,7 @@ async function buildEngine(backends: Backend[], args: Args): Promise<void> {
     mkdirSync(join(scratch, 'src'));
     cpSync(join(SOURCE, 'Makefile'), join(scratch, 'Makefile'));
     cpSync(join(SOURCE, 'src', 'engine'), join(scratch, 'src', 'engine'), { recursive: true });
-    await step(`Building the engine (${backends.join(', ')})`, 'Built the engine', `make -C ${quote(scratch)} BACKENDS=${quote(backends.join(' '))} relay-engine`, args);
+    await step(`Building the engine (${backends.join(', ')})`, 'Built the engine', `make -C ${quote(shellPath(scratch))} BACKENDS=${quote(backends.join(' '))} relay-engine`, args);
     for (const name of ['src', 'build', 'Makefile']) rmSync(join(scratch, name), { recursive: true, force: true });
     rmSync(target, { recursive: true, force: true });
     renameSync(scratch, target);
@@ -183,7 +218,7 @@ async function applySetup(request: Request, plan: Plan, args: Args): Promise<voi
   const names = request.backends.join(' and ');
   if (plan.state === 'needs-packages') {
     if (!args.yes && !interactive(args)) {
-      const flag = process.platform === 'darwin' ? '' : ` --backend ${request.backends.length > 1 ? 'all' : request.backends[0]}`;
+      const flag = process.platform === 'darwin' || process.platform === 'win32' ? '' : ` --backend ${request.backends.length > 1 ? 'all' : request.backends[0]}`;
       throw new Failure('missing_input', `Setting up the ${names} backend installs system packages`, `Run \`screen-relay install${flag} --yes\` to allow it.`);
     }
     const work = packageWork(plan.groups, args);
@@ -240,7 +275,7 @@ export async function cmdInstall(args: Args): Promise<number> {
   requireHost();
   const [settings, , present] = loadConfig(typeof args.config === 'string' && args.config ? args.config : undefined);
   const chosen = args.backend ?? settings.backend;
-  if (chosen === 'all' && !isLinux()) throw new Failure('invalid_input', '--backend all is only supported on Linux', 'Use --backend macos on macOS.');
+  if (chosen === 'all' && !isLinux()) throw new Failure('invalid_input', '--backend all is only supported on Linux', process.platform === 'win32' ? 'Use --backend windows on Windows.' : 'Use --backend macos on macOS.');
   const backends: Backend[] = chosen === 'all' ? ['x11', 'wayland'] : [requestedBackend(chosen) ?? 'x11'];
   const request: Request = { backends, desktop: args.desktop ?? (present.has('desktop') ? settings.desktop : undefined) };
   const label = await setUp(request, args) ? 'Installed' : 'Unchanged';
