@@ -17,7 +17,7 @@ after(() => rmSync(directory, { recursive: true, force: true }));
 
 const bundle = buildSync({
   stdin: {
-    contents: "export { cmdDoctor } from './src/cli/host/doctor.ts'; export { cmdInstall } from './src/cli/host/setup.ts'; export { cmdDown, cmdLogs, cmdRun, cmdUp } from './src/cli/host/session_commands.ts'; export { engineDirectory, requireHost, which } from './src/cli/host/common.ts'; export { compiledBackends, findEngine, requestedBackend, Session } from './src/cli/host/supervisor.ts'; export { alive, identity, lock, stateDir, writeSession } from './src/cli/host/state.ts'; export { engineEnvironment, killTree, msys2Fix, msys2Shell, repairCommand, trustedAcl, windowsSessionId } from './src/cli/host/windows.ts';",
+    contents: "export { cmdDoctor } from './src/cli/host/doctor.ts'; export { cmdInstall } from './src/cli/host/setup.ts'; export { cmdDown, cmdLogs, cmdRun, cmdUp } from './src/cli/host/session_commands.ts'; export { engineDirectory, requireHost, which } from './src/cli/host/common.ts'; export { compiledBackends, findEngine, requestedBackend, Session } from './src/cli/host/supervisor.ts'; export { alive, identity, lock, stateDir, writeSession } from './src/cli/host/state.ts'; export { engineEnvironment, killTree, MSYS2_CHECKED, MSYS2_PATH, msys2Fix, msys2Repair, msys2Shell, repairCommand, trustedAcl, windowsSessionId } from './src/cli/host/windows.ts';",
     resolveDir: root,
   },
   bundle: true,
@@ -29,7 +29,7 @@ const bundle = buildSync({
 });
 const bundlePath = join(directory, 'windows.mjs');
 writeFileSync(bundlePath, bundle.outputFiles[0].contents);
-const { alive, cmdDown, cmdInstall, cmdLogs, cmdRun, cmdUp, compiledBackends, engineDirectory, engineEnvironment, findEngine, identity, killTree, lock, msys2Fix, msys2Shell, repairCommand, requestedBackend, requireHost, Session, stateDir, trustedAcl, which, windowsSessionId, writeSession } = await import(pathToFileURL(bundlePath).href);
+const { alive, cmdDown, cmdInstall, cmdLogs, cmdRun, cmdUp, compiledBackends, engineDirectory, engineEnvironment, findEngine, identity, killTree, lock, MSYS2_CHECKED, MSYS2_PATH, msys2Fix, msys2Repair, msys2Shell, repairCommand, requestedBackend, requireHost, Session, stateDir, trustedAcl, which, windowsSessionId, writeSession } = await import(pathToFileURL(bundlePath).href);
 
 function onWindowsProcess(script) {
   const probe = `Object.defineProperty(process, 'platform', { value: 'win32' });
@@ -179,6 +179,21 @@ test('an MSYS2 tree with trusted owners and a loose rule gets the icacls repair 
   assert.ok(fix.includes(`icacls C:\\msys64 /inheritance:r /grant:r "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F" "*${ACCOUNT}:(OI)(CI)F" "*S-1-5-32-545:(OI)(CI)RX"`), fix);
   assert.match(fix, /delete C:\\msys64 and run screen-relay install again/);
   assert.ok(!fix.includes('`'));
+});
+
+test('setup searches only the MSYS2 directories it checks, with usr\\local\\bin first', () => {
+  assert.equal(MSYS2_PATH.split(':')[0], '/usr/local/bin');
+  const checked = new Set(MSYS2_CHECKED.map((path) => path.toLowerCase()));
+  for (const directory of MSYS2_PATH.split(':')) {
+    assert.ok(checked.has(`c:\\msys64${directory.replaceAll('/', '\\')}`.toLowerCase()), `${directory} is searched but not checked`);
+  }
+});
+
+test('a tree that an Entra account owns gets the icacls repair', () => {
+  const account = 'S-1-12-1-987654321-1234567890-987654321-1234567890';
+  assert.deepEqual(msys2Repair(true, account), repairCommand(account));
+  assert.equal(msys2Repair(true, ''), undefined);
+  assert.equal(msys2Repair(false, account), undefined);
 });
 
 test('an MSYS2 tree owned by another account can only be deleted', () => {

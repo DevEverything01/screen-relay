@@ -11,7 +11,7 @@ import { engineDirectory, isLinux, LAUNCHER_DIR, requireHost, run, which, type H
 import { detectFamily, groupPackages, installCommand, packagesFor, provides } from './packages.js';
 import { claimLock, lockOwnerAlive } from './state.js';
 import { compiledBackends, findEngine, requestedBackend, sessionNeeds } from './supervisor.js';
-import { forgetMsys2Installation, msys2Failure, msys2Installation, msys2Shell, repairMsys2, wingetPath } from './windows.js';
+import { forgetMsys2Installation, MSYS2_PATH, msys2Failure, msys2Installation, msys2Shell, repairMsys2, wingetPath } from './windows.js';
 
 type Backend = (typeof BACKENDS)[number];
 type Args = HostArgs & Record<string, any>;
@@ -29,6 +29,11 @@ function msysEnv(): NodeJS.ProcessEnv {
   return { ...process.env, MSYSTEM: 'UCRT64', CHERE_INVOKING: '1' };
 }
 
+/** The command to hand MSYS2's shell, with PATH set to the directories setup checks so a login profile cannot add one it does not. */
+function msysCommand(command: string): string {
+  return `export PATH=${MSYS2_PATH}; ${command}`;
+}
+
 /** A path as MSYS2's shell reads it: forward slashes on Windows, since its shell treats backslashes as escapes. */
 function shellPath(path: string): string {
   return process.platform === 'win32' ? path.replaceAll('\\', '/') : path;
@@ -40,7 +45,7 @@ function buildable(backends: Backend[]): boolean {
   if (process.platform !== 'win32') return run(['make', '-s', '-C', SOURCE, `BACKENDS=${backends.join(' ')}`, 'deps']).status === 0;
   const installation = msys2Installation();
   if (installation.state !== 'trusted') return false;
-  return run([installation.shell, '-lc', `make -s -C ${quote(shellPath(SOURCE))} BACKENDS=${quote(backends.join(' '))} deps`], { env: msysEnv() }).status === 0;
+  return run([installation.shell, '-lc', msysCommand(`make -s -C ${quote(shellPath(SOURCE))} BACKENDS=${quote(backends.join(' '))} deps`)], { env: msysEnv() }).status === 0;
 }
 
 /** Decides what this machine still needs before it can run the requested backends. The engine is built with every compiled backend, but the desktop packages follow only the requested ones. */
@@ -65,7 +70,7 @@ async function step(title: string, done: string, command: string, args: Args, re
   if (!quiet) process.stderr.write(`${style.strong(title)}\n${style.muted(`  ${command}`)}\n`);
   let output = '';
   const msys = process.platform === 'win32' && !argv;
-  const [program, ...programArgs] = argv ?? (msys ? [msys2Shell(), '-lc', command] : ['sh', '-c', command]);
+  const [program, ...programArgs] = argv ?? (msys ? [msys2Shell(), '-lc', msysCommand(command)] : ['sh', '-c', command]);
   const code = await new Promise<number | null>((resolveExit, reject) => {
     const child = spawn(program, programArgs, { stdio: quiet ? ['ignore', 'pipe', 'pipe'] : ['inherit', 2, 2], env: msys ? msysEnv() : process.env, signal: args.signal });
     for (const stream of [child.stdout, child.stderr]) stream?.on('data', (chunk: Buffer) => { output = (output + chunk.toString()).slice(-16000); });

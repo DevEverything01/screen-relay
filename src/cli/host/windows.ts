@@ -12,8 +12,15 @@ const MSYS2_SHELL = `${MSYS2_ROOT}\\usr\\bin\\bash.exe`;
 /** MSYS2's UCRT64 libraries, which relay-engine loads on Windows. */
 const MSYS2_LIBRARIES = `${MSYS2_ROOT}\\ucrt64\\bin`;
 
-/** The MSYS2 paths that setup runs or loads, and so must belong to a trusted account. */
-const TRUSTED_PATHS = [MSYS2_ROOT, `${MSYS2_ROOT}\\etc`, `${MSYS2_ROOT}\\usr`, `${MSYS2_ROOT}\\usr\\bin`, MSYS2_SHELL, MSYS2_LIBRARIES];
+/** The directories that the MSYS2 shell searches for the commands setup runs, in its own search order. */
+const MSYS2_SEARCH = ['usr/local/bin', 'usr/bin', 'ucrt64/bin'];
+
+/** The PATH that setup gives the MSYS2 shell, so it searches only the directories setup checks and whatever its login profile adds is not used. */
+export const MSYS2_PATH = MSYS2_SEARCH.map((directory) => `/${directory}`).join(':');
+
+/** The MSYS2 paths that setup runs or loads: the shell, the config its login profile reads, and every searched directory with the directories above it that could replace it. */
+export const MSYS2_CHECKED = [...new Set([MSYS2_ROOT, `${MSYS2_ROOT}\\etc`, MSYS2_SHELL,
+  ...MSYS2_SEARCH.flatMap((directory) => directory.split('/').map((_, index, parts) => `${MSYS2_ROOT}\\${parts.slice(0, index + 1).join('\\')}`))])];
 
 /** Owners that setup trusts besides the signed-in account: SYSTEM, Administrators, and TrustedInstaller. */
 const TRUSTED_SIDS = new Set(['S-1-5-18', 'S-1-5-32-544', 'S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464']);
@@ -119,8 +126,12 @@ function detectMsys2(): Msys2Installation {
   if (!probe) return { state: 'untrusted', root: MSYS2_ROOT, reason: `screen-relay could not read who owns ${MSYS2_ROOT}.` };
   const verdict = trustedAcl(probe);
   if (verdict.trusted) return { state: 'trusted', root: MSYS2_ROOT, shell: MSYS2_SHELL };
-  const repair = verdict.owned && /^S-1-5-21-[\d-]+$/.test(probe.current) ? repairCommand(probe.current) : undefined;
-  return { state: 'untrusted', root: MSYS2_ROOT, reason: verdict.reason, repair };
+  return { state: 'untrusted', root: MSYS2_ROOT, reason: verdict.reason, repair: msys2Repair(verdict.owned, probe.current) };
+}
+
+/** The repair for a tree whose owners setup trusts, or undefined when only deleting it helps; any account's SID works, including one from Entra ID. */
+export function msys2Repair(owned: boolean, account: string): string[] | undefined {
+  return owned && /^S-\d+(-\d+)+$/.test(account) ? repairCommand(account) : undefined;
 }
 
 /** The icacls command that replaces the MSYS2 root's inherited rules with full control for SYSTEM, Administrators and this account and read access for Users; Windows passes them on to the tree. */
@@ -133,7 +144,7 @@ function aclProbe(): AclProbe | null {
   const script = [
     "$ErrorActionPreference = 'Stop'",
     '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8',
-    `$paths = @(${TRUSTED_PATHS.map((path) => `'${path}'`).join(', ')})`,
+    `$paths = @(${MSYS2_CHECKED.map((path) => `'${path}'`).join(', ')})`,
     '$objects = @(foreach ($path in $paths) {',
     '  if (-not (Test-Path -LiteralPath $path)) { continue }',
     '  $acl = if (Test-Path -LiteralPath $path -PathType Container) { [System.IO.Directory]::GetAccessControl($path) } else { [System.IO.File]::GetAccessControl($path) }',
