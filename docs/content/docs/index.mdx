@@ -18,15 +18,6 @@ screen-relay up
 
 <Diagram name="architecture" title="How screen-relay connects the desktop, browser, and agent" aspectRatio="720 / 288" />
 
-The same flow in text:
-
-```text
-Linux VM: Desktop (X11 or Wayland) -> screen-relay engine (screen)
-screen-relay engine -> Browser (video)
-Browser -> screen-relay engine (clicks and keys)
-Your agent (CLI, SDK, or HTTP) <-> screen-relay engine (screenshots and input)
-```
-
 The engine captures the screen, encodes it as H.264 video, and streams it to the viewer. The viewer, or an agent over HTTP or WebSocket, sends input back. To see how the stream adapts to a slow link, read [How streaming works](/docs/how-streaming-works).
 
 ## What works where

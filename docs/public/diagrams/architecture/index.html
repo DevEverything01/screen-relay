@@ -73,49 +73,30 @@
 
   <rect class="box" x="16" y="16" width="424" height="136" rx="12"/>
   <text class="head" x="40" y="40">Linux VM</text>
-
-  <rect class="box node" x="40" y="56" width="144" height="72" rx="6"/>
-  <g class="icon" transform="translate(56 70)">
-    <rect x="1.5" y="2" width="13" height="9" rx="1"/>
-    <path d="M8 11v3M5 14h6"/>
-  </g>
+  <rect class="box node" x="40" y="56" width="128" height="72" rx="6"/>
+  <g class="icon" transform="translate(56 70)" aria-hidden="true"><rect x="1" y="1" width="14" height="10" rx="1.5"/><path d="M8 11v4M5 15h6"/></g>
   <text class="label" x="80" y="84">Desktop</text>
-  <text class="sub" x="56" y="108">X11 or Wayland</text>
-
-  <rect class="box node engine" x="240" y="56" width="176" height="72" rx="6"/>
-  <g class="icon" transform="translate(256 70)">
-    <rect x="3" y="3" width="10" height="10" rx="2"/>
-    <path d="M6 1v2m4-2v2M6 13v2m4-2v2M1 6h2m-2 4h2m10-4h2m-2 4h2M6 6h4v4H6z"/>
-  </g>
-  <text class="label" x="280" y="84">screen-relay engine</text>
-  <text class="sub" x="256" y="108">streams the screen</text>
-
+  <text class="sub" x="56" y="110">X11 or Wayland</text>
+  <rect class="box node engine" x="224" y="56" width="192" height="72" rx="6"/>
+  <g class="icon" transform="translate(240 70)" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="1.5"/><path d="M6 0v3M10 0v3M6 13v3M10 13v3M0 6h3M0 10h3M13 6h3M13 10h3"/></g>
+  <text class="label" x="264" y="84">screen-relay engine</text>
+  <text class="sub" x="240" y="110">streams the screen</text>
   <rect class="box node" x="544" y="56" width="160" height="72" rx="6"/>
-  <g class="icon" transform="translate(560 70)">
-    <circle cx="8" cy="8" r="6.5"/>
-    <path d="M1.5 8h13M8 1.5c2 2 3 4.1 3 6.5s-1 4.5-3 6.5C6 12.5 5 10.4 5 8s1-4.5 3-6.5z"/>
-  </g>
+  <g class="icon" transform="translate(560 70)" aria-hidden="true"><circle cx="8" cy="8" r="6.5"/><path d="M1.5 8h13M8 1.5c2 2 3 4.1 3 6.5s-1 4.5-3 6.5C6 12.5 5 10.4 5 8s1-4.5 3-6.5z"/></g>
   <text class="label" x="584" y="84">Browser</text>
-  <text class="sub" x="560" y="108">watch and control</text>
-
-  <rect class="box node" x="240" y="200" width="176" height="72" rx="6"/>
-  <g class="icon" transform="translate(256 214)">
-    <rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/>
-    <path d="m4.5 6 2 2-2 2M8.5 10h3"/>
-  </g>
-  <text class="label" x="280" y="228">Your agent</text>
-  <text class="sub" x="256" y="252">CLI, SDK, or HTTP</text>
-
-  <path class="wire" d="M188 92H236"/>
-  <text class="tag" x="212" y="84" text-anchor="middle">screen</text>
-
+  <text class="sub" x="560" y="110">watch and control</text>
+  <rect class="box node" x="248" y="200" width="144" height="72" rx="6"/>
+  <g class="icon" transform="translate(264 214)" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/><path d="m4.5 6 2 2-2 2M8.5 10h3"/></g>
+  <text class="label" x="288" y="228">Your agent</text>
+  <text class="sub" x="264" y="254">CLI, SDK, or HTTP</text>
+  <path class="wire" d="M172 92H220"/>
   <path class="wire" d="M420 84H540"/>
-  <text class="tag" x="492" y="76" text-anchor="middle">video</text>
   <path class="wire" d="M540 100H420"/>
-  <text class="tag" x="492" y="118" text-anchor="middle">clicks and keys</text>
-
-  <path class="wire both" d="M328 132V196"/>
-  <text class="tag" x="340" y="182">screenshots and input</text>
+  <path class="wire both" d="M320 132V196"/>
+  <text class="tag" x="196" y="81" text-anchor="middle">screen</text>
+  <text class="tag" x="492" y="73" text-anchor="middle">video</text>
+  <text class="tag" x="492" y="119" text-anchor="middle">clicks and keys</text>
+  <text class="tag" x="312" y="182" text-anchor="end">screenshots and input</text>
 </svg>
 </body>
 </html>
