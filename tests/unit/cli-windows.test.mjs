@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { delimiter, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -130,6 +130,30 @@ test('doctor on Windows reports the platform, Windows version, MSYS2, engine and
 
 test('run refuses --restart on Windows', async () => {
   await onPlatform('win32', () => assert.rejects(cmdRun({ command: 'run', json: false, name: 'desk', app: 'notepad', args: [], restart: true }), { reason: 'invalid_input' }));
+});
+
+test('run starts an app found by name on Windows', { skip: process.platform !== 'win32' }, async () => {
+  const name = 'run-windows';
+  const directory = stateDir(name);
+  mkdirSync(directory, { recursive: true });
+  const supervisor = spawn(process.execPath, ['-e', sleeper]);
+  await once(supervisor, 'spawn');
+  const appDirectory = join(home, 'run-windows-app');
+  mkdirSync(appDirectory, { recursive: true });
+  copyFileSync(join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'whoami.exe'), join(appDirectory, 'relay-probe.exe'));
+  const path = process.env.PATH;
+  process.env.PATH = `${appDirectory}${delimiter}${path}`;
+  try {
+    writeSession(directory, { name, state: 'ready', backend: 'windows', ownsDisplay: false, supervisor: identity(supervisor.pid), components: {} });
+    assert.equal(await cmdRun({ command: 'run', json: true, name, app: 'relay-probe', args: [] }), 0);
+    const log = join(directory, 'apps.log');
+    for (let attempt = 0; attempt < 50 && !readFileSync(log, 'utf8').includes('\\'); attempt++) await delay(100);
+    assert.match(readFileSync(log, 'utf8'), /\\/);
+  } finally {
+    process.env.PATH = path;
+    supervisor.kill();
+    await once(supervisor, 'exit');
+  }
 });
 
 test('requireHost still refuses other platforms', async () => {

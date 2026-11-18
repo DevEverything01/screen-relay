@@ -107,6 +107,11 @@ jobs:
       - run: screen-relay doctor
       - run: screen-relay up -d --yes
       - run: screen-relay status
+      - name: Run an app on the desktop
+        shell: bash
+        run: |
+          screen-relay run -- whoami
+          screen-relay logs apps
       - name: Take a screenshot
         shell: bash
         run: |
