@@ -237,7 +237,7 @@ const crypto = require('node:crypto');
 const [port, token] = [Number(process.argv[2]), process.argv[3]];
 const host = `127.0.0.1:${port}`;
 const request = (options) => new Promise((resolve, reject) => {
-  const req = http.request({ host: '127.0.0.2', port, headers: { Host: host, ...options.headers }, ...options, });
+  const req = http.request({ ...options, host: '127.0.0.2', port, headers: { Host: host, ...options.headers } });
   req.on('response', (response) => {
     let body = '';
     response.on('data', (chunk) => { body += chunk; });
