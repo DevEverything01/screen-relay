@@ -110,13 +110,9 @@ jobs:
       - name: Run an app on the desktop
         shell: bash
         run: |
-          screen-relay run -- powershell -NoProfile -Command "Write-Output relay-run-started"
-          for attempt in $(seq 1 30); do
-            output=$(screen-relay logs apps)
-            grep -q relay-run-started <<< "$output" && break
-            sleep 1
-          done
-          grep -q relay-run-started <<< "$output"
+          screen-relay run -- 'C:\Windows\System32\where.exe' cmd
+          output=$(screen-relay logs apps)
+          grep -qi 'cmd.exe' <<< "$output"
       - name: Take a screenshot
         shell: bash
         run: |
