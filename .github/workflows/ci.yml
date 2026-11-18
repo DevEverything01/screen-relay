@@ -96,6 +96,12 @@ jobs:
       - name: Install the packed package
         shell: bash
         run: npm install -g "$(npm pack)"
+      - name: Protect the machine's MSYS2 so setup trusts it
+        shell: pwsh
+        run: |
+          if (-not (Test-Path C:\msys64)) { exit 0 }
+          $me = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+          icacls C:\msys64 /T /inheritance:r /grant:r "*$me:(OI)(CI)(F)" "*S-1-5-18:(OI)(CI)(F)" "*S-1-5-32-544:(OI)(CI)(F)" "*S-1-5-11:(OI)(CI)(RX)"
       - name: Install MSYS2 packages and build the engine
         run: screen-relay install --yes
       - name: Check that a second install changes nothing

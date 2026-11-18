@@ -79,7 +79,7 @@ export function msys2Shell(): string {
 export function msys2Failure(found: Msys2Problem): Failure {
   if (found.state === 'untrusted') {
     return new Failure('missing_dependency', `MSYS2 at ${found.root} is not a trusted installation`,
-      `${found.reason} Delete ${found.root}, then run \`screen-relay install\` again.`);
+      `${found.reason} Delete ${found.root}, then run \`screen-relay install\` again from an administrator account.`);
   }
   return new Failure('missing_dependency', 'MSYS2 is not installed', 'Install MSYS2 from https://www.msys2.org, then run `screen-relay install` again.');
 }
@@ -107,7 +107,7 @@ function detectMsys2(): Msys2Installation {
 }
 
 /** Reads the owners and allow rules of the MSYS2 paths from PowerShell, or null when it cannot report them. */
-export function aclProbe(): AclProbe | null {
+function aclProbe(): AclProbe | null {
   const script = [
     "$ErrorActionPreference = 'Stop'",
     '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8',

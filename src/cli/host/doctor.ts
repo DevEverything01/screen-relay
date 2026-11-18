@@ -106,7 +106,7 @@ export async function cmdDoctor(args: HostArgs): Promise<number> {
     check('windows version', Number(version.split('.')[0]) >= 10, `Windows ${version}`, 'Use Windows 10 or later.');
     const installation = msys2Installation();
     check('msys2', installation.state === 'trusted', installation.state === 'untrusted' ? installation.reason : MSYS2_ROOT,
-      installation.state === 'untrusted' ? `Delete ${MSYS2_ROOT}, then run \`screen-relay install\`.` : 'Run `screen-relay install`.');
+      installation.state === 'untrusted' ? `Delete ${MSYS2_ROOT}, then run \`screen-relay install\` from an administrator account.` : 'Run `screen-relay install`.');
     const session = windowsSessionId();
     check('desktop session', session !== null && session !== 0, session === null ? 'session unknown' : `session ${session}`, "Run screen-relay in a terminal on the signed-in user's desktop.");
   }
