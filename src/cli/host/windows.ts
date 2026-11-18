@@ -18,15 +18,21 @@ const MSYS2_SEARCH = ['usr/local/bin', 'usr/bin', 'ucrt64/bin'];
 /** The PATH that setup gives the MSYS2 shell, so it searches only the directories setup checks and whatever its login profile adds is not used. */
 export const MSYS2_PATH = MSYS2_SEARCH.map((directory) => `/${directory}`).join(':');
 
+/** The files that the MSYS2 login profile reads, which `bash -l` runs before the command setup passes it. */
+const MSYS2_LOGIN_FILES = ['etc\\profile', 'etc\\bash.bashrc'].map((file) => `${MSYS2_ROOT}\\${file}`);
+
 /** The MSYS2 paths that setup runs or loads: the shell, the config its login profile reads, and every searched directory with the directories above it that could replace it. */
-export const MSYS2_CHECKED = [...new Set([MSYS2_ROOT, `${MSYS2_ROOT}\\etc`, MSYS2_SHELL,
+export const MSYS2_CHECKED = [...new Set([MSYS2_ROOT, `${MSYS2_ROOT}\\etc`, `${MSYS2_ROOT}\\etc\\profile.d`, MSYS2_SHELL, ...MSYS2_LOGIN_FILES,
   ...MSYS2_SEARCH.flatMap((directory) => directory.split('/').map((_, index, parts) => `${MSYS2_ROOT}\\${parts.slice(0, index + 1).join('\\')}`))])];
 
 /** Owners that setup trusts besides the signed-in account: SYSTEM, Administrators, and TrustedInstaller. */
 const TRUSTED_SIDS = new Set(['S-1-5-18', 'S-1-5-32-544', 'S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464']);
 
-/** FILE_WRITE_DATA, FILE_DELETE_CHILD, DELETE, WRITE_DAC, WRITE_OWNER, GENERIC_ALL, and GENERIC_WRITE: the rights that let an account replace or alter a file. Creating a subdirectory cannot replace the shell, so it is not one of them. */
-const WRITE_RIGHTS = 0x2 | 0x40 | 0x10000 | 0x40000 | 0x80000 | 0x10000000 | 0x40000000;
+/** FILE_WRITE_DATA, FILE_DELETE_CHILD, DELETE, WRITE_DAC, WRITE_OWNER, GENERIC_ALL, and GENERIC_WRITE: the rights that let an account replace a path or alter the files in it. Creating a subdirectory cannot replace the shell, so FILE_APPEND_DATA is not one of them on a directory. */
+const REPLACE_RIGHTS = 0x2 | 0x40 | 0x10000 | 0x40000 | 0x80000 | 0x10000000 | 0x40000000;
+
+/** The rights that let an account alter a path, by kind of object: on a file FILE_APPEND_DATA adds to its contents, which is how another account runs code from a profile that `bash -l` reads, while on a directory the same bit only adds a subdirectory. */
+const WRITE_RIGHTS: Record<AclObject['kind'], number> = { file: REPLACE_RIGHTS | 0x4, directory: REPLACE_RIGHTS };
 
 /** Rules that only apply to objects their trustee creates; who may create them is already settled by the parent's rules. */
 const CREATOR_SIDS = new Set(['S-1-3-0', 'S-1-3-1', 'S-1-3-4']);
@@ -37,8 +43,8 @@ let installation: Msys2Installation | undefined;
 /** One access rule as PowerShell reports it: the trustee's security identifier, its account name, and the rights it is granted. */
 export type AclRule = { sid: string; name: string; rights: number };
 
-/** The owner and allow rules of one path. */
-export type AclObject = { path: string; owner: string; ownerName: string; rules: AclRule[] };
+/** The owner and allow rules of one path, and whether it is a directory or a file. */
+export type AclObject = { path: string; kind: 'file' | 'directory'; owner: string; ownerName: string; rules: AclRule[] };
 
 /** The allow rules of the MSYS2 paths, and the security identifier of the signed-in account. */
 export type AclProbe = { current: string; objects: AclObject[] };
@@ -112,7 +118,7 @@ export function trustedAcl(probe: AclProbe): { trusted: true } | { trusted: fals
   for (const object of probe.objects) {
     if (!trusted(object.owner)) return { trusted: false, reason: `${object.path} is owned by ${object.ownerName}.`, owned: false };
     for (const rule of object.rules) {
-      if (!(rule.rights & WRITE_RIGHTS) || trusted(rule.sid) || CREATOR_SIDS.has(rule.sid)) continue;
+      if (!(rule.rights & WRITE_RIGHTS[object.kind]) || trusted(rule.sid) || CREATOR_SIDS.has(rule.sid)) continue;
       return { trusted: false, reason: `${object.path} lets ${rule.name} write to it.`, owned: true };
     }
   }
@@ -147,7 +153,8 @@ function aclProbe(): AclProbe | null {
     `$paths = @(${MSYS2_CHECKED.map((path) => `'${path}'`).join(', ')})`,
     '$objects = @(foreach ($path in $paths) {',
     '  if (-not (Test-Path -LiteralPath $path)) { continue }',
-    '  $acl = if (Test-Path -LiteralPath $path -PathType Container) { [System.IO.Directory]::GetAccessControl($path) } else { [System.IO.File]::GetAccessControl($path) }',
+    '  $isDirectory = Test-Path -LiteralPath $path -PathType Container',
+    '  $acl = if ($isDirectory) { [System.IO.Directory]::GetAccessControl($path) } else { [System.IO.File]::GetAccessControl($path) }',
     '  $owner = $acl.GetOwner([System.Security.Principal.SecurityIdentifier])',
     '  $ownerName = try { $owner.Translate([System.Security.Principal.NTAccount]).Value } catch { $owner.Value }',
     '  $rules = @($acl.Access | Where-Object { $_.AccessControlType -eq [System.Security.AccessControl.AccessControlType]::Allow } | ForEach-Object {',
@@ -155,7 +162,7 @@ function aclProbe(): AclProbe | null {
     '    $name = try { $sid.Translate([System.Security.Principal.NTAccount]).Value } catch { $sid.Value }',
     '    [pscustomobject]@{ sid = $sid.Value; name = $name; rights = [int]$_.FileSystemRights }',
     '  })',
-    '  [pscustomobject]@{ path = $path; owner = $owner.Value; ownerName = $ownerName; rules = $rules }',
+    '  [pscustomobject]@{ path = $path; directory = $isDirectory; owner = $owner.Value; ownerName = $ownerName; rules = $rules }',
     '})',
     '$current = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value',
     '[pscustomobject]@{ current = $current; objects = $objects } | ConvertTo-Json -Depth 5 -Compress',
@@ -164,8 +171,9 @@ function aclProbe(): AclProbe | null {
   if (result.status !== 0 || !result.stdout) return null;
   try {
     const decoded = JSON.parse(result.stdout.replace(/^\uFEFF/, '').trim()) as { current?: unknown; objects?: RawObject | RawObject[] };
-    const objects = (Array.isArray(decoded.objects) ? decoded.objects : decoded.objects ? [decoded.objects] : []).map((object) => ({
+    const objects = (Array.isArray(decoded.objects) ? decoded.objects : decoded.objects ? [decoded.objects] : []).map((object): AclObject => ({
       path: String(object.path ?? ''),
+      kind: object.directory === true ? 'directory' : 'file',
       owner: String(object.owner ?? ''),
       ownerName: String(object.ownerName ?? object.owner ?? ''),
       rules: (Array.isArray(object.rules) ? object.rules : object.rules ? [object.rules] : []).map((rule) => ({
@@ -181,7 +189,7 @@ function aclProbe(): AclProbe | null {
 }
 
 /** A path from the probe as PowerShell wrote it, before the shape is checked. */
-type RawObject = { path?: unknown; owner?: unknown; ownerName?: unknown; rules?: RawRule | RawRule[] };
+type RawObject = { path?: unknown; directory?: unknown; owner?: unknown; ownerName?: unknown; rules?: RawRule | RawRule[] };
 
 /** One rule from the probe as PowerShell wrote it, before the shape is checked. */
 type RawRule = { sid?: unknown; name?: unknown; rights?: unknown };

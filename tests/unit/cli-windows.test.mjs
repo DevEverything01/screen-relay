@@ -139,15 +139,15 @@ const CREATE_DIRECTORY = 4;
 const MODIFY = 197055;
 
 test('an MSYS2 tree owned by another account is refused, and the owner is named', () => {
-  const verdict = trustedAcl({ current: ACCOUNT, objects: [{ path: 'C:\\msys64', owner: OTHER, ownerName: 'DESKTOP\\other', rules: [] }] });
+  const verdict = trustedAcl({ current: ACCOUNT, objects: [{ path: 'C:\\msys64', kind: 'directory', owner: OTHER, ownerName: 'DESKTOP\\other', rules: [] }] });
   assert.deepEqual(verdict, { trusted: false, reason: 'C:\\msys64 is owned by DESKTOP\\other.', owned: false });
 });
 
 test('an MSYS2 tree that another account can write to is refused, and the path and account are named', () => {
   const rules = [{ sid: USERS, name: 'BUILTIN\\Users', rights: MODIFY }];
   const verdict = trustedAcl({ current: ACCOUNT, objects: [
-    { path: 'C:\\msys64', owner: SYSTEM, ownerName: 'NT AUTHORITY\\SYSTEM', rules },
-    { path: 'C:\\msys64\\usr\\bin', owner: SYSTEM, ownerName: 'NT AUTHORITY\\SYSTEM', rules },
+    { path: 'C:\\msys64', kind: 'directory', owner: SYSTEM, ownerName: 'NT AUTHORITY\\SYSTEM', rules },
+    { path: 'C:\\msys64\\usr\\bin', kind: 'directory', owner: SYSTEM, ownerName: 'NT AUTHORITY\\SYSTEM', rules },
   ] });
   assert.deepEqual(verdict, { trusted: false, reason: 'C:\\msys64 lets BUILTIN\\Users write to it.', owned: true });
 });
@@ -157,18 +157,28 @@ test('a tree that the signed-in account, SYSTEM or Administrators owns and no ot
     { sid: SYSTEM, name: 'NT AUTHORITY\\SYSTEM', rights: FULL },
     { sid: ADMINISTRATORS, name: 'BUILTIN\\Administrators', rights: FULL },
     { sid: USERS, name: 'BUILTIN\\Users', rights: READ },
-    { sid: USERS, name: 'BUILTIN\\Users', rights: CREATE_DIRECTORY },
     { sid: 'S-1-3-0', name: 'CREATOR OWNER', rights: FULL },
   ];
+  const directoryRules = [...rules, { sid: USERS, name: 'BUILTIN\\Users', rights: CREATE_DIRECTORY }];
+  const directories = ['C:\\msys64', 'C:\\msys64\\usr', 'C:\\msys64\\usr\\bin'];
   for (const owner of [ACCOUNT, SYSTEM, ADMINISTRATORS]) {
-    const objects = ['C:\\msys64', 'C:\\msys64\\usr', 'C:\\msys64\\usr\\bin', 'C:\\msys64\\usr\\bin\\bash.exe'].map((path) => ({ path, owner, ownerName: 'owner', rules }));
+    const objects = [
+      ...directories.map((path) => ({ path, kind: 'directory', owner, ownerName: 'owner', rules: directoryRules })),
+      { path: 'C:\\msys64\\usr\\bin\\bash.exe', kind: 'file', owner, ownerName: 'owner', rules },
+    ];
     assert.deepEqual(trustedAcl({ current: ACCOUNT, objects }), { trusted: true });
   }
 });
 
+test('a file that another account can append to is refused, since the login profile runs it', () => {
+  const rules = [{ sid: USERS, name: 'BUILTIN\\Users', rights: CREATE_DIRECTORY }];
+  const verdict = trustedAcl({ current: ACCOUNT, objects: [{ path: 'C:\\msys64\\etc\\profile', kind: 'file', owner: SYSTEM, ownerName: 'NT AUTHORITY\\SYSTEM', rules }] });
+  assert.deepEqual(verdict, { trusted: false, reason: 'C:\\msys64\\etc\\profile lets BUILTIN\\Users write to it.', owned: true });
+});
+
 test('a rule that grants another account a generic write right is refused', () => {
   for (const rights of [0x40000000, 0x10000000]) {
-    const verdict = trustedAcl({ current: ACCOUNT, objects: [{ path: 'C:\\msys64', owner: SYSTEM, ownerName: 'NT AUTHORITY\\SYSTEM', rules: [{ sid: USERS, name: 'BUILTIN\\Users', rights }] }] });
+    const verdict = trustedAcl({ current: ACCOUNT, objects: [{ path: 'C:\\msys64', kind: 'directory', owner: SYSTEM, ownerName: 'NT AUTHORITY\\SYSTEM', rules: [{ sid: USERS, name: 'BUILTIN\\Users', rights }] }] });
     assert.equal(verdict.trusted, false);
   }
 });
