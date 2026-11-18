@@ -1,8 +1,37 @@
 # screen-relay
 
-## 0.1.0
+## 0.1.1
 
 <!-- release:start -->
+
+### New Features
+
+- Added **Windows hosts**: `screen-relay install`, `up`, `down`, `status`, `logs`, `run`, and `doctor` work on Windows, with MSYS2 at `C:\msys64` providing the build tools and the libraries the engine loads (#57)
+
+### Bug Fixes
+
+- Fixed **TLS verification** skipping the host name check when the SDK was given a CA file. `ca` now checks the chain and the URL host name, and the new `certificate` option pins one exact server certificate (#54)
+- Fixed **wheel scrolling** sending at least one notch for every wheel event, which scrolled the desktop dozens of notches during a short trackpad swipe. The viewer now adds up wheel distance and sends a notch for every 100 pixels (#61)
+- Fixed **Windows setup** running an MSYS2 installation that another local account could have created first. `install` and `doctor` now check the owner and the write rules of the paths they run and load (#60)
+
+### Improvements
+
+- The **viewer opens view-only**. Choose **Take control** to own input and **Release control** to hand it back, so the CLI or SDK can send input while the viewer is open (#56)
+
+### Documentation
+
+- Added **platform demos** to the overview and to the Linux, macOS, and Windows pages (#59)
+- Pointed documentation links at screen-relay.dev, showed screen-relay as a Labs experiment, and gave every diagram node even padding (#53, #55)
+
+### Contributors
+
+- @ctate
+- @lahfir
+- @Railly
+
+<!-- release:end -->
+
+## 0.1.0
 
 ### New Features
 
@@ -22,8 +51,6 @@
 ### Contributors
 
 - @lahfir
-
-<!-- release:end -->
 
 ## 0.0.1
 
