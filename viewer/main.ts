@@ -58,7 +58,7 @@ const HOLD_DECAY = 0.05;
 const CLOCK_JUMP_MS = 500;
 type Sample = { time: number; offset: number; late: number };
 let samples: Sample[] = [], lows: Sample[] = [], holdMs = 0;
-let buttons = 0, modifiers = 0, x = 0, y = 0, viewOnly = false, capsLock = false,
+let buttons = 0, modifiers = 0, x = 0, y = 0, viewOnly = true, capsLock = false,
   metaAsCtrl = stored('relay.metaCtrl') === null ? macos() : stored('relay.metaCtrl') === '1';
 const pending = new Map(), decoded: any[] = [], held = new Set<number>(), latched = new Map<number, Element>();
 const clamp = (value: number, low: number, high: number) => Math.max(low, Math.min(high, value));
@@ -230,7 +230,7 @@ function draw(item: any): boolean {
   ready = true;
   if (!wasReady) renderCursor();
   retry = 0;
-  setStatus('Live · click to control');
+  setStatus(viewOnly ? 'Live · view only' : 'Live · you have control');
   drawnThisFrame = true;
   return ackFrame(item);
 }
@@ -302,7 +302,7 @@ function connect() {
     setStatus('WebCodecs unavailable in this browser');
     return;
   }
-  const target = socketTarget(new URL(`${location.protocol}//${location.host}`), '/stream', accessToken);
+  const target = socketTarget(new URL(`${location.protocol}//${location.host}`), viewOnly ? '/stream?view=1' : '/stream', accessToken);
   socket = new WebSocket(target.url, target.protocols);
   transportBroken = false;
   loadCapabilities();
@@ -658,6 +658,20 @@ function setExpanded(open: boolean) {
   toggle.setAttribute('aria-expanded', String(open));
   if (!open) showPanel(null);
 }
+function applyControl() {
+  const button = actions.querySelector('[data-action="control"]')!;
+  const label = viewOnly ? 'Take control' : 'Release control';
+  button.setAttribute('aria-pressed', String(!viewOnly));
+  button.setAttribute('aria-label', label);
+  button.setAttribute('title', label);
+}
+function setViewOnly(next: boolean) {
+  if (viewOnly === next) return;
+  release();
+  viewOnly = next;
+  applyControl();
+  connect();
+}
 function syncStatus() {
   const text = status.textContent ?? '';
   dot.className = 'dot' + (text.startsWith('Live') ? ' live' : /^(Connecting|Waiting|Paused)/.test(text) ? '' : ' error');
@@ -682,11 +696,7 @@ const toolbarActions: Record<string, (button: Element) => void> = {
     link.click();
     setTimeout(() => URL.revokeObjectURL(link.href), 1000);
   }, 'image/png'),
-  viewonly: (button) => {
-    release();
-    viewOnly = !viewOnly;
-    button.setAttribute('aria-pressed', String(viewOnly));
-  },
+  control: () => setViewOnly(!viewOnly),
   stats: (button) => {
     const panel = document.querySelector('#stats')!;
     panel.hidden = !panel.hidden;
@@ -751,7 +761,8 @@ panels.connection.addEventListener('submit', (e) => {
 if (!document.hidden) startHud();
 applyScale();
 applyMeta();
+applyControl();
 watchDpr();
 connect();
 
-export { socket, capsLock, connect, reset, setScale, toggleSharp, watchDpr, toggleMeta };
+export { socket, capsLock, connect, reset, setScale, setViewOnly, toggleSharp, watchDpr, toggleMeta };

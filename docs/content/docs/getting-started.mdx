@@ -78,7 +78,7 @@ On the VM, start a terminal on the default X11 desktop:
 screen-relay run -- xfce4-terminal
 ```
 
-The command prints the process ID. Wait for the terminal to appear in the viewer, then close the viewer tab before sending input. Only one controller can send input at a time, and another gets `busy`.
+The command prints the process ID. Wait for the terminal to appear in the viewer. The viewer watches without owning input, so the commands below work while it is open. Choose **Take control** in the viewer to drive the desktop from the browser, and **Release control** to hand input back to the CLI.
 
 ```sh
 screen-relay screenshot screen.png
@@ -88,7 +88,7 @@ screen-relay key Enter
 screen-relay screenshot after.png
 ```
 
-The click is at the center of the screen. If the terminal is elsewhere, replace `0.5 0.5` with a point inside it; coordinates are fractions from 0 to 1 measured from the top-left. Reopen the viewer to check for `hello`. The screenshots are saved on the VM.
+The click is at the center of the screen. If the terminal is elsewhere, replace `0.5 0.5` with a point inside it; coordinates are fractions from 0 to 1 measured from the top-left. The viewer shows `hello` as the CLI types it. The screenshots are saved on the VM.
 
 Ask an agent on the VM to run:
 

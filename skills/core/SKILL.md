@@ -145,7 +145,7 @@ Exit codes: [CLI exit codes](references/cli.md#exit-codes).
 
 ## One controller
 
-Only one controller sends input at a time: a browser viewer, an SDK control session, or your CLI. A second controller gets `busy` with the message `Another controller holds control of the desktop.`, and nothing is applied. Screenshots, `status` and `capabilities` keep working. Do not retry in a loop. Wait for the other controller to close, then retry once.
+Only one controller sends input at a time: a browser viewer that took control, an SDK control session, or your CLI. A viewer opens view-only, so it can watch while your CLI sends input. A second controller gets `busy` with the message `Another controller holds control of the desktop.`, and nothing is applied. Screenshots, `status` and `capabilities` keep working. Do not retry in a loop. Wait for the other controller to release control or close, then retry once.
 
 ## Config
 
