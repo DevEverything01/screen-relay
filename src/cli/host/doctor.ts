@@ -147,7 +147,6 @@ export async function cmdDoctor(args: HostArgs): Promise<number> {
     try { mkdirSync(state, { recursive: true }); accessSync(state, constants.W_OK); } catch { writable = false; }
     check('state dir', writable, state, 'export XDG_STATE_HOME=/path/to/a/writable/dir');
     const engine = findEngine();
-    // On Windows the engine loads its libraries from MSYS2, which it does not use while MSYS2 is untrusted.
     const blocked = windows && engine && msys2Installation().state === 'untrusted';
     const engineRuns = blocked
       ? check('engine', false, `${engine} cannot load its MSYS2 libraries until MSYS2 is trusted`, 'Fix the msys2 check first.')

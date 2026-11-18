@@ -75,9 +75,8 @@ export function msys2Shell(): string {
   throw msys2Failure(found);
 }
 
-/** The failure that says setup will not run the MSYS2 tree it found, and what to do about it. */
+/** The failure that says setup will not run the MSYS2 tree it found, and what to do about it. The hint carries no backticks, because the CLI prints a backticked command in place of the hint. */
 export function msys2Failure(found: Msys2Problem): Failure {
-  // No backticks in these hints: the CLI would print only the quoted command and drop the reason.
   if (found.state === 'untrusted') return new Failure('missing_dependency', `MSYS2 at ${found.root} is not a trusted installation`, msys2Fix(found));
   return new Failure('missing_dependency', 'MSYS2 is not installed', 'Install MSYS2 from https://www.msys2.org, then run screen-relay install again.');
 }
@@ -120,14 +119,13 @@ function detectMsys2(): Msys2Installation {
   if (!probe) return { state: 'untrusted', root: MSYS2_ROOT, reason: `screen-relay could not read who owns ${MSYS2_ROOT}.` };
   const verdict = trustedAcl(probe);
   if (verdict.trusted) return { state: 'trusted', root: MSYS2_ROOT, shell: MSYS2_SHELL };
-  // A tree with trusted owners is only wrong in its rules, so resetting them repairs it.
   const repair = verdict.owned && /^S-1-5-21-[\d-]+$/.test(probe.current) ? repairCommand(probe.current) : undefined;
   return { state: 'untrusted', root: MSYS2_ROOT, reason: verdict.reason, repair };
 }
 
-/** The icacls command that replaces the MSYS2 root's inherited rules with full control for SYSTEM, Administrators and this account and read access for Users; Windows passes them on to the whole tree. */
+/** The icacls command that replaces the MSYS2 root's inherited rules with full control for SYSTEM, Administrators and this account and read access for Users, on the whole tree. */
 export function repairCommand(account: string): string[] {
-  return ['icacls', MSYS2_ROOT, '/inheritance:r', '/grant:r', '*S-1-5-18:(OI)(CI)F', '*S-1-5-32-544:(OI)(CI)F', `*${account}:(OI)(CI)F`, '*S-1-5-32-545:(OI)(CI)RX'];
+  return ['icacls', MSYS2_ROOT, '/T', '/inheritance:r', '/grant:r', '*S-1-5-18:(OI)(CI)F', '*S-1-5-32-544:(OI)(CI)F', `*${account}:(OI)(CI)F`, '*S-1-5-32-545:(OI)(CI)RX'];
 }
 
 /** Reads the owners and allow rules of the MSYS2 paths from PowerShell, or null when it cannot report them. */

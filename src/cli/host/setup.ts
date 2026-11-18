@@ -116,7 +116,6 @@ function packageWork(groups: string[], args: Args): { manager: string; packages:
           }
           await step('Installing MSYS2', 'Installed MSYS2', `winget ${WINGET_MSYS2.join(' ')}`, args, true, [winget, ...WINGET_MSYS2]);
           forgetMsys2Installation();
-          // The tree inherits C:\'s rules, which let every user add files to it; setup just made it, so it resets them.
           if (msys2Installation().state === 'untrusted' && !args.json) process.stderr.write('Removing the rights C:\\msys64 inherits from C:\\\n');
           repairMsys2();
           const installed = msys2Installation();
