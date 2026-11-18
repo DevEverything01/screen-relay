@@ -127,7 +127,7 @@ screen-relay install --backend wayland --yes
 | `--yes`, `-y` | Install packages without asking. Required when there is no terminal. |
 
 - Installs packages with the system package manager, using `sudo` unless you are root.
-- On Windows, installs MSYS2 at `C:\msys64` with winget if it is missing, then installs its packages with pacman. Without winget, it stops and asks you to install MSYS2 from https://www.msys2.org. It runs MSYS2 only when your account or an administrator owns the installation and no other account can write to it.
+- On Windows, installs MSYS2 at `C:\msys64` with winget if it is missing, then installs its packages with pacman. Without winget, it stops and asks you to install MSYS2 from https://www.msys2.org. It runs MSYS2 only when your account or an administrator owns the installation and no other account can write to it. After it installs MSYS2, it removes the rules that the folder inherits from `C:\`, which let every user add files.
 - Builds the engine into `~/.local/share/screen-relay/engine/<version>/`. Builds for earlier versions stay there until deleted.
 - At a terminal, it asks before installing packages. Anywhere else, it needs `--yes`.
 - The outcome is `installed` after it sets something up, or `unchanged` when nothing was missing. Adding a backend keeps the ones the engine already has.

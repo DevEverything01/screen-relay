@@ -13,13 +13,13 @@ const MSYS2_SHELL = `${MSYS2_ROOT}\\usr\\bin\\bash.exe`;
 const MSYS2_LIBRARIES = `${MSYS2_ROOT}\\ucrt64\\bin`;
 
 /** The MSYS2 paths that setup runs or loads, and so must belong to a trusted account. */
-const TRUSTED_PATHS = [MSYS2_ROOT, `${MSYS2_ROOT}\\usr`, `${MSYS2_ROOT}\\usr\\bin`, MSYS2_SHELL, MSYS2_LIBRARIES];
+const TRUSTED_PATHS = [MSYS2_ROOT, `${MSYS2_ROOT}\\etc`, `${MSYS2_ROOT}\\usr`, `${MSYS2_ROOT}\\usr\\bin`, MSYS2_SHELL, MSYS2_LIBRARIES];
 
 /** Owners that setup trusts besides the signed-in account: SYSTEM, Administrators, and TrustedInstaller. */
 const TRUSTED_SIDS = new Set(['S-1-5-18', 'S-1-5-32-544', 'S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464']);
 
-/** FILE_WRITE_DATA, FILE_DELETE_CHILD, DELETE, WRITE_DAC, and WRITE_OWNER: the rights that let an account replace or alter a file. Creating a subdirectory cannot replace the shell, so it is not one of them. */
-const WRITE_RIGHTS = 0x2 | 0x40 | 0x10000 | 0x40000 | 0x80000;
+/** FILE_WRITE_DATA, FILE_DELETE_CHILD, DELETE, WRITE_DAC, WRITE_OWNER, GENERIC_ALL, and GENERIC_WRITE: the rights that let an account replace or alter a file. Creating a subdirectory cannot replace the shell, so it is not one of them. */
+const WRITE_RIGHTS = 0x2 | 0x40 | 0x10000 | 0x40000 | 0x80000 | 0x10000000 | 0x40000000;
 
 /** Rules that only apply to objects their trustee creates; who may create them is already settled by the parent's rules. */
 const CREATOR_SIDS = new Set(['S-1-3-0', 'S-1-3-1', 'S-1-3-4']);
@@ -40,7 +40,7 @@ export type AclProbe = { current: string; objects: AclObject[] };
 export type Msys2Installation =
   | { state: 'missing'; root: string }
   | { state: 'trusted'; root: string; shell: string }
-  | { state: 'untrusted'; root: string; reason: string };
+  | { state: 'untrusted'; root: string; reason: string; repair?: string[] };
 
 /** The MSYS2 states that stop setup. */
 export type Msys2Problem = Exclude<Msys2Installation, { state: 'trusted' }>;
@@ -77,21 +77,37 @@ export function msys2Shell(): string {
 
 /** The failure that says setup will not run the MSYS2 tree it found, and what to do about it. */
 export function msys2Failure(found: Msys2Problem): Failure {
-  if (found.state === 'untrusted') {
-    return new Failure('missing_dependency', `MSYS2 at ${found.root} is not a trusted installation`,
-      `${found.reason} Delete ${found.root}, then run \`screen-relay install\` again from an administrator account.`);
-  }
-  return new Failure('missing_dependency', 'MSYS2 is not installed', 'Install MSYS2 from https://www.msys2.org, then run `screen-relay install` again.');
+  // No backticks in these hints: the CLI would print only the quoted command and drop the reason.
+  if (found.state === 'untrusted') return new Failure('missing_dependency', `MSYS2 at ${found.root} is not a trusted installation`, msys2Fix(found));
+  return new Failure('missing_dependency', 'MSYS2 is not installed', 'Install MSYS2 from https://www.msys2.org, then run screen-relay install again.');
+}
+
+/** What to do about an MSYS2 tree that setup does not trust: remove the rights it inherits from C:\ when only those are wrong, else delete it. */
+export function msys2Fix(found: Extract<Msys2Installation, { state: 'untrusted' }>): string {
+  const reinstall = `delete ${found.root} and run screen-relay install again`;
+  if (!found.repair) return `${found.reason} To fix it, ${reinstall}.`;
+  const command = found.repair.map((part, index) => (index > 0 && /[()*]/.test(part) ? `"${part}"` : part)).join(' ');
+  return `${found.reason} If you installed MSYS2 there and only you use it, remove the rights it inherits from C:\\ with: ${command}. Otherwise ${reinstall}.`;
+}
+
+/** Removes the rights the MSYS2 tree inherits from C:\, which let every user add files to it, and leaves full control to SYSTEM, Administrators and this account and read access to Users. Returns false when there is nothing to repair or icacls fails. */
+export function repairMsys2(): boolean {
+  const found = msys2Installation();
+  if (found.state !== 'untrusted' || !found.repair) return false;
+  const [, ...args] = found.repair;
+  const ok = run([systemTool('icacls.exe'), ...args], { timeout: 120000 }).status === 0;
+  forgetMsys2Installation();
+  return ok;
 }
 
 /** Whether the signed-in account, SYSTEM, Administrators, or TrustedInstaller owns every MSYS2 path that setup runs or loads, and no other account can write to it. */
-export function trustedAcl(probe: AclProbe): { trusted: true } | { trusted: false; reason: string } {
+export function trustedAcl(probe: AclProbe): { trusted: true } | { trusted: false; reason: string; owned: boolean } {
   const trusted = (sid: string) => Boolean(sid) && (sid === probe.current || TRUSTED_SIDS.has(sid));
   for (const object of probe.objects) {
-    if (!trusted(object.owner)) return { trusted: false, reason: `${object.path} is owned by ${object.ownerName}.` };
+    if (!trusted(object.owner)) return { trusted: false, reason: `${object.path} is owned by ${object.ownerName}.`, owned: false };
     for (const rule of object.rules) {
       if (!(rule.rights & WRITE_RIGHTS) || trusted(rule.sid) || CREATOR_SIDS.has(rule.sid)) continue;
-      return { trusted: false, reason: `${object.path} lets ${rule.name} write to it.` };
+      return { trusted: false, reason: `${object.path} lets ${rule.name} write to it.`, owned: true };
     }
   }
   return { trusted: true };
@@ -103,7 +119,15 @@ function detectMsys2(): Msys2Installation {
   const probe = aclProbe();
   if (!probe) return { state: 'untrusted', root: MSYS2_ROOT, reason: `screen-relay could not read who owns ${MSYS2_ROOT}.` };
   const verdict = trustedAcl(probe);
-  return verdict.trusted ? { state: 'trusted', root: MSYS2_ROOT, shell: MSYS2_SHELL } : { state: 'untrusted', root: MSYS2_ROOT, reason: verdict.reason };
+  if (verdict.trusted) return { state: 'trusted', root: MSYS2_ROOT, shell: MSYS2_SHELL };
+  // A tree with trusted owners is only wrong in its rules, so resetting them repairs it.
+  const repair = verdict.owned && /^S-1-5-21-[\d-]+$/.test(probe.current) ? repairCommand(probe.current) : undefined;
+  return { state: 'untrusted', root: MSYS2_ROOT, reason: verdict.reason, repair };
+}
+
+/** The icacls command that replaces the MSYS2 root's inherited rules with full control for SYSTEM, Administrators and this account and read access for Users; Windows passes them on to the whole tree. */
+export function repairCommand(account: string): string[] {
+  return ['icacls', MSYS2_ROOT, '/inheritance:r', '/grant:r', '*S-1-5-18:(OI)(CI)F', '*S-1-5-32-544:(OI)(CI)F', `*${account}:(OI)(CI)F`, '*S-1-5-32-545:(OI)(CI)RX'];
 }
 
 /** Reads the owners and allow rules of the MSYS2 paths from PowerShell, or null when it cannot report them. */
