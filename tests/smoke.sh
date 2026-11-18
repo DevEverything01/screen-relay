@@ -224,6 +224,61 @@ for (const options of [[], ['--restart']]) {
 }
 NODE
 
+if [ -z "$backend" ]; then
+  step 'one-time viewer tickets (token session on 127.0.0.2)'
+  ticket_port=$((port + 1))
+  "$relay" up -d --name "$name-t" --port "$ticket_port" --bind 127.0.0.2 --json > "$work/up-t.json" 2> "$work/stderr" ||
+    fail "ticket session up: $(cat "$work/stderr")"
+  "$relay" status --name "$name-t" --show-token --json > "$work/status-t.json" 2> "$work/stderr" || fail 'ticket session status'
+  node - "$ticket_port" "$(field "$work/status-t.json" session.token)" <<'NODE' || { "$relay" down --name "$name-t" >/dev/null 2>&1; fail 'one-time viewer tickets'; }
+const assert = require('node:assert/strict');
+const http = require('node:http');
+const crypto = require('node:crypto');
+const [port, token] = [Number(process.argv[2]), process.argv[3]];
+const host = `127.0.0.1:${port}`;
+const request = (options) => new Promise((resolve, reject) => {
+  const req = http.request({ host: '127.0.0.2', port, headers: { Host: host, ...options.headers }, ...options, });
+  req.on('response', (response) => {
+    let body = '';
+    response.on('data', (chunk) => { body += chunk; });
+    response.on('end', () => resolve({ status: response.statusCode, body }));
+  });
+  req.on('upgrade', (response, socket) => { socket.destroy(); resolve({ status: response.statusCode, protocol: response.headers['sec-websocket-protocol'] }); });
+  req.on('error', reject);
+  req.end();
+});
+const ticket = async () => {
+  const response = await request({ method: 'POST', path: '/tickets', headers: { Authorization: `Bearer ${token}`, 'Content-Length': 0 } });
+  assert.equal(response.status, 200, response.body);
+  const body = JSON.parse(response.body);
+  assert.match(body.ticket, /^[0-9a-f]{64}$/);
+  assert.equal(body.expires_in, 60);
+  return body.ticket;
+};
+const open = (protocol) => request({ path: '/stream', headers: {
+  Connection: 'Upgrade', Upgrade: 'websocket', 'Sec-WebSocket-Version': '13',
+  'Sec-WebSocket-Key': crypto.randomBytes(16).toString('base64'), 'Sec-WebSocket-Protocol': `nsl1, ${protocol}`,
+} });
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+(async () => {
+  assert.equal((await request({ method: 'POST', path: '/tickets', headers: { 'Content-Length': 0 } })).status, 401);
+  assert.equal((await request({ method: 'GET', path: '/tickets' })).status, 405);
+  assert.notEqual((await open(`ticket.${'0'.repeat(64)}`)).status, 101);
+  const first = await ticket();
+  const opened = await open(`ticket.${first}`);
+  assert.equal(opened.status, 101);
+  assert.equal(opened.protocol, 'nsl1');
+  await sleep(500);
+  assert.notEqual((await open(`ticket.${first}`)).status, 101, 'a used ticket opened the stream again');
+  // A new ticket still opens, so the refusal above came from the used ticket.
+  assert.equal((await open(`ticket.${await ticket()}`)).status, 101);
+  await sleep(500);
+  assert.equal((await open(`bearer.${token}`)).status, 101);
+})().catch((error) => { console.error(error); process.exit(1); });
+NODE
+  "$relay" down --name "$name-t" --json > "$work/down-t.json" 2> "$work/stderr" || fail 'ticket session down'
+fi
+
 step 'down (twice: must be idempotent)'
 "$relay" down --name "$name" --json > "$work/down.json" 2> "$work/stderr" || fail down
 [ ! -s "$work/stderr" ] || fail 'down JSON wrote stderr'

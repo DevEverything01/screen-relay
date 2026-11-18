@@ -1,5 +1,6 @@
 #include "config.hpp"
 #include "backend.hpp"
+#include <algorithm>
 #include <charconv>
 #include <filesystem>
 #include <fstream>
@@ -150,6 +151,36 @@ bool authenticated(const Config& config, lws* wsi, bool websocket) {
     if (first != std::string::npos && secretEqual(protocol.substr(first, last-first+1), "bearer." + config.token)) return true;
   }
   return false;
+}
+void Tickets::expire(Clock::time_point now) {
+  waiting.erase(std::remove_if(waiting.begin(), waiting.end(),
+                               [now](const auto& entry) { return now >= entry.second; }),
+                waiting.end());
+}
+void Tickets::add(const std::string& ticket, Clock::time_point now) {
+  expire(now);
+  if (waiting.size() >= capacity) waiting.erase(waiting.begin());
+  waiting.emplace_back(ticket, now + lifetime);
+}
+bool Tickets::redeem(const std::string& ticket, Clock::time_point now) {
+  expire(now);
+  if (ticket.empty()) return false;
+  for (auto entry = waiting.begin(); entry != waiting.end(); ++entry) {
+    if (secretEqual(entry->first, ticket)) { waiting.erase(entry); return true; }
+  }
+  return false;
+}
+std::string offeredTicket(lws* wsi) {
+  std::istringstream protocols(header(wsi, WSI_TOKEN_PROTOCOL));
+  std::string protocol;
+  while (std::getline(protocols, protocol, ',')) {
+    const auto first = protocol.find_first_not_of(" \t");
+    const auto last = protocol.find_last_not_of(" \t");
+    if (first == std::string::npos) continue;
+    protocol = protocol.substr(first, last-first+1);
+    if (protocol.rfind("ticket.", 0) == 0) return protocol.substr(7);
+  }
+  return "";
 }
 bool loopbackOrigin(const std::string& origin) {
   const auto scheme = origin.find("://");

@@ -21,7 +21,7 @@ export interface Capabilities {
   version: number; backend: string; width: number; height: number; fps: number;
   input: { keyboard: boolean; pointer: boolean; buttons: boolean; wheel: boolean };
   screenshot: string; control: string; wayland: boolean; max_input_pending: number;
-  input_endpoint: string; max_input_batch: number;
+  input_endpoint: string; max_input_batch: number; tickets: string;
   cursor: boolean; audio: boolean; clipboard: boolean; resize: boolean; ime: boolean;
 }
 /** Sends each call as its own request. Coordinates are fractions of the screen from 0 to 1, and `screenshot` resolves to PNG bytes. */

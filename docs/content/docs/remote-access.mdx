@@ -67,6 +67,7 @@ screen-relay creates a 64-character lowercase hex token (256 random bits) whenev
 - `screen-relay status` hides the token unless you pass `--show-token`.
 - The viewer reads `#token=` from the link that `up` prints, removes it from the address bar, and uses it only on `https://` or loopback pages. Browsers never send the fragment to the server.
 - Each `screen-relay up` creates a new token and ends open connections. To rotate a token, run `screen-relay down`, then `screen-relay up`.
+- To hand a viewer something that works only once, request a ticket with `POST /tickets` and the token. The viewer connects with the ticket instead of the token, and the ticket stops working after that connection or after 60 seconds. See the [protocol](https://github.com/vercel-labs/screen-relay/blob/main/PROTOCOL.md).
 
 ## Control a session from your laptop
 
