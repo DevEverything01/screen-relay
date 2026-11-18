@@ -57,8 +57,6 @@ jobs:
 
       - name: Build
         run: |
-          VERSION=$(node -p "require('./package.json').version")
-          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           docker build --platform linux/amd64 -f images/vercel-sandbox/Dockerfile \
             -t "$IMAGE:staging-$GITHUB_RUN_ID" .
 
@@ -80,6 +78,11 @@ jobs:
         env:
           DIGEST: ${{ steps.optimized.outputs.digest }}
         run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "package.json has an invalid version: $VERSION" >&2
+            exit 1
+          fi
           for tag in "$VERSION" latest; do
             docker buildx imagetools create --prefer-index=false \
               --tag "$IMAGE:$tag" "$IMAGE@$DIGEST"
