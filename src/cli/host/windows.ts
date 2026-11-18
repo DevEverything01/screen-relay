@@ -107,7 +107,7 @@ function detectMsys2(): Msys2Installation {
 }
 
 /** Reads the owners and allow rules of the MSYS2 paths from PowerShell, or null when it cannot report them. */
-function aclProbe(): AclProbe | null {
+export function aclProbe(): AclProbe | null {
   const script = [
     "$ErrorActionPreference = 'Stop'",
     '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8',
