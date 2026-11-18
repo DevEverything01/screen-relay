@@ -101,7 +101,7 @@ jobs:
         run: |
           if (-not (Test-Path C:\msys64)) { exit 0 }
           $me = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
-          icacls C:\msys64 /T /inheritance:r /grant:r "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F" "*$me:(OI)(CI)F" "*S-1-5-32-545:(OI)(CI)RX"
+          icacls C:\msys64 /T /inheritance:r /grant:r "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F" "*${me}:(OI)(CI)F" "*S-1-5-32-545:(OI)(CI)RX"
       - name: Install MSYS2 packages and build the engine
         run: screen-relay install --yes
       - name: Check that a second install changes nothing
