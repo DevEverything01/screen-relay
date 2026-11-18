@@ -108,11 +108,12 @@ function packageWork(groups: string[], args: Args): { manager: string; packages:
         if (!msys2) {
           const winget = wingetPath();
           if (!winget || run([winget, '--version']).status !== 0) {
-            throw new Failure('missing_dependency', 'MSYS2 is not installed, and winget is not available to install it', 'Install MSYS2 from https://www.msys2.org, then run `screen-relay install` again.');
+            throw new Failure('missing_dependency', 'MSYS2 is not installed, and winget is not available to install it', 'Install MSYS2 from https://www.msys2.org, then run screen-relay install again.');
           }
           await step('Installing MSYS2', 'Installed MSYS2', `winget ${WINGET_MSYS2.join(' ')}`, args, true, [winget, ...WINGET_MSYS2]);
         }
-        await step('Installing MSYS2 packages', 'Installed MSYS2 packages', `pacman -Sy --noconfirm --needed ${MSYS2_PACKAGES.join(' ')}`, args);
+        const keyring = '{ [ -d /etc/pacman.d/gnupg ] || { pacman-key --init && pacman-key --populate msys2 && gpgconf --kill all; }; }';
+        await step('Installing MSYS2 packages', 'Installed MSYS2 packages', `${keyring} && pacman -Sy --noconfirm --needed ${MSYS2_PACKAGES.join(' ')}`, args);
       },
     };
   }
