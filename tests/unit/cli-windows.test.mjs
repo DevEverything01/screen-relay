@@ -176,7 +176,7 @@ test('a rule that grants another account a generic write right is refused', () =
 test('an MSYS2 tree with trusted owners and a loose rule gets the icacls repair in its fix, with no backticks', () => {
   const fix = msys2Fix({ state: 'untrusted', root: 'C:\\msys64', reason: 'C:\\msys64 lets BUILTIN\\Users write to it.', repair: repairCommand(ACCOUNT) });
   assert.match(fix, /lets BUILTIN\\Users write to it\./);
-  assert.ok(fix.includes(`icacls C:\\msys64 /T /inheritance:r /grant:r "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F" "*${ACCOUNT}:(OI)(CI)F" "*S-1-5-32-545:(OI)(CI)RX"`), fix);
+  assert.ok(fix.includes(`icacls C:\\msys64 /inheritance:r /grant:r "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F" "*${ACCOUNT}:(OI)(CI)F" "*S-1-5-32-545:(OI)(CI)RX"`), fix);
   assert.match(fix, /delete C:\\msys64 and run screen-relay install again/);
   assert.ok(!fix.includes('`'));
 });

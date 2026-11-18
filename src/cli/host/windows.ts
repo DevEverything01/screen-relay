@@ -123,9 +123,9 @@ function detectMsys2(): Msys2Installation {
   return { state: 'untrusted', root: MSYS2_ROOT, reason: verdict.reason, repair };
 }
 
-/** The icacls command that replaces the MSYS2 root's inherited rules with full control for SYSTEM, Administrators and this account and read access for Users, on the whole tree. */
+/** The icacls command that replaces the MSYS2 root's inherited rules with full control for SYSTEM, Administrators and this account and read access for Users; Windows passes them on to the tree. */
 export function repairCommand(account: string): string[] {
-  return ['icacls', MSYS2_ROOT, '/T', '/inheritance:r', '/grant:r', '*S-1-5-18:(OI)(CI)F', '*S-1-5-32-544:(OI)(CI)F', `*${account}:(OI)(CI)F`, '*S-1-5-32-545:(OI)(CI)RX'];
+  return ['icacls', MSYS2_ROOT, '/inheritance:r', '/grant:r', '*S-1-5-18:(OI)(CI)F', '*S-1-5-32-544:(OI)(CI)F', `*${account}:(OI)(CI)F`, '*S-1-5-32-545:(OI)(CI)RX'];
 }
 
 /** Reads the owners and allow rules of the MSYS2 paths from PowerShell, or null when it cannot report them. */
