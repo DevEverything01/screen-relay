@@ -12,7 +12,7 @@ import type { HostArgs } from './common.js';
 import { detectFamily, installCommand as packageCommand, packagesFor, type Family } from './packages.js';
 import { stateDir } from './state.js';
 import { BACKEND_PROGRAMS, findEngine, installCommand, resolveBackend, startXvfb, xQuery } from './supervisor.js';
-import { engineEnvironment, engineWorkingDirectory, MSYS2_ROOT, windowsSessionId } from './windows.js';
+import { engineEnvironment, engineWorkingDirectory, MSYS2_ROOT, msys2Installation, windowsSessionId } from './windows.js';
 
 const TINY_SVG = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>');
 function crc32(data: Buffer): number {
@@ -104,7 +104,9 @@ export async function cmdDoctor(args: HostArgs): Promise<number> {
     const version = release();
     check('platform', true, 'Windows');
     check('windows version', Number(version.split('.')[0]) >= 10, `Windows ${version}`, 'Use Windows 10 or later.');
-    check('msys2', existsSync(join(MSYS2_ROOT, 'usr', 'bin', 'bash.exe')), MSYS2_ROOT, 'Run `screen-relay install`.');
+    const installation = msys2Installation();
+    check('msys2', installation.state === 'trusted', installation.state === 'untrusted' ? installation.reason : MSYS2_ROOT,
+      installation.state === 'untrusted' ? `Delete ${MSYS2_ROOT}, then run \`screen-relay install\`.` : 'Run `screen-relay install`.');
     const session = windowsSessionId();
     check('desktop session', session !== null && session !== 0, session === null ? 'session unknown' : `session ${session}`, "Run screen-relay in a terminal on the signed-in user's desktop.");
   }

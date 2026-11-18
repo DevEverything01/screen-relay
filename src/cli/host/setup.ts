@@ -11,7 +11,7 @@ import { engineDirectory, isLinux, LAUNCHER_DIR, requireHost, run, which, type H
 import { detectFamily, groupPackages, installCommand, packagesFor, provides } from './packages.js';
 import { claimLock, lockOwnerAlive } from './state.js';
 import { compiledBackends, findEngine, requestedBackend, sessionNeeds } from './supervisor.js';
-import { MSYS2_SHELL, wingetPath } from './windows.js';
+import { forgetMsys2Installation, msys2Failure, msys2Installation, msys2Shell, wingetPath } from './windows.js';
 
 type Backend = (typeof BACKENDS)[number];
 type Args = HostArgs & Record<string, any>;
@@ -38,7 +38,9 @@ function shellPath(path: string): string {
 function buildable(backends: Backend[]): boolean {
   if (!existsSync(join(SOURCE, 'Makefile'))) return false;
   if (process.platform !== 'win32') return run(['make', '-s', '-C', SOURCE, `BACKENDS=${backends.join(' ')}`, 'deps']).status === 0;
-  return run([MSYS2_SHELL, '-lc', `make -s -C ${quote(shellPath(SOURCE))} BACKENDS=${quote(backends.join(' '))} deps`], { env: msysEnv() }).status === 0;
+  const installation = msys2Installation();
+  if (installation.state !== 'trusted') return false;
+  return run([installation.shell, '-lc', `make -s -C ${quote(shellPath(SOURCE))} BACKENDS=${quote(backends.join(' '))} deps`], { env: msysEnv() }).status === 0;
 }
 
 /** Decides what this machine still needs before it can run the requested backends. The engine is built with every compiled backend, but the desktop packages follow only the requested ones. */
@@ -48,7 +50,8 @@ export function planSetup(request: Request): Plan {
   const backends = BACKENDS.filter((backend) => compiled.includes(backend) || request.backends.includes(backend));
   const programs = request.backends.flatMap((backend) => sessionNeeds(backend, request).missing)
     .filter((program) => provides(program === 'swaymsg' ? 'sway' : program));
-  const packages = programs.length > 0 || (build && !buildable(backends));
+  const untrusted = process.platform === 'win32' && msys2Installation().state === 'untrusted';
+  const packages = programs.length > 0 || untrusted || (build && !buildable(backends));
   const xfce = request.backends.includes('x11') && sessionNeeds('x11', request).desktop === 'xfce';
   const groups = ['core', ...backends, ...(xfce ? ['xfce'] : [])];
   return { state: packages ? 'needs-packages' : build ? 'needs-build' : 'ready', backends, build, groups };
@@ -62,7 +65,7 @@ async function step(title: string, done: string, command: string, args: Args, re
   if (!quiet) process.stderr.write(`${style.strong(title)}\n${style.muted(`  ${command}`)}\n`);
   let output = '';
   const msys = process.platform === 'win32' && !argv;
-  const [program, ...programArgs] = argv ?? (msys ? [MSYS2_SHELL, '-lc', command] : ['sh', '-c', command]);
+  const [program, ...programArgs] = argv ?? (msys ? [msys2Shell(), '-lc', command] : ['sh', '-c', command]);
   const code = await new Promise<number | null>((resolveExit, reject) => {
     const child = spawn(program, programArgs, { stdio: quiet ? ['ignore', 'pipe', 'pipe'] : ['inherit', 2, 2], env: msys ? msysEnv() : process.env, signal: args.signal });
     for (const stream of [child.stdout, child.stderr]) stream?.on('data', (chunk: Buffer) => { output = (output + chunk.toString()).slice(-16000); });
@@ -100,17 +103,21 @@ function packageWork(groups: string[], args: Args): { manager: string; packages:
     return { manager: 'brew', packages: BREW_PACKAGES, run: () => step('Installing Homebrew packages', 'Installed Homebrew packages', `brew install ${BREW_PACKAGES.join(' ')}`, args) };
   }
   if (process.platform === 'win32') {
-    const msys2 = existsSync(MSYS2_SHELL);
+    const installation = msys2Installation();
     return {
       manager: 'MSYS2 pacman',
-      packages: msys2 ? MSYS2_PACKAGES : ['MSYS2', ...MSYS2_PACKAGES],
+      packages: installation.state === 'trusted' ? MSYS2_PACKAGES : ['MSYS2', ...MSYS2_PACKAGES],
       run: async () => {
-        if (!msys2) {
+        if (installation.state === 'untrusted') throw msys2Failure(installation);
+        if (installation.state === 'missing') {
           const winget = wingetPath();
           if (!winget || run([winget, '--version']).status !== 0) {
             throw new Failure('missing_dependency', 'MSYS2 is not installed, and winget is not available to install it', 'Install MSYS2 from https://www.msys2.org, then run screen-relay install again.');
           }
           await step('Installing MSYS2', 'Installed MSYS2', `winget ${WINGET_MSYS2.join(' ')}`, args, true, [winget, ...WINGET_MSYS2]);
+          forgetMsys2Installation();
+          const installed = msys2Installation();
+          if (installed.state !== 'trusted') throw msys2Failure(installed);
         }
         const keyring = '{ [ -d /etc/pacman.d/gnupg ] || { pacman-key --init && pacman-key --populate msys2 && gpgconf --kill all; }; }';
         await step('Installing MSYS2 packages', 'Installed MSYS2 packages', `${keyring} && pacman -Sy --noconfirm --needed ${MSYS2_PACKAGES.join(' ')}`, args);

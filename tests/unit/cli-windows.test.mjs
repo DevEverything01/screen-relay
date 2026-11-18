@@ -17,7 +17,7 @@ after(() => rmSync(directory, { recursive: true, force: true }));
 
 const bundle = buildSync({
   stdin: {
-    contents: "export { cmdDoctor } from './src/cli/host/doctor.ts'; export { cmdInstall } from './src/cli/host/setup.ts'; export { cmdDown, cmdLogs, cmdRun, cmdUp } from './src/cli/host/session_commands.ts'; export { engineDirectory, requireHost, which } from './src/cli/host/common.ts'; export { compiledBackends, findEngine, requestedBackend, Session } from './src/cli/host/supervisor.ts'; export { alive, identity, lock, stateDir, writeSession } from './src/cli/host/state.ts'; export { killTree, windowsSessionId } from './src/cli/host/windows.ts';",
+    contents: "export { cmdDoctor } from './src/cli/host/doctor.ts'; export { cmdInstall } from './src/cli/host/setup.ts'; export { cmdDown, cmdLogs, cmdRun, cmdUp } from './src/cli/host/session_commands.ts'; export { engineDirectory, requireHost, which } from './src/cli/host/common.ts'; export { compiledBackends, findEngine, requestedBackend, Session } from './src/cli/host/supervisor.ts'; export { alive, identity, lock, stateDir, writeSession } from './src/cli/host/state.ts'; export { engineEnvironment, killTree, msys2Shell, trustedAcl, windowsSessionId } from './src/cli/host/windows.ts';",
     resolveDir: root,
   },
   bundle: true,
@@ -29,7 +29,7 @@ const bundle = buildSync({
 });
 const bundlePath = join(directory, 'windows.mjs');
 writeFileSync(bundlePath, bundle.outputFiles[0].contents);
-const { alive, cmdDown, cmdInstall, cmdLogs, cmdRun, cmdUp, compiledBackends, engineDirectory, findEngine, identity, killTree, lock, requestedBackend, requireHost, Session, stateDir, which, windowsSessionId, writeSession } = await import(pathToFileURL(bundlePath).href);
+const { alive, cmdDown, cmdInstall, cmdLogs, cmdRun, cmdUp, compiledBackends, engineDirectory, engineEnvironment, findEngine, identity, killTree, lock, msys2Shell, requestedBackend, requireHost, Session, stateDir, trustedAcl, which, windowsSessionId, writeSession } = await import(pathToFileURL(bundlePath).href);
 
 function onWindowsProcess(script) {
   const probe = `Object.defineProperty(process, 'platform', { value: 'win32' });
@@ -126,6 +126,53 @@ test('doctor on Windows reports the platform, Windows version, MSYS2, engine and
   for (const name of ['platform', 'windows version', 'msys2', 'engine', 'desktop session']) {
     assert.ok(names.includes(name), `${name} missing from ${names.join(', ')}`);
   }
+});
+
+const SYSTEM = 'S-1-5-18';
+const ADMINISTRATORS = 'S-1-5-32-544';
+const USERS = 'S-1-5-32-545';
+const ACCOUNT = 'S-1-5-21-1-1001';
+const OTHER = 'S-1-5-21-1-1002';
+const FULL = 2032127;
+const READ = 131241;
+const CREATE_DIRECTORY = 4;
+const MODIFY = 197055;
+
+test('an MSYS2 tree owned by another account is refused, and the owner is named', () => {
+  const verdict = trustedAcl({ current: ACCOUNT, objects: [{ path: 'C:\\msys64', owner: OTHER, ownerName: 'DESKTOP\\other', rules: [] }] });
+  assert.deepEqual(verdict, { trusted: false, reason: 'C:\\msys64 is owned by DESKTOP\\other.' });
+});
+
+test('an MSYS2 tree that another account can write to is refused, and the path and account are named', () => {
+  const rules = [{ sid: USERS, name: 'BUILTIN\\Users', rights: MODIFY }];
+  const verdict = trustedAcl({ current: ACCOUNT, objects: [
+    { path: 'C:\\msys64', owner: SYSTEM, ownerName: 'NT AUTHORITY\\SYSTEM', rules },
+    { path: 'C:\\msys64\\usr\\bin', owner: SYSTEM, ownerName: 'NT AUTHORITY\\SYSTEM', rules },
+  ] });
+  assert.deepEqual(verdict, { trusted: false, reason: 'C:\\msys64 lets BUILTIN\\Users write to it.' });
+});
+
+test('a tree that the signed-in account, SYSTEM or Administrators owns and no other account can write to is trusted', () => {
+  const rules = [
+    { sid: SYSTEM, name: 'NT AUTHORITY\\SYSTEM', rights: FULL },
+    { sid: ADMINISTRATORS, name: 'BUILTIN\\Administrators', rights: FULL },
+    { sid: USERS, name: 'BUILTIN\\Users', rights: READ },
+    { sid: USERS, name: 'BUILTIN\\Users', rights: CREATE_DIRECTORY },
+    { sid: 'S-1-3-0', name: 'CREATOR OWNER', rights: FULL },
+  ];
+  for (const owner of [ACCOUNT, SYSTEM, ADMINISTRATORS]) {
+    const objects = ['C:\\msys64', 'C:\\msys64\\usr', 'C:\\msys64\\usr\\bin', 'C:\\msys64\\usr\\bin\\bash.exe'].map((path) => ({ path, owner, ownerName: 'owner', rules }));
+    assert.deepEqual(trustedAcl({ current: ACCOUNT, objects }), { trusted: true });
+  }
+});
+
+test('setup refuses an MSYS2 shell it cannot vouch for', async () => {
+  await onPlatform('win32', () => assert.throws(() => msys2Shell(), { reason: 'missing_dependency', hint: /https:\/\/www\.msys2\.org/ }));
+});
+
+test('the Windows engine environment keeps PATH unchanged while MSYS2 is untrusted', async () => {
+  const env = await onPlatform('win32', () => engineEnvironment({ PATH: 'C:\\Windows\\System32' }));
+  assert.equal(env.PATH, 'C:\\Windows\\System32');
 });
 
 test('run refuses --restart on Windows', async () => {

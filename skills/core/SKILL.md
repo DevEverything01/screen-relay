@@ -23,7 +23,7 @@ screen-relay up -d
 - After an upgrade, the next `up` rebuilds the engine. That needs no `sudo`.
 - Linux: automatic setup supports Debian, Ubuntu, Fedora, Arch Linux and Alpine on x64 and arm64. It needs root or passwordless `sudo`. On another distribution, install the build tools and libraries yourself, then run `screen-relay install`.
 - macOS: setup needs Homebrew and the Xcode Command Line Tools. See [macOS](references/macos.md).
-- Windows: setup needs Windows 10 or later on x64. It installs MSYS2 with winget when MSYS2 is missing. Without winget, install MSYS2 from https://www.msys2.org first. Run the commands in a terminal on the signed-in user's desktop. `up` over SSH or from a service session fails with `No display is attached to this session` or `Desktop Duplication is unavailable`. See [Windows](https://screen-relay.dev/docs/windows).
+- Windows: setup needs Windows 10 or later on x64. It installs MSYS2 with winget when MSYS2 is missing, and it refuses an installation that another account owns or can write to. Without winget, install MSYS2 from https://www.msys2.org first. Run the commands in a terminal on the signed-in user's desktop. `up` over SSH or from a service session fails with `No display is attached to this session` or `Desktop Duplication is unavailable`. See [Windows](https://screen-relay.dev/docs/windows).
 
 ## Pick a backend
 

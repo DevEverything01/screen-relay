@@ -1,23 +1,157 @@
+import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { Failure } from '../output.js';
 import { run } from './common.js';
 
 /** Root of the MSYS2 install that `screen-relay install` sets up on Windows. */
 export const MSYS2_ROOT = 'C:\\msys64';
 
-/** MSYS2's bash, which runs build commands in its UCRT64 environment. */
-export const MSYS2_SHELL = `${MSYS2_ROOT}\\usr\\bin\\bash.exe`;
+/** MSYS2's bash, which runs build commands in its UCRT64 environment. Every caller reaches it through msys2Shell, which checks the installation first. */
+const MSYS2_SHELL = `${MSYS2_ROOT}\\usr\\bin\\bash.exe`;
+
+/** MSYS2's UCRT64 libraries, which relay-engine loads on Windows. */
+const MSYS2_LIBRARIES = `${MSYS2_ROOT}\\ucrt64\\bin`;
+
+/** The MSYS2 paths that setup runs or loads, and so must belong to a trusted account. */
+const TRUSTED_PATHS = [MSYS2_ROOT, `${MSYS2_ROOT}\\usr`, `${MSYS2_ROOT}\\usr\\bin`, MSYS2_SHELL, MSYS2_LIBRARIES];
+
+/** Owners that setup trusts besides the signed-in account: SYSTEM, Administrators, and TrustedInstaller. */
+const TRUSTED_SIDS = new Set(['S-1-5-18', 'S-1-5-32-544', 'S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464']);
+
+/** FILE_WRITE_DATA, FILE_DELETE_CHILD, DELETE, WRITE_DAC, and WRITE_OWNER: the rights that let an account replace or alter a file. Creating a subdirectory cannot replace the shell, so it is not one of them. */
+const WRITE_RIGHTS = 0x2 | 0x40 | 0x10000 | 0x40000 | 0x80000;
+
+/** Rules that only apply to objects their trustee creates; who may create them is already settled by the parent's rules. */
+const CREATOR_SIDS = new Set(['S-1-3-0', 'S-1-3-1', 'S-1-3-4']);
+
+/** The decision this process made about the MSYS2 installation, so setup checks the tree once rather than for every step. */
+let installation: Msys2Installation | undefined;
+
+/** One access rule as PowerShell reports it: the trustee's security identifier, its account name, and the rights it is granted. */
+export type AclRule = { sid: string; name: string; rights: number };
+
+/** The owner and allow rules of one path. */
+export type AclObject = { path: string; owner: string; ownerName: string; rules: AclRule[] };
+
+/** The allow rules of the MSYS2 paths, and the security identifier of the signed-in account. */
+export type AclProbe = { current: string; objects: AclObject[] };
+
+/** What setup found at the MSYS2 root: an installation it runs, nothing, or a tree it will not run. */
+export type Msys2Installation =
+  | { state: 'missing'; root: string }
+  | { state: 'trusted'; root: string; shell: string }
+  | { state: 'untrusted'; root: string; reason: string };
+
+/** The MSYS2 states that stop setup. */
+export type Msys2Problem = Exclude<Msys2Installation, { state: 'trusted' }>;
 
 /** The environment that runs relay-engine, with MSYS2's UCRT64 libraries first on PATH on Windows. Other platforms get the environment unchanged. */
 export function engineEnvironment(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
-  if (process.platform !== 'win32') return env;
+  if (process.platform !== 'win32' || msys2Installation().state !== 'trusted') return env;
   const key = Object.keys(env).find((name) => name.toUpperCase() === 'PATH') ?? 'PATH';
-  return { ...env, [key]: [`${MSYS2_ROOT}\\ucrt64\\bin`, env[key]].filter(Boolean).join(';') };
+  return { ...env, [key]: [MSYS2_LIBRARIES, env[key]].filter(Boolean).join(';') };
 }
 
 /** The directory to start the engine in on Windows: its own, so Windows does not search the caller's folder for the engine's DLLs. Undefined elsewhere. */
 export function engineWorkingDirectory(engine: string): string | undefined {
   return process.platform === 'win32' ? dirname(engine) : undefined;
 }
+
+/** The MSYS2 installation on this machine, decided once per process. Call forgetMsys2Installation after setup changes the tree. */
+export function msys2Installation(): Msys2Installation {
+  installation ??= detectMsys2();
+  return installation;
+}
+
+/** Drops the remembered decision, so the next check reads the installation again. */
+export function forgetMsys2Installation(): void {
+  installation = undefined;
+}
+
+/** MSYS2's bash, after checking that setup trusts the installation it comes from. */
+export function msys2Shell(): string {
+  const found = msys2Installation();
+  if (found.state === 'trusted') return found.shell;
+  throw msys2Failure(found);
+}
+
+/** The failure that says setup will not run the MSYS2 tree it found, and what to do about it. */
+export function msys2Failure(found: Msys2Problem): Failure {
+  if (found.state === 'untrusted') {
+    return new Failure('missing_dependency', `MSYS2 at ${found.root} is not a trusted installation`,
+      `${found.reason} Delete ${found.root}, then run \`screen-relay install\` again.`);
+  }
+  return new Failure('missing_dependency', 'MSYS2 is not installed', 'Install MSYS2 from https://www.msys2.org, then run `screen-relay install` again.');
+}
+
+/** Whether the signed-in account, SYSTEM, Administrators, or TrustedInstaller owns every MSYS2 path that setup runs or loads, and no other account can write to it. */
+export function trustedAcl(probe: AclProbe): { trusted: true } | { trusted: false; reason: string } {
+  const trusted = (sid: string) => Boolean(sid) && (sid === probe.current || TRUSTED_SIDS.has(sid));
+  for (const object of probe.objects) {
+    if (!trusted(object.owner)) return { trusted: false, reason: `${object.path} is owned by ${object.ownerName}.` };
+    for (const rule of object.rules) {
+      if (!(rule.rights & WRITE_RIGHTS) || trusted(rule.sid) || CREATOR_SIDS.has(rule.sid)) continue;
+      return { trusted: false, reason: `${object.path} lets ${rule.name} write to it.` };
+    }
+  }
+  return { trusted: true };
+}
+
+/** Reads what the machine has at the MSYS2 root and, when a shell is there, whether setup trusts the tree it came from. */
+function detectMsys2(): Msys2Installation {
+  if (!existsSync(MSYS2_SHELL)) return { state: 'missing', root: MSYS2_ROOT };
+  const probe = aclProbe();
+  if (!probe) return { state: 'untrusted', root: MSYS2_ROOT, reason: `screen-relay could not read who owns ${MSYS2_ROOT}.` };
+  const verdict = trustedAcl(probe);
+  return verdict.trusted ? { state: 'trusted', root: MSYS2_ROOT, shell: MSYS2_SHELL } : { state: 'untrusted', root: MSYS2_ROOT, reason: verdict.reason };
+}
+
+/** Reads the owners and allow rules of the MSYS2 paths from PowerShell, or null when it cannot report them. */
+function aclProbe(): AclProbe | null {
+  const script = [
+    "$ErrorActionPreference = 'Stop'",
+    '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8',
+    `$paths = @(${TRUSTED_PATHS.map((path) => `'${path}'`).join(', ')})`,
+    '$objects = @(foreach ($path in $paths) {',
+    '  if (-not (Test-Path -LiteralPath $path)) { continue }',
+    '  $acl = if (Test-Path -LiteralPath $path -PathType Container) { [System.IO.Directory]::GetAccessControl($path) } else { [System.IO.File]::GetAccessControl($path) }',
+    '  $owner = $acl.GetOwner([System.Security.Principal.SecurityIdentifier])',
+    '  $ownerName = try { $owner.Translate([System.Security.Principal.NTAccount]).Value } catch { $owner.Value }',
+    '  $rules = @($acl.Access | Where-Object { $_.AccessControlType -eq [System.Security.AccessControl.AccessControlType]::Allow } | ForEach-Object {',
+    '    $sid = if ($_.IdentityReference -is [System.Security.Principal.SecurityIdentifier]) { $_.IdentityReference } else { $_.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]) }',
+    '    $name = try { $sid.Translate([System.Security.Principal.NTAccount]).Value } catch { $sid.Value }',
+    '    [pscustomobject]@{ sid = $sid.Value; name = $name; rights = [int]$_.FileSystemRights }',
+    '  })',
+    '  [pscustomobject]@{ path = $path; owner = $owner.Value; ownerName = $ownerName; rules = $rules }',
+    '})',
+    '$current = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value',
+    '[pscustomobject]@{ current = $current; objects = $objects } | ConvertTo-Json -Depth 5 -Compress',
+  ].join('\n');
+  const result = run([systemTool('WindowsPowerShell', 'v1.0', 'powershell.exe'), '-NoProfile', '-NonInteractive', '-Command', script], { timeout: 20000 });
+  if (result.status !== 0 || !result.stdout) return null;
+  try {
+    const decoded = JSON.parse(result.stdout.replace(/^\uFEFF/, '').trim()) as { current?: unknown; objects?: RawObject | RawObject[] };
+    const objects = (Array.isArray(decoded.objects) ? decoded.objects : decoded.objects ? [decoded.objects] : []).map((object) => ({
+      path: String(object.path ?? ''),
+      owner: String(object.owner ?? ''),
+      ownerName: String(object.ownerName ?? object.owner ?? ''),
+      rules: (Array.isArray(object.rules) ? object.rules : object.rules ? [object.rules] : []).map((rule) => ({
+        sid: String(rule.sid ?? ''),
+        name: String(rule.name ?? rule.sid ?? ''),
+        rights: Number(rule.rights ?? 0),
+      })),
+    }));
+    return { current: String(decoded.current ?? ''), objects };
+  } catch {
+    return null;
+  }
+}
+
+/** A path from the probe as PowerShell wrote it, before the shape is checked. */
+type RawObject = { path?: unknown; owner?: unknown; ownerName?: unknown; rules?: RawRule | RawRule[] };
+
+/** One rule from the probe as PowerShell wrote it, before the shape is checked. */
+type RawRule = { sid?: unknown; name?: unknown; rights?: unknown };
 
 /** Absolute path of a tool in the Windows system folder, so a same-named file in the working directory cannot stand in for it. */
 function systemTool(...parts: string[]): string {
