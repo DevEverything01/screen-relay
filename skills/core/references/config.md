@@ -25,8 +25,8 @@ Precedence, highest first:
 | `server.tls_cert` | none | Certificate file; `server.tls_key` must be set too | `SCREEN_RELAY_TLS_CERT` |
 | `server.tls_key` | none | Private key file | `SCREEN_RELAY_TLS_KEY` |
 | `keyboard.layout` | `us` | Comma-separated XKB layout such as `fr,us` | `SCREEN_RELAY_KEYBOARD_LAYOUT` |
-| `backend` | Linux: `x11` when the engine has it, else `wayland`. macOS: `macos` | `x11`, `wayland` or `macos`; `--backend` overrides it | `SCREEN_RELAY_BACKEND` |
-| `desktop` | `xfce` (x11) or `foot` (wayland) | `xfce`, `none`, or a desktop command; defaults to `none` with `--display`; always `none` on macOS | `SCREEN_RELAY_DESKTOP` |
+| `backend` | Linux: `x11` when the engine has it, else `wayland`. macOS: `macos`. Windows: `windows` | `x11`, `wayland`, `macos` or `windows`; `--backend` overrides it | `SCREEN_RELAY_BACKEND` |
+| `desktop` | `xfce` (x11) or `foot` (wayland) | `xfce`, `none`, or a desktop command; defaults to `none` with `--display`; ignored on macOS and Windows, which start no desktop | `SCREEN_RELAY_DESKTOP` |
 
 Example:
 

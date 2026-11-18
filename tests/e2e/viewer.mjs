@@ -117,6 +117,8 @@ try {
       decodeerrors: window.nativeStats?.decodeerrors ?? -1,
       width: document.querySelector('#screen')?.width ?? 0,
       height: document.querySelector('#screen')?.height ?? 0,
+      status: document.querySelector('#status')?.textContent ?? '',
+      control: document.querySelector('[data-action="control"]')?.getAttribute('aria-pressed') ?? '',
     })`);
   }
   try {
@@ -134,6 +136,8 @@ try {
   assert.equal(view.width, 1920, `the canvas is ${view.width} pixels wide, expected 1920`);
   assert.equal(view.height, 1080, `the canvas is ${view.height} pixels high, expected 1080`);
   console.log(`viewer live: ${view.drawn} frames drawn, ${view.width}x${view.height}`);
+  assert.equal(view.status, 'Live · view only', `the viewer status is "${view.status}"`);
+  assert.equal(view.control, 'false', 'the viewer took control without being asked');
 
   const box = evalJs(`(() => {
     const rect = document.querySelector('#screen').getBoundingClientRect();
@@ -145,19 +149,12 @@ try {
     browser(['mouse', 'down', 'left']);
     browser(['mouse', 'up', 'left']);
   }
-  await clickAt(box.x + box.width * 0.25, box.y + box.height * 0.75);
-  await poll(
-    () => {
-      const out = xdotool(['getmouselocation']);
-      const match = /x:(\d+) y:(\d+)/.exec(out);
-      if (!match) throw new Error(`unexpected xdotool output: ${out}`);
-      return { x: Number(match[1]), y: Number(match[2]) };
-    },
-    (point) => point.x === 480 && point.y === 810,
-    10000,
-    'a click at 25% x 75% of the canvas did not land at X 480, Y 810',
-  );
-  console.log('click landed at 480,810');
+  function pointerLocation() {
+    const out = xdotool(['getmouselocation']);
+    const match = /x:(\d+) y:(\d+)/.exec(out);
+    if (!match) throw new Error(`unexpected xdotool output: ${out}`);
+    return { x: Number(match[1]), y: Number(match[2]) };
+  }
 
   async function openTerminal(command) {
     text(execIn(['screen-relay', 'run', '--json', '--', 'xfce4-terminal', '-x', 'sh', '-c', command]));
@@ -188,6 +185,37 @@ try {
 
   const typedWindow = await openTerminal('cat > /tmp/out');
   await waitForFile('/tmp/out');
+
+  text(execIn(['screen-relay', 'click', '0.5', '0.5']));
+  text(execIn(['screen-relay', 'type', 'while watching']));
+  text(execIn(['screen-relay', 'key', 'Enter']));
+  await poll(
+    () => text(execIn(['cat', '/tmp/out'])),
+    (value) => value.includes('while watching'),
+    10000,
+    'the CLI could not type into the terminal while a view-only viewer watched',
+  );
+  console.log('CLI click and type worked while the viewer watched');
+
+  browser(['click', '#toolbar-toggle']);
+  browser(['click', '[data-action="control"]']);
+  await poll(
+    () => viewer(),
+    (state) => state.status === 'Live · you have control' && state.control === 'true',
+    15000,
+    'the viewer did not take control',
+  );
+  console.log('viewer took control');
+
+  await clickAt(box.x + box.width * 0.25, box.y + box.height * 0.75);
+  await poll(
+    () => pointerLocation(),
+    (point) => point.x === 480 && point.y === 810,
+    10000,
+    'a click at 25% x 75% of the canvas did not land at X 480, Y 810',
+  );
+  console.log('click landed at 480,810');
+
   await clickCenter();
   for (const key of 'hello') browser(['press', key]);
   browser(['press', 'Enter']);
@@ -199,7 +227,6 @@ try {
   );
   console.log('viewer typed hello');
 
-  browser(['click', '#toolbar-toggle']);
   browser(['click', '[data-action="keys"]']);
   if (browser(['get', 'attr', '#meta-ctrl', 'aria-pressed']).trim() !== 'true') browser(['click', '#meta-ctrl']);
   assert.equal(browser(['get', 'attr', '#meta-ctrl', 'aria-pressed']).trim(), 'true', 'the "Use ⌘ as Ctrl" setting is off');
@@ -226,8 +253,15 @@ try {
 
   xdotool(['windowclose', ctrlWindow]);
   xdotool(['windowactivate', '--sync', typedWindow]);
-  browser(['open', 'about:blank']);
-  await sleep(1000);
+
+  browser(['click', '[data-action="control"]']);
+  await poll(
+    () => viewer(),
+    (state) => state.status === 'Live · view only' && state.control === 'false',
+    15000,
+    'the viewer did not release control',
+  );
+  console.log('viewer released control');
 
   text(execIn(['screen-relay', 'type', 'héllo €']));
   text(execIn(['screen-relay', 'key', 'Enter']));
@@ -238,6 +272,9 @@ try {
     'screen-relay type from the CLI did not deliver the UTF-8 text "héllo €"',
   );
   console.log('CLI typed héllo €');
+
+  browser(['open', 'about:blank']);
+  await sleep(1000);
   console.log('PASS');
 } finally {
   const problems = [];

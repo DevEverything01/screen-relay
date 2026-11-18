@@ -10,7 +10,7 @@ screen-relay up -d
 screen-relay screenshot screen.png
 ```
 
-VM commands run on the Linux VM or Mac that hosts the desktop, including a container or sandbox. Client commands also run remotely with a URL and token. [Global options](#global-options) include `--json`.
+VM commands run on the Linux VM, Mac, or Windows PC that hosts the desktop, including a container or sandbox. Client commands also run remotely with a URL and token. [Global options](#global-options) include `--json`.
 
 ## VM commands
 
@@ -27,10 +27,10 @@ screen-relay up -d --name demo --port 8084
 | `-d`, `--detach` | Run in the background. Otherwise, Ctrl+C stops the session. |
 | `--config FILE` | YAML config. Default: `SCREEN_RELAY_CONFIG`, then `${XDG_CONFIG_HOME:-~/.config}/screen-relay/config.yaml` if present. |
 | `--port N` | Listen port, 1 to 65535. Default `8080`. |
-| `--desktop CMD` | `xfce`, `none`, or a command. Default: `xfce` on X11, `foot` on Wayland, or `none` when attaching. Always `none` on macOS. |
-| `--display DISPLAY` | Attach to an existing display at its size: `:0` (X display) or `wayland-1` (Wayland socket) on Linux. Not supported on macOS. |
-| `--backend x11\|wayland\|macos` | On Linux, default `x11` when available, else `wayland`. Without a configured backend, a display without a colon selects Wayland. On macOS, `macos`. |
-| `--output NAME` | Wayland output name, or a macOS display ID. Default: first output, or the main display. Not valid on X11. |
+| `--desktop CMD` | `xfce`, `none`, or a command. Default: `xfce` on X11, `foot` on Wayland, or `none` when attaching. Always `none` on macOS and Windows. |
+| `--display DISPLAY` | Attach to an existing display at its size: `:0` (X display) or `wayland-1` (Wayland socket) on Linux. Not supported on macOS or Windows. |
+| `--backend x11\|wayland\|macos\|windows` | On Linux, default `x11` when available, else `wayland`. Without a configured backend, a display without a colon selects Wayland. On macOS, `macos`. On Windows, `windows`. |
+| `--output NAME` | Wayland output name, a macOS display ID, or a Windows display name such as `'\\.\DISPLAY2'`. Default: first output, the main display on macOS, or the primary display on Windows. Not valid on X11. |
 | `--public URL` | HTTPS origin. Generates a token. Requires a TLS proxy unless direct TLS is configured. |
 | `--tls-cert FILE`, `--tls-key FILE` | Serve TLS directly. Both are required. |
 | `--bind ADDR` | Listen address. Default `127.0.0.1`, or `0.0.0.0` with `--public`. Other addresses generate a token. |
@@ -39,6 +39,7 @@ screen-relay up -d --name demo --port 8084
 
 - Default display: 1280x720 at 60 fps.
 - On macOS, screen-relay attaches to the existing display and ignores `display.resolution`. It does not stop an attached display.
+- On Windows, screen-relay attaches to the signed-in user's desktop and ignores `display.resolution` with a warning. Run `up` in a terminal on that desktop. Over SSH or from a service session, `up` fails. The viewer link always carries a token.
 - To become ready, a desktop command must open a window on X11 or a new Wayland display. Startup failures include the component's log.
 - If the display, desktop, or engine exits later, the session stops. Check `screen-relay status` and `screen-relay logs`.
 - Foreground `up --json` prints after supervision ends. An interrupt prints no success document.
@@ -49,7 +50,7 @@ For backend-specific usage, see [X11](/docs/linux), [Wayland](/docs/linux), and 
 
 ### down
 
-Stops the session and its apps. Safe to repeat.
+Stops the session and its apps. On Windows, apps started with `run` keep running. Safe to repeat.
 
 ```sh
 screen-relay down --name demo
@@ -82,7 +83,7 @@ screen-relay run --name demo --restart -- mousepad notes.txt
 
 | Option | Meaning |
 | --- | --- |
-| `--restart` | Restart the app whenever it exits, until the session stops. |
+| `--restart` | Restart the app whenever it exits, until the session stops. Not supported on Windows. |
 
 - Put screen-relay options before `--`. Everything after it goes to the app.
 - Read app output with `screen-relay logs apps`.
@@ -94,7 +95,7 @@ screen-relay run --name demo --restart -- mousepad notes.txt
 
 ### doctor
 
-Checks the VM or Mac and prints fixes for failed checks.
+Checks the VM, Mac, or Windows PC and prints fixes for failed checks.
 
 ```sh
 SCREEN_RELAY_BACKEND=wayland screen-relay doctor
@@ -106,6 +107,7 @@ SCREEN_RELAY_BACKEND=wayland screen-relay doctor
 
 - On Linux, doctor checks the `x11` backend unless `SCREEN_RELAY_BACKEND` or the config `backend` key says otherwise.
 - On macOS, doctor checks the macOS version, the engine, and the Screen Recording and Accessibility permissions.
+- On Windows, doctor checks the Windows version, MSYS2, the engine, and whether it runs in a desktop session.
 - Failures exit 1. Warnings do not.
 - JSON checks include `name`, `status`, `detail`, and `fix`.
 
@@ -119,12 +121,13 @@ screen-relay install --backend wayland --yes
 
 | Option | Meaning |
 | --- | --- |
-| `--backend BACKEND` | Backend to set up: `x11`, `wayland`, or `all` on Linux; `macos` on macOS. Default: `x11` on Linux, `macos` on macOS. Also read from `SCREEN_RELAY_BACKEND` and the config file's `backend` key. |
+| `--backend BACKEND` | Backend to set up: `x11`, `wayland`, or `all` on Linux; `macos` on macOS; `windows` on Windows, the only value there. Default: `x11` on Linux, `macos` on macOS. Also read from `SCREEN_RELAY_BACKEND` and the config file's `backend` key. |
 | `--desktop COMMAND` | Same values as `up --desktop`. With the default `xfce` on x11, the XFCE packages are installed. With `none` or another command, they are skipped. |
 | `--config FILE` | Read `backend` and `desktop` from this config file. |
 | `--yes`, `-y` | Install packages without asking. Required when there is no terminal. |
 
 - Installs packages with the system package manager, using `sudo` unless you are root.
+- On Windows, installs MSYS2 at `C:\msys64` with winget if it is missing, then installs its packages with pacman. Without winget, it stops and asks you to install MSYS2 from https://www.msys2.org.
 - Builds the engine into `~/.local/share/screen-relay/engine/<version>/`. Builds for earlier versions stay there until deleted.
 - At a terminal, it asks before installing packages. Anywhere else, it needs `--yes`.
 - The outcome is `installed` after it sets something up, or `unchanged` when nothing was missing. Adding a backend keeps the ones the engine already has.
@@ -249,7 +252,8 @@ screen-relay input '[{"type":"keyDown","key":4},{"type":"keyUp","key":4}]'
 Coordinates are fractions from `0` to `1`, measured from the top-left.
 
 - Success means the engine applied the events, not that the app reacted. Take a screenshot to check.
-- Only one input owner can send input: a viewer, an SDK control session, or the CLI.
+- Only one input owner can send input: a viewer that took control, an SDK control session, or the CLI.
+- The viewer opens view-only, so it can watch while the CLI sends input. Choose **Take control** in the viewer to own input, and **Release control** to hand it back.
 - Batches hold up to 256 events. A key combination is never split across batches.
 - Keys and buttons are released after each batch.
 - `busy` means another owner holds input, a batch exceeds the 1024-event queue, or the session ends during input.
@@ -405,7 +409,7 @@ Each `next` entry has `command` and `argv`. `data` can contain `component`, `log
 | `component_failed` | Component or app failed. Read its logs. |
 | `spawn_failed` | App could not start. Check its name and installation. |
 | `missing_dependency` | A required program is missing. Run `screen-relay install`. |
-| `unsupported_platform` | `up`, `down`, or `run` needs Linux or macOS. Run on the VM or Mac. |
+| `unsupported_platform` | `up`, `down`, or `run` needs Linux, macOS, or Windows. Run on the VM, Mac, or Windows PC. |
 | `invalid_config` | Invalid configuration. Correct the file and key named in the error. |
 | `disconnected`, `io_error`, `protocol_error` | Connection lost, local I/O failed, or engine response invalid. Check the connection or reported file. |
 | `canceled` | Interrupted. Retry if needed. |

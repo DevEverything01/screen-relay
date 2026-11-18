@@ -58,7 +58,7 @@ const HOLD_DECAY = 0.05;
 const CLOCK_JUMP_MS = 500;
 type Sample = { time: number; offset: number; late: number };
 let samples: Sample[] = [], lows: Sample[] = [], holdMs = 0;
-let buttons = 0, modifiers = 0, x = 0, y = 0, viewOnly = false, capsLock = false,
+let buttons = 0, modifiers = 0, x = 0, y = 0, viewOnly = true, capsLock = false,
   metaAsCtrl = stored('relay.metaCtrl') === null ? macos() : stored('relay.metaCtrl') === '1';
 const pending = new Map(), decoded: any[] = [], held = new Set<number>(), latched = new Map<number, Element>();
 const clamp = (value: number, low: number, high: number) => Math.max(low, Math.min(high, value));
@@ -230,7 +230,7 @@ function draw(item: any): boolean {
   ready = true;
   if (!wasReady) renderCursor();
   retry = 0;
-  setStatus('Live · click to control');
+  setStatus(viewOnly ? 'Live · view only' : 'Live · you have control');
   drawnThisFrame = true;
   return ackFrame(item);
 }
@@ -302,7 +302,7 @@ function connect() {
     setStatus('WebCodecs unavailable in this browser');
     return;
   }
-  const target = socketTarget(new URL(`${location.protocol}//${location.host}`), '/stream', accessToken);
+  const target = socketTarget(new URL(`${location.protocol}//${location.host}`), viewOnly ? '/stream?view=1' : '/stream', accessToken);
   socket = new WebSocket(target.url, target.protocols);
   transportBroken = false;
   loadCapabilities();
@@ -473,14 +473,30 @@ canvas.addEventListener('lostpointercapture', () => {
   if (buttons) release();
 });
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+const WHEEL_LINES_PER_NOTCH = 3;
+const WHEEL_PIXELS_PER_NOTCH = 100;
+const wheelRemainder = [0, 0];
+/** Wheel notches in one event. WebKit and Blink report 120 per notch in wheelDelta however many pixels the platform gives a notch (about 4 on macOS), so that value wins; Firefox reports only deltas, in lines, pages or pixels. */
+function wheelNotches(e: WheelEvent, axis: 0 | 1): number {
+  const legacy = axis ? (e as WheelEvent & { wheelDeltaX?: number }).wheelDeltaX : (e as WheelEvent & { wheelDeltaY?: number }).wheelDeltaY;
+  if (typeof legacy === 'number' && legacy !== 0) return -legacy / 120;
+  const delta = axis ? e.deltaX : e.deltaY;
+  if (e.deltaMode === 1) return delta / WHEEL_LINES_PER_NOTCH;
+  if (e.deltaMode === 2) return delta;
+  return delta / WHEEL_PIXELS_PER_NOTCH;
+}
 canvas.addEventListener('wheel', (e) => {
   e.preventDefault();
   position(e);
-  for (const [axis, delta] of [[0, e.deltaY], [1, e.deltaX]] as const) {
-    if (delta) {
-      const notches = Math.max(1, Math.round(Math.abs(delta) / 100));
-      sendInput({ type: 'wheel', axis: axis ? 'horizontal' : 'vertical', delta: clamp(Math.sign(delta) * notches * 120, -1200, 1200), x, y });
-    }
+  for (const axis of [0, 1] as const) {
+    if (!(axis ? e.deltaX : e.deltaY)) continue;
+    const notches = wheelNotches(e, axis);
+    if (Math.sign(notches) !== Math.sign(wheelRemainder[axis])) wheelRemainder[axis] = 0;
+    wheelRemainder[axis] += notches;
+    const whole = Math.trunc(wheelRemainder[axis]);
+    if (!whole) continue;
+    wheelRemainder[axis] -= whole;
+    sendInput({ type: 'wheel', axis: axis ? 'horizontal' : 'vertical', delta: clamp(whole * 120, -1200, 1200), x, y });
   }
 }, { passive: false });
 canvas.addEventListener('blur', release);
@@ -658,6 +674,20 @@ function setExpanded(open: boolean) {
   toggle.setAttribute('aria-expanded', String(open));
   if (!open) showPanel(null);
 }
+function applyControl() {
+  const button = actions.querySelector('[data-action="control"]')!;
+  const label = viewOnly ? 'Take control' : 'Release control';
+  button.setAttribute('aria-pressed', String(!viewOnly));
+  button.setAttribute('aria-label', label);
+  button.setAttribute('title', label);
+}
+function setViewOnly(next: boolean) {
+  if (viewOnly === next) return;
+  release();
+  viewOnly = next;
+  applyControl();
+  connect();
+}
 function syncStatus() {
   const text = status.textContent ?? '';
   dot.className = 'dot' + (text.startsWith('Live') ? ' live' : /^(Connecting|Waiting|Paused)/.test(text) ? '' : ' error');
@@ -682,11 +712,7 @@ const toolbarActions: Record<string, (button: Element) => void> = {
     link.click();
     setTimeout(() => URL.revokeObjectURL(link.href), 1000);
   }, 'image/png'),
-  viewonly: (button) => {
-    release();
-    viewOnly = !viewOnly;
-    button.setAttribute('aria-pressed', String(viewOnly));
-  },
+  control: () => setViewOnly(!viewOnly),
   stats: (button) => {
     const panel = document.querySelector('#stats')!;
     panel.hidden = !panel.hidden;
@@ -751,7 +777,8 @@ panels.connection.addEventListener('submit', (e) => {
 if (!document.hidden) startHud();
 applyScale();
 applyMeta();
+applyControl();
 watchDpr();
 connect();
 
-export { socket, capsLock, connect, reset, setScale, toggleSharp, watchDpr, toggleMeta };
+export { socket, capsLock, connect, reset, setScale, setViewOnly, toggleSharp, watchDpr, toggleMeta };

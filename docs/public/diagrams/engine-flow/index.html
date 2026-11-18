@@ -62,7 +62,7 @@
 </style>
 </head>
 <body>
-<svg viewBox="0 0 720 536" role="img" aria-labelledby="t d">
+<svg viewBox="0 0 720 560" role="img" aria-labelledby="t d">
   <title id="t">Inside the engine: flow control</title>
   <desc id="d">Inside the screen-relay engine, each acknowledgement gives the frame's total time since capture and its wait in the viewer. Recent delays over 10 seconds give the link's normal delay and the longest delay. The standing queue is the smallest delay above the base over one round trip. The longest delay sizes the frame window. The whole standing queue decides when to pause capture. The network part of it decides when to cut the bitrate. Safety limits cap frames and bytes on the way and close the stream after 3 seconds without progress.</desc>
   <defs>
@@ -71,65 +71,66 @@
     </marker>
   </defs>
 
-  <rect class="box engine" x="16" y="16" width="688" height="504" rx="12"/>
+  <rect class="box" x="16" y="16" width="688" height="528" rx="12"/>
   <text class="head" x="40" y="40">screen-relay engine, from acknowledgements to decisions</text>
-  <rect class="box node" x="504" y="56" width="176" height="128" rx="6"/>
-  <g class="icon" transform="translate(520 72)" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/><path d="M1.5 6h13M6 6v7.5"/></g>
-  <text class="label" x="544" y="84">Frame window</text>
-  <text class="sub" x="520" y="110">frames allowed on the</text>
-  <text class="sub" x="520" y="128">way: the longest delay</text>
-  <text class="sub" x="520" y="146">in frames, plus two</text>
   <rect class="box node" x="272" y="56" width="176" height="128" rx="6"/>
-  <g class="icon" transform="translate(288 72)" aria-hidden="true"><circle cx="8" cy="8" r="7"/><path d="M8 4v4l2.5 1.5"/></g>
-  <text class="label" x="312" y="84">Recent delays</text>
-  <text class="sub" x="288" y="110">over 10 s, the shortest</text>
-  <text class="sub" x="288" y="128">is the link's normal</text>
-  <text class="sub" x="288" y="146">delay; the longest</text>
-  <text class="sub" x="288" y="164">sizes the window</text>
-  <rect class="box node" x="40" y="224" width="176" height="104" rx="6"/>
-  <g class="icon" transform="translate(56 240)" aria-hidden="true"><circle cx="8" cy="8" r="7"/><path d="M4.5 8.5l2.5 2.5 4.5-5"/></g>
-  <text class="label" x="80" y="252">Acknowledgement</text>
-  <text class="sub" x="56" y="278">gives the frame's total</text>
-  <text class="sub" x="56" y="296">time since capture and</text>
-  <text class="sub" x="56" y="314">its wait in the viewer</text>
+  <g class="icon" transform="translate(288 71)" aria-hidden="true"><circle cx="8" cy="8" r="7"/><path d="M8 4v4l2.5 1.5"/></g>
+  <text class="label" x="312" y="85">Recent delays</text>
+  <text class="sub" x="288" y="111">over 10 s, the shortest</text>
+  <text class="sub" x="288" y="129">is the link's normal</text>
+  <text class="sub" x="288" y="147">delay; the longest</text>
+  <text class="sub" x="288" y="165">sizes the window</text>
+  <rect class="box node" x="504" y="56" width="176" height="128" rx="6"/>
+  <g class="icon" transform="translate(520 80)" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/><path d="M1.5 6h13M6 6v7.5"/></g>
+  <text class="label" x="544" y="94">Frame window</text>
+  <text class="sub" x="520" y="120">frames allowed on the</text>
+  <text class="sub" x="520" y="138">way: the longest delay</text>
+  <text class="sub" x="520" y="156">in frames, plus two</text>
+  <rect class="box node" x="40" y="224" width="184" height="128" rx="6"/>
+  <g class="icon" transform="translate(56 248)" aria-hidden="true"><circle cx="8" cy="8" r="7"/><path d="M4.5 8.5l2.5 2.5 4.5-5"/></g>
+  <text class="label" x="80" y="262">Acknowledgement</text>
+  <text class="sub" x="56" y="288">gives the frame's total</text>
+  <text class="sub" x="56" y="306">time since capture and</text>
+  <text class="sub" x="56" y="324">its wait in the viewer</text>
   <rect class="box node" x="272" y="224" width="176" height="128" rx="6"/>
-  <g class="icon" transform="translate(288 240)" aria-hidden="true"><rect x="1.5" y="3" width="3" height="10" rx="1"/><rect x="6.5" y="3" width="3" height="10" rx="1"/><rect x="11.5" y="3" width="3" height="10" rx="1"/></g>
-  <text class="label" x="312" y="252">Standing queue</text>
-  <text class="sub" x="288" y="278">smallest delay above</text>
-  <text class="sub" x="288" y="296">the base over one round</text>
-  <text class="sub" x="288" y="314">trip. One late burst</text>
-  <text class="sub" x="288" y="332">leaves it at zero</text>
-  <rect class="box node" x="504" y="224" width="176" height="104" rx="6"/>
-  <g class="icon" transform="translate(520 240)" aria-hidden="true"><rect x="3" y="2" width="3.5" height="12" rx="1"/><rect x="9.5" y="2" width="3.5" height="12" rx="1"/></g>
-  <text class="label" x="544" y="252">Pause</text>
-  <text class="sub" x="520" y="278">stops capture when the</text>
-  <text class="sub" x="520" y="296">queue reaches the base</text>
-  <text class="sub" x="520" y="314">delay plus two frames</text>
-  <rect class="box node" x="504" y="368" width="176" height="128" rx="6"/>
-  <g class="icon" transform="translate(520 384)" aria-hidden="true"><path d="M2 12a6 6 0 0 1 12 0M2 12h12M8 12l3-4"/></g>
-  <text class="label" x="544" y="396">Bitrate</text>
-  <text class="sub" x="520" y="422">cut a quarter when the</text>
-  <text class="sub" x="520" y="440">network queue is high;</text>
-  <text class="sub" x="520" y="458">up 10% a second while</text>
-  <text class="sub" x="520" y="476">clear, within the range</text>
-  <rect class="box node" x="40" y="368" width="176" height="128" rx="6"/>
-  <g class="icon" transform="translate(56 384)" aria-hidden="true"><path d="M8 1.5l5.5 2v4.5c0 3-2.5 5.5-5.5 6.5-3-1-5.5-3.5-5.5-6.5V3.5z"/></g>
-  <text class="label" x="80" y="396">Safety limits</text>
-  <text class="sub" x="56" y="422">at most 3 s of frames</text>
-  <text class="sub" x="56" y="440">and 8 MiB on the way;</text>
-  <text class="sub" x="56" y="458">closes after 3 s idle</text>
+  <g class="icon" transform="translate(288 239)" aria-hidden="true"><rect x="1.5" y="3" width="3" height="10" rx="1"/><rect x="6.5" y="3" width="3" height="10" rx="1"/><rect x="11.5" y="3" width="3" height="10" rx="1"/></g>
+  <text class="label" x="312" y="253">Standing queue</text>
+  <text class="sub" x="288" y="279">smallest delay above</text>
+  <text class="sub" x="288" y="297">the base over one</text>
+  <text class="sub" x="288" y="315">round trip. One late</text>
+  <text class="sub" x="288" y="333">burst leaves it at zero</text>
+  <rect class="box node" x="504" y="224" width="176" height="128" rx="6"/>
+  <g class="icon" transform="translate(520 239)" aria-hidden="true"><rect x="3" y="2" width="3.5" height="12" rx="1"/><rect x="9.5" y="2" width="3.5" height="12" rx="1"/></g>
+  <text class="label" x="544" y="253">Pause</text>
+  <text class="sub" x="520" y="279">pauses capture when</text>
+  <text class="sub" x="520" y="297">the standing queue</text>
+  <text class="sub" x="520" y="315">reaches the base delay</text>
+  <text class="sub" x="520" y="333">plus two frames</text>
+  <rect class="box node" x="40" y="392" width="184" height="128" rx="6"/>
+  <g class="icon" transform="translate(56 416)" aria-hidden="true"><path d="M8 1.5l5.5 2v4.5c0 3-2.5 5.5-5.5 6.5-3-1-5.5-3.5-5.5-6.5V3.5z"/></g>
+  <text class="label" x="80" y="430">Safety limits</text>
+  <text class="sub" x="56" y="456">at most 3 s of frames</text>
+  <text class="sub" x="56" y="474">and 8 MiB on the way;</text>
+  <text class="sub" x="56" y="492">closes after 3 s idle</text>
+  <rect class="box node" x="504" y="392" width="176" height="128" rx="6"/>
+  <g class="icon" transform="translate(520 407)" aria-hidden="true"><path d="M2 12a6 6 0 0 1 12 0M2 12h12M8 12l3-4"/></g>
+  <text class="label" x="544" y="421">Bitrate</text>
+  <text class="sub" x="520" y="447">cut a quarter when the</text>
+  <text class="sub" x="520" y="465">network queue is high;</text>
+  <text class="sub" x="520" y="483">up 10% a second while</text>
+  <text class="sub" x="520" y="501">clear, within the range</text>
   <path class="wire" d="M128 220V120H268"/>
-  <text class="tag" x="198" y="112" text-anchor="middle">delays</text>
-  <path class="wire" d="M220 276H268"/>
-  <text class="tag" x="244" y="268" text-anchor="middle">delays</text>
+  <path class="wire" d="M228 288H268"/>
   <path class="wire" d="M360 188V220"/>
-  <text class="tag" x="368" y="208" text-anchor="start">its base</text>
   <path class="wire" d="M452 120H500"/>
-  <text class="tag" x="476" y="112" text-anchor="middle">largest</text>
-  <path class="wire" d="M452 276H500"/>
-  <text class="tag" x="476" y="268" text-anchor="middle">all of it</text>
-  <path class="wire" d="M360 356V432H500"/>
-  <text class="tag" x="430" y="424" text-anchor="middle">network part</text>
+  <path class="wire" d="M452 288H500"/>
+  <path class="wire" d="M360 356V456H500"/>
+  <text class="tag" x="198" y="108" text-anchor="middle">delays</text>
+  <text class="tag" x="248" y="277" text-anchor="middle">delays</text>
+  <text class="tag" x="368" y="208">its base</text>
+  <text class="tag" x="476" y="108" text-anchor="middle">largest</text>
+  <text class="tag" x="476" y="277" text-anchor="middle">all of it</text>
+  <text class="tag" x="430" y="444" text-anchor="middle">network part</text>
 </svg>
 </body>
 </html>

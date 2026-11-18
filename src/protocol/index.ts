@@ -185,8 +185,8 @@ export function h264Codec(bytes: Uint8Array): string {
   throw new RelayError('protocol_error', 'Keyframe is missing SPS');
 }
 
-/** Returns the WebSocket URL and subprotocols for `/stream` or `/control` on an engine origin. */
-export function socketTarget(origin: URL, path: '/stream' | '/control', token?: string): { url: URL; protocols: string[] } {
+/** Returns the WebSocket URL and subprotocols for `/stream`, `/stream?view=1`, or `/control` on an engine origin. */
+export function socketTarget(origin: URL, path: '/stream' | '/stream?view=1' | '/control', token?: string): { url: URL; protocols: string[] } {
   const url = new URL(path, origin);
   url.protocol = origin.protocol === 'https:' ? 'wss:' : 'ws:';
   return { url, protocols: token ? [SUBPROTOCOL, `bearer.${token}`] : [SUBPROTOCOL] };

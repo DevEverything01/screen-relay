@@ -6,7 +6,7 @@ allowed-tools: Bash(screen-relay:*)
 
 # screen-relay core workflow
 
-screen-relay streams a desktop to a browser viewer and gives you CLI control. Run it on the Linux or macOS machine that shows the desktop. Node 22 or newer is required.
+screen-relay streams a desktop to a browser viewer and gives you CLI control. Run it on the Linux, macOS or Windows machine that shows the desktop. Node 22 or newer is required.
 
 ## Set up
 
@@ -23,12 +23,14 @@ screen-relay up -d
 - After an upgrade, the next `up` rebuilds the engine. That needs no `sudo`.
 - Linux: automatic setup supports Debian, Ubuntu, Fedora, Arch Linux and Alpine on x64 and arm64. It needs root or passwordless `sudo`. On another distribution, install the build tools and libraries yourself, then run `screen-relay install`.
 - macOS: setup needs Homebrew and the Xcode Command Line Tools. See [macOS](references/macos.md).
+- Windows: setup needs Windows 10 or later on x64. It installs MSYS2 with winget when MSYS2 is missing. Without winget, install MSYS2 from https://www.msys2.org first. Run the commands in a terminal on the signed-in user's desktop. `up` over SSH or from a service session fails with `No display is attached to this session` or `Desktop Duplication is unavailable`. See [Windows](https://screen-relay.dev/docs/windows).
 
 ## Pick a backend
 
 | Platform | Backend | Start |
 | --- | --- | --- |
 | macOS | `macos`: streams the logged-in user's display. Starts no virtual display or desktop. | `screen-relay up -d` |
+| Windows | `windows`: streams the signed-in user's desktop. Starts no virtual display or desktop. | `screen-relay up -d` |
 | Linux | `x11`: a virtual display with XFCE. | `screen-relay up -d` |
 | Linux | `wayland`: a headless sway desktop with foot. | `screen-relay up -d --backend wayland` |
 | Linux | Attach to a compositor you already run. | `screen-relay up -d --backend wayland --display "$WAYLAND_DISPLAY"` |
@@ -41,7 +43,7 @@ screen-relay up -d
 
 ## Where commands run
 
-- VM commands (`install`, `up`, `down`, `logs`, `run`, `doctor`) run on the Linux or macOS machine that shows the desktop. `up`, `down` and `run` fail with `unsupported_platform` elsewhere.
+- VM commands (`install`, `up`, `down`, `logs`, `run`, `doctor`) run on the Linux, macOS or Windows machine that shows the desktop. `up`, `down` and `run` fail with `unsupported_platform` elsewhere.
 - Client commands (`status`, `screenshot`, `click`, `move`, `scroll`, `key`, `type`, `input`) reach the engine through the local session, or from another machine with `--url` and a token file (`--token-file` or `SCREEN_RELAY_TOKEN_FILE`). See [Client target](references/cli.md#client-target).
 - `skills` and `help` work anywhere and never contact an engine.
 - A script can use the Node SDK instead of the CLI. See [Node SDK](references/sdk.md).
@@ -138,14 +140,14 @@ Exit codes: [CLI exit codes](references/cli.md#exit-codes).
 | `missing_command` | `run` was given no app (exit 2). | `screen-relay run -- APP`. |
 | `spawn_failed` | `run` could not start the app. | Check the app name and `screen-relay logs apps`. |
 | `unsupported_input` | The backend cannot produce a character or apply the input. | Use `screen-relay type` for layout-neutral text. |
-| `unsupported_platform` | `up`, `down` or `run` ran off Linux and macOS. | Run host commands on the Linux or macOS machine. |
+| `unsupported_platform` | `up`, `down` or `run` ran on a platform other than Linux, macOS or Windows. | Run host commands on the Linux, macOS or Windows machine that shows the desktop. |
 | `invalid_config` | A config key or value is invalid. The message names the file and key. | Fix the file and start again. |
 | `invalid_input`, `invalid_option`, `unknown_command` | Usage error (exit 2). | Read the `next` command, usually `screen-relay help <command>`. |
 | `internal` | A bug in screen-relay. | Report it with the command you ran. |
 
 ## One controller
 
-Only one controller sends input at a time: a browser viewer, an SDK control session, or your CLI. A second controller gets `busy` with the message `Another controller holds control of the desktop.`, and nothing is applied. Screenshots, `status` and `capabilities` keep working. Do not retry in a loop. Wait for the other controller to close, then retry once.
+Only one controller sends input at a time: a browser viewer that took control, an SDK control session, or your CLI. A viewer opens view-only, so it can watch while your CLI sends input. A second controller gets `busy` with the message `Another controller holds control of the desktop.`, and nothing is applied. Screenshots, `status` and `capabilities` keep working. Do not retry in a loop. Wait for the other controller to release control or close, then retry once.
 
 ## Config
 

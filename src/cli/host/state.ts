@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { Failure } from '../output.js';
+import { killTree, windowsStartTime } from './windows.js';
 
 export type ProcessIdentity = { pid: number; start: string | null };
 export type SessionData = Record<string, any>;
@@ -61,6 +62,7 @@ function darwinStartTime(pid: number): string | null {
 }
 
 export function startTime(pid: number): string | null {
+  if (process.platform === 'win32') return windowsStartTime(pid);
   if (process.platform === 'darwin') return darwinStartTime(pid);
   try {
     const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
@@ -74,6 +76,7 @@ export function startTime(pid: number): string | null {
 export function alive(record: unknown): boolean {
   if (!record || typeof record !== 'object') return false;
   const value = record as Partial<ProcessIdentity>;
+  if (process.platform === 'win32' && value.start === null) return false;
   return typeof value.pid === 'number' && value.start !== undefined && startTime(value.pid) === value.start;
 }
 
@@ -107,7 +110,7 @@ export function lockOwnerAlive(file: string): boolean {
 
 /** Signals every Linux process carrying this session's SCREEN_RELAY_SESSION marker; on macOS the app watcher stops each app it holds. */
 export async function sweep(directory: string, signal?: AbortSignal): Promise<void> {
-  if (process.platform === 'darwin') return;
+  if (process.platform === 'darwin' || process.platform === 'win32') return;
   const marker = Buffer.from(`SCREEN_RELAY_SESSION=${directory}`);
   for (const killSignal of ['SIGTERM', 'SIGKILL'] as const) {
     signal?.throwIfAborted();
@@ -139,18 +142,26 @@ export async function reap(directory: string, session: SessionData | null, signa
   for (const record of Object.values(session?.components ?? {}) as unknown[]) {
     if (alive(record)) {
       try {
-        process.kill(-Number((record as ProcessIdentity).pid), 'SIGKILL');
+        if (process.platform === 'win32') killTree((record as ProcessIdentity).pid);
+        else process.kill(-Number((record as ProcessIdentity).pid), 'SIGKILL');
       } catch {}
     }
   }
   await sweep(directory, signal);
 }
 
-/** Holds the kernel session lock until close, with flock on Linux and lockf on macOS. */
+/** Holds the session lock until close: flock on Linux, lockf on macOS, and a lock file on Windows. */
 export async function lock(name: string, directory: string): Promise<{ close(): Promise<void> }> {
   const file = join(directory, 'lock');
   const busy = () => new Failure('already_running', `Session "${name}" is already running`,
     'Stop it with `screen-relay down --name ' + name + '` or pick another --name.');
+  if (process.platform === 'win32') {
+    while (!claimLock(file)) {
+      if (lockOwnerAlive(file)) throw busy();
+      rmSync(file, { force: true });
+    }
+    return { close: () => { rmSync(file, { force: true }); return Promise.resolve(); } };
+  }
   const [command, args] = process.platform === 'darwin'
     ? ['lockf', ['-k', '-s', '-t', '0', file, 'sh', '-c', 'printf .; cat']]
     : ['flock', ['--exclusive', '--nonblock', '--conflict-exit-code', '75', file, 'sh', '-c', 'printf .; cat']];

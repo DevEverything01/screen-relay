@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import type { Readable } from 'node:stream';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createClient } from '../../sdk/index.js';
@@ -11,8 +11,9 @@ import { emit, Failure, formatReady, formatStarted, formatStatus, formatStopped,
 import { COMPONENTS, HostArgs, requireHost, spawnCleared, which } from './common.js';
 import { alive, lock, readSession, reap, stateDir, tail, writeSession } from './state.js';
 import { ensureSetup } from './setup.js';
-import { connectHost, desktopEnv, Session } from './supervisor.js';
+import { attaches, connectHost, desktopEnv, Session } from './supervisor.js';
 import { startWatcher } from './watcher.js';
+import { killTree } from './windows.js';
 
 export { COMPONENTS };
 
@@ -27,13 +28,14 @@ async function reapSession(directory: string, session: Record<string, any> | nul
 
 export async function cmdUp(args: Args): Promise<number> {
   requireHost();
-  if (process.platform === 'darwin' && args.display !== undefined) {
-    throw new Failure('invalid_input', '--display is not supported on macOS', 'Remove --display; screen-relay attaches to the current display on macOS.');
+  const attachedHost = process.platform === 'darwin' ? 'macOS' : process.platform === 'win32' ? 'Windows' : undefined;
+  if (attachedHost && args.display !== undefined) {
+    throw new Failure('invalid_input', `--display is not supported on ${attachedHost}`, `Remove --display; screen-relay attaches to the current display on ${attachedHost}.`);
   }
   const [settings, , present] = loadConfig(typeof args.config === 'string' && args.config ? args.config : undefined);
-  const warnings = (args.display || process.platform === 'darwin') && present.has('display.resolution')
-    ? [{ reason: 'display_resolution_ignored', message: process.platform === 'darwin'
-      ? 'display.resolution is ignored on macOS; the existing display size is used'
+  const warnings = (args.display || attachedHost) && present.has('display.resolution')
+    ? [{ reason: 'display_resolution_ignored', message: attachedHost
+      ? `display.resolution is ignored on ${attachedHost}; the existing display size is used`
       : 'display.resolution is ignored with --display; the existing display size is used' }] : [];
   for (const warning of warnings) printWarning(warning.message, args);
   applyTo(args, settings, present);
@@ -110,13 +112,16 @@ async function detach(args: Args, directory: string, timeout: number, warnings: 
   const logPath = join(directory, 'supervisor.log');
   const log = openSync(logPath, 'w', 0o600);
   const child = spawn(process.execPath, [process.argv[1] ?? '', ...process.argv.slice(2), ...chosen], {
-    cwd: process.cwd(), env: { ...process.env, SCREEN_RELAY_READY_FD: '3' }, detached: true,
+    cwd: process.cwd(), env: { ...process.env, SCREEN_RELAY_READY_FD: '3' }, detached: true, windowsHide: true,
     stdio: ['ignore', log, log, 'pipe'],
   });
   const signal = args.signal as AbortSignal | undefined;
-  const cancel = () => { child.kill('SIGTERM'); };
-  signal?.addEventListener('abort', cancel, { once: true });
-  if (signal?.aborted) cancel();
+  const stopChild = () => {
+    if (process.platform !== 'win32') child.kill('SIGTERM');
+    else if (child.pid !== undefined) killTree(child.pid);
+  };
+  signal?.addEventListener('abort', stopChild, { once: true });
+  if (signal?.aborted) stopChild();
   closeSync(log);
   const stream = child.stdio[3] as Readable;
   let data = '';
@@ -127,11 +132,11 @@ async function detach(args: Args, directory: string, timeout: number, warnings: 
     child.once('exit', () => { clearTimeout(timer); resolve(data); });
     child.once('error', () => { clearTimeout(timer); resolve(data); });
   });
-  signal?.removeEventListener('abort', cancel);
+  signal?.removeEventListener('abort', stopChild);
   if (signal?.aborted) throw new Failure('canceled', 'Session startup canceled.');
   if (!result) {
     if (child.exitCode === null) {
-      child.kill('SIGTERM');
+      stopChild();
       throw new Failure('timeout', 'Background supervisor did not report readiness in time', `See ${logPath}.`, { component: 'supervisor', log: tail(logPath), logs: directory });
     }
     throw new Failure('component_failed', 'Background supervisor exited before it was ready', `See ${logPath}.`, { component: 'supervisor', log: tail(logPath), logs: directory });
@@ -155,13 +160,17 @@ export async function cmdDown(args: Args): Promise<number> {
   const supervisor = session?.supervisor;
   const running = alive(supervisor);
   if (running) {
-    process.kill(supervisor.pid, 'SIGTERM');
+    if (process.platform === 'win32') killTree(supervisor.pid);
+    else process.kill(supervisor.pid, 'SIGTERM');
     const deadline = Date.now() + 20000;
     while (alive(supervisor) && Date.now() < deadline) await delay(100, undefined, { signal: args.signal });
     args.signal?.throwIfAborted();
-    if (alive(supervisor)) {
+    if (alive(supervisor) && process.platform !== 'win32') {
       process.kill(supervisor.pid, 'SIGKILL');
       while (alive(supervisor)) await delay(50, undefined, { signal: args.signal });
+    }
+    if (alive(supervisor) && process.platform === 'win32') {
+      throw new Failure('timeout', `Session "${args.name}" did not stop`, 'Run `' + sessionCommand('down', args.name) + '` again from a terminal with the same rights as the one that started the session.');
     }
   }
   if (session) {
@@ -218,9 +227,10 @@ export async function cmdLogs(args: Args): Promise<number> {
   if (!files.length) throw new Failure('not_running', `No logs for "${args.name}"`, 'Start a session with `screen-relay up`.');
   if (args.json) {
     if (args.follow) throw new Failure('invalid_input', '--follow cannot be combined with --json', 'Run `screen-relay logs --help`.');
-    emit(args, { logs: Object.fromEntries(files.map((file) => [file.slice(file.lastIndexOf('/') + 1, -4), tail(file, 200)])) }, '');
+    emit(args, { logs: Object.fromEntries(files.map((file) => [basename(file, '.log'), tail(file, 200)])) }, '');
     return 0;
   }
+  if (process.platform === 'win32') return printWindowsLogs(files, args);
   const child = spawn('tail', ['-n', '200', ...(args.follow ? ['-F'] : []), ...files], { stdio: 'inherit', signal: args.signal });
   return await new Promise((resolve) => {
     child.once('error', () => resolve(1));
@@ -228,19 +238,53 @@ export async function cmdLogs(args: Args): Promise<number> {
   });
 }
 
+/** Prints the last 200 lines of each log, then follows them by polling when --follow is set. Stops when the signal aborts. */
+async function printWindowsLogs(files: string[], args: Args): Promise<number> {
+  const offsets = new Map<string, number>();
+  files.forEach((file, index) => {
+    if (files.length > 1) process.stdout.write(`${index ? '\n' : ''}==> ${file} <==\n`);
+    const text = tail(file, 201).replace(/\r?\n$/, '');
+    if (text) process.stdout.write(`${text.split(/\r?\n/).slice(-200).join('\n')}\n`);
+    offsets.set(file, statSync(file).size);
+  });
+  if (!args.follow) return 0;
+  for (;;) {
+    await delay(200, undefined, { signal: args.signal });
+    for (const file of files) {
+      const size = statSync(file).size;
+      const previous = offsets.get(file) ?? 0;
+      const from = size < previous ? 0 : previous;
+      if (size > from) {
+        const descriptor = openSync(file, 'r');
+        try {
+          const buffer = Buffer.alloc(size - from);
+          readSync(descriptor, buffer, 0, buffer.length, from);
+          process.stdout.write(buffer);
+        } finally {
+          closeSync(descriptor);
+        }
+      }
+      offsets.set(file, size);
+    }
+  }
+}
+
 export async function cmdRun(args: Args): Promise<number> {
   requireHost();
+  if (args.restart && process.platform === 'win32') throw new Failure('invalid_input', '--restart is not supported on Windows', 'Remove --restart and run the app again.');
   const rest = args.args === undefined ? [] : Array.isArray(args.args) ? args.args : [args.args];
   const command = [args.app, ...rest].filter((value) => value !== undefined).map(String);
   if (!command.length) throw new Failure('missing_command', 'Name the app to start', 'Run `screen-relay run --help`.');
-  if (!which(command[0])) throw new Failure('spawn_failed', `${command[0]} was not found`, 'Install it or check the name, then run the command again.');
+  const found = which(command[0]);
+  if (!found) throw new Failure('spawn_failed', `${command[0]} was not found`, 'Install it or check the name, then run the command again.');
+  const spawned = process.platform === 'win32' ? [found, ...command.slice(1)] : command;
   const session = readSession(args.name);
   if (!session || session.state !== 'ready' || !alive(session.supervisor)) throw new Failure('not_found', `No running session named "${args.name}"`, 'Start one with `screen-relay up -d`.');
   const directory = stateDir(args.name);
   const env = session.ownsDisplay === false
-    ? { ...process.env, ...(session.backend === 'macos' ? session.environment ?? {} : {}), SCREEN_RELAY_SESSION: directory }
+    ? { ...process.env, ...(attaches(session.backend) ? session.environment ?? {} : {}), SCREEN_RELAY_SESSION: directory }
     : { ...desktopEnv(directory), ...(session.environment ?? {}) };
-  if (session.backend === 'macos') {
+  if (attaches(session.backend)) {
     delete env.DISPLAY;
     delete env.WAYLAND_DISPLAY;
     delete env.XAUTHORITY;
@@ -261,7 +305,7 @@ export async function cmdRun(args: Args): Promise<number> {
       if (started.exited) throw new Failure('component_failed', `${command[0]} exited with code ${started.exited}`, 'Read `screen-relay logs apps`.', { component: 'apps', log: tail(path) });
       pid = started.pid;
     } else {
-      const child = spawnCleared(command, { cwd: homedir(), env, stdio: ['ignore', log, log], detached: true, signal: args.signal });
+      const child = spawnCleared(spawned, { cwd: homedir(), env, stdio: ['ignore', log, log], detached: true, signal: args.signal });
       await new Promise<void>((resolve, reject) => { child.once('spawn', () => resolve()); child.once('error', reject); });
       pid = child.pid!;
       const earlyExit = child.exitCode !== null ? child.exitCode : child.signalCode !== null ? 1 : await Promise.race([
@@ -278,6 +322,6 @@ export async function cmdRun(args: Args): Promise<number> {
     closeSync(log);
   }
   emit(args, { app: { pid, command }, outcome: 'started' },
-    formatStarted(command[0], pid, session.backend === 'macos' ? 'macOS' : session.display, path, args) + '\n' + nextStep('Read app output', sessionCommand('logs apps', args.name), args), { identifier: String(pid) });
+    formatStarted(command[0], pid, session.backend === 'macos' ? 'macOS' : session.backend === 'windows' ? 'Windows' : session.display, path, args) + '\n' + nextStep('Read app output', sessionCommand('logs apps', args.name), args), { identifier: String(pid) });
   return 0;
 }

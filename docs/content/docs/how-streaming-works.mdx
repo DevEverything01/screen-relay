@@ -7,17 +7,7 @@ screen-relay streams frames from the VM to your browser. The engine uses the bro
 
 ## The streaming loop
 
-<Diagram name="streaming-loop" title="How a frame travels from the desktop to the browser and how feedback returns" aspectRatio="720 / 368" />
-
-The same flow in text:
-
-```text
-Linux VM: Desktop -> screen-relay engine (paints)
-screen-relay engine -> Viewer in the browser (frames)
-Viewer -> Acknowledgement (after showing)
-Acknowledgement -> Rate control on the VM (wait time)
-Rate control -> screen-relay engine (bitrate, frames on the way, pause)
-```
+<Diagram name="streaming-loop" title="How a frame travels from the desktop to the browser and how feedback returns" aspectRatio="760 / 368" />
 
 Each frame takes this path:
 
@@ -68,18 +58,7 @@ This section explains how the engine decides. You do not need it to run screen-r
 
 ### One frame inside the engine
 
-<Diagram name="engine-pipeline" title="The stages one frame goes through inside the engine" aspectRatio="720 / 416" />
-
-The same flow in text:
-
-```text
-Wait (for a screen change) -> Admit (change)
-Admit (takes a frame only if fewer frames are on the way than allowed and capture is not paused) -> Pace (allowed)
-Pace (keeps capture at the configured frame rate, with a reserve of two frames) -> Capture (on pace)
-Capture (reads only the changed region, converts it block by block, marks unchanged blocks, no change means no frame) -> Encode (pixels)
-Encode (at the current bitrate, skips marked blocks, a keyframe starts a session and follows a recovery) -> Send (frame)
-Send (queues the frame to the viewer with its capture time and sequence number)
-```
+<Diagram name="engine-pipeline" title="The stages one frame goes through inside the engine" aspectRatio="720 / 424" />
 
 Each frame passes through these stages in order:
 
@@ -93,19 +72,7 @@ Each frame passes through these stages in order:
 
 ### How acknowledgements become decisions
 
-<Diagram name="engine-flow" title="How acknowledgements become the frame window, the pause, and the bitrate" aspectRatio="720 / 536" />
-
-The same flow in text:
-
-```text
-Acknowledgement (total time since capture and its wait in the viewer) -> Recent delays (delays)
-Acknowledgement -> Standing queue (delays)
-Recent delays (shortest over 10 s is the normal delay; longest sizes the window) -> Standing queue (its base)
-Recent delays -> Frame window (largest)
-Standing queue (smallest delay above the base over one round trip) -> Pause (all of it)
-Standing queue -> Bitrate (network part)
-Safety limits: at most 3 s of frames and 8 MiB on the way; the stream closes after 3 s without progress
-```
+<Diagram name="engine-flow" title="How acknowledgements become the frame window, the pause, and the bitrate" aspectRatio="720 / 560" />
 
 Each acknowledgement gives the engine two numbers: the time from capture to acknowledgement, and how long the frame waited in the viewer. The engine derives two values from them:
 
