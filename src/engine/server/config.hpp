@@ -39,6 +39,11 @@ class Tickets {
   std::vector<std::pair<std::string, Clock::time_point>> waiting;
   void expire(Clock::time_point now);
 };
+/**
+ * Fills out with bytes from the OS CSPRNG. lws_get_random isn't safe for
+ * secrets: libwebsockets before 5.1 uses unseeded rand() on Windows.
+ */
+bool secureRandom(unsigned char* out, size_t size);
 /** The ticket a WebSocket offers as its ticket.TICKET subprotocol, or "". */
 std::string offeredTicket(lws* wsi);
 bool loopbackOrigin(const std::string& origin);

@@ -10,7 +10,9 @@
 #ifdef _WIN32
 #include <windows.h>
 #include <aclapi.h>
+#include <bcrypt.h>
 #else
+#include <sys/random.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #endif
@@ -151,6 +153,17 @@ bool authenticated(const Config& config, lws* wsi, bool websocket) {
     if (first != std::string::npos && secretEqual(protocol.substr(first, last-first+1), "bearer." + config.token)) return true;
   }
   return false;
+}
+bool secureRandom(unsigned char* out, size_t size) {
+#ifdef _WIN32
+  return BCRYPT_SUCCESS(BCryptGenRandom(nullptr, out, ULONG(size), BCRYPT_USE_SYSTEM_PREFERRED_RNG));
+#else
+  // getentropy fills at most 256 bytes per call.
+  for (size_t done = 0; done < size; done += 256) {
+    if (getentropy(out + done, std::min<size_t>(256, size - done)) != 0) return false;
+  }
+  return true;
+#endif
 }
 void Tickets::expire(Clock::time_point now) {
   waiting.erase(std::remove_if(waiting.begin(), waiting.end(),

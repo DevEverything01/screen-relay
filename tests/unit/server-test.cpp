@@ -4,6 +4,7 @@
 #include "server/wire.hpp"
 #include <libwebsockets.h>
 #include <cassert>
+#include <cstring>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -58,6 +59,14 @@ int main() {
     for (size_t i = 0; i <= Tickets::capacity; ++i) tickets.add("t" + std::to_string(i), start);
     assert(!tickets.redeem("t0", start) && tickets.redeem("t1", start));
     assert(tickets.redeem("t" + std::to_string(Tickets::capacity), start));
+  }
+  {
+    unsigned char first[300] = {}, second[300] = {};
+    assert(secureRandom(first, sizeof(first)) && secureRandom(second, sizeof(second)));
+    assert(std::memcmp(first, second, sizeof(first)) != 0);
+    // The tail past getentropy's 256-byte limit is filled too.
+    const unsigned char zero[44] = {};
+    assert(std::memcmp(first + 256, zero, sizeof(zero)) != 0);
   }
   bool control = false, viewOnly = false;
   assert(viewerTarget("/stream", control, viewOnly) && !control && !viewOnly);

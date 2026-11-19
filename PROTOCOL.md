@@ -44,7 +44,7 @@ A `/stream?view=1` connection watches without owning input, so `POST /input` and
 
 When the session has a token, offer both `nsl1` and `bearer.TOKEN` as subprotocols; the server selects `nsl1`. Do not put the token in a request URL.
 
-To let a viewer connect without giving it the token, send `POST /tickets` with the token as `Authorization: Bearer TOKEN`. The response is `{"ticket":"…","expires_in":60}`. The viewer offers `nsl1` and `ticket.TICKET` instead of `bearer.TOKEN`. A ticket opens one WebSocket, within 60 seconds; a connection the server refuses for another reason, such as an existing viewer, doesn't use it. A ticket doesn't authorize HTTP requests. Up to 16 unused tickets are kept, and requesting another drops the oldest.
+To let a viewer connect without giving it the token, send `POST /tickets` with the token as `Authorization: Bearer TOKEN`. The response is `{"ticket":"…","expires_in":60}`. The viewer offers `nsl1` and `ticket.TICKET` instead of `bearer.TOKEN`. A ticket opens one WebSocket, within 60 seconds; a connection the server refuses for another reason, such as an existing viewer, doesn't use it. A ticket doesn't authorize HTTP requests. The bundled viewer doesn't use tickets yet, so only custom clients can offer `ticket.TICKET`. Up to 16 unused tickets are kept, and requesting another drops the oldest.
 
 | Header offset | Size | Field |
 | ---: | ---: | --- |

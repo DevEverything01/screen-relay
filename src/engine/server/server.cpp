@@ -373,7 +373,7 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
         if (!localRequest(s->config, wsi)) return errorResponse(wsi, response, HTTP_STATUS_FORBIDDEN, "forbidden");
         if (!authenticated(s->config, wsi)) return errorResponse(wsi, response, HTTP_STATUS_UNAUTHORIZED, "unauthorized");
         unsigned char bytes[32];
-        if (lws_get_random(lws_get_context(wsi), bytes, sizeof(bytes)) != sizeof(bytes)) return -1;
+        if (!secureRandom(bytes, sizeof(bytes))) return errorResponse(wsi, response, HTTP_STATUS_INTERNAL_SERVER_ERROR, "random_failed");
         static const char digits[] = "0123456789abcdef";
         std::string ticket;
         for (const unsigned char byte : bytes) { ticket += digits[byte >> 4]; ticket += digits[byte & 15]; }
