@@ -6,20 +6,24 @@ name: Vercel Sandbox image
 # that team (<team-slug>/<project-slug>/<repository>). The base image is pulled
 # from VCR too, so the build also needs the login.
 
-# The Dockerfile copies the whole checkout, so every change can reach the image
-# except paths .dockerignore leaves out.
 on:
   pull_request:
-    paths-ignore:
-      - docs/**
-      - experiments/**
-      - .context/**
+    paths:
+      - images/vercel-sandbox/**
+      - src/**
+      - packages.tsv
+      - Makefile
+      - package.json
+      - .github/workflows/sandbox-image.yml
   push:
     branches: [main]
-    paths-ignore:
-      - docs/**
-      - experiments/**
-      - .context/**
+    paths:
+      - images/vercel-sandbox/**
+      - src/**
+      - packages.tsv
+      - Makefile
+      - package.json
+      - .github/workflows/sandbox-image.yml
   workflow_dispatch:
 
 permissions:
@@ -79,20 +83,7 @@ jobs:
             echo "package.json has an invalid version: $VERSION" >&2
             exit 1
           fi
-          # package.json only changes in release PRs, so a published version
-          # keeps its image, as release.yml skips versions npm already has.
-          # Only a clear not-found means unpublished: a registry error must not
-          # overwrite a released version.
-          tags=(latest)
-          if inspect=$(docker buildx imagetools inspect "$IMAGE:$VERSION" 2>&1); then
-            echo "$IMAGE:$VERSION is already published; moving only latest."
-          elif grep -qiE 'not found|manifest unknown' <<<"$inspect"; then
-            tags=("$VERSION" latest)
-          else
-            echo "Could not check whether $IMAGE:$VERSION is published: $inspect" >&2
-            exit 1
-          fi
-          for tag in "${tags[@]}"; do
+          for tag in "$VERSION" latest; do
             docker buildx imagetools create --prefer-index=false \
               --tag "$IMAGE:$tag" "$IMAGE@$DIGEST"
           done
