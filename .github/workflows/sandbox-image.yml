@@ -81,11 +81,16 @@ jobs:
           fi
           # package.json only changes in release PRs, so a published version
           # keeps its image, as release.yml skips versions npm already has.
+          # Only a clear not-found means unpublished: a registry error must not
+          # overwrite a released version.
           tags=(latest)
-          if docker buildx imagetools inspect "$IMAGE:$VERSION" >/dev/null 2>&1; then
+          if inspect=$(docker buildx imagetools inspect "$IMAGE:$VERSION" 2>&1); then
             echo "$IMAGE:$VERSION is already published; moving only latest."
-          else
+          elif grep -qiE 'not found|manifest unknown' <<<"$inspect"; then
             tags=("$VERSION" latest)
+          else
+            echo "Could not check whether $IMAGE:$VERSION is published: $inspect" >&2
+            exit 1
           fi
           for tag in "${tags[@]}"; do
             docker buildx imagetools create --prefer-index=false \
