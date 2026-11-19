@@ -3,6 +3,23 @@ title: Changelog
 description: What changed in each screen-relay release.
 ---
 
+## v0.1.2
+
+<p className="text-[#888] text-sm">November 18, 2026</p>
+
+### New Features
+
+- Added **one-time viewer tickets**: `POST /tickets` returns a ticket that opens one WebSocket within 60 seconds, so a custom client can connect without holding the session token (#64)
+
+### Improvements
+
+- **GitHub releases** no longer attach `relay-engine` binaries. `screen-relay install` already builds the engine on each machine (#67)
+
+### Contributors
+
+- @joshuasoup
+- @lahfir
+
 ## v0.1.1
 
 <p className="text-[#888] text-sm">November 18, 2026</p>
