@@ -132,6 +132,7 @@ int Server::startStream(lws* wsi, Socket socket, const ConnectionPlan& plan, boo
   if (plan.closeControl) { evict(control); endControl(); }
   if (socket != Socket::watch) { input_viewer = wsi; input->resetLocks(); }
   auto& stream = **slot;
+  stream.width = width; stream.height = height;
   stream.clipboard_notices = clipboardNotices;
   stream.begin(wsi, ++nextGeneration);
   stream.updateFlow(config.proxy);
