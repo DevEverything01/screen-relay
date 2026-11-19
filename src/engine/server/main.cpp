@@ -39,6 +39,7 @@ int main(int argc, char** argv) {
     const auto dimensions = s.input->dimensions();
     relay::requireSurfaceSize(dimensions.first, dimensions.second);
     s.width = dimensions.first; s.height = dimensions.second;
+    if (backend.clipboard) s.clipboard = backend.clipboard();
   } catch (const std::exception& error) { std::cerr << error.what() << '\n'; s.capture.stop(); return 1; }
   lws_protocols protocols[] = {{"http", relay::callback, sizeof(relay::HttpResponse), 4096, 0, nullptr, 0}, {"nsl1", relay::callback, sizeof(relay::HttpResponse), 4096, 0, nullptr, 0}, {nullptr, nullptr, 0, 0, 0, nullptr, 0}};
   lws_context_creation_info info{};
@@ -54,6 +55,10 @@ int main(int argc, char** argv) {
   s.context=lws_create_context(&info);
   if (!s.context) { std::cerr << "Cannot listen on " << config.bind << ':' << config.port << '\n'; s.capture.stop(); return 1; }
   s.wake->set(s.context);
+  if (s.clipboard) {
+    lws_context* context = s.context;
+    s.clipboard->notify([context] { lws_cancel_service(context); });
+  }
   s.screenshot.start(s.context);
   heartbeatContext=s.context;
   lws_sul_schedule(s.context, 0, &heartbeat, heartbeatTick, 100000);
@@ -71,7 +76,7 @@ int main(int argc, char** argv) {
       result = 1; break;
     }
   }
-  s.end(); s.capture.stop(); s.screenshot.stop(); s.input.reset();
+  s.end(); s.capture.stop(); s.screenshot.stop(); s.input.reset(); s.clipboard.reset();
   const auto stats=s.capture.stats();
   std::cerr << "capture_stats captures=" << stats.captures << " encoded=" << stats.encoded
             << " capture_ns=" << stats.capture_ns << " convert_ns=" << stats.convert_ns << " encode_ns=" << stats.encode_ns << '\n';

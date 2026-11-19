@@ -4,7 +4,7 @@ import { request as httpsRequest, type RequestOptions } from 'node:https';
 import { plan, type Plan } from './transport.js';
 import {
   RelayError, networkError, responseError, baseUrl, integer, encodeInput, encodeInputBatch, comboEvents, textEvents,
-  batches, parseMessage, socketTarget, MAX_INPUT_BATCH, MAX_INPUT_PENDING,
+  encodeClipboard, batches, parseMessage, socketTarget, MAX_INPUT_BATCH, MAX_INPUT_PENDING,
   type InputEvent,
 } from '../protocol/index.js';
 
@@ -35,6 +35,8 @@ export interface Client {
   key(...combos: string[]): Promise<InputResult>;
   type(text: string): Promise<InputResult>;
   input(events: InputEvent[]): Promise<InputResult>;
+  clipboard(): Promise<string>;
+  setClipboard(text: string): Promise<void>;
 }
 /** A control connection that owns input until `close()`. `input` sends one raw event. */
 export interface Session {
@@ -191,6 +193,76 @@ export async function status(options: ClientOptions = {}): Promise<Status> {
   return request(target(options), '/metrics');
 }
 
+/** Reads the desktop clipboard. Fails when the engine reports no clipboard or another /stream connection holds the session. */
+/** Retries a stream connection briefly, because one /stream slot is shared with viewers and a closing one lingers a moment. */
+async function retryStream<Result>(attempt: () => Promise<Result>): Promise<Result> {
+  let last: unknown;
+  for (let tries = 0; tries < 5; tries++) {
+    try { return await attempt(); }
+    catch (error) {
+      last = error;
+      if (!(error instanceof RelayError) || (error.reason !== 'unreachable' && error.reason !== 'disconnected')) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+  }
+  throw last;
+}
+
+async function readClipboard(server: Server): Promise<string> {
+  return await retryStream(() => readClipboardOnce(server));
+}
+
+async function readClipboardOnce(server: Server): Promise<string> {
+  const { url, protocols } = socketTarget(new URL(server.base), '/stream?view=1', server.token);
+  return await new Promise<string>((resolve, reject) => {
+    const socket = new WebSocket(url, protocols);
+    socket.binaryType = 'arraybuffer';
+    const timer = setTimeout(() => { socket.close(); reject(new RelayError('timeout', 'The clipboard text did not arrive.')); }, server.timeout);
+    const stop = (error?: Error, text?: string) => {
+      clearTimeout(timer); socket.close();
+      if (error) reject(error); else resolve(text as string);
+    };
+    socket.onerror = () => stop(networkError(new Error('The clipboard connection failed')));
+    socket.onmessage = (event) => {
+      if (typeof event.data === 'string') return;
+      try {
+        const message = parseMessage(event.data as ArrayBuffer);
+        if (message.type === 'clipboard') stop(undefined, message.text);
+      } catch (error) { stop(error instanceof Error ? error : new RelayError('protocol_error', 'Invalid clipboard message')); }
+    };
+  });
+}
+
+/** Replaces the desktop clipboard. Fails when the engine reports no clipboard or another /stream connection holds the session. */
+async function writeClipboard(server: Server, text: string): Promise<void> {
+  await retryStream(() => writeClipboardOnce(server, text));
+}
+
+async function writeClipboardOnce(server: Server, text: string): Promise<void> {
+  const { url, protocols } = socketTarget(new URL(server.base), '/stream?view=1', server.token);
+  const payload = encodeClipboard(text, 1);
+  await new Promise<void>((resolve, reject) => {
+    const socket = new WebSocket(url, protocols);
+    const timer = setTimeout(() => { socket.close(); reject(new RelayError('timeout', 'The clipboard connection did not open.')); }, server.timeout);
+    socket.onerror = () => { clearTimeout(timer); reject(networkError(new Error('The clipboard connection failed'))); };
+    socket.onopen = () => {
+      clearTimeout(timer);
+      socket.send(payload.buffer as ArrayBuffer);
+      setTimeout(() => { socket.close(); resolve(); }, 50);
+    };
+  });
+}
+
+/** Reads the desktop clipboard. */
+export async function clipboard(options: ClientOptions = {}): Promise<string> {
+  return await readClipboard(target(options));
+}
+
+/** Replaces the desktop clipboard. */
+export async function setClipboard(text: string, options: ClientOptions = {}): Promise<void> {
+  await writeClipboard(target(options), text);
+}
+
 export async function screenshot(options: ClientOptions = {}, path?: string): Promise<Uint8Array> {
   const bytes = await request<Uint8Array>(target(options), '/screenshot.png', true);
   if (path !== undefined) {
@@ -230,6 +302,8 @@ export function createClient(options: ClientOptions = {}): Client {
     capabilities: () => request(server, '/capabilities'),
     status: () => request(server, '/metrics'),
     screenshot: () => request(server, '/screenshot.png', true),
+    clipboard: () => readClipboard(server),
+    setClipboard: (text: string) => writeClipboard(server, text),
     async click(x, y, { button = 'left' } = {}) {
       const buttons = { left: 1, middle: 2, right: 3 } as const;
       if (!Object.hasOwn(buttons, button)) throw new RelayError('invalid_input', 'Invalid button');

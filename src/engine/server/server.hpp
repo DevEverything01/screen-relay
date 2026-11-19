@@ -2,6 +2,7 @@
 
 #include "config.hpp"
 #include "core/capture.hpp"
+#include "core/clipboard.hpp"
 #include "core/flow.hpp"
 #include "core/input.hpp"
 #include "screenshot.hpp"
@@ -59,8 +60,11 @@ struct Server {
   std::mutex mutex;
   std::shared_ptr<InputWake> wake = std::make_shared<InputWake>();
   std::unique_ptr<InputController> input;
+  /// Optional desktop clipboard of the backend; null when the backend has none.
+  std::unique_ptr<Clipboard> clipboard;
   std::deque<EncodedFrame> pending;
   std::optional<CursorImage> pending_cursor;
+  std::optional<std::string> pending_clipboard;
   bool last_write_cursor = false;
   size_t buffered_stream_bytes = 0;
   uint32_t stream_notsent_lowat = 0;

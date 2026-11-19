@@ -47,6 +47,8 @@ The full walkthrough is in [Getting started](https://screen-relay.dev/docs/getti
 
 `screen-relay up` starts a session: a virtual display, a desktop, and the engine. On Linux the display is X11 with XFCE or headless Wayland with sway. On a Mac the engine attaches to the display you are logged in to. On Windows it attaches to the desktop of the signed-in user. The engine captures the screen, encodes it as H.264, and serves the viewer, the stream, and the input API on one port. It lowers the bitrate on a slow link. See [How streaming works](https://screen-relay.dev/docs/how-streaming-works).
 
+On the X11 backend the engine also shares the desktop clipboard as UTF-8 text: the viewer's clipboard panel copies between the two, and `screen-relay clipboard get` or `set` reads and replaces it.
+
 A session listens on loopback with no token by default. Starting it with `--public` or on another address creates a token that every remote request must send. Only one controller sends input at a time: a viewer that took control, an SDK control session, or the CLI. A viewer opens view-only, so it can watch while the CLI or SDK sends input. Screenshots still work while another controller holds input.
 
 ## For AI agents
@@ -75,7 +77,7 @@ Run `screen-relay --help` for the full list, or `screen-relay <command> --help` 
 | Group | Commands | Docs |
 |---|---|---|
 | Session | `up`, `down`, `status`, `logs`, `run` | [CLI reference](https://screen-relay.dev/docs/cli) |
-| Control | `screenshot`, `click`, `move`, `scroll`, `key`, `type`, `input` | [Client commands](https://screen-relay.dev/docs/cli#client-commands) |
+| Control | `screenshot`, `click`, `move`, `scroll`, `key`, `type`, `input`, `clipboard` | [Client commands](https://screen-relay.dev/docs/cli#client-commands) |
 | Setup | `install`, `doctor` | [Getting started](https://screen-relay.dev/docs/getting-started), [Troubleshooting](https://screen-relay.dev/docs/troubleshooting) |
 | Agents | `skills`, `help` | [Agent skills](https://screen-relay.dev/docs/agent-skills) |
 

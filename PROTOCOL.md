@@ -64,6 +64,8 @@ To let a viewer connect without giving it the token, send `POST /tickets` with t
 | 4 | Server to `/control` | Desktop width and height, 2 bytes each. Sequence is zero. |
 | 5 | Server to `/control` | One status byte: 0 accepted, 1 invalid, 2 unsupported. Sequence echoes the request ID. A status of 0 does not report a later backend failure. |
 | 6 | Server to `/stream` | Width, height, hotspot X, and hotspot Y (2 bytes each), followed by straight-alpha RGBA pixels row by row. Sequence is zero. No ACK is needed. |
+| 7 | Server to `/stream` | The desktop clipboard as UTF-8 text, up to 1 MiB. Sequence is zero. The engine sends it when a viewer connects and again after the clipboard changes. A backend without a clipboard never sends it and reports `"clipboard": false` in `/capabilities`. |
+| 8 | Client to `/stream` | UTF-8 text for the desktop clipboard, up to 1 MiB. Sequence is zero. Any generation may set it, because the clipboard is session-wide rather than per stream, and `/stream?view=1` may send it too. The engine ignores it when the backend has no clipboard. |
 
 | Rule | Detail |
 | --- | --- |

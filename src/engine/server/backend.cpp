@@ -7,6 +7,7 @@ namespace x11 {
 bool initializeNativeBackend(const std::string& output);
 std::unique_ptr<CaptureSource> makeCaptureSource();
 std::unique_ptr<InputBackend> makeInputBackend();
+std::unique_ptr<Clipboard> makeClipboard();
 }
 #endif
 #ifdef RELAY_BACKEND_wayland
@@ -34,16 +35,16 @@ std::unique_ptr<InputBackend> makeInputBackend();
 namespace {
 const Backend backends[] = {
 #ifdef RELAY_BACKEND_x11
-  {"x11", x11::initializeNativeBackend, x11::makeCaptureSource, x11::makeInputBackend},
+  {"x11", x11::initializeNativeBackend, x11::makeCaptureSource, x11::makeInputBackend, x11::makeClipboard},
 #endif
 #ifdef RELAY_BACKEND_wayland
-  {"wayland", wayland::initializeNativeBackend, wayland::makeCaptureSource, wayland::makeInputBackend},
+  {"wayland", wayland::initializeNativeBackend, wayland::makeCaptureSource, wayland::makeInputBackend, nullptr},
 #endif
 #ifdef RELAY_BACKEND_windows
-  {"windows", windows::initializeNativeBackend, windows::makeCaptureSource, windows::makeInputBackend},
+  {"windows", windows::initializeNativeBackend, windows::makeCaptureSource, windows::makeInputBackend, nullptr},
 #endif
 #ifdef RELAY_BACKEND_macos
-  {"macos", macos::initializeNativeBackend, macos::makeCaptureSource, macos::makeInputBackend},
+  {"macos", macos::initializeNativeBackend, macos::makeCaptureSource, macos::makeInputBackend, nullptr},
 #endif
 };
 }
