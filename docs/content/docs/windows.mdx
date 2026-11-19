@@ -21,7 +21,11 @@ Install the CLI with `npm install -g screen-relay`, as in [Getting started](/doc
 screen-relay install
 ```
 
-Setup uses MSYS2 at `C:\msys64`. If MSYS2 is missing, setup installs it with winget (`winget install MSYS2.MSYS2`). Without winget, setup stops and asks you to install MSYS2 from https://www.msys2.org. Setup runs MSYS2 only when your account or an administrator owns it and no other account can write to it. A folder at the root of `C:\` inherits a rule that lets every user add files to it, so an MSYS2 that setup installs gets new rules: full control for SYSTEM, Administrators, and your account, and read access for Users. If you installed MSYS2 yourself and only you use it, setup stops and prints an `icacls` command that sets the same rules. Run that command, then run `screen-relay install` again. If another account owns the installation, delete `C:\msys64` and run `screen-relay install` again. Then setup installs `make`, `diffutils`, `mingw-w64-ucrt-x86_64-gcc`, `mingw-w64-ucrt-x86_64-pkgconf`, `mingw-w64-ucrt-x86_64-libwebsockets`, and `mingw-w64-ucrt-x86_64-x264` with pacman, and builds the engine.
+Setup uses MSYS2 at `C:\msys64`. If that folder does not exist, setup creates it with the access rules it needs: full control for SYSTEM, Administrators, and your account, and read and execute access for Users. It then starts the MSYS2 installation with winget (`winget install MSYS2.MSYS2`), so the files the installer writes inherit those rules. Setup needs permission to create `C:\msys64`; if your account cannot, run the command from an elevated terminal. Without winget, setup stops. If you install MSYS2 yourself, it must already have those access rules; setup checks the result and does not change them.
+
+Setup uses an existing `C:\msys64` only when the owner and write rules of the MSYS2 shell, its login scripts, the command files it runs, and the directories it searches already pass the same check. It does not change the access rules of an existing installation. If the check fails, setup stops. Back up any files you need, then delete `C:\msys64` and run `screen-relay install` again so setup can create a fresh copy.
+
+Then setup installs `make`, `diffutils`, `mingw-w64-ucrt-x86_64-gcc`, `mingw-w64-ucrt-x86_64-pkgconf`, `mingw-w64-ucrt-x86_64-libwebsockets`, and `mingw-w64-ucrt-x86_64-x264` with pacman, and builds the engine.
 
 At a terminal, setup asks before it installs anything. Anywhere else, pass `--yes`. Setup is safe to repeat. On Windows, `--backend` accepts only `windows`.
 
@@ -73,7 +77,7 @@ Quote the name so the shell keeps its backslashes. An unknown name lists the att
 screen-relay doctor
 ```
 
-The checks cover the Windows version, MSYS2, the engine, and whether the command runs in a desktop session. The MSYS2 check fails when another account owns the installation or can write to it.
+The checks cover the Windows version, MSYS2, the engine, and whether the command runs in a desktop session. The MSYS2 check fails when setup cannot verify the installation's owner and write rules.
 
 ## Remote access
 

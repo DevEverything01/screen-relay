@@ -11,7 +11,7 @@ import { engineDirectory, isLinux, LAUNCHER_DIR, requireHost, run, which, type H
 import { detectFamily, groupPackages, installCommand, packagesFor, provides } from './packages.js';
 import { claimLock, lockOwnerAlive } from './state.js';
 import { compiledBackends, findEngine, requestedBackend, sessionNeeds } from './supervisor.js';
-import { forgetMsys2Installation, MSYS2_PATH, msys2Failure, msys2Installation, msys2Shell, repairMsys2, wingetPath } from './windows.js';
+import { createPrivateMsys2Root, MSYS2_PATH, MSYS2_ROOT, msys2Failure, msys2Installation, msys2Shell, wingetPath } from './windows.js';
 
 type Backend = (typeof BACKENDS)[number];
 type Args = HostArgs & Record<string, any>;
@@ -115,14 +115,17 @@ function packageWork(groups: string[], args: Args): { manager: string; packages:
       run: async () => {
         if (installation.state === 'untrusted') throw msys2Failure(installation);
         if (installation.state === 'missing') {
+          if (existsSync(MSYS2_ROOT)) {
+            throw new Failure('missing_dependency', `${MSYS2_ROOT} appeared before setup could install MSYS2`, `Delete ${MSYS2_ROOT} and run screen-relay install again.`);
+          }
           const winget = wingetPath();
           if (!winget || run([winget, '--version']).status !== 0) {
-            throw new Failure('missing_dependency', 'MSYS2 is not installed, and winget is not available to install it', 'Install MSYS2 from https://www.msys2.org, then run screen-relay install again.');
+            throw new Failure('missing_dependency', 'MSYS2 is not installed, and winget is not available to install it', 'Install App Installer, or install MSYS2 from https://www.msys2.org with the access rules in the Windows guide, then run screen-relay install again.');
+          }
+          if (!createPrivateMsys2Root()) {
+            throw new Failure('missing_dependency', `Setup could not create a private ${MSYS2_ROOT}`, `Run screen-relay install from an elevated terminal. If ${MSYS2_ROOT} exists, delete it first.`);
           }
           await step('Installing MSYS2', 'Installed MSYS2', `winget ${WINGET_MSYS2.join(' ')}`, args, true, [winget, ...WINGET_MSYS2]);
-          forgetMsys2Installation();
-          if (msys2Installation().state === 'untrusted' && !args.json) process.stderr.write('Removing the rights C:\\msys64 inherits from C:\\\n');
-          repairMsys2();
           const installed = msys2Installation();
           if (installed.state !== 'trusted') throw msys2Failure(installed);
         }
