@@ -74,7 +74,7 @@ export const commands: Record<string, Command> = {
       { name: 'display', type: 'string', valueHint: '<DISPLAY>', summary: 'Attach to an existing X display (:0) or Wayland socket (wayland-1) on Linux' },
       { name: 'backend', type: 'string', valueHint: '<BACKEND>', summary: 'On Linux, defaults to x11 when the engine has it, else wayland; a --display without a colon selects wayland. On macOS, defaults to macos; on Windows, defaults to windows', environment: 'SCREEN_RELAY_BACKEND', acceptedValues: BACKENDS },
       { name: 'output', type: 'string', valueHint: '<NAME>', summary: 'Capture a Wayland output by name, a macOS display by CGDirectDisplayID, or a Windows display by device name' },
-      { name: 'public', type: 'string', valueHint: '<URL>', summary: 'Advertise this HTTPS origin', environment: 'SCREEN_RELAY_PUBLIC', validate: (value) => /^https:\/\/[^/?#@\\\s]+$/.test(String(value)) },
+      { name: 'public', type: 'string', valueHint: '<URL>', summary: 'Advertise this HTTPS origin without changing the listen address', environment: 'SCREEN_RELAY_PUBLIC', validate: (value) => /^https:\/\/[^/?#@\\\s]+$/.test(String(value)) },
       { name: 'tls-cert', type: 'string', valueHint: '<FILE>', summary: 'Serve TLS with this certificate', environment: 'SCREEN_RELAY_TLS_CERT' },
       { name: 'tls-key', type: 'string', valueHint: '<FILE>', summary: 'Read the TLS private key', environment: 'SCREEN_RELAY_TLS_KEY' },
       { name: 'bind', type: 'string', valueHint: '<ADDRESS>', summary: 'Listen on this address', environment: 'SCREEN_RELAY_BIND', default: '127.0.0.1', deferredDefault: true },

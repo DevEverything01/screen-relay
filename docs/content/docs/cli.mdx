@@ -33,7 +33,7 @@ screen-relay up -d --name demo --port 8084
 | `--output NAME` | Wayland output name, a macOS display ID, or a Windows display name such as `'\\.\DISPLAY2'`. Default: first output, the main display on macOS, or the primary display on Windows. Not valid on X11. |
 | `--public URL` | HTTPS origin. Generates a token. Requires a TLS proxy unless direct TLS is configured. |
 | `--tls-cert FILE`, `--tls-key FILE` | Serve TLS directly. Both are required. |
-| `--bind ADDR` | Listen address. Default `127.0.0.1`, or `0.0.0.0` with `--public`. Other addresses generate a token. |
+| `--bind ADDR` | Listen address. Defaults to `127.0.0.1`, including with `--public`. Any other address generates a token. |
 | `--timeout S` | Engine and desktop readiness timeout in seconds. Default `30`; must be positive. |
 | `--yes`, `-y` | Install missing packages without asking. Required when there is no terminal. |
 

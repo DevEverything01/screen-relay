@@ -3,7 +3,7 @@ title: Remote access
 description: Open the viewer or control a session from another machine with an SSH tunnel, a public HTTPS URL, or native TLS.
 ---
 
-Open a session's viewer and run its client commands from another machine. A session listens on `127.0.0.1:8080` with no token, so only the VM can reach it by default. Anyone with a session's token can see and control its desktop. A session has one token and no user identity.
+Open a session's viewer and run its client commands from another machine. A session listens on `127.0.0.1:8080` by default, including when you pass `--public`. Anyone with a session's token can see and control its desktop. A session has one token and no user identity.
 
 ## Choose a path
 
@@ -33,7 +33,7 @@ The session stays on loopback, so the tunnel needs no token.
    screen-relay up -d --public https://desktop.example.com
    ```
 
-   `--public` takes a bare HTTPS origin. It makes the session listen on `0.0.0.0` unless you pass `--bind`, creates a token, and accepts requests only for that host. Pages and apps on any origin can connect when they send the token.
+   `--public` takes a bare HTTPS origin, sets the accepted public host, and creates a token. It does not change the listen address. Pages and apps on any origin can connect when they send the token.
 
 2. Configure the proxy to:
    - forward every path with no prefix, including `/viewer.js`, `/stream`, and `/control` ([endpoints](/docs/protocol#endpoints))
@@ -43,7 +43,7 @@ The session stays on loopback, so the tunnel needs no token.
 
 3. Open the viewer link that `up` printed.
 
-Without `--tls-cert`, the engine serves plain HTTP and the proxy ends TLS. The proxy must be the only thing that can reach the port. The engine ignores `X-Forwarded-*` headers.
+Without `--tls-cert`, the engine serves plain HTTP and the proxy terminates TLS. A proxy on the same VM can use `127.0.0.1`. For a proxy that runs elsewhere, pass `--bind` with an address only the proxy can reach. Do not expose that port to clients. The engine ignores `X-Forwarded-*` headers.
 
 `up` prints a `TLS proxy` row that names the forwarding target.
 
@@ -52,12 +52,12 @@ Without `--tls-cert`, the engine serves plain HTTP and the proxy ends TLS. The p
 1. On the VM, start the session with your certificate:
 
    ```sh
-   screen-relay up -d --tls-cert fullchain.pem --tls-key key.pem --public https://desktop.example.com
+   screen-relay up -d --bind 0.0.0.0 --tls-cert fullchain.pem --tls-key key.pem --public https://desktop.example.com
    ```
 
 2. Open the viewer link that `up` printed.
 
-The engine serves HTTPS itself, prints no `TLS proxy` row, and speaks HTTP/1.1 only. Client commands on the VM accept the session's own certificate even when its host name does not match, so a self-signed certificate works there.
+The engine serves HTTPS itself, prints no `TLS proxy` row, and speaks HTTP/1.1 only. This example listens on all IPv4 interfaces. Pass a specific address to `--bind` if only one interface should accept connections. Client commands on the VM accept the session's own certificate even when its host name does not match, so a self-signed certificate works there.
 
 ## Tokens
 

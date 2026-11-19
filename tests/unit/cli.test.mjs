@@ -118,6 +118,53 @@ if (process.argv.includes('--help')) {
   }
 });
 
+test('--public keeps the engine on loopback unless a bind address is supplied', { skip: process.platform !== 'linux' }, async () => {
+  const engine = join(directory, 'relay-engine');
+  writeFileSync(engine, `#!/usr/bin/env node
+import { createServer } from 'node:http';
+import { readFileSync } from 'node:fs';
+
+if (process.argv.includes('--help')) {
+  console.log('Compiled backends: x11');
+} else {
+  const option = (name) => process.argv[process.argv.indexOf(name) + 1];
+  const token = readFileSync(option('--token-file'), 'utf8').trim();
+  const image = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64');
+  const listener = createServer((req, res) => {
+    if (req.headers.authorization !== 'Bearer ' + token) { res.writeHead(401).end(); return; }
+    res.writeHead(200, { 'Content-Type': 'image/png' }).end(image);
+  });
+  listener.listen(Number(option('--port')), option('--bind'), () => {
+    console.log(JSON.stringify({ ready: true, pid: process.pid, bind: listener.address().address }));
+  });
+}
+`, { mode: 0o755 });
+  try {
+    for (const [bind, expected] of [[undefined, '127.0.0.1'], ['0.0.0.0', '0.0.0.0']]) {
+      const probe = createServer();
+      await new Promise((resolve) => probe.listen(0, '127.0.0.1', resolve));
+      const port = probe.address().port;
+      await new Promise((resolve, reject) => probe.close((error) => error ? reject(error) : resolve()));
+      const sessionDir = mkdtempSync(join(directory, 'proxy-'));
+      const session = new Session({ command: 'up', json: true, name: 'proxy', port, bind,
+        backend: 'x11', display: ':77', desktop: 'none', public: 'https://desk.example.com',
+        resolution: '1280x720', fps: 60, bitrateMin: 1000000, bitrateStart: 8000000, bitrateMax: 40000000, timeout: 5 }, sessionDir);
+      try {
+        const info = await session.start();
+        assert.equal(info.bind, expected);
+        const started = JSON.parse(readFileSync(join(sessionDir, 'engine.log'), 'utf8').trim());
+        assert.equal(started.bind, expected);
+        assert.equal(info.url, 'https://desk.example.com');
+        assert.equal((await fetch(`http://127.0.0.1:${port}/screenshot.png`)).status, 401);
+      } finally {
+        await session.cleanup();
+      }
+    }
+  } finally {
+    rmSync(engine, { force: true });
+  }
+});
+
 test('--json failures write one JSON line to stderr and nothing to stdout', () => {
   for (const [argv, exit] of [
     [['frob'], 2],

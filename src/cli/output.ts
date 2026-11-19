@@ -49,7 +49,10 @@ export function formatReady(info: Record<string, any>, args: Record<string, any>
   if (info.resolution) lines.push(row('Resolution', `${info.resolution}${info.fps ? ` at ${info.fps} fps` : ''}`, args));
   lines.push(row('Logs', info.logs, args));
   if (info.public) {
-    if (!args['tls-cert']) lines.push(row('TLS proxy', `Forward ${info.url} to http://<HOST>:${info.port}`, args));
+    if (!args['tls-cert']) {
+      const host = info.bind === '127.0.0.1' ? info.bind : '<HOST>';
+      lines.push(row('TLS proxy', `Forward ${info.url} to http://${host}:${info.port}`, args));
+    }
   } else if (info.bind !== '127.0.0.1') {
     lines.push(row('Listening', `${info.bind}:${info.port}; use a loopback port publish or SSH tunnel`, args));
   }
