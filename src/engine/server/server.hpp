@@ -28,7 +28,7 @@ struct HttpResponse {
   std::string* upload;
   size_t offset;
   Socket socket;
-  uint64_t upload_expected;
+  uint64_t upload_expected, grant_id;
   bool image_headers, clipboard, input_reply, input_headers, closing;
   unsigned reply_status, image_status;
   const char* image_type;
@@ -77,7 +77,7 @@ struct Server {
     int write(bool proxy);
   };
   Config config;
-  Tickets tickets;
+  Grants grants;
   lws_context* context = nullptr;
   std::array<std::unique_ptr<Stream>, max_viewers> streams;
   lws* input_viewer = nullptr;
@@ -106,8 +106,8 @@ struct Server {
   void endStream(lws* wsi);
   void endControl();
   void end();
-  /// Sends the takeover close code from the timer callback.
-  void evict(lws* wsi);
+  void expireGrants();
+  void evict(lws* wsi, uint16_t code = close_taken);
   bool holdsInput() const { return control || input_viewer; }
   bool streamMessage(Stream& stream);
   bool controlMessage();

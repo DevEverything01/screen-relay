@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { createContext, runInContext } from 'node:vm';
 
-function viewer({ devicePixelRatio = 1, storage, decode = true, deferDecode = false, fetch = async () => ({ ok: false, status: 401 }), navigator } = {}) {
+function viewer({ devicePixelRatio = 1, storage, decode = true, deferDecode = false, fetch = async () => ({ ok: false, status: 401 }), navigator, hash = '' } = {}) {
   const listeners = {}, windowListeners = {}, elements = {}, sockets = [], trace = [], animationFrames = new Map(), timers = [];
   const decodeQueue = [];
   let now = 0, nextAnimationFrame = 1;
@@ -24,7 +24,7 @@ function viewer({ devicePixelRatio = 1, storage, decode = true, deferDecode = fa
   class Socket {
     static OPEN = 1;
     static CLOSING = 2;
-    constructor(url) { this.url = String(url); this.readyState = Socket.OPEN; this.events = []; this.inputs = []; this.waits = []; sockets.push(this); }
+    constructor(url, protocols) { this.url = String(url); this.protocols = [...protocols]; this.readyState = Socket.OPEN; this.events = []; this.inputs = []; this.waits = []; sockets.push(this); }
     send(data) {
       const offset = data instanceof ArrayBuffer ? 0 : data.byteOffset;
       const length = data instanceof ArrayBuffer ? data.byteLength : data.byteLength;
@@ -57,7 +57,8 @@ function viewer({ devicePixelRatio = 1, storage, decode = true, deferDecode = fa
   };
   const context = createContext({
     document, window: { devicePixelRatio, VideoDecoder: Decoder, EncodedVideoChunk: true, addEventListener: (name, callback) => { windowListeners[name] = callback; } },
-    location: { protocol: 'http:', hostname: 'localhost', host: 'localhost', hash: '' },
+    location: { protocol: 'http:', hostname: 'localhost', host: 'localhost', hash, pathname: '/', search: '' },
+    history: { replaceState() {} },
     URL, URLSearchParams, AbortSignal, WebSocket: Socket, VideoDecoder: Decoder,
     EncodedVideoChunk: class { constructor(options) { Object.assign(this, options); } },
     MutationObserver: class { observe() {} }, ResizeObserver: class { observe() {} },
@@ -837,4 +838,53 @@ test('a viewer that loses input to a takeover reconnects view-only', () => {
   app.frame(1);
   assert.equal(app.sockets.at(-1).url, 'ws://localhost/stream?view=1');
   assert.equal(app.document.querySelector('#status').textContent, 'Live · view only');
+});
+
+function linkedViewer(fragment) {
+  const requests = [];
+  const app = viewer({ hash: `#token=${'a'.repeat(64)}${fragment}`, fetch: async (path, options) => { requests.push([path, options.headers.Authorization]); return { ok: false, status: 401 }; } });
+  const action = (name) => app.document.querySelector('#toolbar-actions').querySelector(`[data-action="${name}"]`);
+  return { app, requests, action };
+}
+
+test('a token link without a scope opens the owner stream and reads capabilities with the token', () => {
+  const { app, requests, action } = linkedViewer('');
+  assert.equal(app.sockets[0].url, 'ws://localhost/stream?clipboard=1');
+  assert.deepEqual(app.sockets[0].protocols, ['nsl1', `bearer.${'a'.repeat(64)}`]);
+  assert.deepEqual(requests, [['/capabilities', `Bearer ${'a'.repeat(64)}`]]);
+  assert.equal(action('control').hidden, false);
+});
+
+test('a watch link only opens the view-only stream, sends no HTTP request, and cannot take control', () => {
+  {
+    const { app, requests, action } = linkedViewer(fragment);
+    assert.equal(app.sockets[0].url, 'ws://localhost/stream?view=1');
+    assert.deepEqual(app.sockets[0].protocols, ['nsl1', `bearer.${'a'.repeat(64)}`]);
+    assert.equal(action('control').hidden, true);
+    runInContext('relayViewer.setViewOnly(false)', app.context);
+    assert.equal(app.sockets.length, 1);
+    app.sockets[0].onopen();
+    app.frame(1);
+    key(app, 'keydown', 'KeyA');
+    assert.deepEqual(app.sockets[0].inputs, []);
+    app.sockets[0].onclose({ code: 1006 });
+    runInContext('relayViewer.connect()', app.context);
+    assert.equal(app.sockets.at(-1).url, 'ws://localhost/stream?view=1');
+    assert.deepEqual(requests, []);
+  }
+});
+
+test('a control link claims, releases, and takes input without clipboard paths or HTTP requests', () => {
+  const { app, requests, action } = linkedViewer('&scope=control');
+  assert.equal(app.sockets[0].url, 'ws://localhost/stream');
+  assert.deepEqual(app.sockets[0].protocols, ['nsl1', `bearer.${'a'.repeat(64)}`]);
+  assert.equal(action('control').hidden, false);
+  app.sockets[0].onopen();
+  app.frame(1);
+  runInContext('relayViewer.setViewOnly(true)', app.context);
+  assert.equal(app.sockets.at(-1).url, 'ws://localhost/stream?view=1');
+  runInContext('relayViewer.setViewOnly(false)', app.context);
+  assert.equal(app.sockets.at(-1).url, 'ws://localhost/stream?take=1');
+  app.sockets.at(-1).onclose({ code: 1006 });
+  assert.deepEqual(requests, []);
 });

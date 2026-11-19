@@ -52,16 +52,22 @@ int main() {
   assert(inputLength("17", length) == HTTP_STATUS_BAD_REQUEST && inputLength("-16", length) == HTTP_STATUS_BAD_REQUEST);
   assert(!inputLength("4096", length) && length == 4096 && inputLength("4112", length) == HTTP_STATUS_REQ_ENTITY_TOO_LARGE);
   {
-    Tickets tickets;
-    const auto start = Tickets::Clock::now();
-    tickets.add("a", start);
-    assert(!tickets.redeem("b", start) && !tickets.redeem("", start));
-    assert(tickets.redeem("a", start) && !tickets.redeem("a", start));
-    tickets.add("late", start);
-    assert(!tickets.redeem("late", start + Tickets::lifetime));
-    for (size_t i = 0; i <= Tickets::capacity; ++i) tickets.add("t" + std::to_string(i), start);
-    assert(!tickets.redeem("t0", start) && tickets.redeem("t1", start));
-    assert(tickets.redeem("t" + std::to_string(Tickets::capacity), start));
+    Grants grants;
+    const auto start = Grants::Clock::now();
+    const auto watch = grants.issue("watch", GrantScope::watch, start, 1);
+    const auto control = grants.issue("control", GrantScope::control, start, 2);
+    assert(watch && control && watch != control);
+    assert(grants.find("watch", start)->scope == GrantScope::watch);
+    assert(grants.find("control", start)->scope == GrantScope::control);
+    assert(!grants.find("missing", start));
+    assert(!grants.active(watch, start + std::chrono::seconds(1)));
+    assert(!grants.find("watch", start + std::chrono::seconds(1)));
+    assert(grants.revoke(control) && !grants.active(control, start));
+    for (size_t i = 0; i < Grants::capacity; ++i) {
+      assert(grants.issue(std::to_string(i), GrantScope::watch, start + std::chrono::seconds(2), 1));
+    }
+    assert(!grants.issue("full", GrantScope::watch, start + std::chrono::seconds(2), 1));
+    assert(grants.find("0", start + std::chrono::seconds(2)));
   }
   {
     unsigned char first[300] = {}, second[300] = {};
