@@ -94,6 +94,61 @@ function releaseLatched() {
   clearLatched();
 }
 const authHeaders = () => accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
+/**
+ * Clipboard sync for the viewer that holds control.
+ * Paste: a paste shortcut is held back (idle -> waiting) until the browser's paste event gives the local text, which is
+ * sent to the remote clipboard (waiting -> sending) before the shortcut is replayed (-> idle). Without a paste event or
+ * text, the shortcut is replayed at once and pastes what the remote clipboard already holds.
+ * Copy: a clipboard notice that arrives while the page has focus writes the remote text to the local clipboard. A
+ * notice that arrives without focus is not applied, so a copy in another local app is never overwritten.
+ */
+type PasteState = { state: 'idle' } | { state: 'waiting' | 'sending'; key: number; chord: number[] };
+let paste: PasteState = { state: 'idle' }, clipboardAvailable = false;
+let syncedText: string | null = null;
+async function readRemoteClipboard(): Promise<string | null> {
+  const response = await fetch('/clipboard', { cache: 'no-store', redirect: 'error', headers: authHeaders(), signal: AbortSignal.timeout(5000) });
+  const data = response.ok ? await response.json() : null;
+  return typeof data?.text === 'string' ? data.text : null;
+}
+async function writeRemoteClipboard(local: string): Promise<boolean> {
+  const text = local.replace(/\r\n/g, '\n');
+  const response = await fetch('/clipboard', { method: 'POST', cache: 'no-store', redirect: 'error', headers: { ...authHeaders(), 'Content-Type': 'text/plain;charset=utf-8' }, body: text, signal: AbortSignal.timeout(5000) });
+  if (response.ok) syncedText = text;
+  return response.ok;
+}
+async function copyRemoteClipboard(always = false): Promise<void> {
+  const text = await readRemoteClipboard();
+  if (text === null) throw new Error('unavailable');
+  if (!always && (!text || text === syncedText)) return;
+  await navigator.clipboard.writeText(text);
+  syncedText = text;
+}
+function remoteClipboardChanged() {
+  if (navigator.clipboard && document.hasFocus()) copyRemoteClipboard().catch(() => {});
+}
+function replayPaste() {
+  if (paste.state === 'idle') return;
+  const { key, chord } = paste;
+  paste = { state: 'idle' };
+  const pressed = chord.filter((code) => !held.has(code) && holdKey(code));
+  if (holdKey(key)) releaseKey(key);
+  for (const code of pressed.reverse()) releaseKey(code);
+}
+function holdBackPaste(e: KeyboardEvent, key: number): boolean {
+  if (viewOnly || !clipboardAvailable || paste.state !== 'idle' || e.code !== 'KeyV' || e.altKey || !(e.ctrlKey || e.metaKey)) return false;
+  paste = { state: 'waiting', key, chord: [...held].filter((code) => code >= 224) };
+  setTimeout(() => { if (paste.state === 'waiting') replayPaste(); }, 0);
+  return true;
+}
+document.addEventListener('paste', (e) => {
+  if (paste.state !== 'waiting') return;
+  e.preventDefault();
+  const text = e.clipboardData?.getData('text/plain');
+  if (!text) { replayPaste(); return; }
+  paste = { ...paste, state: 'sending' };
+  writeRemoteClipboard(text).catch(() => false).then(replayPaste);
+});
+
 function sendInput(event: InputEvent): boolean {
   if (!ready || socket?.readyState !== WebSocket.OPEN || (viewOnly && event.type !== 'releaseAll')) return false;
   socket.send(encodeInput({ ...event, buttons, modifiers }, generation, 0));
@@ -302,7 +357,7 @@ function connect() {
     setStatus('WebCodecs unavailable in this browser');
     return;
   }
-  const path = viewOnly ? '/stream?view=1' : takeRequested ? '/stream?take=1' : '/stream';
+  const path = viewOnly ? '/stream?view=1' : takeRequested ? '/stream?take=1&clipboard=1' : '/stream?clipboard=1';
   takeRequested = false;
   const target = socketTarget(new URL(`${location.protocol}//${location.host}`), path, accessToken);
   socket = new WebSocket(target.url, target.protocols);
@@ -326,6 +381,7 @@ function connect() {
       if (!(e.data instanceof ArrayBuffer)) throw new Error('Invalid frame length');
       const message = parseMessage(e.data);
       if (message.type === 'cursor') { receiveCursor(message); return; }
+      if (message.type === 'clipboard') { remoteClipboardChanged(); return; }
       if (message.type !== 'frame') throw new Error('Invalid frame header');
       const { generation: gen, sequence: seq, keyframe, width, height, timestamp, data } = message;
       if (generation && gen < generation) throw new Error('Stale generation');
@@ -436,6 +492,8 @@ function position(e: MouseEvent) {
 canvas.addEventListener('keydown', (e) => {
   const code = mapKey(keys[e.code]);
   if (!code) return;
+  if (paste.state !== 'idle' && e.code === 'KeyV') { e.preventDefault(); return; }
+  if (!e.repeat && holdBackPaste(e, code)) return;
   e.preventDefault();
   syncCaps(e);
   if (e.code === 'CapsLock') return;
@@ -526,6 +584,8 @@ function loadCapabilities() {
     .then((response) => (response.ok ? response.json() : null))
     .then((data) => {
       if (Number.isFinite(data?.fps) && data.fps > 0) configuredFps = data.fps;
+      clipboardAvailable = data?.clipboard === true;
+      applyControl();
     })
     .catch(() => {});
 }
@@ -676,6 +736,7 @@ const toolbar = document.querySelector('#toolbar')!,
   dot = document.querySelector('#dot')!,
   panels: Record<string, HTMLElement> = { keys: document.querySelector('#keys-panel')!, connection: document.querySelector('#connection-panel') as HTMLElement };
 panels.scale = document.querySelector('#scale-panel') as HTMLElement;
+panels.clipboard = document.querySelector('#clipboard-panel') as HTMLElement;
 function showPanel(name: string | null, open = panels[name!]?.hidden) {
   for (const [key, panel] of Object.entries(panels)) {
     panel.hidden = !(key === name && open);
@@ -694,6 +755,9 @@ function applyControl() {
   button.setAttribute('aria-pressed', String(!viewOnly));
   button.setAttribute('aria-label', label);
   button.setAttribute('title', label);
+  const clipboard = actions.querySelector('[data-action="clipboard"]') as HTMLElement;
+  clipboard.hidden = viewOnly || !clipboardAvailable || !navigator.clipboard;
+  if (clipboard.hidden && !panels.clipboard.hidden) showPanel(null);
 }
 function setViewOnly(next: boolean) {
   if (viewOnly === next) return;
@@ -717,6 +781,7 @@ const toolbarActions: Record<string, (button: Element) => void> = {
   fullscreen: () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen())
     .catch(() => {}),
   scale: () => showPanel('scale'),
+  clipboard: () => showPanel('clipboard'),
   keys: () => showPanel('keys'),
   connection: () => showPanel('connection'),
   screenshot: () => canvas.toBlob((blob) => {
@@ -740,6 +805,14 @@ actions.addEventListener('click', (e) => {
 });
 document.addEventListener('fullscreenchange', () => {
   toolbar.querySelector('[data-action="fullscreen"]')!.setAttribute('aria-pressed', String(Boolean(document.fullscreenElement)));
+});
+panels.clipboard.addEventListener('click', (e) => {
+  const button = (e.target as Element).closest('[data-clipboard]') as HTMLElement | null;
+  if (!button) return;
+  const pull = button.dataset.clipboard === 'pull';
+  const done = pull ? copyRemoteClipboard(true) : navigator.clipboard.readText().then(writeRemoteClipboard).then((ok) => { if (!ok) throw new Error('rejected'); });
+  done.then(() => showPanel(null), () => setStatus(pull ? 'Could not copy the remote clipboard' : 'Could not send the clipboard'));
+  canvas.focus();
 });
 panels.scale.addEventListener('click', (e) => {
   const button = (e.target as Element).closest('[data-scale]');

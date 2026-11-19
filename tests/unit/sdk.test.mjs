@@ -302,3 +302,32 @@ test('a viewer taking control ends the control session with control_taken', asyn
     await assert.rejects(session.input({ type: 'releaseAll' }), { reason: 'control_taken' });
   } finally { globalThis.WebSocket = original; }
 });
+
+test('clipboard text round-trips as UTF-8 and engine refusals keep their reasons', async () => {
+  let stored = '', available = true;
+  const server = createServer(async (request, response) => {
+    response.setHeader('content-type', 'application/json');
+    if (!available) { response.writeHead(503); return response.end(JSON.stringify({ error: 'clipboard_unavailable' })); }
+    if (request.method === 'GET') return response.end(JSON.stringify({ text: stored }));
+    const chunks = [];
+    for await (const chunk of request) chunks.push(chunk);
+    stored = Buffer.concat(chunks).toString('utf8');
+    response.end(JSON.stringify({ length: Buffer.concat(chunks).length }));
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  try {
+    const client = createClient({ url: `http://127.0.0.1:${server.address().port}` });
+    await client.setClipboard('naïve ✓ 🚀\nline');
+    assert.equal(await client.clipboard(), 'naïve ✓ 🚀\nline');
+    await client.setClipboard('');
+    assert.equal(await client.clipboard(), '');
+    await assert.rejects(client.setClipboard('a\0b'), { reason: 'invalid_input' });
+    await assert.rejects(client.setClipboard('é'.repeat(131073)), { reason: 'invalid_input' });
+    available = false;
+    await assert.rejects(client.clipboard(), { reason: 'clipboard_unavailable' });
+  } finally {
+    server.close();
+    await once(server, 'close');
+  }
+});

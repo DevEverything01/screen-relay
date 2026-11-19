@@ -1,5 +1,6 @@
 #pragma once
 
+#include "clipboard.hpp"
 #include "config.hpp"
 #include "core/capture.hpp"
 #include "core/flow.hpp"
@@ -23,10 +24,13 @@ struct HttpResponse {
   unsigned char body[2048], input[max_input_batch * 16];
   size_t length, input_length, input_expected;
   std::vector<uint8_t>* image;
+  std::string* upload;
   size_t offset;
   Socket socket;
-  bool image_headers, screenshot_error, input_reply, input_headers, closing;
-  unsigned reply_status;
+  uint64_t upload_expected;
+  bool image_headers, clipboard, input_reply, input_headers, closing;
+  unsigned reply_status, image_status;
+  const char* image_type;
 };
 /** One /stream and one /control socket at a time, as connectionPlan allows; the capture thread and the lws service thread share it through mutex. */
 struct Server {
@@ -57,7 +61,9 @@ struct Server {
   std::set<lws*> closing;
   Screenshot screenshot;
   lws* screenshot_client = nullptr;
-  bool viewOnly = false, control_ready = false;
+  ClipboardWorker clipboard;
+  std::atomic<bool> clipboard_changed{false};
+  bool viewOnly = false, control_ready = false, clipboard_notices = false, clipboard_pending = false;
   uint32_t control_generation = 0;
   std::vector<uint8_t> control_received;
   std::deque<std::shared_ptr<ControlReply>> replies;

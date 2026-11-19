@@ -3,8 +3,8 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { createContext, runInContext } from 'node:vm';
 
-function viewer({ devicePixelRatio = 1, storage, decode = true, deferDecode = false } = {}) {
-  const listeners = {}, elements = {}, sockets = [], trace = [], animationFrames = new Map();
+function viewer({ devicePixelRatio = 1, storage, decode = true, deferDecode = false, fetch = async () => ({ ok: false, status: 401 }), navigator } = {}) {
+  const listeners = {}, elements = {}, sockets = [], trace = [], animationFrames = new Map(), timers = [];
   const decodeQueue = [];
   let now = 0, nextAnimationFrame = 1;
   const element = () => {
@@ -51,21 +51,21 @@ function viewer({ devicePixelRatio = 1, storage, decode = true, deferDecode = fa
     close() { this.state = 'closed'; }
   }
   const document = {
-    hidden: false, body: element(), documentElement: element(),
+    hidden: false, body: element(), documentElement: element(), hasFocus: () => true,
     querySelector: (selector) => elements[selector] ||= element(),
     addEventListener: (name, callback) => { listeners[name] = callback; },
   };
   const context = createContext({
     document, window: { devicePixelRatio, VideoDecoder: Decoder, EncodedVideoChunk: true, addEventListener() {} },
     location: { protocol: 'http:', hostname: 'localhost', host: 'localhost', hash: '' },
-    URL, URLSearchParams, WebSocket: Socket, VideoDecoder: Decoder,
+    URL, URLSearchParams, AbortSignal, WebSocket: Socket, VideoDecoder: Decoder,
     EncodedVideoChunk: class { constructor(options) { Object.assign(this, options); } },
     MutationObserver: class { observe() {} }, ResizeObserver: class { observe() {} },
     performance: { now: () => now }, setInterval: () => 1, clearInterval() {},
-    setTimeout: () => 1, clearTimeout() {},
+    setTimeout: (callback) => timers.push(callback), clearTimeout() {}, navigator,
     requestAnimationFrame(callback) { const id = nextAnimationFrame++; animationFrames.set(id, callback); return id; },
     cancelAnimationFrame(id) { animationFrames.delete(id); },
-    fetch: async () => ({ ok: false, status: 401 }), localStorage: storage,
+    fetch, localStorage: storage,
   });
   runInContext(readFileSync('dist/viewer/viewer.js', 'utf8'), context);
   const frame = (seq, width = 1280, height = 720, payloadLength = 8, stamp = seq) => runInContext(`(() => {
@@ -90,7 +90,8 @@ function viewer({ devicePixelRatio = 1, storage, decode = true, deferDecode = fa
     animationFrames.delete(entry[0]);
     entry[1](now);
   };
-  return { context, document, listeners, sockets, trace, frame, tick, refresh, setTime: (time) => { now = time; }, decodeAll: () => { while (decodeQueue.length) decodeQueue.shift()(); } };
+  const timersAfter = (mark) => { for (const callback of timers.splice(mark)) callback(); };
+  return { context, document, listeners, sockets, trace, frame, tick, refresh, timerCount: () => timers.length, timersAfter, setTime: (time) => { now = time; }, decodeAll: () => { while (decodeQueue.length) decodeQueue.shift()(); } };
 }
 
 const traced = (app, type) => app.trace.filter((event) => event[0] === type).map((event) => event[1]);
@@ -267,7 +268,7 @@ test('the viewer connects view-only and takes control from the toolbar', () => {
   key(app, 'keydown', 'KeyA');
   assert.deepEqual(app.sockets[0].inputs, []);
   runInContext('relayViewer.setViewOnly(false)', app.context);
-  assert.equal(app.sockets.at(-1).url, 'ws://localhost/stream?take=1');
+  assert.equal(app.sockets.at(-1).url, 'ws://localhost/stream?take=1&clipboard=1');
   app.frame(1);
   assert.equal(app.document.querySelector('#status').textContent, 'Live · you have control');
   assert.equal(control().attributes['aria-pressed'], 'true');
@@ -686,13 +687,91 @@ test('a viewer replaced by a newer viewer stops without retrying and reconnects 
 test('only Take control takes input; a reconnect keeps control without taking it, and a refused one watches', () => {
   const app = viewer();
   runInContext('relayViewer.setViewOnly(false)', app.context);
-  assert.equal(app.sockets.at(-1).url, 'ws://localhost/stream?take=1');
+  assert.equal(app.sockets.at(-1).url, 'ws://localhost/stream?take=1&clipboard=1');
   app.sockets.at(-1).onopen();
   app.frame(1);
   app.sockets.at(-1).onclose({ code: 1006 });
   runInContext('relayViewer.connect()', app.context);
-  assert.equal(app.sockets.at(-1).url, 'ws://localhost/stream');
+  assert.equal(app.sockets.at(-1).url, 'ws://localhost/stream?clipboard=1');
   app.sockets.at(-1).onclose({ code: 1006 });
   runInContext('relayViewer.connect()', app.context);
   assert.equal(app.sockets.at(-1).url, 'ws://localhost/stream?view=1');
+});
+
+function clipboardViewer(remoteText = '') {
+  const posted = [], written = [];
+  const json = (body) => ({ ok: true, status: 200, json: async () => body });
+  const app = viewer({
+    fetch: async (path, options = {}) => {
+      if (path === '/capabilities') return json({ fps: 60, clipboard: true });
+      if (path === '/clipboard' && options.method === 'POST') { posted.push(options.body); return json({ length: options.body.length }); }
+      if (path === '/clipboard') return json({ text: remoteText });
+      return { ok: false, status: 404 };
+    },
+    navigator: { clipboard: { writeText: async (text) => { written.push(text); } } },
+  });
+  runInContext('relayViewer.setViewOnly(false)', app.context);
+  app.frame(1);
+  return { app, posted, written, setRemote: (text) => { remoteText = text; } };
+}
+const settle = () => new Promise((resolve) => setImmediate(resolve));
+function chord(app, type, code, modifiers = {}) {
+  app.document.querySelector('#screen').handlers[type]({
+    code, repeat: false, ctrlKey: false, metaKey: false, altKey: false, ...modifiers, preventDefault() {}, getModifierState: () => false,
+  });
+}
+function clipboardNotice(app) {
+  runInContext(`(() => {
+    const data = new ArrayBuffer(20), view = new DataView(data);
+    view.setUint32(0, 0x4e534c31); view.setUint8(4, 1); view.setUint8(5, 7); view.setUint32(8, 1);
+    relayViewer.socket.onmessage({ data });
+  })()`, app.context);
+}
+
+test('a paste shortcut puts the local text on the remote clipboard before the remote paste', async () => {
+  const { app, posted } = clipboardViewer();
+  await settle();
+  chord(app, 'keydown', 'ControlLeft', { ctrlKey: true });
+  chord(app, 'keydown', 'KeyV', { ctrlKey: true });
+  assert.deepEqual(inputBytes(app), [[1, 224]]);
+  app.listeners.paste({ preventDefault() {}, clipboardData: { getData: () => 'local ✓\r\nline' } });
+  chord(app, 'keyup', 'ControlLeft');
+  await settle();
+  assert.deepEqual(posted, ['local ✓\nline']);
+  assert.deepEqual(inputBytes(app), [[1, 224], [2, 224], [1, 224], [1, 25], [2, 25], [2, 224]]);
+  chord(app, 'keyup', 'KeyV');
+  assert.equal(inputBytes(app).length, 6);
+  chord(app, 'keydown', 'KeyV', { ctrlKey: true });
+  app.listeners.paste({ preventDefault() {}, clipboardData: { getData: () => 'local ✓\r\nline' } });
+  await settle();
+  assert.deepEqual(posted, ['local ✓\nline', 'local ✓\nline']);
+});
+
+test('a paste shortcut without local text pastes what the remote clipboard holds', async () => {
+  const { app, posted } = clipboardViewer();
+  await settle();
+  chord(app, 'keydown', 'ControlLeft', { ctrlKey: true });
+  const mark = app.timerCount();
+  chord(app, 'keydown', 'KeyV', { ctrlKey: true });
+  app.timersAfter(mark);
+  assert.deepEqual(posted, []);
+  assert.deepEqual(inputBytes(app), [[1, 224], [1, 25], [2, 25]]);
+});
+
+test('a remote copy reaches the local clipboard, but neither the viewer\'s own paste nor empty text is copied back', async () => {
+  const { app, written, setRemote } = clipboardViewer('remote text');
+  await settle();
+  clipboardNotice(app);
+  await settle();
+  assert.deepEqual(written, ['remote text']);
+  chord(app, 'keydown', 'KeyV', { ctrlKey: true });
+  app.listeners.paste({ preventDefault() {}, clipboardData: { getData: () => 'pasted' } });
+  await settle();
+  setRemote('pasted');
+  clipboardNotice(app);
+  await settle();
+  setRemote('');
+  clipboardNotice(app);
+  await settle();
+  assert.deepEqual(written, ['remote text']);
 });

@@ -38,6 +38,8 @@ The server processes records in order and stops at the first record rejected dur
 | `/stream` | Receives video and, when supported, cursor messages. Sends ACKs and input. |
 | `/stream?view=1` | Receives the same messages, but does not own input. |
 | `/stream?take=1` | Works like `/stream`, and takes input from an open `/control` connection. |
+| `/stream?clipboard=1` | Works like `/stream` and also receives a clipboard notice when the desktop clipboard changes. |
+| `/stream?take=1&clipboard=1` | Works like `/stream?take=1` and also receives clipboard notices. The bundled viewer uses it when it takes control. |
 | `/control` | Receives a control-ready message, then sends input and receives one response per request. Up to 32 replies can be queued. |
 | All | Use the `nsl1` subprotocol and binary messages. One WebSocket message contains one protocol message. A `/stream` connection without `?view=1`, or a `/control` connection, owns input and blocks `POST /input`. |
 
@@ -52,7 +54,7 @@ One `/stream` connection and one `/control` connection can be open at the same t
 | `/stream?take=1` | Opens. An open `/control` connection closes with code 4001 and reason `taken`. |
 | `/control` | Opens, unless `/control` is already open or a `/stream` connection owns input. |
 
-A `/stream` connection that opens replaces the open one, which closes with code 4002 and reason `replaced`. A refused connection fails its WebSocket handshake. A client that gets 4002 should not reconnect on its own, or two clients would replace each other in a loop. Held keys and buttons are released when a connection loses input.
+Adding `clipboard=1` does not change these rules. A `/stream` connection that opens replaces the open one, which closes with code 4002 and reason `replaced`. A refused connection fails its WebSocket handshake. A client that gets 4002 should not reconnect on its own, or two clients would replace each other in a loop. Held keys and buttons are released when a connection loses input.
 
 When the session has a token, offer both `nsl1` and `bearer.TOKEN` as subprotocols; the server selects `nsl1`. Do not put the token in a request URL.
 
@@ -76,6 +78,7 @@ To let a viewer connect without giving it the token, send `POST /tickets` with t
 | 4 | Server to `/control` | Desktop width and height, 2 bytes each. Sequence is zero. |
 | 5 | Server to `/control` | One status byte: 0 accepted, 1 invalid, 2 unsupported. Sequence echoes the request ID. A status of 0 does not report a later backend failure. |
 | 6 | Server to `/stream` | Width, height, hotspot X, and hotspot Y (2 bytes each), followed by straight-alpha RGBA pixels row by row. Sequence is zero. No ACK is needed. |
+| 7 | Server to a `/stream` opened with `clipboard=1` | Clipboard notice: the desktop clipboard changed, including changes from `POST /clipboard`. Empty payload, sequence zero, no ACK. Read the text with `GET /clipboard`. |
 
 | Rule | Detail |
 | --- | --- |
@@ -85,3 +88,4 @@ To let a viewer connect without giving it the token, send `POST /tickets` with t
 | Counters | Reconnect when the frame sequence reaches 4294967295. If the generation reaches that value, restart the session before connecting again. |
 | Cursor | At most 256 by 256 pixels, with the hotspot inside the image. Eight zero bytes restore the local arrow; a transparent image hides the cursor. The cursor does not follow pointer jumps made by the desktop. |
 | Disconnect | Held input is released. Reconnecting does not replay requests. |
+| Clipboard | Only a `/stream` opened with `clipboard=1` receives type 7, so a client that rejects unknown types keeps working. Several changes close together can arrive as one notice, and one change can arrive as more than one. |

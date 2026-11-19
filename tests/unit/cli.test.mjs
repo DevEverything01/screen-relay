@@ -341,3 +341,30 @@ test('piped help and errors contain no ANSI escape codes', () => {
     assert.doesNotMatch(result.stdout + result.stderr, /\u001b\[/);
   }
 });
+
+test('--stdin reads a pipe that is still being written', async () => {
+  const received = [];
+  const { createServer: createHttpServer } = await import('node:http');
+  const server = createHttpServer(async (request, response) => {
+    const chunks = [];
+    for await (const chunk of request) chunks.push(chunk);
+    received.push(Buffer.concat(chunks).toString('utf8'));
+    response.setHeader('content-type', 'application/json');
+    response.end(JSON.stringify({ length: Buffer.concat(chunks).length }));
+  });
+  server.listen(0, '127.0.0.1');
+  await new Promise((resolve) => server.once('listening', resolve));
+  try {
+    const child = spawn(process.execPath, [cli, 'clipboard', 'set', '--stdin', '--json', '--url', `http://127.0.0.1:${server.address().port}`], { timeout: 15000 });
+    let stdout = '', stderr = '';
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    child.stdin.write('first ');
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    child.stdin.end('second');
+    const status = await new Promise((resolve) => child.on('close', resolve));
+    assert.equal(status, 0, stderr);
+    assert.deepEqual(JSON.parse(stdout), { clipboard: { bytes: 12 }, outcome: 'set' });
+    assert.deepEqual(received, ['first second']);
+  } finally { server.close(); }
+});
