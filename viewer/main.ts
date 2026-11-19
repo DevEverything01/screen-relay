@@ -8,10 +8,14 @@ const canvas = document.querySelector('#screen') as HTMLCanvasElement,
   ctx = canvas.getContext('2d')!,
   status = document.querySelector('#status')!;
 const cursor = document.querySelector('#cursor') as HTMLCanvasElement, cursorContext = cursor.getContext('2d')!;
-let accessToken = '';
+/** The credential the link carries: the session token, or a watch or control grant that only opens WebSockets. */
+type Access = 'owner' | 'watch' | 'control';
+let accessToken = '', access: Access = 'owner';
 const trustedPage = location.protocol === 'https:' || isLoopback(location.hostname);
 {
   const fragmentToken = new URLSearchParams(location.hash.slice(1)).get('token');
+  const fragmentScope = new URLSearchParams(location.hash.slice(1)).get('scope');
+  access = fragmentScope === 'watch' ? 'watch' : fragmentScope === 'control' ? 'control' : 'owner';
   if (fragmentToken !== null) {
     history.replaceState(null, '', location.pathname + location.search);
     if (validToken(fragmentToken) && trustedPage) accessToken = (document.querySelector('#access-token') as HTMLInputElement).value = fragmentToken;
@@ -59,7 +63,7 @@ const HOLD_DECAY = 0.05;
 const CLOCK_JUMP_MS = 500;
 type Sample = { time: number; offset: number; late: number };
 let samples: Sample[] = [], lows: Sample[] = [], holdMs = 0;
-let buttons = 0, modifiers = 0, x = 0, y = 0, viewOnly = false, capsLock = false,
+let buttons = 0, modifiers = 0, x = 0, y = 0, viewOnly = access === 'watch', capsLock = false,
   metaAsCtrl = stored('relay.metaCtrl') === null ? macos() : stored('relay.metaCtrl') === '1';
 const pending = new Map(), decoded: any[] = [], held = new Set<number>(), latched = new Map<number, Element>();
 const clamp = (value: number, low: number, high: number) => Math.max(low, Math.min(high, value));
@@ -375,7 +379,10 @@ function connect() {
     setStatus('WebCodecs unavailable in this browser');
     return;
   }
-  const path = viewOnly ? '/stream?view=1' : takeRequested ? '/stream?take=1&clipboard=1' : '/stream?clipboard=1';
+  const sync = access === 'owner';
+  const path = viewOnly ? '/stream?view=1'
+    : takeRequested ? (sync ? '/stream?take=1&clipboard=1' : '/stream?take=1')
+    : sync ? '/stream?clipboard=1' : '/stream';
   takeRequested = false;
   const target = socketTarget(new URL(`${location.protocol}//${location.host}`), path, accessToken);
   socket = new WebSocket(target.url, target.protocols);
@@ -601,6 +608,7 @@ function hudText(fps: number, mbps: number, metrics: string) {
   return `${stream} · Drawn FPS: ${fps.toFixed(1)} · Stream Mbps: ${mbps.toFixed(2)} · ${metrics}`;
 }
 function loadCapabilities() {
+  if (access !== 'owner') return;
   fetch('/capabilities', { cache: 'no-store', redirect: 'error', headers: authHeaders() })
     .then((response) => (response.ok ? response.json() : null))
     .then((data) => {
@@ -625,7 +633,7 @@ function startHud() {
     previousTime = now;
     previousDrawn = stats.drawn;
     previousBytes = stats.bytes;
-    if (!metricsRequest && !document.querySelector('#stats')!.hidden) {
+    if (access === 'owner' && !metricsRequest && !document.querySelector('#stats')!.hidden) {
       const controller = metricsRequest = new AbortController();
       const timer = setTimeout(() => controller.abort(), 2000);
       fetch('/metrics', { cache: 'no-store', signal: controller.signal, redirect: 'error', headers: authHeaders() })
@@ -677,6 +685,7 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 function checkAccess(current: number) {
+  if (access !== 'owner') return;
   fetch('/capabilities', { cache: 'no-store', redirect: 'error', headers: authHeaders() })
     .then((response) => {
       if (response.status !== 401 || current !== epoch) return;
@@ -771,7 +780,8 @@ function setExpanded(open: boolean) {
   if (!open) showPanel(null);
 }
 function applyControl() {
-  const button = actions.querySelector('[data-action="control"]')!;
+  const button = actions.querySelector('[data-action="control"]') as HTMLElement;
+  button.hidden = access === 'watch';
   const label = viewOnly ? 'Take control' : 'Release control';
   button.setAttribute('aria-pressed', String(!viewOnly));
   button.setAttribute('aria-label', label);
@@ -781,7 +791,7 @@ function applyControl() {
   if (clipboard.hidden && !panels.clipboard.hidden) showPanel(null);
 }
 function setViewOnly(next: boolean) {
-  if (viewOnly === next) return;
+  if (viewOnly === next || (access === 'watch' && !next)) return;
   release();
   viewOnly = next;
   takeRequested = !next;
