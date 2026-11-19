@@ -16,6 +16,8 @@ export async function directViewer(origin: string): Promise<string> {
   let script = replaceOnce(bundle,
     'new URLSearchParams(location.hash.slice(1)).get("token")', "stream.token ?? null");
   script = replaceOnce(script,
+    'new URLSearchParams(location.hash.slice(1)).get("scope")', "stream.scope");
+  script = replaceOnce(script,
     'history.replaceState(null, "", location.pathname + location.search);', "");
   const socketOrigin = 'new URL(`${location.protocol}//${location.host}`)';
   script = script.includes(socketOrigin)

@@ -156,9 +156,22 @@ void Server::end() {
   endControl();
   for (auto& stream : streams) if (stream && stream->viewer) endStream(stream->viewer);
 }
-void Server::evict(lws* wsi) {
-  unsigned char reason[] = "taken";
-  lws_close_reason(wsi, static_cast<lws_close_status>(close_taken), reason, sizeof(reason) - 1);
+void Server::expireGrants() {
+  const auto now = Grants::Clock::now();
+  auto expired = [&](lws* wsi) {
+    auto* response = static_cast<HttpResponse*>(lws_wsi_user(wsi));
+    return response && response->grant_id && !grants.active(response->grant_id, now);
+  };
+  if (control && expired(control)) { evict(control, LWS_CLOSE_STATUS_POLICY_VIOLATION); endControl(); }
+  for (auto& stream : streams) if (stream && stream->viewer && expired(stream->viewer)) {
+    evict(stream->viewer, LWS_CLOSE_STATUS_POLICY_VIOLATION);
+    endStream(stream->viewer);
+  }
+}
+void Server::evict(lws* wsi, uint16_t code) {
+  unsigned char taken[] = "taken", expired[] = "grant ended";
+  lws_close_reason(wsi, static_cast<lws_close_status>(code), code == close_taken ? taken : expired,
+                   code == close_taken ? sizeof(taken) - 1 : sizeof(expired) - 1);
   closing.insert(wsi);
   lws_set_timer_usecs(wsi, 1);
 }
@@ -497,20 +510,41 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
         response->upload_expected = length;
         return length ? 0 : clipboardWrite(wsi, response, s);
       }
-      if (path == "/tickets") {
-        if (lws_hdr_total_length(wsi, WSI_TOKEN_POST_URI) <= 0) {
+      if (path.rfind("/grants/", 0) == 0) {
+        if (!response) return -1;
+        if (!localRequest(s->config, wsi)) return errorResponse(wsi, response, HTTP_STATUS_FORBIDDEN, "forbidden");
+        if (s->config.token.empty() || !authenticated(s->config, wsi)) {
+          return errorResponse(wsi, response, HTTP_STATUS_UNAUTHORIZED, "unauthorized");
+        }
+        const auto name = path.substr(8);
+        if (name == "watch" || name == "control") {
+          if (lws_hdr_total_length(wsi, WSI_TOKEN_POST_URI) <= 0) {
+            return errorResponse(wsi, response, HTTP_STATUS_METHOD_NOT_ALLOWED, "method_not_allowed");
+          }
+          const auto args = header(wsi, WSI_TOKEN_HTTP_URI_ARGS);
+          uint64_t ttl = Grants::max_ttl;
+          if (!args.empty() && (args.rfind("ttl=", 0) != 0 || !unsignedNumber(args.substr(4), ttl) || !ttl || ttl > Grants::max_ttl)) {
+            return errorResponse(wsi, response, HTTP_STATUS_BAD_REQUEST, "invalid_ttl");
+          }
+          unsigned char bytes[32];
+          if (!secureRandom(bytes, sizeof(bytes))) return errorResponse(wsi, response, HTTP_STATUS_INTERNAL_SERVER_ERROR, "random_failed");
+          static const char digits[] = "0123456789abcdef";
+          std::string token;
+          for (const unsigned char byte : bytes) { token += digits[byte >> 4]; token += digits[byte & 15]; }
+          const auto scope = name == "watch" ? GrantScope::watch : GrantScope::control;
+          const auto id = s->grants.issue(token, scope, Grants::Clock::now(), ttl);
+          if (!id) return errorResponse(wsi, response, HTTP_STATUS_SERVICE_UNAVAILABLE, "grant_limit");
+          return jsonResponse(wsi, response, HTTP_STATUS_OK, "{\"id\":\"" + std::to_string(id) + "\",\"token\":\"" + token +
+            "\",\"expires_in\":" + std::to_string(ttl) + ",\"scope\":\"" + name + "\"}");
+        }
+        uint64_t id = 0;
+        if (!unsignedNumber(name, id) || !id) return errorResponse(wsi, response, HTTP_STATUS_NOT_FOUND, "not_found");
+        if (lws_hdr_total_length(wsi, WSI_TOKEN_DELETE_URI) <= 0) {
           return errorResponse(wsi, response, HTTP_STATUS_METHOD_NOT_ALLOWED, "method_not_allowed");
         }
-        if (!localRequest(s->config, wsi)) return errorResponse(wsi, response, HTTP_STATUS_FORBIDDEN, "forbidden");
-        if (!authenticated(s->config, wsi)) return errorResponse(wsi, response, HTTP_STATUS_UNAUTHORIZED, "unauthorized");
-        unsigned char bytes[32];
-        if (!secureRandom(bytes, sizeof(bytes))) return errorResponse(wsi, response, HTTP_STATUS_INTERNAL_SERVER_ERROR, "random_failed");
-        static const char digits[] = "0123456789abcdef";
-        std::string ticket;
-        for (const unsigned char byte : bytes) { ticket += digits[byte >> 4]; ticket += digits[byte & 15]; }
-        s->tickets.add(ticket, Tickets::Clock::now());
-        return jsonResponse(wsi, response, HTTP_STATUS_OK, "{\"ticket\":\"" + ticket + "\",\"expires_in\":" +
-                            std::to_string(Tickets::lifetime.count()) + "}");
+        if (!s->grants.revoke(id)) return errorResponse(wsi, response, HTTP_STATUS_NOT_FOUND, "not_found");
+        s->expireGrants();
+        return jsonResponse(wsi, response, HTTP_STATUS_OK, "{\"revoked\":true}");
       }
       if (path == "/metrics" || path == "/capabilities" || path == "/screenshot.png") {
         if (lws_hdr_total_length(wsi, WSI_TOKEN_GET_URI) <= 0) {
@@ -534,7 +568,7 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
             "\"screenshot\":\"/screenshot.png\",\"control\":\"/control\",\"wayland\":" +
             (backend == "wayland" ? "true" : "false") +
             ",\"max_input_pending\":32,\"cursor\":" + (s->streams[0]->capture.stats().cursor_supported ? "true" : "false") +
-            ",\"input_endpoint\":\"/input\",\"tickets\":\"/tickets\",\"max_input_batch\":" + std::to_string(max_input_batch) +
+            ",\"input_endpoint\":\"/input\",\"max_input_batch\":" + std::to_string(max_input_batch) +
             ",\"audio\":false,\"clipboard\":" + (s->clipboard.available() ? "true" : "false") +
             ",\"clipboard_endpoint\":\"/clipboard\",\"max_clipboard_bytes\":" + std::to_string(max_clipboard_bytes) +
             ",\"resize\":false,\"ime\":false}";
@@ -620,16 +654,20 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
       const Target parsed = viewerTarget(target);
       if (parsed.socket == Socket::none || !localRequest(s->config, wsi) || s->nextGeneration == UINT32_MAX) return 1;
       if (!s->planConnection(parsed.socket).open) return 1;
-      // Check a ticket only for a connection that would open, so a refused
-      // one doesn't use it up.
-      if (!authenticated(s->config, wsi, true) && !s->tickets.redeem(offeredTicket(wsi), Tickets::Clock::now())) return 1;
       auto* response = static_cast<HttpResponse*>(user);
+      response->grant_id = 0;
+      if (!authenticated(s->config, wsi, true)) {
+        const auto* grant = s->grants.find(websocketBearer(wsi), Grants::Clock::now());
+        if (!grant || parsed.clipboard || (grant->scope == GrantScope::watch && parsed.socket != Socket::watch)) return 1;
+        response->grant_id = grant->id;
+      }
       response->socket = parsed.socket; response->clipboard = parsed.clipboard;
       return 0;
     }
     case LWS_CALLBACK_ESTABLISHED: {
       if (s->nextGeneration == UINT32_MAX) return -1;
       const auto* response = static_cast<HttpResponse*>(user);
+      if (response->grant_id && !s->grants.active(response->grant_id, Grants::Clock::now())) return -1;
       const Socket socket = response->socket;
       const auto plan = s->planConnection(socket);
       if (!plan.open) return -1;
@@ -643,6 +681,8 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
     }
     case LWS_CALLBACK_RECEIVE: {
       if (s->closing.count(wsi)) return 0;
+      if (const auto* response = static_cast<HttpResponse*>(user); response && response->grant_id &&
+          !s->grants.active(response->grant_id, Grants::Clock::now())) return -1;
       auto* stream = s->streamFor(wsi);
       if (!stream && s->control != wsi) return -1;
       auto& received = stream ? stream->received : s->control_received;
@@ -657,6 +697,8 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
     }
     case LWS_CALLBACK_SERVER_WRITEABLE: {
       if (s->closing.count(wsi)) return 0;
+      if (const auto* response = static_cast<HttpResponse*>(user); response && response->grant_id &&
+          !s->grants.active(response->grant_id, Grants::Clock::now())) return -1;
       if (auto* stream = s->streamFor(wsi)) {
         const int result = stream->write(s->config.proxy);
         if (stream->width) { s->width = stream->width; s->height = stream->height; }

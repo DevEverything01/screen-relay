@@ -2,13 +2,14 @@ import type { McpServer } from "@modelcontextprotocol/server";
 import { registerAppTool } from "@modelcontextprotocol/ext-apps/server";
 import { z } from "zod";
 import { createClient } from "../../dist/sdk/index.js";
-import { originOf, tokenOf } from "./config.ts";
+import { originOf, ownerToken, VIEWER_SCOPE } from "./config.ts";
+import { mintGrant } from "./grants.ts";
 import { runInSandbox } from "./sandbox.ts";
 import { RESOURCE_URI } from "./viewer.ts";
 
 /** Registers the desktop, screenshot, and automation tools on a server. */
 export function registerTools(server: McpServer): void {
-  let session: { url: string; token?: string } | undefined;
+  let sessionUrl: string | undefined;
 
   registerAppTool(
     server,
@@ -18,17 +19,16 @@ export function registerTools(server: McpServer): void {
       description: "Show a screen-relay desktop stream in an interactive viewer.",
       inputSchema: z.object({
         url: z.string().describe("screen-relay viewer URL, for example http://localhost:18080/"),
-        token: z.string().optional().describe("screen-relay access token. Omit to use SCREEN_RELAY_TOKEN."),
       }),
       _meta: { ui: { resourceUri: RESOURCE_URI } },
     },
-    async ({ url, token }) => {
+    async ({ url }) => {
       const viewer = originOf(url);
-      const accessToken = tokenOf(token);
-      session = { url: viewer.href, token: accessToken };
+      const grant = await mintGrant(viewer, ownerToken(), VIEWER_SCOPE);
+      sessionUrl = viewer.href;
       return {
         content: [{ type: "text", text: "Desktop opened. Use desktop_screenshot to inspect it." }],
-        _meta: { "relay/viewer": { url: viewer.href, token: accessToken } },
+        _meta: { "relay/viewer": { url: viewer.href, ...grant } },
       };
     },
   );
@@ -40,8 +40,8 @@ export function registerTools(server: McpServer): void {
       description: "Capture the desktop from the last open_desktop session.",
     },
     async () => {
-      if (!session) throw new Error("Call open_desktop first");
-      const png = await createClient({ url: session.url, token: session.token }).screenshot();
+      if (!sessionUrl) throw new Error("Call open_desktop first");
+      const png = await createClient({ url: sessionUrl, token: ownerToken() }).screenshot();
       return {
         content: [{ type: "image", data: Buffer.from(png).toString("base64"), mimeType: "image/png" }],
       };
