@@ -4,7 +4,7 @@ import { request as httpsRequest, type RequestOptions } from 'node:https';
 import { plan, type Plan } from './transport.js';
 import {
   RelayError, networkError, responseError, baseUrl, integer, encodeInput, encodeInputBatch, comboEvents, textEvents,
-  batches, parseMessage, socketTarget, CLOSE_TAKEN, MAX_CLIPBOARD_BYTES, MAX_INPUT_BATCH, MAX_INPUT_PENDING,
+  batches, parseMessage, socketTarget, CLOSE_TAKEN, CLOSE_BUSY, MAX_CLIPBOARD_BYTES, MAX_INPUT_BATCH, MAX_INPUT_PENDING,
   type InputEvent,
 } from '../protocol/index.js';
 
@@ -310,7 +310,9 @@ export async function connect(options: ClientOptions = {}): Promise<Session> {
   socket.addEventListener('error', () => finish(new RelayError('unreachable', 'The connection failed.')));
   socket.addEventListener('close', ({ code }) => finish(code === CLOSE_TAKEN
     ? new RelayError('control_taken', 'A viewer took control of the desktop.', { hint: 'Wait for the viewer to release control, then connect again.' })
-    : new RelayError('disconnected', 'Control connection closed')));
+    : code === CLOSE_BUSY
+      ? new RelayError('busy', 'Another controller holds control of the desktop.', { hint: 'Wait for it to release control, then connect again.' })
+      : new RelayError('disconnected', 'Control connection closed')));
   socket.addEventListener('message', ({ data }) => {
     try {
       if (!(data instanceof ArrayBuffer)) throw new Error('Non-binary message');

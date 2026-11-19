@@ -52,9 +52,9 @@ The engine admits up to four `/stream` connections, with one input owner at a ti
 | `/stream?view=1` | Opens if a viewer slot is available. No change to input ownership. |
 | `/stream` | Opens and owns input if a viewer slot is available and input has no owner. |
 | `/stream?take=1` | Opens and owns input if a viewer slot is available or the current owner is a viewer it can replace. The previous input owner closes with code 4001 and reason `taken`. |
-| `/control` | Opens and owns input if input has no owner. |
+| `/control` | Opens and owns input if input has no owner. Otherwise it opens and closes with code 4003 and reason `busy`. |
 
-Adding `clipboard=1` to a supported stream URL does not change these rules. A refused connection fails its WebSocket handshake. Held keys and buttons are released when a connection loses input. A browser that loses input to a takeover reconnects with `?view=1`.
+Adding `clipboard=1` to a supported stream URL does not change these rules. A refused `/stream` connection fails its WebSocket handshake, while a refused `/control` connection opens and closes with code 4003 and reason `busy` so a client can tell it apart from an unreachable engine. Held keys and buttons are released when a connection loses input. A browser that loses input to a takeover reconnects with `?view=1`.
 
 When the session has a token, offer both `nsl1` and `bearer.TOKEN` as subprotocols; the server selects `nsl1`. Do not put the token in a request URL.
 

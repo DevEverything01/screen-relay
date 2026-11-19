@@ -156,9 +156,9 @@ void Server::end() {
   endControl();
   for (auto& stream : streams) if (stream && stream->viewer) endStream(stream->viewer);
 }
-void Server::evict(lws* wsi) {
-  unsigned char reason[] = "taken";
-  lws_close_reason(wsi, static_cast<lws_close_status>(close_taken), reason, sizeof(reason) - 1);
+void Server::evict(lws* wsi, uint16_t code, const char* reason) {
+  auto* bytes = reinterpret_cast<unsigned char*>(const_cast<char*>(reason));
+  lws_close_reason(wsi, static_cast<lws_close_status>(code), bytes, std::strlen(reason));
   closing.insert(wsi);
   lws_set_timer_usecs(wsi, 1);
 }
@@ -435,7 +435,7 @@ int clipboardWrite(lws* wsi, HttpResponse* response, Server* s) {
   delete response->upload; response->upload = nullptr;
   if (!complete) return -1;
   if (!validText(text)) return errorResponse(wsi, response, HTTP_STATUS_BAD_REQUEST, "invalid_text");
-  if (!s->clipboard.submit(wsi, std::move(text))) return errorResponse(wsi, response, HTTP_STATUS_SERVICE_UNAVAILABLE, "busy");
+  if (!s->clipboard.submit(wsi, std::move(text))) return errorResponse(wsi, response, HTTP_STATUS_SERVICE_UNAVAILABLE, "clipboard_busy");
   return 0;
 }
 int metricsResponse(lws* wsi, HttpResponse* response, Server* server) {
@@ -484,7 +484,7 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
         if (!authenticated(s->config, wsi)) return errorResponse(wsi, response, HTTP_STATUS_UNAUTHORIZED, "unauthorized");
         if (!s->clipboard.available()) return errorResponse(wsi, response, HTTP_STATUS_SERVICE_UNAVAILABLE, "clipboard_unavailable");
         if (!write) {
-          if (!s->clipboard.submit(wsi, std::nullopt)) return errorResponse(wsi, response, HTTP_STATUS_SERVICE_UNAVAILABLE, "busy");
+          if (!s->clipboard.submit(wsi, std::nullopt)) return errorResponse(wsi, response, HTTP_STATUS_SERVICE_UNAVAILABLE, "clipboard_busy");
           return 0;
         }
         uint64_t length = 0;
@@ -619,7 +619,7 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
       }
       const Target parsed = viewerTarget(target);
       if (parsed.socket == Socket::none || !localRequest(s->config, wsi) || s->nextGeneration == UINT32_MAX) return 1;
-      if (!s->planConnection(parsed.socket).open) return 1;
+      if (!s->planConnection(parsed.socket).open && parsed.socket != Socket::control) return 1;
       // Check a ticket only for a connection that would open, so a refused
       // one doesn't use it up.
       if (!authenticated(s->config, wsi, true) && !s->tickets.redeem(offeredTicket(wsi), Tickets::Clock::now())) return 1;
@@ -632,7 +632,10 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
       const auto* response = static_cast<HttpResponse*>(user);
       const Socket socket = response->socket;
       const auto plan = s->planConnection(socket);
-      if (!plan.open) return -1;
+      if (!plan.open) {
+        if (socket == Socket::control) { s->evict(wsi, close_busy, "busy"); return 0; }
+        return -1;
+      }
       if (socket == Socket::control) {
         s->control = wsi; s->control_generation = ++s->nextGeneration; s->control_received.clear();
         s->input->resetLocks();
