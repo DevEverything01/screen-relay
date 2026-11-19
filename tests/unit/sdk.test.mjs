@@ -108,6 +108,94 @@ test('custom HTTP transport enforces the overall request deadline', async () => 
   }
 });
 
+function incompleteResponseServer() {
+  return createServer((request, response) => {
+    response.on('error', () => {});
+    response.writeHead(200, { 'content-type': 'application/json', 'content-length': '128' });
+    response.write('{"version":1', () => { if (response.socket) response.socket.end(); else response.destroy(); });
+  });
+}
+
+function oversizedResponseServer(status) {
+  return createServer((request, response) => {
+    response.on('error', () => {});
+    response.writeHead(status, { 'content-type': 'application/json' });
+    const chunk = 'x'.repeat(64 * 1024);
+    const limit = 8 * 1024 * 1024 + chunk.length * 2;
+    let sent = 0;
+    const pump = () => {
+      try {
+        while (sent < limit && !response.destroyed) {
+          sent += chunk.length;
+          if (!response.write(chunk)) { response.once('drain', pump); return; }
+        }
+        if (!response.destroyed) response.end();
+      } catch {}
+    };
+    pump();
+  });
+}
+
+async function withServer(server, run) {
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  try { await run(`http://127.0.0.1:${server.address().port}`); }
+  finally {
+    server.closeAllConnections();
+    await new Promise(resolve => server.close(resolve));
+  }
+}
+
+test('custom transport returns a normal response', async () => {
+  const server = createServer((request, response) => {
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end('{"version":7}');
+  });
+  await withServer(server, async (url) => {
+    assert.deepEqual(await createClient({ url, connect: '127.0.0.1' }).capabilities(), { version: 7 });
+  });
+});
+
+test('custom transport settles an incomplete response before the deadline', async () => {
+  await withServer(incompleteResponseServer(), async (url) => {
+    const started = Date.now();
+    await assert.rejects(createClient({ url, connect: '127.0.0.1', timeout: 5000 }).capabilities(), (error) => {
+      assert.notEqual(error.reason, 'timeout');
+      assert.ok(error.reason === 'disconnected' || error.reason === 'unreachable', `unexpected reason ${error.reason}`);
+      return true;
+    });
+    assert.ok(Date.now() - started < 4000, 'settled before the deadline');
+  });
+});
+
+test('fetch transport settles an incomplete response before the deadline', async () => {
+  await withServer(incompleteResponseServer(), async (url) => {
+    const started = Date.now();
+    await assert.rejects(capabilities({ url, timeout: 5000 }), (error) => {
+      assert.notEqual(error.code, 'TIMEOUT');
+      assert.ok(error.code === 'NETWORK_ERROR' || error.code === 'PROTOCOL_ERROR', `unexpected code ${error.code}`);
+      return true;
+    });
+    assert.ok(Date.now() - started < 4000, 'settled before the deadline');
+  });
+});
+
+test('custom transport bounds success and error bodies', async () => {
+  for (const status of [200, 500]) {
+    await withServer(oversizedResponseServer(status), async (url) => {
+      await assert.rejects(createClient({ url, connect: '127.0.0.1', timeout: 10000 }).capabilities(), { code: 'PROTOCOL_ERROR' });
+    });
+  }
+});
+
+test('fetch transport bounds success and error bodies', async () => {
+  for (const status of [200, 500]) {
+    await withServer(oversizedResponseServer(status), async (url) => {
+      await assert.rejects(capabilities({ url, timeout: 10000 }), { code: 'PROTOCOL_ERROR' });
+    });
+  }
+});
+
 test('control connections reject unsupported transport overrides', async () => {
   await assert.rejects(connect({ ca: 'ca.pem' }), { code: 'INVALID_ARGUMENT', message: /do not support ca, certificate, or connect/ });
   await assert.rejects(connect({ certificate: 'cert.pem' }), { code: 'INVALID_ARGUMENT', message: /do not support ca, certificate, or connect/ });
