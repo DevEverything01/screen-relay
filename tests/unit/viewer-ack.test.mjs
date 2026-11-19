@@ -682,3 +682,17 @@ test('a viewer replaced by a newer viewer stops without retrying and reconnects 
   runInContext('relayViewer.connect()', app.context);
   assert.equal(app.sockets.at(-1).url, 'ws://localhost/stream?view=1');
 });
+
+test('only Take control takes input; a reconnect keeps control without taking it, and a refused one watches', () => {
+  const app = viewer();
+  runInContext('relayViewer.setViewOnly(false)', app.context);
+  assert.equal(app.sockets.at(-1).url, 'ws://localhost/stream?take=1');
+  app.sockets.at(-1).onopen();
+  app.frame(1);
+  app.sockets.at(-1).onclose({ code: 1006 });
+  runInContext('relayViewer.connect()', app.context);
+  assert.equal(app.sockets.at(-1).url, 'ws://localhost/stream');
+  app.sockets.at(-1).onclose({ code: 1006 });
+  runInContext('relayViewer.connect()', app.context);
+  assert.equal(app.sockets.at(-1).url, 'ws://localhost/stream?view=1');
+});

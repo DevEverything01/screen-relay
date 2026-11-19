@@ -42,7 +42,7 @@ const stats = ((window as any).nativeStats = {
   received: 0, drawn: 0, superseded: 0, holdMs: 0, bytes: 0, decodeerrors: 0, outstanding: 0, pendingBytes: 0, pendingHighWater: 0,
 });
 let socket: WebSocket, decoder: VideoDecoder, retryTimer: any, deadline: any, frameHandle = 0, drawnThisFrame = false, transportBroken = false;
-let generation = 0, sequence = 0, lastTimestamp = -1, ready = false, retry = 0, epoch = 0;
+let generation = 0, sequence = 0, lastTimestamp = -1, ready = false, retry = 0, epoch = 0, takeRequested = false;
 let backlogSince: number | null = null, lastCatchUp = -Infinity;
 /** How far back the smallest arrival-minus-capture offset is searched, in ms. */
 const CLOCK_WINDOW_MS = 5000;
@@ -302,13 +302,17 @@ function connect() {
     setStatus('WebCodecs unavailable in this browser');
     return;
   }
-  const target = socketTarget(new URL(`${location.protocol}//${location.host}`), viewOnly ? '/stream?view=1' : '/stream?take=1', accessToken);
+  const path = viewOnly ? '/stream?view=1' : takeRequested ? '/stream?take=1' : '/stream';
+  takeRequested = false;
+  const target = socketTarget(new URL(`${location.protocol}//${location.host}`), path, accessToken);
   socket = new WebSocket(target.url, target.protocols);
   transportBroken = false;
   loadCapabilities();
   const ws = socket;
   ws.binaryType = 'arraybuffer';
+  let opened = false;
   ws.onopen = () => {
+    opened = true;
     if (current === epoch) {
       setStatus('Waiting for frame…');
       deadline = setTimeout(() => {
@@ -400,6 +404,10 @@ function connect() {
       applyControl();
       setStatus('Opened in another viewer · reconnect to watch here');
       return;
+    }
+    if (!opened && !viewOnly) {
+      viewOnly = true;
+      applyControl();
     }
     if (document.hidden) {
       setStatus('Paused while hidden');
@@ -691,6 +699,7 @@ function setViewOnly(next: boolean) {
   if (viewOnly === next) return;
   release();
   viewOnly = next;
+  takeRequested = !next;
   applyControl();
   connect();
 }
