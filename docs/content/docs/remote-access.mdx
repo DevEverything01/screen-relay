@@ -70,6 +70,8 @@ screen-relay creates a 64-character lowercase hex token (256 random bits) whenev
 
 ## Grants
 
+Grants replace the one-time `/tickets` endpoint introduced in v0.1.2. Custom viewers now send `bearer.GRANT_TOKEN` instead of `ticket.TICKET`.
+
 A grant gives someone part of a session for a limited time without giving them the token. You create it with the token, and you can revoke it before it expires.
 
 | Scope | What the holder can do |
