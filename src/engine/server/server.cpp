@@ -540,10 +540,13 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
     }
     case LWS_CALLBACK_HTTP_FILE_COMPLETION: return completeResponse(wsi, static_cast<HttpResponse*>(user));
     case LWS_CALLBACK_FILTER_PROTOCOL_CONNECTION: {
-      char uri[256] = {}, args[256] = {};
+      char uri[256] = {}, arg[256] = {};
       if (lws_hdr_copy(wsi, uri, sizeof(uri), WSI_TOKEN_GET_URI) <= 0 || !user) return 1;
       std::string target(uri);
-      if (lws_hdr_copy(wsi, args, sizeof(args), WSI_TOKEN_HTTP_URI_ARGS) > 0) { target += '?'; target += args; }
+      for (int index = 0; lws_hdr_copy_fragment(wsi, arg, sizeof(arg), WSI_TOKEN_HTTP_URI_ARGS, index) > 0; ++index) {
+        target += index ? '&' : '?';
+        target += arg;
+      }
       const Target parsed = viewerTarget(target);
       if (parsed.socket == Socket::none || !localRequest(s->config, wsi) || s->nextGeneration == UINT32_MAX) return 1;
       if (!connectionPlan(parsed.socket, s->viewer, s->viewer && !s->viewOnly, s->control).open) return 1;
