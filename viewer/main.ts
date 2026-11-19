@@ -41,6 +41,7 @@ function receiveCursor({ generation: gen, width, height, hotX, hotY, pixels }: E
 const stats = ((window as any).nativeStats = {
   received: 0, drawn: 0, superseded: 0, holdMs: 0, bytes: 0, decodeerrors: 0, outstanding: 0, pendingBytes: 0, pendingHighWater: 0,
 });
+let reconnectMode: 'automatic' | 'manual' = 'automatic';
 let socket: WebSocket, decoder: VideoDecoder, retryTimer: any, deadline: any, frameHandle = 0, drawnThisFrame = false, transportBroken = false;
 let generation = 0, sequence = 0, lastTimestamp = -1, ready = false, retry = 0, epoch = 0, takeRequested = false;
 let backlogSince: number | null = null, lastCatchUp = -Infinity;
@@ -355,7 +356,11 @@ function present() {
   }
   if (drew || decoded.length) schedulePresent();
 }
+function reconnectAutomatically() {
+  if (reconnectMode === 'automatic') connect();
+}
 function connect() {
+  reconnectMode = 'automatic';
   clearTimeout(retryTimer);
   epoch++;
   const current = epoch;
@@ -469,6 +474,7 @@ function connect() {
     if (current !== epoch) return;
     reset();
     if (e.code === CLOSE_REPLACED) {
+      reconnectMode = 'manual';
       viewOnly = true;
       applyControl();
       setStatus('Opened in another viewer · reconnect to watch here');
@@ -488,7 +494,7 @@ function connect() {
     }
     const delay = Math.min(1000 * 2 ** retry++, 8000);
     setStatus(status.textContent + ` · retrying in ${delay / 1000}s`);
-    retryTimer = setTimeout(connect, delay);
+    retryTimer = setTimeout(reconnectAutomatically, delay);
     checkAccess(current);
   };
 }
@@ -661,11 +667,11 @@ document.addEventListener('visibilitychange', () => {
     if (socket) socket.close();
     reset();
     clearTimeout(retryTimer);
-    setStatus('Paused while hidden');
+    if (reconnectMode === 'automatic') setStatus('Paused while hidden');
   } else {
     startHud();
     retry = 0;
-    connect();
+    reconnectAutomatically();
   }
 });
 function checkAccess(current: number) {

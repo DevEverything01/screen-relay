@@ -670,7 +670,7 @@ test('under a hold, frames wait for their due time and a trimmed frame is acknow
   assert.deepEqual(all, Array.from({ length: all.length }, (_, index) => index + 1));
 });
 
-test('a viewer replaced by a newer viewer stops without retrying and reconnects view-only', () => {
+test('a replaced viewer stays disconnected across visibility changes until manually reconnected', () => {
   const app = viewer();
   const control = () => app.document.querySelector('#toolbar-actions').querySelector('[data-action="control"]');
   runInContext('relayViewer.setViewOnly(false)', app.context);
@@ -679,6 +679,9 @@ test('a viewer replaced by a newer viewer stops without retrying and reconnects 
   app.sockets.at(-1).onclose({ code: 4002 });
   assert.equal(app.document.querySelector('#status').textContent, 'Opened in another viewer · reconnect to watch here');
   assert.equal(control().attributes['aria-pressed'], 'false');
+  app.document.hidden = true; app.listeners.visibilitychange();
+  app.document.hidden = false; app.listeners.visibilitychange();
+  assert.equal(app.document.querySelector('#status').textContent, 'Opened in another viewer · reconnect to watch here');
   assert.equal(app.sockets.length, count);
   runInContext('relayViewer.connect()', app.context);
   assert.equal(app.sockets.at(-1).url, 'ws://localhost/stream?view=1');
