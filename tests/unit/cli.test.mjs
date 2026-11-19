@@ -13,7 +13,7 @@ const directory = mkdtempSync(join(root, '.cli-test-'));
 after(() => rmSync(directory, { recursive: true, force: true }));
 const bundle = buildSync({
   stdin: {
-    contents: "export { commands } from './src/cli/commands.ts'; export { parseCommand } from './src/cli/parser.ts'; export { Session, resolveBackend } from './src/cli/host/supervisor.ts'; export { cmdRun } from './src/cli/host/session_commands.ts'; export { planSetup } from './src/cli/host/setup.ts';",
+    contents: "export { commands } from './src/cli/commands.ts'; export { parseCommand } from './src/cli/parser.ts'; export { Session, resolveBackend } from './src/cli/host/supervisor.ts'; export { cmdRun } from './src/cli/host/session_commands.ts'; export { formatReady } from './src/cli/output.ts'; export { planSetup } from './src/cli/host/setup.ts';",
     resolveDir: root,
   },
   bundle: true,
@@ -25,7 +25,7 @@ const bundle = buildSync({
 });
 const bundlePath = join(directory, 'parser.mjs');
 writeFileSync(bundlePath, bundle.outputFiles[0].contents);
-const { commands, parseCommand, Session, resolveBackend, cmdRun, planSetup } = await import(pathToFileURL(bundlePath).href);
+const { commands, parseCommand, Session, resolveBackend, cmdRun, formatReady, planSetup } = await import(pathToFileURL(bundlePath).href);
 
 test('every metadata example parses through the command parser', () => {
   for (const [name, command] of Object.entries(commands)) {
@@ -140,7 +140,7 @@ if (process.argv.includes('--help')) {
 }
 `, { mode: 0o755 });
   try {
-    for (const [bind, expected] of [[undefined, '127.0.0.1'], ['0.0.0.0', '0.0.0.0']]) {
+    for (const [bind, expected] of [[undefined, '127.0.0.1'], ['127.0.0.1', '127.0.0.1'], ['0.0.0.0', '0.0.0.0']]) {
       const probe = createServer();
       await new Promise((resolve) => probe.listen(0, '127.0.0.1', resolve));
       const port = probe.address().port;
@@ -163,6 +163,20 @@ if (process.argv.includes('--help')) {
   } finally {
     rmSync(engine, { force: true });
   }
+});
+
+test('startup output points a public direct TLS session at --bind when it stays on loopback', () => {
+  const base = { name: 'desk', viewer: 'https://desk.example.com/#token=abc', logs: '/tmp/desk', url: 'https://desk.example.com', port: 8080, public: true };
+  const tls = { 'tls-cert': 'cert.pem' };
+  const loopback = formatReady({ ...base, bind: '127.0.0.1' }, tls);
+  assert.ok(loopback.includes('127.0.0.1:8080; pass --bind <ADDR> to accept remote clients'));
+  assert.ok(!loopback.includes('TLS proxy'));
+  assert.ok(!formatReady({ ...base, bind: '0.0.0.0' }, tls).includes('pass --bind'));
+  const proxy = formatReady({ ...base, bind: '127.0.0.1' }, {});
+  assert.ok(proxy.includes('Forward https://desk.example.com to http://127.0.0.1:8080'));
+  assert.ok(!proxy.includes('pass --bind'));
+  assert.ok(!formatReady({ ...base, public: false, url: 'http://127.0.0.1:8080', bind: '127.0.0.1' }, {}).includes('Listening'));
+  assert.ok(formatReady({ ...base, public: false, url: 'http://0.0.0.0:8080', bind: '0.0.0.0' }, {}).includes('use a loopback port publish or SSH tunnel'));
 });
 
 test('--json failures write one JSON line to stderr and nothing to stdout', () => {

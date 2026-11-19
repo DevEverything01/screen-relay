@@ -31,7 +31,7 @@ screen-relay up -d --name demo --port 8084
 | `--display DISPLAY` | Attach to an existing display at its size: `:0` (X display) or `wayland-1` (Wayland socket) on Linux. Not supported on macOS or Windows. |
 | `--backend x11\|wayland\|macos\|windows` | On Linux, default `x11` when available, else `wayland`. Without a configured backend, a display without a colon selects Wayland. On macOS, `macos`. On Windows, `windows`. |
 | `--output NAME` | Wayland output name, a macOS display ID, or a Windows display name such as `'\\.\DISPLAY2'`. Default: first output, the main display on macOS, or the primary display on Windows. Not valid on X11. |
-| `--public URL` | HTTPS origin. Generates a token. Requires a TLS proxy unless direct TLS is configured. |
+| `--public URL` | HTTPS origin. Does not change the listen address. Generates a token. Requires a TLS proxy unless direct TLS is configured. |
 | `--tls-cert FILE`, `--tls-key FILE` | Serve TLS directly. Both are required. |
 | `--bind ADDR` | Listen address. Defaults to `127.0.0.1`, including with `--public`. Any other address generates a token. |
 | `--timeout S` | Engine and desktop readiness timeout in seconds. Default `30`; must be positive. |

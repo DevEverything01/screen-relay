@@ -33,7 +33,8 @@ screen-relay doctor [--config FILE]
   - `--backend x11|wayland|macos|windows`: on Linux, defaults to `x11` when the engine has it, else `wayland`. A `--display` without a colon, such as `wayland-1`, selects `wayland` on its own. On macOS the only backend is `macos`, and on Windows it is `windows`. `x11` and `wayland` fail there with `invalid_input`, and `macos` fails on Linux the same way.
   - `--output NAME|DISPLAY_ID`: capture this Wayland output by name, a macOS display by its CGDirectDisplayID, or a Windows display such as `'\\.\DISPLAY2'`. `up` fails on x11.
   - `--yes`: when setup is needed, set it up without asking. Without a terminal, `up` never prompts and fails with `missing_input` unless `--yes` is given.
-  - `--public HTTPS_URL`: advertises an HTTPS origin. Expects a TLS proxy unless `--tls-cert` is set.
+  - `--public HTTPS_URL`: advertises an HTTPS origin without changing the listen address. Expects a TLS proxy unless `--tls-cert` is set.
+  - `--bind ADDRESS`: listen address. Defaults to `127.0.0.1`, including with `--public`; another address generates a token.
   - Backend setup: [Wayland](wayland.md) and [macOS](macos.md).
 - `down` stops the session and everything it started. On Windows, apps started with `run` keep running. It is safe to repeat. JSON outcome: `stopped` or `unchanged`.
 - `logs` prints the last 200 lines of one component (`display`, `dbus`, `desktop`, `engine`, `apps`), or of every component log. `-f` follows; it cannot be combined with `--json`.
