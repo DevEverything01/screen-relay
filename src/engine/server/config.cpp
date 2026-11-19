@@ -1,5 +1,6 @@
 #include "config.hpp"
 #include "backend.hpp"
+#include <algorithm>
 #include <charconv>
 #include <filesystem>
 #include <fstream>
@@ -9,7 +10,9 @@
 #ifdef _WIN32
 #include <windows.h>
 #include <aclapi.h>
+#include <bcrypt.h>
 #else
+#include <sys/random.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #endif
@@ -150,6 +153,47 @@ bool authenticated(const Config& config, lws* wsi, bool websocket) {
     if (first != std::string::npos && secretEqual(protocol.substr(first, last-first+1), "bearer." + config.token)) return true;
   }
   return false;
+}
+bool secureRandom(unsigned char* out, size_t size) {
+#ifdef _WIN32
+  return BCRYPT_SUCCESS(BCryptGenRandom(nullptr, out, ULONG(size), BCRYPT_USE_SYSTEM_PREFERRED_RNG));
+#else
+  // getentropy fills at most 256 bytes per call.
+  for (size_t done = 0; done < size; done += 256) {
+    if (getentropy(out + done, std::min<size_t>(256, size - done)) != 0) return false;
+  }
+  return true;
+#endif
+}
+void Tickets::expire(Clock::time_point now) {
+  waiting.erase(std::remove_if(waiting.begin(), waiting.end(),
+                               [now](const auto& entry) { return now >= entry.second; }),
+                waiting.end());
+}
+void Tickets::add(const std::string& ticket, Clock::time_point now) {
+  expire(now);
+  if (waiting.size() >= capacity) waiting.erase(waiting.begin());
+  waiting.emplace_back(ticket, now + lifetime);
+}
+bool Tickets::redeem(const std::string& ticket, Clock::time_point now) {
+  expire(now);
+  if (ticket.empty()) return false;
+  for (auto entry = waiting.begin(); entry != waiting.end(); ++entry) {
+    if (secretEqual(entry->first, ticket)) { waiting.erase(entry); return true; }
+  }
+  return false;
+}
+std::string offeredTicket(lws* wsi) {
+  std::istringstream protocols(header(wsi, WSI_TOKEN_PROTOCOL));
+  std::string protocol;
+  while (std::getline(protocols, protocol, ',')) {
+    const auto first = protocol.find_first_not_of(" \t");
+    const auto last = protocol.find_last_not_of(" \t");
+    if (first == std::string::npos) continue;
+    protocol = protocol.substr(first, last-first+1);
+    if (protocol.rfind("ticket.", 0) == 0) return protocol.substr(7);
+  }
+  return "";
 }
 bool loopbackOrigin(const std::string& origin) {
   const auto scheme = origin.find("://");

@@ -47,6 +47,7 @@ struct Server {
     lws_context* context = nullptr;
   };
   Config config;
+  Tickets tickets;
   lws_context* context = nullptr;
   lws* viewer = nullptr;
   Screenshot screenshot;

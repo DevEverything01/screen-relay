@@ -4,6 +4,7 @@
 #include "server/wire.hpp"
 #include <libwebsockets.h>
 #include <cassert>
+#include <cstring>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -47,6 +48,26 @@ int main() {
   assert(inputLength("", length) == HTTP_STATUS_LENGTH_REQUIRED && inputLength("0", length) == HTTP_STATUS_BAD_REQUEST);
   assert(inputLength("17", length) == HTTP_STATUS_BAD_REQUEST && inputLength("-16", length) == HTTP_STATUS_BAD_REQUEST);
   assert(!inputLength("4096", length) && length == 4096 && inputLength("4112", length) == HTTP_STATUS_REQ_ENTITY_TOO_LARGE);
+  {
+    Tickets tickets;
+    const auto start = Tickets::Clock::now();
+    tickets.add("a", start);
+    assert(!tickets.redeem("b", start) && !tickets.redeem("", start));
+    assert(tickets.redeem("a", start) && !tickets.redeem("a", start));
+    tickets.add("late", start);
+    assert(!tickets.redeem("late", start + Tickets::lifetime));
+    for (size_t i = 0; i <= Tickets::capacity; ++i) tickets.add("t" + std::to_string(i), start);
+    assert(!tickets.redeem("t0", start) && tickets.redeem("t1", start));
+    assert(tickets.redeem("t" + std::to_string(Tickets::capacity), start));
+  }
+  {
+    unsigned char first[300] = {}, second[300] = {};
+    assert(secureRandom(first, sizeof(first)) && secureRandom(second, sizeof(second)));
+    assert(std::memcmp(first, second, sizeof(first)) != 0);
+    // The tail past getentropy's 256-byte limit is filled too.
+    const unsigned char zero[44] = {};
+    assert(std::memcmp(first + 256, zero, sizeof(zero)) != 0);
+  }
   bool control = false, viewOnly = false;
   assert(viewerTarget("/stream", control, viewOnly) && !control && !viewOnly);
   assert(viewerTarget("/stream?view=1", control, viewOnly) && !control && viewOnly);

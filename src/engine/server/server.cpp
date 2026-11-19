@@ -366,6 +366,21 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
         if (s->holdsInput()) return errorResponse(wsi, response, HTTP_STATUS_CONFLICT, "busy");
         response->input_length = 0; response->input_expected = length; return 0;
       }
+      if (path == "/tickets") {
+        if (lws_hdr_total_length(wsi, WSI_TOKEN_POST_URI) <= 0) {
+          return errorResponse(wsi, response, HTTP_STATUS_METHOD_NOT_ALLOWED, "method_not_allowed");
+        }
+        if (!localRequest(s->config, wsi)) return errorResponse(wsi, response, HTTP_STATUS_FORBIDDEN, "forbidden");
+        if (!authenticated(s->config, wsi)) return errorResponse(wsi, response, HTTP_STATUS_UNAUTHORIZED, "unauthorized");
+        unsigned char bytes[32];
+        if (!secureRandom(bytes, sizeof(bytes))) return errorResponse(wsi, response, HTTP_STATUS_INTERNAL_SERVER_ERROR, "random_failed");
+        static const char digits[] = "0123456789abcdef";
+        std::string ticket;
+        for (const unsigned char byte : bytes) { ticket += digits[byte >> 4]; ticket += digits[byte & 15]; }
+        s->tickets.add(ticket, Tickets::Clock::now());
+        return jsonResponse(wsi, response, HTTP_STATUS_OK, "{\"ticket\":\"" + ticket + "\",\"expires_in\":" +
+                            std::to_string(Tickets::lifetime.count()) + "}");
+      }
       if (path == "/metrics" || path == "/capabilities" || path == "/screenshot.png") {
         if (lws_hdr_total_length(wsi, WSI_TOKEN_GET_URI) <= 0) {
           return errorResponse(wsi, response, HTTP_STATUS_METHOD_NOT_ALLOWED, "method_not_allowed");
@@ -388,7 +403,7 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
             "\"screenshot\":\"/screenshot.png\",\"control\":\"/control\",\"wayland\":" +
             (backend == "wayland" ? "true" : "false") +
             ",\"max_input_pending\":32,\"cursor\":" + (s->capture.stats().cursor_supported ? "true" : "false") +
-            ",\"input_endpoint\":\"/input\",\"max_input_batch\":" + std::to_string(max_input_batch) +
+            ",\"input_endpoint\":\"/input\",\"tickets\":\"/tickets\",\"max_input_batch\":" + std::to_string(max_input_batch) +
             ",\"audio\":false,\"clipboard\":false,\"resize\":false,\"ime\":false}";
         return jsonResponse(wsi, response, HTTP_STATUS_OK, json);
       }
@@ -458,8 +473,10 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
       if (lws_hdr_copy(wsi, args, sizeof(args), WSI_TOKEN_HTTP_URI_ARGS) > 0) { target += '?'; target += args; }
       bool control = false, viewOnly = false;
       if (!viewerTarget(target, control, viewOnly)) return 1;
-      if (!localRequest(s->config, wsi) || !authenticated(s->config, wsi, true) ||
-          s->viewer || s->nextGeneration == UINT32_MAX) return 1;
+      if (!localRequest(s->config, wsi) || s->viewer || s->nextGeneration == UINT32_MAX) return 1;
+      // Check a ticket only for a connection that would open, so a refused
+      // one doesn't use it up.
+      if (!authenticated(s->config, wsi, true) && !s->tickets.redeem(offeredTicket(wsi), Tickets::Clock::now())) return 1;
       auto* response = static_cast<HttpResponse*>(user);
       response->control = control; response->view_only = viewOnly;
       return 0;
