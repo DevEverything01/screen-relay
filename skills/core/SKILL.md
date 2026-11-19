@@ -151,7 +151,7 @@ Exit codes: [CLI exit codes](references/cli.md#exit-codes).
 
 Only one controller sends input at a time. A viewer claims idle input when it opens. If you hold an SDK control session, the viewer opens view-only. Choose **Release control** in a viewer that owns input before sending input with the CLI. A second controller gets `busy` with the message `Another controller holds control of the desktop.`, and nothing is applied. Screenshots, `status` and `capabilities` keep working. Do not retry in a loop. Wait for the other controller to release control or close, then retry once.
 
-A person can open the viewer while you hold an SDK control session, and choose **Take control** at any time. That ends your session with `control_taken`, and every later call on it returns the same reason. Treat it as a handover: stop sending input, and connect again only after the person releases control.
+A person can open the viewer while you hold an SDK control session, and choose **Take control** at any time. Pending and future input and future `session.screenshot()` calls fail with `control_taken`. `session.capabilities()` and `session.status()` still use HTTP. Connect again only after the person releases control.
 
 ## Config
 
