@@ -1,6 +1,7 @@
 let initialized = false;
 let started = false;
 let activeToken;
+let activeScope;
 let pendingStream;
 
 function post(data) {
@@ -18,11 +19,13 @@ function show(stream) {
     if (url.origin !== relayOrigin || url.username || url.password || url.search || url.hash) {
       throw new Error("Unexpected screen-relay origin.");
     }
-    if (stream.token && !/^[0-9a-f]{64}$/.test(stream.token)) {
+    if (!/^[0-9a-f]{64}$/.test(stream.token ?? "")) {
       throw new Error("Invalid screen-relay token.");
     }
+    if (stream.scope !== "watch" && stream.scope !== "control") throw new Error("Invalid viewer scope.");
     if (!window.isSecureContext) throw new Error("The MCP App needs a secure browser context.");
     if (started) {
+      if (activeScope !== stream.scope) throw new Error("Reopen the viewer to change its permissions.");
       if (activeToken === stream.token) return;
       document.querySelector("#access-token").value = stream.token ?? "";
       document.querySelector("#connection-panel").dispatchEvent(new Event("submit", { cancelable: true }));
@@ -31,7 +34,8 @@ function show(stream) {
     }
     started = true;
     activeToken = stream.token;
-    startViewer({ url: url.origin, token: stream.token });
+    activeScope = stream.scope;
+    startViewer({ url: url.origin, token: stream.token, scope: stream.scope });
     size();
   } catch (error) {
     document.querySelector("#status").textContent = error.message;

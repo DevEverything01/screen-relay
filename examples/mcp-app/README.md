@@ -46,13 +46,13 @@ npm install && npm run start
 
 Open `http://localhost:8080`, choose `open_desktop`, and call it with the viewer URL. Use `desktop_screenshot` afterwards to capture the same session.
 
-Configure `SCREEN_RELAY_TOKEN` in the MCP server environment, then omit the `token` tool argument. The result carries the token only in `_meta`, not model-visible content. Supplying a token as a tool argument exposes it to the conversation.
+Set `SCREEN_RELAY_TOKEN` in the MCP server environment. The server uses it to request a one-hour watch grant and sends only the grant to the viewer in `_meta`, outside model-visible content. To allow input from the viewer, set `SCREEN_RELAY_VIEWER_SCOPE=control` before starting the MCP server. Neither grant enables clipboard access. The screenshot and automation tools keep their existing server-side permissions.
 
 ## Claude rendering
 
 The tested Claude host blocked a nested iframe, despite the resource declaring the screen-relay origin in `frameDomains`. The resource therefore declares the HTTPS and WSS origins in `connectDomains` and renders the viewer inline.
 
-The adapter changes the built viewer in memory: it takes the token from the tool result, waits for MCP initialization, and targets the screen-relay origin explicitly. It retains the viewer's trusted-page check. Neither `viewer/` nor `src/` is changed. If the viewer bundle changes enough that the adapter cannot identify its startup code, resource loading fails with an error.
+The adapter changes the built viewer in memory: it takes the scoped grant from the tool result, waits for MCP initialization, and targets the screen-relay origin explicitly. It retains the viewer's trusted-page check. Neither `viewer/` nor `src/` is changed. If the viewer bundle changes enough that the adapter cannot identify its startup code, resource loading fails with an error.
 
 ## Desktop and browser tools
 
@@ -90,7 +90,7 @@ From this directory, with the server environment set:
 node check.mjs
 ```
 
-Alternatively, `SCREEN_RELAY_TOKEN_FILE` can point to the sandbox session's token file for the check. The check reads the resource through MCP, checks that credentials stay out of model-visible results, exercises both UI initialization orders, captures a screenshot, and tests a WebSocket upgrade with a foreign HTTPS Origin. It does not decode video or drive a browser.
+Alternatively, `SCREEN_RELAY_TOKEN_FILE` can point to the sandbox session's token file for the check. The check reads the resource through MCP, checks that credentials stay out of model-visible results, exercises both UI initialization orders, captures a screenshot, and tests a WebSocket upgrade with the scoped credential and the configured embed origin. It does not decode video or drive a browser.
 
 The check passed against a Vercel Sandbox with a 1280×720 screenshot, including after a fresh screen-relay build. In Claude Desktop's Code chat, the resource rendered inline, reported `Live · click to control`, and displayed the sandbox desktop. Its generated frame policy included both configured connection origins. Codex rendered the same resource inline at 1280×720.
 
