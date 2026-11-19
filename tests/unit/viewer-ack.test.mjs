@@ -856,22 +856,20 @@ test('a token link without a scope opens the owner stream and reads capabilities
 });
 
 test('a watch link only opens the view-only stream, sends no HTTP request, and cannot take control', () => {
-  {
-    const { app, requests, action } = linkedViewer(fragment);
-    assert.equal(app.sockets[0].url, 'ws://localhost/stream?view=1');
-    assert.deepEqual(app.sockets[0].protocols, ['nsl1', `bearer.${'a'.repeat(64)}`]);
-    assert.equal(action('control').hidden, true);
-    runInContext('relayViewer.setViewOnly(false)', app.context);
-    assert.equal(app.sockets.length, 1);
-    app.sockets[0].onopen();
-    app.frame(1);
-    key(app, 'keydown', 'KeyA');
-    assert.deepEqual(app.sockets[0].inputs, []);
-    app.sockets[0].onclose({ code: 1006 });
-    runInContext('relayViewer.connect()', app.context);
-    assert.equal(app.sockets.at(-1).url, 'ws://localhost/stream?view=1');
-    assert.deepEqual(requests, []);
-  }
+  const { app, requests, action } = linkedViewer('&scope=watch');
+  assert.equal(app.sockets[0].url, 'ws://localhost/stream?view=1');
+  assert.deepEqual(app.sockets[0].protocols, ['nsl1', `bearer.${'a'.repeat(64)}`]);
+  assert.equal(action('control').hidden, true);
+  runInContext('relayViewer.setViewOnly(false)', app.context);
+  assert.equal(app.sockets.length, 1);
+  app.sockets[0].onopen();
+  app.frame(1);
+  key(app, 'keydown', 'KeyA');
+  assert.deepEqual(app.sockets[0].inputs, []);
+  app.sockets[0].onclose({ code: 1006 });
+  runInContext('relayViewer.connect()', app.context);
+  assert.equal(app.sockets.at(-1).url, 'ws://localhost/stream?view=1');
+  assert.deepEqual(requests, []);
 });
 
 test('a control link claims, releases, and takes input without clipboard paths or HTTP requests', () => {
