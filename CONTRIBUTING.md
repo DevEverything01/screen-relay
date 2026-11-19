@@ -1,6 +1,6 @@
 # Contributing to screen-relay
 
-This file is for people changing screen-relay's source. For installing and using screen-relay, read the [documentation](https://screen-relay.dev/docs). The wire format is documented there too, under "API and protocol".
+This guide is for contributors changing screen-relay's source. For installing and using screen-relay, read the [documentation](https://screen-relay.dev/docs). The wire format is documented there too, under "API and protocol".
 
 For the wire format, see [screen-relay wire protocol](PROTOCOL.md).
 

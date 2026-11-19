@@ -4,7 +4,7 @@ Read this file for every writing task in the screen-relay repository. It adapts 
 
 ## Know who reads what
 
-The docs site in `docs/content/docs/` is for people who use screen-relay:
+The docs site in `docs/content/docs/` is for humans and AI agents who use screen-relay. Its human readers include:
 
 - Operators who start a desktop on a Linux VM, sandbox, or container and open it in a browser.
 - Agent builders who control that desktop from the `screen-relay` CLI, the Node SDK, or the HTTP and WebSocket API.
