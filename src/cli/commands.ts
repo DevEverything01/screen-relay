@@ -1,4 +1,4 @@
-import { cmdClick, cmdInput, cmdKey, cmdMove, cmdScreenshot, cmdScroll, cmdType } from './client.js';
+import { cmdClick, cmdClipboard, cmdInput, cmdKey, cmdMove, cmdScreenshot, cmdScroll, cmdType } from './client.js';
 import { BACKENDS } from './config.js';
 import { cmdDoctor } from './host/doctor.js';
 import { cmdDown, cmdLogs, cmdRun, cmdStatus, cmdUp, COMPONENTS } from './host/session_commands.js';
@@ -125,6 +125,23 @@ export const commands: Record<string, Command> = {
   },
   doctor: { summary: 'Check this machine and show fixes', group: 'Machine', runsOn: 'vm', arguments: [], options: [configOption], examples: example('Check host dependencies', 'screen-relay doctor'), notes: ['On Linux, checks the x11 backend unless SCREEN_RELAY_BACKEND or the config backend key says otherwise; run SCREEN_RELAY_BACKEND=wayland screen-relay doctor for Wayland. On macOS, checks the macos backend. On Windows, checks the windows backend, MSYS2 and the desktop session.'], resultSchema: { checks: 'array', summary: 'object' }, run: cmdDoctor },
   screenshot: { summary: 'Save a PNG of the screen', group: 'Control', runsOn: 'client', arguments: [{ name: 'file', type: 'string', valueHint: 'file', summary: 'Destination path, or - for PNG stdout', default: 'screen.png' }], options: client, examples: example('Save the current screen', 'screen-relay screenshot screen.png'), notes: ['Use - to write PNG bytes to stdout. This cannot be combined with --json.'], resultSchema: { screenshot: { path: 'string', width: 'number', height: 'number', bytes: 'number' }, outcome: 'saved' }, validate: (args) => args.file === '-' && args.json ? 'PNG stdout cannot be combined with --json' : undefined, run: cmdScreenshot },
+  clipboard: {
+    summary: 'Read or replace the desktop clipboard', group: 'Control', runsOn: 'client', usageTail: '<get|set> [text]',
+    arguments: [
+      { name: 'action', type: 'string', valueHint: '<get|set>', summary: 'Read or replace the clipboard', default: 'get', acceptedValues: ['get', 'set'] },
+      { name: 'text', type: 'string', valueHint: '[text]', brackets: false, summary: 'Text to set' },
+    ],
+    options: [...client, stdin],
+    examples: [
+      { description: 'Read the clipboard', command: 'screen-relay clipboard get' },
+      { description: 'Replace the clipboard', command: 'screen-relay clipboard set "hello"' },
+      { description: 'Replace it from a pipe', command: 'screen-relay clipboard set --stdin' },
+    ],
+    notes: ['Needs a backend with a desktop clipboard; the x11 backend has one.', 'Only one /stream connection is allowed, so this fails while a viewer is attached.'],
+    resultSchema: { clipboard: { text: 'string', bytes: 'number' }, outcome: ['read', 'set'] },
+    validate: (args) => args.action === 'set' ? textSource('text')(args) : args.text === undefined ? undefined : 'Give the text only with set',
+    run: cmdClipboard,
+  },
   click: { summary: 'Click at screen coordinates', group: 'Control', runsOn: 'client', arguments: coordinates, options: [...client, { name: 'button', type: 'string', valueHint: '<BUTTON>', summary: 'Select the mouse button', default: 'left', acceptedValues: ['left', 'middle', 'right'] }], examples: example('Click the center', 'screen-relay click 0.5 0.5'), notes: coordinateNotes, resultSchema: inputResult, run: cmdClick },
   move: { summary: 'Move the pointer to screen coordinates', group: 'Control', runsOn: 'client', arguments: coordinates, options: client, examples: example('Move to the center', 'screen-relay move 0.5 0.5'), notes: coordinateNotes, resultSchema: inputResult, run: cmdMove },
   scroll: { summary: 'Scroll at screen coordinates', group: 'Control', runsOn: 'client', arguments: coordinates, options: [...client, ...['dx', 'dy'].map((name): Parameter => ({ name, type: 'number', valueHint: '<NUMBER>', summary: `${name === 'dx' ? 'Horizontal' : 'Vertical'} wheel notches`, default: 0, validate: (value) => Number.isInteger(value) }))], examples: example('Scroll down at the center', 'screen-relay scroll 0.5 0.5 --dy 3'), notes: [...coordinateNotes, 'Positive dy scrolls down; positive dx scrolls right.'], resultSchema: inputResult, validate: (args) => !args.dx && !args.dy ? 'Give a nonzero --dx or --dy' : undefined, run: cmdScroll },

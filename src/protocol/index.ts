@@ -11,8 +11,9 @@ export const MAX_INPUT_PENDING = 32;
 export const MAX_WIDTH = 65535;
 export const MAX_HEIGHT = 65535;
 export const MAX_BYTES_IN_FLIGHT = 8388608;
+export const MAX_CLIPBOARD_BYTES = 1048576;
 export const SUBPROTOCOL = 'nsl1';
-export const MESSAGE_TYPES = { frame: 1, ack: 2, input: 3, controlReady: 4, inputResponse: 5, cursor: 6 } as const;
+export const MESSAGE_TYPES = { frame: 1, ack: 2, input: 3, controlReady: 4, inputResponse: 5, cursor: 6, clipboard: 7, clipboardSet: 8 } as const;
 export const INPUT_TYPES = { keyDown: 1, keyUp: 2, pointerMove: 3, buttonDown: 4, buttonUp: 5, wheel: 6, releaseAll: 7, text: 8 } as const;
 
 export type InputEvent = (
@@ -92,7 +93,7 @@ export function batches(groups: InputEvent[][], limit = MAX_INPUT_BATCH): InputE
 }
 
 export function header(type: number, generation: number, sequence: number, size: number): Uint8Array {
-  integer(type, 1, 6, 'message type');
+  integer(type, 1, 8, 'message type');
   integer(generation, 1, 0xffffffff, 'generation');
   integer(sequence, 0, 0xffffffff, 'sequence');
   integer(size, 0, 8388620, 'payload length');
@@ -114,6 +115,16 @@ export function encodeInput(event: InputEvent, generation: number, sequence: num
 }
 
 /** Builds an ACK carrying how long the frame waited inside the viewer, in microseconds, saturating at 2^32 - 1. Without a wait it is the 20-byte ACK that engines before the wait field require. */
+/** Builds a clipboard update: the desktop clipboard text, as UTF-8. */
+export function encodeClipboard(text: string, generation: number): Uint8Array {
+  if (typeof text !== 'string') throw new RelayError('invalid_input', 'Clipboard text must be a string');
+  const payload = new TextEncoder().encode(text);
+  if (payload.length > MAX_CLIPBOARD_BYTES) throw new RelayError('invalid_input', 'Clipboard text is too large');
+  const bytes = header(MESSAGE_TYPES.clipboardSet, generation, 0, payload.length);
+  bytes.set(payload, HEADER_SIZE);
+  return bytes;
+}
+
 export function encodeAck(generation: number, sequence: number, viewerWaitMs?: number): Uint8Array {
   if (viewerWaitMs === undefined) return header(MESSAGE_TYPES.ack, generation, sequence, 0);
   const bytes = header(MESSAGE_TYPES.ack, generation, sequence, 4);
@@ -129,7 +140,7 @@ export function parseHeader(bytes: Uint8Array | ArrayBuffer): Header {
   if (data.byteLength < HEADER_SIZE || data.byteLength > HEADER_SIZE + 12 + MAX_BYTES_IN_FLIGHT) throw new RelayError('protocol_error', 'Invalid message length');
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
   const type = view.getUint8(5), flags = view.getUint16(6), generation = view.getUint32(8);
-  if (view.getUint32(0) !== MAGIC || view.getUint8(4) !== VERSION || type < 1 || type > 6 ||
+  if (view.getUint32(0) !== MAGIC || view.getUint8(4) !== VERSION || type < 1 || type > 8 ||
       flags > (type === MESSAGE_TYPES.frame ? 1 : 0) || !generation || view.getUint32(16) !== data.byteLength - HEADER_SIZE) {
     throw new RelayError('protocol_error', 'Invalid message envelope');
   }
@@ -139,6 +150,7 @@ export function parseHeader(bytes: Uint8Array | ArrayBuffer): Header {
 export type Message =
   | { type: 'frame'; generation: number; sequence: number; keyframe: boolean; width: number; height: number; timestamp: number; data: Uint8Array }
   | { type: 'cursor'; generation: number; width: number; height: number; hotX: number; hotY: number; pixels: Uint8ClampedArray }
+  | { type: 'clipboard'; generation: number; text: string }
   | { type: 'controlReady'; generation: number; width: number; height: number }
   | { type: 'inputResponse'; generation: number; sequence: number; status: number };
 
@@ -160,6 +172,14 @@ export function parseMessage(bytes: Uint8Array | ArrayBuffer): Message {
     if (width > 256 || height > 256 || size !== 8 + width * height * 4 ||
         (width && height ? hotX >= width || hotY >= height : width || height || hotX || hotY)) throw invalid('cursor image');
     return { type: 'cursor', generation, width, height, hotX, hotY, pixels: new Uint8ClampedArray(data.buffer, data.byteOffset + HEADER_SIZE + 8, size - 8) };
+  }
+  if (type === MESSAGE_TYPES.clipboard) {
+    if (sequence || size > MAX_CLIPBOARD_BYTES) throw invalid('clipboard envelope');
+    try {
+      return { type: 'clipboard', generation, text: new TextDecoder('utf-8', { fatal: true }).decode(data.subarray(HEADER_SIZE)) };
+    } catch {
+      throw invalid('clipboard text');
+    }
   }
   if (type === MESSAGE_TYPES.controlReady) {
     if (size !== 4 || sequence || !view.getUint16(0) || !view.getUint16(2)) throw invalid('ready message');

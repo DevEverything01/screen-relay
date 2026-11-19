@@ -1,5 +1,5 @@
 import {
-  HID_KEYS, MAX_BYTES_IN_FLIGHT, encodeAck, encodeInput, h264Codec, isLoopback, parseMessage, socketTarget, validToken,
+  HID_KEYS, MAX_BYTES_IN_FLIGHT, encodeAck, encodeClipboard, encodeInput, h264Codec, isLoopback, parseMessage, socketTarget, validToken,
   type InputEvent, type Message,
 } from '../src/protocol/index.js';
 
@@ -58,6 +58,7 @@ const HOLD_DECAY = 0.05;
 const CLOCK_JUMP_MS = 500;
 type Sample = { time: number; offset: number; late: number };
 let samples: Sample[] = [], lows: Sample[] = [], holdMs = 0;
+let remoteClipboard = '';
 let buttons = 0, modifiers = 0, x = 0, y = 0, viewOnly = true, capsLock = false,
   metaAsCtrl = stored('relay.metaCtrl') === null ? macos() : stored('relay.metaCtrl') === '1';
 const pending = new Map(), decoded: any[] = [], held = new Set<number>(), latched = new Map<number, Element>();
@@ -322,6 +323,7 @@ function connect() {
       if (!(e.data instanceof ArrayBuffer)) throw new Error('Invalid frame length');
       const message = parseMessage(e.data);
       if (message.type === 'cursor') { receiveCursor(message); return; }
+      if (message.type === 'clipboard') { remoteClipboard = message.text; return; }
       if (message.type !== 'frame') throw new Error('Invalid frame header');
       const { generation: gen, sequence: seq, keyframe, width, height, timestamp, data } = message;
       if (generation && gen < generation) throw new Error('Stale generation');
@@ -660,7 +662,7 @@ const toolbar = document.querySelector('#toolbar')!,
   toggle = document.querySelector('#toolbar-toggle')!,
   actions = document.querySelector('#toolbar-actions')!,
   dot = document.querySelector('#dot')!,
-  panels: Record<string, HTMLElement> = { keys: document.querySelector('#keys-panel')!, connection: document.querySelector('#connection-panel') as HTMLElement };
+  panels: Record<string, HTMLElement> = { keys: document.querySelector('#keys-panel')!, connection: document.querySelector('#connection-panel') as HTMLElement, clipboard: document.querySelector('#clipboard-panel') as HTMLElement };
 panels.scale = document.querySelector('#scale-panel') as HTMLElement;
 function showPanel(name: string | null, open = panels[name!]?.hidden) {
   for (const [key, panel] of Object.entries(panels)) {
@@ -703,6 +705,7 @@ const toolbarActions: Record<string, (button: Element) => void> = {
     .catch(() => {}),
   scale: () => showPanel('scale'),
   keys: () => showPanel('keys'),
+  clipboard: () => showPanel('clipboard'),
   connection: () => showPanel('connection'),
   screenshot: () => canvas.toBlob((blob) => {
     if (!blob) return;
@@ -762,6 +765,28 @@ panels.keys.addEventListener('click', (e) => {
   if (codes.some((code) => code < 224)) releaseLatched();
   showPanel(null);
   canvas.focus();
+});
+function clipboardStatus(message: string) {
+  const note = document.querySelector('#clipboard-note');
+  if (note) note.textContent = message;
+}
+panels.clipboard.addEventListener('click', async (e) => {
+  const action = (e.target as Element).closest('[data-clipboard]') as HTMLElement | null;
+  if (!action) return;
+  const which = action.dataset.clipboard;
+  if (which === 'download') {
+    if (!remoteClipboard) return clipboardStatus('The desktop clipboard is empty');
+    try { await navigator.clipboard.writeText(remoteClipboard); clipboardStatus(`Copied ${remoteClipboard.length} characters`); }
+    catch { clipboardStatus('The browser refused clipboard write'); }
+    return;
+  }
+  if (!navigator.clipboard?.readText) return clipboardStatus('This browser cannot read the clipboard');
+  try {
+    const text = await navigator.clipboard.readText();
+    if (!socket || socket.readyState !== WebSocket.OPEN) return clipboardStatus('Not connected');
+    socket.send(encodeClipboard(text, generation));
+    clipboardStatus(`Sent ${text.length} characters`);
+  } catch { clipboardStatus('The browser refused clipboard read'); }
 });
 panels.connection.addEventListener('submit', (e) => {
   e.preventDefault();

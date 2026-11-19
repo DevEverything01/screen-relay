@@ -1,5 +1,11 @@
 # screen-relay
 
+## Unreleased
+
+### New Features
+
+- Added **clipboard sharing** on the X11 backend: message type 7 carries the desktop clipboard to `/stream`, type 8 replaces it, `screen-relay clipboard get|set` reads and writes it from the shell, and the viewer has a clipboard panel with copy and send buttons
+
 ## 0.1.2
 
 <!-- release:start -->

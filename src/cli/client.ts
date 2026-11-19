@@ -150,6 +150,30 @@ export async function cmdScreenshot(args: Args): Promise<number> {
   return 0;
 }
 
+export async function cmdClipboard(args: Args): Promise<number> {
+  const action = String(args.action ?? 'get');
+  const target = resolveTarget(args);
+  const capabilities = await withClient(args, (client) => client.capabilities(), target);
+  if (!capabilities.clipboard) {
+    throw new Failure('unsupported_platform', 'This engine has no desktop clipboard',
+      'The backend does not expose a clipboard; the x11 backend does.');
+  }
+  if (action === 'get') {
+    const text = await withClient(args, (client) => client.clipboard(), target);
+    if (args.json) {
+      emit(args, { clipboard: { text, bytes: Buffer.byteLength(text) }, outcome: 'read' }, '', {});
+      return 0;
+    }
+    process.stdout.write(text);
+    return 0;
+  }
+  const text = textArgument(args, args.text);
+  await withClient(args, (client) => client.setClipboard(text), target);
+  emit(args, { clipboard: { bytes: Buffer.byteLength(text) }, outcome: 'set' },
+    `Set the clipboard to ${size(Buffer.byteLength(text))}`, {});
+  return 0;
+}
+
 export async function cmdClick(args: Args): Promise<number> {
   const target = resolveTarget(args);
   const button = String(args.button) as 'left' | 'middle' | 'right';

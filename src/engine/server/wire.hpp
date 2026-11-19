@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/capture.hpp"
+#include "core/clipboard.hpp"
 #include "core/input.hpp"
 #include <cstddef>
 #include <cstdint>
@@ -24,6 +25,8 @@ bool viewerTarget(const std::string& target, bool& control, bool& viewOnly);
 bool frameMessage(std::vector<uint8_t>& out, size_t pre, uint32_t generation, uint32_t lastSequence, const EncodedFrame& frame,
                   uint16_t width, uint16_t height);
 bool cursorMessage(std::vector<uint8_t>& out, size_t pre, uint32_t generation, const CursorImage& cursor);
+/** The desktop clipboard text; false when it is larger than max_clipboard_bytes. */
+bool clipboardMessage(std::vector<uint8_t>& out, size_t pre, uint32_t generation, const std::string& text);
 void controlReady(std::vector<uint8_t>& out, size_t pre, uint32_t generation, uint16_t width, uint16_t height);
 void inputReply(std::vector<uint8_t>& out, size_t pre, uint32_t generation, uint32_t sequence, InputStatus status);
 }  // namespace relay

@@ -58,6 +58,13 @@ bool cursorMessage(std::vector<uint8_t>& out, size_t pre, uint32_t generation, c
   std::copy(c.rgba.begin(), c.rgba.end(), p+28);
   return true;
 }
+bool clipboardMessage(std::vector<uint8_t>& out, size_t pre, uint32_t generation, const std::string& text) {
+  if (text.size() > max_clipboard_bytes) return false;
+  auto* p = start(out, pre, 20 + text.size(), 7, generation);
+  put(p+16, text.size(), 4);
+  std::memcpy(p+20, text.data(), text.size());
+  return true;
+}
 void controlReady(std::vector<uint8_t>& out, size_t pre, uint32_t generation, uint16_t width, uint16_t height) {
   auto* p = start(out, pre, 24, 4, generation);
   put(p+16, 4, 4); put(p+20, width, 2); put(p+22, height, 2);

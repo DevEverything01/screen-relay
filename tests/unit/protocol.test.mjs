@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { encodeInputRecord, encodeAck, encodeInput, encodeInputBatch, comboEvents, textEvents, batches, baseUrl, parseHeader, parseMessage, header, RelayError } from '../../dist/protocol/index.js';
+import { encodeInputRecord, encodeAck, encodeInput, encodeInputBatch, encodeClipboard, comboEvents, textEvents, batches, baseUrl, parseHeader, parseMessage, header, RelayError } from '../../dist/protocol/index.js';
 const hex = bytes => Buffer.from(bytes).toString('hex');
 
 test('input records and WebSocket envelope match golden bytes', () => {
@@ -106,4 +106,26 @@ test('ACK carries the viewer wait as saturating big-endian microseconds', () => 
   assert.deepEqual(bytes(-3), [0, 0, 0, 4, 0, 0, 0, 0]);
   assert.deepEqual(bytes(NaN), [0, 0, 0, 4, 0, 0, 0, 0]);
   assert.deepEqual(Array.from(encodeAck(1, 7)).slice(16), [0, 0, 0, 0]);
+});
+
+test('clipboard messages carry UTF-8 text both ways', () => {
+  const text = 'hello 中文 ✓';
+  const set = encodeClipboard(text, 7);
+  assert.equal(set[5], 8);
+  assert.equal(new DataView(set.buffer, set.byteOffset).getUint32(16), Buffer.byteLength(text));
+
+  const update = header(7, 3, 0, Buffer.byteLength(text));
+  update.set(Buffer.from(text, 'utf8'), 20);
+  const parsed = parseMessage(update.buffer.slice(update.byteOffset, update.byteOffset + update.byteLength));
+  assert.equal(parsed.type, 'clipboard');
+  assert.equal(parsed.text, text);
+  assert.equal(parsed.generation, 3);
+
+  const empty = header(7, 1, 0, 0);
+  assert.equal(parseMessage(empty.buffer.slice(empty.byteOffset, empty.byteOffset + empty.byteLength)).text, '');
+
+  assert.throws(() => encodeClipboard('x'.repeat(1048577), 1), RelayError);
+  const stale = header(7, 1, 5, 1);
+  stale.set(0x41, 20);
+  assert.throws(() => parseMessage(stale.buffer.slice(stale.byteOffset, stale.byteOffset + stale.byteLength)), RelayError);
 });

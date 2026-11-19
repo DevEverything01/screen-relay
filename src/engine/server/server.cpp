@@ -82,7 +82,7 @@ void Server::release() { if (input) input->releaseAll(); }
 void Server::end() {
   if (holdsInput()) { release(); input->cancel(); }
   uint32_t old;
-  { std::lock_guard<std::mutex> lock(mutex); old = generation; generation = 0; pending.clear(); pending_cursor.reset(); flow.reset(); failed = false; }
+  { std::lock_guard<std::mutex> lock(mutex); old = generation; generation = 0; pending.clear(); pending_cursor.reset(); pending_clipboard.reset(); flow.reset(); failed = false; }
   last_write_cursor = false;
   buffered_stream_bytes = 0; stream_notsent_lowat = 0; flow_timer_due_us = 0;
   if (old) capture.endSession(old);
@@ -110,6 +110,12 @@ bool Server::message() {
     }
     if (accepted) { capture.acknowledge(gen, seq); updateFlow(); }
     return true;
+  }
+  if (b[5] == 8) {
+    // The clipboard is session-wide, so any generation may set it.
+    if (seq || !clipboard || !clipboard->supported() ||
+        b.size() - 20 > max_clipboard_bytes) return false;
+    return clipboard->write(std::string(reinterpret_cast<const char*>(b.data() + 20), b.size() - 20));
   }
   if (b[5] != 3 || b.size() != 36 || seq || gen != generation) return false;
   if (viewOnly) return true;
@@ -237,10 +243,13 @@ int Server::write(lws* wsi) {
   updateFlow();
   std::optional<EncodedFrame> frame;
   std::optional<CursorImage> cursor;
+  std::optional<std::string> clipboard_text;
   { std::lock_guard<std::mutex> lock(mutex);
     if (failed) return -1;
     // Start with video to establish the generation; then share writes fairly.
-    if (lastSequence && pending_cursor && (!last_write_cursor || pending.empty())) {
+    if (pending_clipboard) {
+      clipboard_text = std::move(pending_clipboard); pending_clipboard.reset();
+    } else if (lastSequence && pending_cursor && (!last_write_cursor || pending.empty())) {
       cursor = std::move(pending_cursor); pending_cursor.reset();
     } else {
       if (pending.empty()) return 0;
@@ -248,6 +257,16 @@ int Server::write(lws* wsi) {
     }
   }
   std::vector<uint8_t> wire;
+  if (clipboard_text) {
+    if (!clipboardMessage(wire, LWS_PRE, generation, *clipboard_text)) return -1;
+    const size_t size = wire.size() - LWS_PRE;
+    if (lws_write(wsi, wire.data() + LWS_PRE, size, LWS_WRITE_BINARY) != int(size)) return -1;
+    buffered_stream_bytes = lws_partial_buffered(wsi) ? size : 0;
+    { std::lock_guard<std::mutex> lock(mutex);
+      if (!pending.empty() || pending_cursor || pending_clipboard) lws_callback_on_writable(wsi);
+    }
+    return 0;
+  }
   if (cursor) {
     if (!cursorMessage(wire, LWS_PRE, generation, *cursor)) return -1;
     const size_t size = wire.size() - LWS_PRE;
@@ -404,7 +423,7 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
             (backend == "wayland" ? "true" : "false") +
             ",\"max_input_pending\":32,\"cursor\":" + (s->capture.stats().cursor_supported ? "true" : "false") +
             ",\"input_endpoint\":\"/input\",\"tickets\":\"/tickets\",\"max_input_batch\":" + std::to_string(max_input_batch) +
-            ",\"audio\":false,\"clipboard\":false,\"resize\":false,\"ime\":false}";
+            ",\"audio\":false,\"clipboard\":" + std::string(s->clipboard && s->clipboard->supported() ? "true" : "false") + ",\"resize\":false,\"ime\":false}";
         return jsonResponse(wsi, response, HTTP_STATUS_OK, json);
       }
       std::string file; const char* mime = nullptr; const char* headers = nullptr; int headerCount = 0;
@@ -492,14 +511,18 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
       s->last_write_cursor = false;
       s->lastSequence=0; s->received.clear();
       if (!s->viewOnly) s->input->resetLocks();
+      if (!s->controller && s->clipboard && s->clipboard->supported()) {
+        std::lock_guard<std::mutex> lock(s->mutex);
+        s->pending_clipboard = s->clipboard->current();
+      }
       if (s->controller) { s->control_ready = true; lws_callback_on_writable(wsi); }
       else { s->capture.beginSession(s->generation); s->updateFlow(); }
       return 0;
     }
     case LWS_CALLBACK_RECEIVE:
-      if (s->viewer != wsi || !lws_frame_is_binary(wsi) || len > 65536-s->received.size()) return -1;
+      if (s->viewer != wsi || !lws_frame_is_binary(wsi) || len > 20+max_clipboard_bytes-s->received.size()) return -1;
       s->received.insert(s->received.end(), static_cast<uint8_t*>(in), static_cast<uint8_t*>(in)+len);
-      if (s->received.size() > 36) return -1;
+      if (s->received.size() > 20+max_clipboard_bytes) return -1;
       if (lws_is_final_fragment(wsi) && !lws_remaining_packet_payload(wsi)) {
         if (!s->message()) return -1;
         s->received.clear();
@@ -507,6 +530,12 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
       return 0;
     case LWS_CALLBACK_SERVER_WRITEABLE: return s->viewer == wsi ? (s->controller ? s->writeControl(wsi) : s->write(wsi)) : -1;
     case LWS_CALLBACK_EVENT_WAIT_CANCELLED: {
+      if (s->clipboard) {
+        if (auto text = s->clipboard->take()) {
+          std::lock_guard<std::mutex> lock(s->mutex);
+          s->pending_clipboard = std::move(*text);
+        }
+      }
       if (s->viewer) {
         if (!s->controller) s->updateFlow();
         lws_callback_on_writable(s->viewer);
