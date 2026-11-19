@@ -1,8 +1,25 @@
 # screen-relay
 
-## 0.1.1
+## 0.1.2
 
 <!-- release:start -->
+
+### New Features
+
+- Added **one-time viewer tickets**: `POST /tickets` returns a ticket that opens one WebSocket within 60 seconds, so a custom client can connect without holding the session token (#64)
+- Added a **Vercel Sandbox image** with screen-relay and the desktop packages preinstalled, so `screen-relay up` starts a desktop without installing anything first (#58)
+
+### Improvements
+
+- The **Vercel Sandbox image** keeps a released version's tag once published, moves only `latest` on later builds, and rebuilds on every change it copies (#65)
+
+### Contributors
+
+- @joshuasoup
+
+<!-- release:end -->
+
+## 0.1.1
 
 ### New Features
 
@@ -28,8 +45,6 @@
 - @ctate
 - @lahfir
 - @Railly
-
-<!-- release:end -->
 
 ## 0.1.0
 

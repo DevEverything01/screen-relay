@@ -3,6 +3,23 @@ title: Changelog
 description: What changed in each screen-relay release.
 ---
 
+## v0.1.2
+
+<p className="text-[#888] text-sm">November 18, 2026</p>
+
+### New Features
+
+- Added **one-time viewer tickets**: `POST /tickets` returns a ticket that opens one WebSocket within 60 seconds, so a custom client can connect without holding the session token (#64)
+- Added a **Vercel Sandbox image** with screen-relay and the desktop packages preinstalled, so `screen-relay up` starts a desktop without installing anything first (#58)
+
+### Improvements
+
+- The **Vercel Sandbox image** keeps a released version's tag once published, moves only `latest` on later builds, and rebuilds on every change it copies (#65)
+
+### Contributors
+
+- @joshuasoup
+
 ## v0.1.1
 
 <p className="text-[#888] text-sm">November 18, 2026</p>
