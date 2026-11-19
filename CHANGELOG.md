@@ -8,9 +8,14 @@
 
 - Added **one-time viewer tickets**: `POST /tickets` returns a ticket that opens one WebSocket within 60 seconds, so a custom client can connect without holding the session token (#64)
 
+### Improvements
+
+- **GitHub releases** no longer attach `relay-engine` binaries. `screen-relay install` already builds the engine on each machine (#67)
+
 ### Contributors
 
 - @joshuasoup
+- @lahfir
 
 <!-- release:end -->
 
