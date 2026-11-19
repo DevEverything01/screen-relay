@@ -13,7 +13,7 @@ npm install screen-relay
 
 ### One-shot calls
 
-A viewer opens view-only, so these calls work while it watches. A viewer that took control makes `click` return `busy`; choose **Release control** in the viewer first.
+A viewer opens with control when input is idle. If it has control, `click` returns `busy`; choose **Release control** in the viewer first.
 
 ```js
 import { createClient } from 'screen-relay';
@@ -52,7 +52,7 @@ try {
 
 ## One input owner at a time
 
-- A viewer that took control, a control session, or the CLI can own input. The viewer opens view-only, so client calls work while it watches.
+- An SDK control session owns input until it closes or a viewer takes control. A viewer that opens during an SDK control session can watch without interrupting it.
 - Choose **Release control** in a viewer that owns input, or close it, before sending input from the CLI or SDK. Otherwise the call returns `busy`.
 - A viewer that chooses **Take control** ends a control session with `control_taken`.
 - Status, capabilities, screenshots, and the clipboard do not need input control.

@@ -254,19 +254,27 @@ test('drawing updates status only when its text changes', () => {
   app.sockets[0].onerror();
   assert.equal(status.textContent, 'Connection error');
   app.frame(3); app.tick(32);
-  assert.equal(status.textContent, 'Live · view only');
+  assert.equal(status.textContent, 'Live · you have control');
   assert.equal(status.textWrites, liveWrites + 2);
 });
 
-test('the viewer connects view-only and takes control from the toolbar', () => {
+test('the first viewer claims idle input; a refused viewer watches and can choose Take control', () => {
+  const first = viewer();
+  assert.equal(first.sockets[0].url, 'ws://localhost/stream?clipboard=1');
+  first.sockets[0].onopen();
+  first.frame(1);
+  assert.equal(first.document.querySelector('#status').textContent, 'Live · you have control');
+
   const app = viewer();
   const control = () => app.document.querySelector('#toolbar-actions').querySelector('[data-action="control"]');
+  app.sockets[0].onclose({ code: 1006 });
+  runInContext('relayViewer.connect()', app.context);
   app.frame(1);
-  assert.equal(app.sockets[0].url, 'ws://localhost/stream?view=1');
+  assert.equal(app.sockets.at(-1).url, 'ws://localhost/stream?view=1');
   assert.equal(control().attributes['aria-pressed'], 'false');
   assert.equal(control().attributes['title'], 'Take control');
   key(app, 'keydown', 'KeyA');
-  assert.deepEqual(app.sockets[0].inputs, []);
+  assert.deepEqual(app.sockets.at(-1).inputs, []);
   runInContext('relayViewer.setViewOnly(false)', app.context);
   assert.equal(app.sockets.at(-1).url, 'ws://localhost/stream?take=1&clipboard=1');
   app.frame(1);
@@ -687,10 +695,9 @@ test('a replaced viewer stays disconnected across visibility changes until manua
   assert.equal(app.sockets.at(-1).url, 'ws://localhost/stream?view=1');
 });
 
-test('only Take control takes input; a reconnect keeps control without taking it, and a refused one watches', () => {
+test('an automatic reconnect claims idle input without taking it from another owner', () => {
   const app = viewer();
-  runInContext('relayViewer.setViewOnly(false)', app.context);
-  assert.equal(app.sockets.at(-1).url, 'ws://localhost/stream?take=1&clipboard=1');
+  assert.equal(app.sockets.at(-1).url, 'ws://localhost/stream?clipboard=1');
   app.sockets.at(-1).onopen();
   app.frame(1);
   app.sockets.at(-1).onclose({ code: 1006 });
@@ -819,4 +826,15 @@ test('a copy after window blur can sync the same remote text again', async () =>
   clipboardNotice(app);
   await settle();
   assert.deepEqual(written, ['remote text', 'remote text']);
+});
+
+test('a viewer that loses input to a takeover reconnects view-only', () => {
+  const app = viewer();
+  app.sockets[0].onopen();
+  app.frame(1);
+  app.sockets[0].onclose({ code: 4001 });
+  runInContext('relayViewer.connect()', app.context);
+  app.frame(1);
+  assert.equal(app.sockets.at(-1).url, 'ws://localhost/stream?view=1');
+  assert.equal(app.document.querySelector('#status').textContent, 'Live · view only');
 });

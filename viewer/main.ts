@@ -1,5 +1,5 @@
 import {
-  CLOSE_REPLACED, HID_KEYS, MAX_BYTES_IN_FLIGHT, encodeAck, encodeInput, h264Codec, isLoopback, parseMessage, socketTarget, validToken,
+  CLOSE_REPLACED, CLOSE_TAKEN, HID_KEYS, MAX_BYTES_IN_FLIGHT, encodeAck, encodeInput, h264Codec, isLoopback, parseMessage, socketTarget, validToken,
   type InputEvent, type Message,
 } from '../src/protocol/index.js';
 
@@ -59,7 +59,7 @@ const HOLD_DECAY = 0.05;
 const CLOCK_JUMP_MS = 500;
 type Sample = { time: number; offset: number; late: number };
 let samples: Sample[] = [], lows: Sample[] = [], holdMs = 0;
-let buttons = 0, modifiers = 0, x = 0, y = 0, viewOnly = true, capsLock = false,
+let buttons = 0, modifiers = 0, x = 0, y = 0, viewOnly = false, capsLock = false,
   metaAsCtrl = stored('relay.metaCtrl') === null ? macos() : stored('relay.metaCtrl') === '1';
 const pending = new Map(), decoded: any[] = [], held = new Set<number>(), latched = new Map<number, Element>();
 const clamp = (value: number, low: number, high: number) => Math.max(low, Math.min(high, value));
@@ -480,7 +480,8 @@ function connect() {
       setStatus('Opened in another viewer · reconnect to watch here');
       return;
     }
-    if (!opened && !viewOnly) {
+    if (e.code === CLOSE_TAKEN) retry = 0;
+    if ((!opened || e.code === CLOSE_TAKEN) && !viewOnly) {
       viewOnly = true;
       applyControl();
     }
@@ -493,6 +494,7 @@ function connect() {
       return;
     }
     const delay = Math.min(1000 * 2 ** retry++, 8000);
+    if (e.code === CLOSE_TAKEN) setStatus('Control changed · reconnecting view-only');
     setStatus(status.textContent + ` · retrying in ${delay / 1000}s`);
     retryTimer = setTimeout(reconnectAutomatically, delay);
     checkAccess(current);
