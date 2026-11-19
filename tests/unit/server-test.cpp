@@ -75,25 +75,28 @@ int main() {
     assert(viewerTarget(target) == Socket::none);
   }
   {
-    struct Row { Socket socket; bool stream, owns, control, open, closeStream, closeControl; };
+    struct Row { Socket socket; size_t viewerCount; bool owns, control, open, closeStream, closeControl; };
     const Row rows[] = {
-      {Socket::watch, false, false, false, true, false, false},
-      {Socket::watch, false, false, true, true, false, false},
-      {Socket::watch, true, true, false, true, true, false},
-      {Socket::stream, false, false, false, true, false, false},
-      {Socket::stream, true, false, false, true, true, false},
-      {Socket::stream, true, false, true, false, false, false},
-      {Socket::take, true, false, true, true, true, true},
-      {Socket::take, false, false, true, true, false, true},
-      {Socket::take, true, true, false, true, true, false},
-      {Socket::control, false, false, false, true, false, false},
-      {Socket::control, true, false, false, true, false, false},
-      {Socket::control, true, true, false, false, false, false},
-      {Socket::control, false, false, true, false, false, false},
-      {Socket::none, false, false, false, false, false, false},
+      {Socket::watch, 0, false, false, true, false, false},
+      {Socket::watch, 1, true, false, true, false, false},
+      {Socket::watch, 1, false, true, true, false, false},
+      {Socket::watch, max_viewers, true, false, false, false, false},
+      {Socket::stream, 0, false, false, true, false, false},
+      {Socket::stream, 1, false, false, true, false, false},
+      {Socket::stream, 1, true, false, false, false, false},
+      {Socket::stream, 0, false, true, false, false, false},
+      {Socket::stream, max_viewers, false, false, false, false, false},
+      {Socket::control, max_viewers, false, false, true, false, false},
+      {Socket::control, 1, true, false, false, false, false},
+      {Socket::control, 0, false, true, false, false, false},
+      {Socket::take, 1, true, false, true, true, false},
+      {Socket::take, 1, false, true, true, false, true},
+      {Socket::take, max_viewers, true, false, true, true, false},
+      {Socket::take, max_viewers, false, true, false, false, false},
+      {Socket::none, 0, false, false, false, false, false},
     };
     for (const auto& row : rows) {
-      const auto plan = connectionPlan(row.socket, row.stream, row.owns, row.control);
+      const auto plan = connectionPlan(row.socket, row.viewerCount, row.owns, row.control);
       assert(plan.open == row.open && plan.closeStream == row.closeStream && plan.closeControl == row.closeControl);
     }
   }

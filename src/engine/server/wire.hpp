@@ -23,20 +23,10 @@ Socket viewerTarget(const std::string& target);
 struct ConnectionPlan {
   bool open = false, closeStream = false, closeControl = false;
 };
-/// Close code for a /control socket whose input a viewer took.
+constexpr size_t max_viewers = 4;
 constexpr uint16_t close_taken = 4001;
-/// Close code for a /stream socket that a newer /stream replaced.
-constexpr uint16_t close_replaced = 4002;
-/**
- * The connection state machine. At most one /stream and one /control are open, and input has at most one owner:
- * the /control socket, or a /stream opened without ?view=1.
- *   /stream?view=1  opens next to /control.
- *   /stream         opens unless /control owns input.
- *   /stream?take=1  opens and closes /control with close_taken.
- *   /control        opens unless /control is open or a /stream owns input.
- * A /stream that opens replaces the open /stream, which closes with close_replaced.
- */
-ConnectionPlan connectionPlan(Socket socket, bool streamOpen, bool streamOwnsInput, bool controlOpen);
+/// Plans a connection without changing the current input owner or any active stream.
+ConnectionPlan connectionPlan(Socket socket, size_t viewerCount, bool streamOwnsInput, bool controlOpen);
 /**
  * The builders below fill out with pre zero bytes of caller padding followed by one NSL1 message.
  * frameMessage and cursorMessage return false when the payload must not be sent.

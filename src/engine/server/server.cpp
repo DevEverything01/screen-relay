@@ -62,40 +62,100 @@ std::optional<FlowControl::TransportSample> streamTransportSample(lws* wsi, size
 }
 #endif
 }  // namespace
-Server::Server(Config settings) : config(std::move(settings)), capture([this](EncodedFrame&& frame) {
+Server::Stream::Stream(Server& server) : capture([this, &server](EncodedFrame&& frame) {
   std::lock_guard<std::mutex> lock(mutex);
-  if (!context || !generation || frame.generation != generation) return false;
+  if (!generation || frame.generation != generation) return false;
   if (!flow.enqueue(frame.sequence, frame.annex_b.size(), frame.pts_us, nowUs())) {
-    failed = true; lws_cancel_service(context); return false;
+    failed = true; lws_cancel_service(server.context); return false;
   }
   pending.push_back(std::move(frame));
-  lws_cancel_service(context);
+  lws_cancel_service(server.context);
   return true;
-}, CaptureSettings{config.fps, config.bitrate_min, config.bitrate_start, config.bitrate_max}, backendFor(config.backend).capture,
-[this](uint32_t gen, CursorImage&& cursor) {
+}, CaptureSettings{server.config.fps, server.config.bitrate_min, server.config.bitrate_start, server.config.bitrate_max},
+backendFor(server.config.backend).capture, [this, &server](uint32_t gen, CursorImage&& cursor) {
   std::lock_guard<std::mutex> lock(mutex);
-  if (!context || !generation || gen != generation) return;
+  if (!generation || gen != generation) return;
   pending_cursor = std::move(cursor);
-  lws_cancel_service(context);
-}) { flow.configure(config.bitrate_min, config.bitrate_start, config.bitrate_max, config.fps); }
-void Server::release() { if (input) input->releaseAll(); }
-void Server::endStream() {
-  if (viewer && !viewOnly) { release(); input->cancel(); }
+  lws_cancel_service(server.context);
+}) {
+  const auto& cfg = server.config;
+  flow.configure(cfg.bitrate_min, cfg.bitrate_start, cfg.bitrate_max, cfg.fps);
+}
+void Server::Stream::begin(lws* wsi, uint32_t gen) {
+  viewer = wsi;
+#ifdef __linux__
+  configureStreamSocket(wsi);
+#endif
+  { std::lock_guard<std::mutex> lock(mutex); generation = gen; }
+  capture.beginSession(gen);
+}
+void Server::Stream::end() {
   uint32_t old;
   { std::lock_guard<std::mutex> lock(mutex); old = generation; generation = 0; pending.clear(); pending_cursor.reset(); flow.reset(); failed = false; }
   last_write_cursor = false;
   buffered_stream_bytes = 0; stream_notsent_lowat = 0; flow_timer_due_us = 0;
   if (old) capture.endSession(old);
-  lastSequence = 0; received.clear(); viewOnly = false; viewer = nullptr;
+  lastSequence = 0; width = height = 0; received.clear(); viewer = nullptr;
+}
+Server::Server(Config settings) : config(std::move(settings)) {
+  streams[0] = std::make_unique<Stream>(*this);
+}
+Server::Stream* Server::streamFor(lws* wsi) {
+  for (auto& stream : streams) if (stream && stream->viewer == wsi) return stream.get();
+  return nullptr;
+}
+ConnectionPlan Server::planConnection(Socket socket) {
+  const auto count = std::count_if(streams.begin(), streams.end(), [](const auto& stream) { return stream && stream->viewer; });
+  return connectionPlan(socket, size_t(count), input_viewer != nullptr, control != nullptr);
+}
+int Server::startStream(lws* wsi, Socket socket, const ConnectionPlan& plan) {
+  auto slot = std::find_if(streams.begin(), streams.end(), [](const auto& stream) { return !stream || !stream->viewer; });
+  if (slot != streams.end() && !*slot) {
+    auto stream = std::make_unique<Stream>(*this);
+    std::string error;
+    if (!stream->capture.start(error)) {
+      std::cerr << "Viewer capture startup failed: " << error << '\n';
+      return -1;
+    }
+    *slot = std::move(stream);
+  }
+  if (plan.closeStream) {
+    auto* previous = input_viewer;
+    evict(previous);
+    if (slot == streams.end()) {
+      slot = std::find_if(streams.begin(), streams.end(), [previous](const auto& stream) { return stream->viewer == previous; });
+      release(); input->cancel(); input_viewer = nullptr;
+      (*slot)->end();
+    } else endStream(previous);
+  }
+  if (plan.closeControl) { evict(control); endControl(); }
+  if (socket != Socket::watch) { input_viewer = wsi; input->resetLocks(); }
+  auto& stream = **slot;
+  stream.begin(wsi, ++nextGeneration);
+  stream.updateFlow(config.proxy);
+  return 0;
+}
+void Server::release() { if (input) input->releaseAll(); }
+void Server::endStream(lws* wsi) {
+  for (auto slot = streams.begin(); slot != streams.end(); ++slot) {
+    if (!*slot || (*slot)->viewer != wsi) continue;
+    if (input_viewer == wsi) { release(); input->cancel(); input_viewer = nullptr; }
+    (*slot)->end();
+    if (slot != streams.begin()) slot->reset();
+    return;
+  }
 }
 void Server::endControl() {
   if (control) { release(); input->cancel(); }
   control_received.clear(); replies.clear(); control_ready = false; control_generation = 0; control = nullptr;
 }
-void Server::end() { endControl(); endStream(); }
-void Server::evict(lws* wsi, uint16_t code) {
-  const char* reason = code == close_taken ? "taken" : "replaced";
-  lws_close_reason(wsi, static_cast<lws_close_status>(code), reinterpret_cast<unsigned char*>(const_cast<char*>(reason)), std::strlen(reason));
+void Server::end() {
+  endControl();
+  for (auto& stream : streams) if (stream && stream->viewer) endStream(stream->viewer);
+}
+void Server::evict(lws* wsi) {
+  unsigned char reason[] = "taken";
+  lws_close_reason(wsi, static_cast<lws_close_status>(close_taken), reason, sizeof(reason) - 1);
   closing.insert(wsi);
   lws_set_timer_usecs(wsi, 1);
 }
@@ -117,28 +177,28 @@ bool Server::controlMessage() {
   input->fence(std::make_shared<ReplyFence>(wake, [reply](bool, size_t) { reply->ready.store(true, std::memory_order_release); }));
   lws_callback_on_writable(control); return true;
 }
-bool Server::streamMessage() {
-  const auto& b = received;
+bool Server::streamMessage(Stream& stream) {
+  const auto& b = stream.received;
   uint32_t gen = 0, seq = 0;
   if (!envelope(b, gen, seq)) return false;
   if (b[5] == 2) {
     if (b.size() != 20 && b.size() != 24) return false;
     const uint64_t wait = FlowControl::ackWaitUs(b.data()+20, b.size()-20);
     bool accepted = false;
-    { std::lock_guard<std::mutex> lock(mutex);
-      if (gen == generation && seq) accepted = flow.ack(seq, nowUs(), wait);
+    { std::lock_guard<std::mutex> lock(stream.mutex);
+      if (gen == stream.generation && seq) accepted = stream.flow.ack(seq, nowUs(), wait);
     }
-    if (accepted) { capture.acknowledge(gen, seq); updateFlow(); }
+    if (accepted) { stream.capture.acknowledge(gen, seq); stream.updateFlow(config.proxy); }
     return true;
   }
-  if (b[5] != 3 || b.size() != 36 || seq || gen != generation) return false;
-  if (viewOnly) return true;
+  if (b[5] != 3 || b.size() != 36 || seq || gen != stream.generation) return false;
+  if (input_viewer != stream.viewer) return true;
   return input->apply(inputEvent(b.data()+20)) != InputStatus::invalid;
 }
-void Server::updateFlow() {
+void Server::Stream::updateFlow(bool proxy) {
   if (viewer && !lws_partial_buffered(viewer)) buffered_stream_bytes = 0;
 #ifdef __linux__
-  const auto sample = viewer && !config.proxy ? streamTransportSample(viewer, buffered_stream_bytes) : std::nullopt;
+  const auto sample = viewer && !proxy ? streamTransportSample(viewer, buffered_stream_bytes) : std::nullopt;
   uint32_t notsent_lowat;
 #endif
   uint32_t gen; unsigned window; uint64_t bitrate, admit_until, service_deadline; bool paused, inflight;
@@ -171,11 +231,17 @@ void Server::updateFlow() {
   // Never hold the transport mutex while calling the capture API. Publication takes it later.
   capture.setFlowControl(gen, window, bitrate, paused, admit_until);
 }
-bool Server::timedOut() {
+bool Server::Stream::timedOut() {
+  if (!capture.error().empty()) return true;
   std::lock_guard<std::mutex> lock(mutex);
   return failed || flow.timedOut(nowUs());
 }
 std::string Server::metrics() {
+  if (input_viewer) return streamFor(input_viewer)->metrics();
+  for (const auto& stream : streams) if (stream && stream->viewer) return stream->metrics();
+  return streams[0]->metrics();
+}
+std::string Server::Stream::metrics() {
   std::lock_guard<std::mutex> lock(mutex);
   return ",\"inflight_frames\":" + std::to_string(flow.frames.size()) +
       ",\"inflight_bytes\":" + std::to_string(flow.bytes) +
@@ -253,8 +319,9 @@ void Server::forgetInput(lws* wsi) {
   input_replies.erase(std::remove_if(input_replies.begin(), input_replies.end(),
       [wsi](const std::shared_ptr<InputReply>& reply) { return reply->wsi == wsi; }), input_replies.end());
 }
-int Server::write(lws* wsi) {
-  updateFlow();
+int Server::Stream::write(bool proxy) {
+  auto* wsi = viewer;
+  updateFlow(proxy);
   std::optional<EncodedFrame> frame;
   std::optional<CursorImage> cursor;
   { std::lock_guard<std::mutex> lock(mutex);
@@ -274,7 +341,7 @@ int Server::write(lws* wsi) {
     if (lws_write(wsi, wire.data() + LWS_PRE, size, LWS_WRITE_BINARY) != int(size)) return -1;
     buffered_stream_bytes = lws_partial_buffered(wsi) ? size : 0;
     last_write_cursor = true;
-    updateFlow();
+    updateFlow(proxy);
     { std::lock_guard<std::mutex> lock(mutex);
       if (!pending.empty() || pending_cursor) lws_callback_on_writable(wsi);
     }
@@ -289,7 +356,7 @@ int Server::write(lws* wsi) {
   width = f.width; height = f.height; lastSequence = f.sequence;
   last_write_cursor = false;
   { std::lock_guard<std::mutex> lock(mutex); if (!flow.sent(f.sequence, nowUs())) return -1; }
-  updateFlow();
+  updateFlow(proxy);
   { std::lock_guard<std::mutex> lock(mutex); if (!pending.empty() || pending_cursor) lws_callback_on_writable(wsi); }
   return 0;
 }
@@ -422,7 +489,7 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
             ",\"input\":{\"keyboard\":true,\"pointer\":true,\"buttons\":true,\"wheel\":true}," +
             "\"screenshot\":\"/screenshot.png\",\"control\":\"/control\",\"wayland\":" +
             (backend == "wayland" ? "true" : "false") +
-            ",\"max_input_pending\":32,\"cursor\":" + (s->capture.stats().cursor_supported ? "true" : "false") +
+            ",\"max_input_pending\":32,\"cursor\":" + (s->streams[0]->capture.stats().cursor_supported ? "true" : "false") +
             ",\"input_endpoint\":\"/input\",\"tickets\":\"/tickets\",\"max_input_batch\":" + std::to_string(max_input_batch) +
             ",\"audio\":false,\"clipboard\":false,\"resize\":false,\"ime\":false}";
         return jsonResponse(wsi, response, HTTP_STATUS_OK, json);
@@ -493,7 +560,7 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
       if (lws_hdr_copy(wsi, args, sizeof(args), WSI_TOKEN_HTTP_URI_ARGS) > 0) { target += '?'; target += args; }
       const Socket socket = viewerTarget(target);
       if (socket == Socket::none || !localRequest(s->config, wsi) || s->nextGeneration == UINT32_MAX) return 1;
-      if (!connectionPlan(socket, s->viewer, s->viewer && !s->viewOnly, s->control).open) return 1;
+      if (!s->planConnection(socket).open) return 1;
       // Check a ticket only for a connection that would open, so a refused
       // one doesn't use it up.
       if (!authenticated(s->config, wsi, true) && !s->tickets.redeem(offeredTicket(wsi), Tickets::Clock::now())) return 1;
@@ -503,50 +570,43 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
     case LWS_CALLBACK_ESTABLISHED: {
       if (s->nextGeneration == UINT32_MAX) return -1;
       const Socket socket = static_cast<HttpResponse*>(user)->socket;
-      const auto plan = connectionPlan(socket, s->viewer, s->viewer && !s->viewOnly, s->control);
+      const auto plan = s->planConnection(socket);
       if (!plan.open) return -1;
-      if (plan.closeControl) { s->evict(s->control, close_taken); s->endControl(); }
-      if (plan.closeStream) { s->evict(s->viewer, close_replaced); s->endStream(); }
       if (socket == Socket::control) {
         s->control = wsi; s->control_generation = ++s->nextGeneration; s->control_received.clear();
         s->input->resetLocks();
         s->control_ready = true; lws_callback_on_writable(wsi);
         return 0;
       }
-      s->viewer = wsi; s->viewOnly = socket == Socket::watch;
-#ifdef __linux__
-      configureStreamSocket(wsi);
-#endif
-      { std::lock_guard<std::mutex> lock(s->mutex); s->generation = ++s->nextGeneration; s->pending.clear(); s->pending_cursor.reset(); s->flow.reset(); s->failed=false; }
-      s->last_write_cursor = false;
-      s->lastSequence=0; s->received.clear();
-      if (!s->viewOnly) s->input->resetLocks();
-      s->capture.beginSession(s->generation); s->updateFlow();
-      return 0;
+      return s->startStream(wsi, socket, plan);
     }
     case LWS_CALLBACK_RECEIVE: {
       if (s->closing.count(wsi)) return 0;
-      const bool stream = s->viewer == wsi;
+      auto* stream = s->streamFor(wsi);
       if (!stream && s->control != wsi) return -1;
-      auto& received = stream ? s->received : s->control_received;
+      auto& received = stream ? stream->received : s->control_received;
       if (!lws_frame_is_binary(wsi) || len > 65536-received.size()) return -1;
       received.insert(received.end(), static_cast<uint8_t*>(in), static_cast<uint8_t*>(in)+len);
       if (received.size() > 36) return -1;
       if (lws_is_final_fragment(wsi) && !lws_remaining_packet_payload(wsi)) {
-        if (!(stream ? s->streamMessage() : s->controlMessage())) return -1;
+        if (!(stream ? s->streamMessage(*stream) : s->controlMessage())) return -1;
         received.clear();
       }
       return 0;
     }
     case LWS_CALLBACK_SERVER_WRITEABLE: {
       if (s->closing.count(wsi)) return 0;
-      if (s->viewer == wsi) return s->write(wsi);
+      if (auto* stream = s->streamFor(wsi)) {
+        const int result = stream->write(s->config.proxy);
+        if (stream->width) { s->width = stream->width; s->height = stream->height; }
+        return result;
+      }
       return s->control == wsi ? s->writeControl(wsi) : -1;
     }
     case LWS_CALLBACK_EVENT_WAIT_CANCELLED: {
-      if (s->viewer) {
-        s->updateFlow();
-        lws_callback_on_writable(s->viewer);
+      for (const auto& stream : s->streams) if (stream && stream->viewer) {
+        stream->updateFlow(s->config.proxy);
+        lws_callback_on_writable(stream->viewer);
       }
       if (s->control) lws_callback_on_writable(s->control);
       for (const auto& reply : s->readyInputs()) {
@@ -577,16 +637,18 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
     case LWS_CALLBACK_TIMER:
       if (s->closing.erase(wsi)) return -1;
       if (s->screenshot_client == wsi) { closeScreenshot(s, wsi, static_cast<HttpResponse*>(user)); return -1; }
-      if (s->viewer != wsi) return -1;
-      s->flow_timer_due_us = 0;
-      if (s->timedOut()) {
-        std::cerr << "Viewer flow failure, 3s frame age, or no ACK progress for 3s\n"; s->endStream(); return -1;
+      if (auto* stream = s->streamFor(wsi)) {
+        stream->flow_timer_due_us = 0;
+        if (stream->timedOut()) {
+          std::cerr << "Viewer capture or flow failed\n"; s->endStream(wsi); return -1;
+        }
+        stream->updateFlow(s->config.proxy);
+        return 0;
       }
-      s->updateFlow();
-      return 0;
+      return -1;
     case LWS_CALLBACK_CLOSED:
       s->closing.erase(wsi);
-      if (s->viewer == wsi) s->endStream();
+      s->endStream(wsi);
       if (s->control == wsi) s->endControl();
       return 0;
     default: return 0;

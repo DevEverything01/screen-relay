@@ -37,22 +37,22 @@ The server processes records in order and stops at the first record rejected dur
 | --- | --- |
 | `/stream` | Receives video and, when supported, cursor messages. Sends ACKs and input. |
 | `/stream?view=1` | Receives the same messages, but does not own input. |
-| `/stream?take=1` | Works like `/stream`, and takes input from an open `/control` connection. |
+| `/stream?take=1` | Works like `/stream`, and takes input from the current owner. |
 | `/control` | Receives a control-ready message, then sends input and receives one response per request. Up to 32 replies can be queued. |
 | All | Use the `nsl1` subprotocol and binary messages. One WebSocket message contains one protocol message. A `/stream` connection without `?view=1`, or a `/control` connection, owns input and blocks `POST /input`. |
 
 A `/stream?view=1` connection watches without owning input, so `POST /input` and the CLI keep working while it is connected. The server ignores input messages sent on it. To take input, close the connection and open `/stream?take=1`.
 
-One `/stream` connection and one `/control` connection can be open at the same time, and input has at most one owner. Opening a connection does this:
+The engine admits up to four `/stream` connections, with one input owner at a time.
 
 | Connection | Result |
 | --- | --- |
-| `/stream?view=1` | Opens, even while `/control` owns input. |
-| `/stream` | Opens, unless `/control` is open. |
-| `/stream?take=1` | Opens. An open `/control` connection closes with code 4001 and reason `taken`. |
-| `/control` | Opens, unless `/control` is already open or a `/stream` connection owns input. |
+| `/stream?view=1` | Opens if a viewer slot is available. No change to input ownership. |
+| `/stream` | Opens and owns input if a viewer slot is available and input has no owner. |
+| `/stream?take=1` | Opens and owns input if a viewer slot is available or the current owner is a viewer it can replace. The previous input owner closes with code 4001 and reason `taken`. |
+| `/control` | Opens and owns input if input has no owner. |
 
-A `/stream` connection that opens replaces the open one, which closes with code 4002 and reason `replaced`. A refused connection fails its WebSocket handshake. A client that gets 4002 should not reconnect on its own, or two clients would replace each other in a loop. Held keys and buttons are released when a connection loses input.
+A refused connection fails its WebSocket handshake. Held keys and buttons are released when a connection loses input. A browser that loses input to a takeover reconnects with `?view=1`.
 
 When the session has a token, offer both `nsl1` and `bearer.TOKEN` as subprotocols; the server selects `nsl1`. Do not put the token in a request URL.
 
