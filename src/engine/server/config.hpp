@@ -14,6 +14,7 @@ struct Config {
   unsigned fps = 60;
   uint64_t bitrate_min = 1000000, bitrate_start = 8000000, bitrate_max = 40000000;
   bool proxy = false, insecure_local = false, check = false;
+  std::vector<std::string> allowed_origins;
 };
 bool unsignedNumber(const std::string& text, uint64_t& value);
 /** Fills config from argv and throws std::runtime_error on invalid options; returns false after printing --help. */
@@ -48,5 +49,12 @@ bool secureRandom(unsigned char* out, size_t size);
 std::string offeredTicket(lws* wsi);
 bool loopbackOrigin(const std::string& origin);
 bool loopbackHost(const std::string& host);
+/** True for a lowercase https://HOST[:PORT] origin as a browser sends it: no path, wildcard, or default port. */
+bool exactHttpsOrigin(const std::string& origin);
+/**
+ * Decides a request that sent an Origin header. An allowlisted origin always passes; otherwise a session with a
+ * public origin accepts only that origin, and a session without one accepts only loopback origins.
+ */
+bool originAllowed(const Config& config, const std::string& origin);
 bool localRequest(const Config& config, lws* wsi);
 }  // namespace relay

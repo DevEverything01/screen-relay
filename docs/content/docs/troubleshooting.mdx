@@ -84,7 +84,7 @@ To confirm, compare the frame rate in the viewer's **Stream statistics**, which 
 | Symptom | Cause and fix |
 | --- | --- |
 | `unauthorized` (HTTP 401) | Token missing or wrong. Run `screen-relay status --show-token` on the VM, and update the file used by `--token-file` or `SCREEN_RELAY_TOKEN_FILE`. For the viewer, open the link printed by `screen-relay up`. Each `screen-relay up` that needs a token creates a new one. |
-| `forbidden` (HTTP 403) | `Host` or `Origin` not allowed. Connect through `127.0.0.1`, `localhost`, or the `--public` URL. Configure the proxy to preserve both headers. |
+| `forbidden` (HTTP 403) | `Host` or `Origin` not allowed. Connect through `127.0.0.1`, `localhost`, or the `--public` URL. Configure the proxy to preserve both headers. For a browser page on another origin, see [Browser origins](/docs/remote-access#browser-origins). |
 | `invalid_input` about a URL or plain HTTP | Use an HTTPS origin with no path, query, or credentials, and pass a token for remote hosts. Plain HTTP works only for `localhost` and `127.0.0.1`. Use an [SSH tunnel](/docs/remote-access) if needed. |
 | `unreachable` | Check the URL, and run `screen-relay status` on the VM. If the certificate was rejected, use one the client trusts. |
 

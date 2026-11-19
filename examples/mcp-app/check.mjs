@@ -7,6 +7,7 @@ import { Client } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 
 const origin = process.env.SCREEN_RELAY_ORIGIN;
+const appOrigin = process.env.SCREEN_RELAY_APP_ORIGIN ?? "https://relay-test.claudemcpcontent.com";
 assert(origin, "Set SCREEN_RELAY_ORIGIN to the sandbox HTTPS origin.");
 const token = process.env.SCREEN_RELAY_TOKEN ?? (await readFile(process.env.SCREEN_RELAY_TOKEN_FILE, "utf8")).trim();
 assert(/^[0-9a-f]{64}$/.test(token), "Set a valid token without putting it in tool arguments.");
@@ -90,7 +91,7 @@ try {
         "Sec-WebSocket-Version": "13",
         "Sec-WebSocket-Key": randomBytes(16).toString("base64"),
         "Sec-WebSocket-Protocol": `nsl1, bearer.${token}`,
-        Origin: "https://relay-test.claudemcpcontent.com",
+        Origin: appOrigin,
       },
     });
     const timer = setTimeout(() => { upgrade.destroy(); reject(new Error("Stream handshake timed out")); }, 10000);
@@ -103,13 +104,13 @@ try {
         resolve();
         return;
       }
-      reject(new Error(`Stream returned HTTP ${response.statusCode}`));
+      reject(new Error(`Stream returned HTTP ${response.statusCode}; start the session with --allow-origin ${appOrigin}`));
     });
     upgrade.on("upgrade", (response, socket) => {
       clearTimeout(timer);
       assert.equal(response.statusCode, 101);
       socket.destroy();
-      console.log("Stream: authenticated WebSocket accepts a foreign HTTPS Origin.");
+      console.log(`Stream: authenticated WebSocket accepts the allowed Origin ${appOrigin}.`);
       resolve();
     });
     upgrade.end();

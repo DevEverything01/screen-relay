@@ -23,6 +23,14 @@ export type Parameter = {
   deferredDefault?: boolean;
   validate?: (value: unknown) => boolean;
 };
+/** Reports whether a value is 1 to 16 comma-separated lowercase https://HOST[:PORT] origins, written the way a browser sends them. */
+export function allowedOrigins(value: unknown): boolean {
+  const origins = String(value).split(',');
+  return origins.length <= 16 && origins.every((origin) => {
+    const match = /^https:\/\/[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?(?::([1-9][0-9]{0,4}))?$/.exec(origin);
+    return match !== null && (match[1] === undefined || (Number(match[1]) <= 65535 && Number(match[1]) !== 443));
+  });
+}
 export type Subcommand = { name: string; summary: string; examples: { description: string; command: string }[] };
 export type RunsOn = 'vm' | 'client' | 'anywhere';
 export type Command = {
@@ -75,6 +83,7 @@ export const commands: Record<string, Command> = {
       { name: 'backend', type: 'string', valueHint: '<BACKEND>', summary: 'On Linux, defaults to x11 when the engine has it, else wayland; a --display without a colon selects wayland. On macOS, defaults to macos; on Windows, defaults to windows', environment: 'SCREEN_RELAY_BACKEND', acceptedValues: BACKENDS },
       { name: 'output', type: 'string', valueHint: '<NAME>', summary: 'Capture a Wayland output by name, a macOS display by CGDirectDisplayID, or a Windows display by device name' },
       { name: 'public', type: 'string', valueHint: '<URL>', summary: 'Advertise this HTTPS origin', environment: 'SCREEN_RELAY_PUBLIC', validate: (value) => /^https:\/\/[^/?#@\\\s]+$/.test(String(value)) },
+      { name: 'allow-origin', type: 'string', valueHint: '<ORIGINS>', summary: 'Also accept browser requests from these comma-separated HTTPS origins, such as an app that embeds the viewer', environment: 'SCREEN_RELAY_ALLOW_ORIGIN', validate: allowedOrigins },
       { name: 'tls-cert', type: 'string', valueHint: '<FILE>', summary: 'Serve TLS with this certificate', environment: 'SCREEN_RELAY_TLS_CERT' },
       { name: 'tls-key', type: 'string', valueHint: '<FILE>', summary: 'Read the TLS private key', environment: 'SCREEN_RELAY_TLS_KEY' },
       { name: 'bind', type: 'string', valueHint: '<ADDRESS>', summary: 'Listen on this address', environment: 'SCREEN_RELAY_BIND', default: '127.0.0.1', deferredDefault: true },

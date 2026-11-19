@@ -48,6 +48,16 @@ Open `http://localhost:8080`, choose `open_desktop`, and call it with the viewer
 
 Configure `SCREEN_RELAY_TOKEN` in the MCP server environment, then omit the `token` tool argument. The result carries the token only in `_meta`, not model-visible content. Supplying a token as a tool argument exposes it to the conversation.
 
+## Allow the app's origin
+
+The viewer in this app runs on the AI client's origin and connects to screen-relay from there. The engine accepts a browser connection only from its `--public` origin, from loopback when there is no `--public` origin, or from an origin listed in `--allow-origin`. Start the session with the origin the client renders the app on:
+
+```sh
+screen-relay up -d --public https://your-sandbox.vercel.run --allow-origin https://APP_ORIGIN
+```
+
+To find that origin, open the client's developer tools and read the `Origin` request header on the `/stream` request. It must match exactly; there is no wildcard. A client that renders the app in a frame with `Origin: null` cannot connect. The ext-apps basic host on `http://localhost:8080` needs no `--allow-origin` when the session has no `--public` origin.
+
 ## Claude rendering
 
 The tested Claude host blocked a nested iframe, despite the resource declaring the screen-relay origin in `frameDomains`. The resource therefore declares the HTTPS and WSS origins in `connectDomains` and renders the viewer inline.
@@ -90,7 +100,13 @@ From this directory, with the server environment set:
 node check.mjs
 ```
 
-Alternatively, `SCREEN_RELAY_TOKEN_FILE` can point to the sandbox session's token file for the check. The check reads the resource through MCP, checks that credentials stay out of model-visible results, exercises both UI initialization orders, captures a screenshot, and tests a WebSocket upgrade with a foreign HTTPS Origin. It does not decode video or drive a browser.
+Alternatively, `SCREEN_RELAY_TOKEN_FILE` can point to the sandbox session's token file for the check. The check reads the resource through MCP, checks that credentials stay out of model-visible results, exercises both UI initialization orders, captures a screenshot, and tests a WebSocket upgrade from the app's origin. It does not decode video or drive a browser.
+
+The engine refuses a browser origin it was not told about, so start the session with the origin the check sends. The default is `https://relay-test.claudemcpcontent.com`; set `SCREEN_RELAY_APP_ORIGIN` to send another.
+
+```sh
+screen-relay up -d --public https://your-sandbox.vercel.run --allow-origin https://relay-test.claudemcpcontent.com
+```
 
 The check passed against a Vercel Sandbox with a 1280×720 screenshot, including after a fresh screen-relay build. In Claude Desktop's Code chat, the resource rendered inline, reported `Live · click to control`, and displayed the sandbox desktop. Its generated frame policy included both configured connection origins. Codex rendered the same resource inline at 1280×720.
 

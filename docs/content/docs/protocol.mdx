@@ -72,7 +72,7 @@ The viewer HTML is served with `Content-Security-Policy: frame-ancestors 'none'`
 - When the session has a token, send `Authorization: Bearer TOKEN`. Do not put the token in a request URL. See [Tokens](/docs/remote-access#tokens).
 - A custom client's WebSocket can offer the `ticket.TICKET` subprotocol from `POST /tickets` instead of the token. Each ticket works once. The bundled viewer still uses the token.
 - The `Host` must be `localhost`, `127.0.0.1`, or the authority configured with `--public`, with its port if specified.
-- `Origin` is optional. When the session has a token, any `Origin` is accepted. Without a token, a sent `Origin` must be a loopback origin with a loopback `Host`.
+- `Origin` is optional, and a request without one is checked by its token alone. A request that sends `Origin` must send the `--public` origin exactly. In a session without `--public`, it must send a loopback origin: `http` or `https`, `localhost` or `127.0.0.1`, any port. An origin listed in `--allow-origin` is also accepted in both cases. Every other value gets 403 `forbidden`, including `null`, even with a valid token. See [Browser origins](/docs/remote-access#browser-origins).
 
 ## Errors
 
@@ -83,7 +83,7 @@ The viewer HTML is served with `Content-Security-Policy: frame-ancestors 'none'`
 | 400 `invalid_input` | Send a nonempty batch of valid records with the correct `Content-Length`. |
 | 400 `invalid_text` | Send clipboard text as UTF-8 without NUL characters. |
 | 401 `unauthorized` | Send the correct session token. |
-| 403 `forbidden` | Check the `Host` and `Origin` rules. |
+| 403 `forbidden` | Check the `Host` and `Origin` rules under [Authentication](#authentication). |
 | 404 `not_found` | Check the endpoint path. |
 | 405 `method_not_allowed` | Use the method listed for the endpoint. |
 | 409 `busy` | Close the input owner or wait, then check for partial input before retrying. A viewer that owns input is one owner; a view-only viewer is not. |

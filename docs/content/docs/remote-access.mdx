@@ -33,7 +33,7 @@ The session stays on loopback, so the tunnel needs no token.
    screen-relay up -d --public https://desktop.example.com
    ```
 
-   `--public` takes a bare HTTPS origin. It makes the session listen on `0.0.0.0` unless you pass `--bind`, creates a token, and accepts requests only for that host. Pages and apps on any origin can connect when they send the token.
+   `--public` takes a bare HTTPS origin. It makes the session listen on `0.0.0.0` unless you pass `--bind`, creates a token, and accepts requests only for that host. A browser page must be served from that origin to connect, unless you list its origin with [`--allow-origin`](#browser-origins).
 
 2. Configure the proxy to:
    - forward every path with no prefix, including `/viewer.js`, `/stream`, and `/control` ([endpoints](/docs/protocol#endpoints))
@@ -59,9 +59,44 @@ Without `--tls-cert`, the engine serves plain HTTP and the proxy ends TLS. The p
 
 The engine serves HTTPS itself, prints no `TLS proxy` row, and speaks HTTP/1.1 only. Client commands on the VM accept the session's own certificate even when its host name does not match, so a self-signed certificate works there.
 
+## Browser origins
+
+A browser adds an `Origin` header to WebSocket connections and to cross-origin requests, naming the page that made them. The engine checks that header in addition to the token, so a page on another site cannot use a token it obtained.
+
+| Session | Origins the engine accepts |
+| --- | --- |
+| Started with `--public` | The `--public` origin, each origin in `--allow-origin`, and a matching loopback origin for direct local connections. |
+| Started without `--public` | Loopback origins (`http` or `https`, `localhost` or `127.0.0.1`, any port), and each origin in `--allow-origin`. |
+
+A request from any other origin gets 403 `forbidden`, and a WebSocket fails its handshake. The CLI, the Node SDK, and other clients that send no `Origin` header are not affected.
+
+To let a page on another origin connect, such as an app that embeds the viewer, list its origin when you start the session:
+
+```sh
+screen-relay up -d --public https://desktop.example.com --allow-origin https://app.example.com
+```
+
+- Separate several origins with commas and no spaces, up to 16. You can set `SCREEN_RELAY_ALLOW_ORIGIN` instead of the flag.
+- Write each origin the way the browser sends it: lowercase `https://HOST` or `https://HOST:PORT`, with no path and no trailing slash. Leave out port 443.
+- The engine compares the whole string. It has no wildcard, so `https://app.example.com` does not cover `https://www.app.example.com`.
+- `--allow-origin` creates a token even when the session listens on `127.0.0.1`, and the allowed page must send it.
+- The engine never accepts `Origin: null`, which a browser sends from a sandboxed frame or a `file://` page.
+
+### Update an app that connects from another origin
+
+Earlier versions accepted any origin when the session had a token. After upgrading, a session with `--public` also refuses the viewer opened at `http://127.0.0.1:8080` or through an SSH tunnel, because that page's origin is not the `--public` origin. Open the `--public` URL instead.
+
+An app that opens `/stream` or calls the HTTP API from its own origin now gets 403 until you allow that origin. This includes an MCP App that renders the viewer inside an AI client:
+
+1. Find the origin the app's page runs on. In the browser's or client's developer tools, open the failed `/stream` request and read its `Origin` request header.
+2. Restart the session with that value in `--allow-origin`. Restarting creates a new token, so give the app the new one.
+3. Reload the app.
+
+If the header is `null`, the client renders the app in a frame without an origin of its own, and the app cannot connect from the browser. Route its requests through a server you control, which sends no `Origin` header and holds the token.
+
 ## Tokens
 
-screen-relay creates a 64-character lowercase hex token (256 random bits) whenever the session listens anywhere other than `127.0.0.1`, or uses `--public`.
+screen-relay creates a 64-character lowercase hex token (256 random bits) whenever the session listens anywhere other than `127.0.0.1`, or uses `--public` or `--allow-origin`.
 
 - The token is stored in a `token` file in the session's state directory, readable only by its owner. `screen-relay status --json` shows the path as `tokenFile`.
 - `screen-relay status` hides the token unless you pass `--show-token`.
