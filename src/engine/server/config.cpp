@@ -220,13 +220,31 @@ bool exactHttpsOrigin(const std::string& origin) {
   uint64_t port = 0;
   return text.size() <= 5 && unsignedNumber(text, port) && text.front() != '0' && port <= 65535 && port != 443;
 }
+static std::string httpsAuthority(const std::string& authority) {
+  if (authority.empty() || authority.find_first_of("/?#@\\ \t\r\n") != std::string::npos) return {};
+  auto separator = authority.find(':');
+  if (authority.front() == '[') {
+    const auto bracket = authority.find(']');
+    if (bracket == std::string::npos || bracket == 1) return {};
+    separator = bracket + 1;
+    if (separator == authority.size()) separator = std::string::npos;
+    else if (authority[separator] != ':') return {};
+  }
+  auto host = authority.substr(0, separator);
+  if (host.empty()) return {};
+  for (auto& c : host) if (c >= 'A' && c <= 'Z') c += 'a' - 'A';
+  if (separator == std::string::npos) return host;
+  uint64_t port = 0;
+  if (!unsignedNumber(authority.substr(separator + 1), port) || !port || port > 65535) return {};
+  return port == 443 ? host : host + ':' + std::to_string(port);
+}
 bool originAllowed(const Config& config, const std::string& origin) {
   if (std::find(config.allowed_origins.begin(), config.allowed_origins.end(), origin) != config.allowed_origins.end()) return true;
   return config.origin.empty() ? loopbackOrigin(origin) : origin == config.origin;
 }
 bool localRequest(const Config& config, lws* wsi) {
   const auto host = header(wsi, WSI_TOKEN_HOST);
-  if (!loopbackHost(host) && (config.origin.empty() || host != config.authority)) return false;
+  if (!loopbackHost(host) && (config.origin.empty() || httpsAuthority(host) != config.authority)) return false;
   if (lws_hdr_total_length(wsi, WSI_TOKEN_ORIGIN) <= 0) return true;
   const auto origin = header(wsi, WSI_TOKEN_ORIGIN);
   return originAllowed(config, origin) ||
@@ -289,9 +307,9 @@ bool parseConfig(int argc, char** argv, Config& config) {
     else if (option == "--bitrate-max") config.bitrate_max = bitrate(value);
     else if (option == "--viewer-dir") config.viewer = value;
     else if (option == "--public-origin") {
-      if (value.rfind("https://", 0) != 0 || value.size() <= 8 || value.find_first_of("/?#@\\ \t\r\n", 8) != std::string::npos)
-        throw std::runtime_error("Public origin must be an HTTPS origin without path or credentials");
-      config.origin = value; config.authority = value.substr(8);
+      config.authority = value.rfind("https://", 0) == 0 ? httpsAuthority(value.substr(8)) : std::string{};
+      if (config.authority.empty()) throw std::runtime_error("Public origin must be an HTTPS origin without path or credentials");
+      config.origin = "https://" + config.authority;
     } else if (option == "--allow-origin") {
       std::istringstream origins(value + ',');
       std::string origin;

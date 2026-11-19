@@ -99,6 +99,14 @@ int main() {
     assert(!chmod(tokenFile.c_str(), 0600));
     assert(engineConfig({"--token-file", tokenFile, "--allow-origin", "https://a.example.com,https://b.example.com:8443"}, config));
     assert((config.allowed_origins == std::vector<std::string>{"https://a.example.com", "https://b.example.com:8443"}));
+    for (const auto& [input, expected] : std::vector<std::pair<const char*, const char*>>{
+           {"https://DESK.Example.com:443", "desk.example.com"},
+           {"https://DESK.Example.com:08443", "desk.example.com:8443"},
+           {"https://[2001:DB8::1]:443", "[2001:db8::1]"}}) {
+      assert(engineConfig({"--token-file", tokenFile, "--public-origin", input, "--behind-tls-proxy"}, config));
+      assert(config.authority == expected);
+      assert(originAllowed(config, "https://" + config.authority));
+    }
     std::remove(tokenFile.c_str());
 #endif
   }

@@ -28,6 +28,8 @@ function probe({ origin, hostHeader = 'desktop.example.test', websocket = false,
 }
 for (const origin of [undefined, publicOrigin, embedded]) assert.equal(await probe({ origin }), 200);
 assert.equal(await probe({ origin: publicOrigin, authenticated: false }), 401);
+assert.equal(await probe({ origin: publicOrigin, hostHeader: "Desktop.Example.test:443" }), 200);
+assert.equal(await probe({ origin: publicOrigin, hostHeader: "desktop.example.test:8443" }), 403);
 assert.equal(await probe({ origin: `http://${host}`, hostHeader: host }), 200);
 for (const origin of ['null', '*', 'http://desktop.example.test', 'https://app.example.test:8443',
   'https://untrusted.example.test', 'https://app.example.test.untrusted.example', `http://${host}`]) {
