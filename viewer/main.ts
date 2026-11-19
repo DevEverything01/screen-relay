@@ -104,49 +104,59 @@ const authHeaders = () => accessToken ? { Authorization: `Bearer ${accessToken}`
  */
 type PasteState = { state: 'idle' } | { state: 'waiting' | 'sending'; key: number; chord: number[] };
 let paste: PasteState = { state: 'idle' }, clipboardAvailable = false;
-let syncedText: string | null = null;
+let syncedText: string | null = null, clipboardEpoch = 0;
 async function readRemoteClipboard(): Promise<string | null> {
   const response = await fetch('/clipboard', { cache: 'no-store', redirect: 'error', headers: authHeaders(), signal: AbortSignal.timeout(5000) });
   const data = response.ok ? await response.json() : null;
   return typeof data?.text === 'string' ? data.text : null;
 }
 async function writeRemoteClipboard(local: string): Promise<boolean> {
+  const current = clipboardEpoch;
   const text = local.replace(/\r\n/g, '\n');
   const response = await fetch('/clipboard', { method: 'POST', cache: 'no-store', redirect: 'error', headers: { ...authHeaders(), 'Content-Type': 'text/plain;charset=utf-8' }, body: text, signal: AbortSignal.timeout(5000) });
-  if (response.ok) syncedText = text;
-  return response.ok;
+  if (!response.ok || current !== clipboardEpoch) return false;
+  syncedText = text;
+  return true;
 }
 async function copyRemoteClipboard(always = false): Promise<void> {
+  const current = clipboardEpoch;
   const text = await readRemoteClipboard();
+  if (current !== clipboardEpoch || !document.hasFocus()) return;
   if (text === null) throw new Error('unavailable');
   if (!always && (!text || text === syncedText)) return;
   await navigator.clipboard.writeText(text);
-  syncedText = text;
+  if (current === clipboardEpoch) syncedText = text;
 }
 function remoteClipboardChanged() {
   if (navigator.clipboard && document.hasFocus()) copyRemoteClipboard().catch(() => {});
 }
-function replayPaste() {
-  if (paste.state === 'idle') return;
-  const { key, chord } = paste;
+function finishPaste(current: Exclude<PasteState, { state: 'idle' }>, replay: boolean) {
+  if (paste !== current) return;
   paste = { state: 'idle' };
+  if (!replay) return;
+  const { key, chord } = current;
   const pressed = chord.filter((code) => !held.has(code) && holdKey(code));
   if (holdKey(key)) releaseKey(key);
   for (const code of pressed.reverse()) releaseKey(code);
 }
 function holdBackPaste(e: KeyboardEvent, key: number): boolean {
   if (viewOnly || !clipboardAvailable || paste.state !== 'idle' || e.code !== 'KeyV' || e.altKey || !(e.ctrlKey || e.metaKey)) return false;
-  paste = { state: 'waiting', key, chord: [...held].filter((code) => code >= 224) };
-  setTimeout(() => { if (paste.state === 'waiting') replayPaste(); }, 0);
+  const waiting = { state: 'waiting' as const, key, chord: [...held].filter((code) => code >= 224) };
+  paste = waiting;
+  setTimeout(() => finishPaste(waiting, true), 0);
   return true;
 }
 document.addEventListener('paste', (e) => {
   if (paste.state !== 'waiting') return;
   e.preventDefault();
   const text = e.clipboardData?.getData('text/plain');
-  if (!text) { replayPaste(); return; }
-  paste = { ...paste, state: 'sending' };
-  writeRemoteClipboard(text).catch(() => false).then(replayPaste);
+  if (!text) { finishPaste(paste, true); return; }
+  const sending = { ...paste, state: 'sending' as const };
+  paste = sending;
+  writeRemoteClipboard(text).then(
+    (ok) => finishPaste(sending, ok),
+    () => finishPaste(sending, false),
+  );
 });
 
 function sendInput(event: InputEvent): boolean {
@@ -173,6 +183,9 @@ function dropLatch(code: number): boolean {
   return true;
 }
 function release() {
+  clipboardEpoch++;
+  syncedText = null;
+  paste = { state: 'idle' };
   buttons = modifiers = 0;
   if (ready) sendInput({ type: 'releaseAll' });
   held.clear();
@@ -810,8 +823,14 @@ panels.clipboard.addEventListener('click', (e) => {
   const button = (e.target as Element).closest('[data-clipboard]') as HTMLElement | null;
   if (!button) return;
   const pull = button.dataset.clipboard === 'pull';
-  const done = pull ? copyRemoteClipboard(true) : navigator.clipboard.readText().then(writeRemoteClipboard).then((ok) => { if (!ok) throw new Error('rejected'); });
-  done.then(() => showPanel(null), () => setStatus(pull ? 'Could not copy the remote clipboard' : 'Could not send the clipboard'));
+  const current = clipboardEpoch;
+  const done = pull ? copyRemoteClipboard(true) : navigator.clipboard.readText().then(async (text) => {
+    if (current === clipboardEpoch && !await writeRemoteClipboard(text)) throw new Error('rejected');
+  });
+  done.then(
+    () => { if (current === clipboardEpoch) showPanel(null); },
+    () => { if (current === clipboardEpoch) setStatus(pull ? 'Could not copy the remote clipboard' : 'Could not send the clipboard'); },
+  );
   canvas.focus();
 });
 panels.scale.addEventListener('click', (e) => {

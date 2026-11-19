@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import { createContext, runInContext } from 'node:vm';
 
 function viewer({ devicePixelRatio = 1, storage, decode = true, deferDecode = false, fetch = async () => ({ ok: false, status: 401 }), navigator } = {}) {
-  const listeners = {}, elements = {}, sockets = [], trace = [], animationFrames = new Map(), timers = [];
+  const listeners = {}, windowListeners = {}, elements = {}, sockets = [], trace = [], animationFrames = new Map(), timers = [];
   const decodeQueue = [];
   let now = 0, nextAnimationFrame = 1;
   const element = () => {
@@ -56,7 +56,7 @@ function viewer({ devicePixelRatio = 1, storage, decode = true, deferDecode = fa
     addEventListener: (name, callback) => { listeners[name] = callback; },
   };
   const context = createContext({
-    document, window: { devicePixelRatio, VideoDecoder: Decoder, EncodedVideoChunk: true, addEventListener() {} },
+    document, window: { devicePixelRatio, VideoDecoder: Decoder, EncodedVideoChunk: true, addEventListener: (name, callback) => { windowListeners[name] = callback; } },
     location: { protocol: 'http:', hostname: 'localhost', host: 'localhost', hash: '' },
     URL, URLSearchParams, AbortSignal, WebSocket: Socket, VideoDecoder: Decoder,
     EncodedVideoChunk: class { constructor(options) { Object.assign(this, options); } },
@@ -91,7 +91,7 @@ function viewer({ devicePixelRatio = 1, storage, decode = true, deferDecode = fa
     entry[1](now);
   };
   const timersAfter = (mark) => { for (const callback of timers.splice(mark)) callback(); };
-  return { context, document, listeners, sockets, trace, frame, tick, refresh, timerCount: () => timers.length, timersAfter, setTime: (time) => { now = time; }, decodeAll: () => { while (decodeQueue.length) decodeQueue.shift()(); } };
+  return { context, document, listeners, windowListeners, sockets, trace, frame, tick, refresh, timerCount: () => timers.length, timersAfter, setTime: (time) => { now = time; }, decodeAll: () => { while (decodeQueue.length) decodeQueue.shift()(); } };
 }
 
 const traced = (app, type) => app.trace.filter((event) => event[0] === type).map((event) => event[1]);
@@ -698,13 +698,13 @@ test('only Take control takes input; a reconnect keeps control without taking it
   assert.equal(app.sockets.at(-1).url, 'ws://localhost/stream?view=1');
 });
 
-function clipboardViewer(remoteText = '') {
+function clipboardViewer(remoteText = '', upload) {
   const posted = [], written = [];
   const json = (body) => ({ ok: true, status: 200, json: async () => body });
   const app = viewer({
     fetch: async (path, options = {}) => {
       if (path === '/capabilities') return json({ fps: 60, clipboard: true });
-      if (path === '/clipboard' && options.method === 'POST') { posted.push(options.body); return json({ length: options.body.length }); }
+      if (path === '/clipboard' && options.method === 'POST') { posted.push(options.body); return upload ? upload(options.body) : json({ length: options.body.length }); }
       if (path === '/clipboard') return json({ text: remoteText });
       return { ok: false, status: 404 };
     },
@@ -774,4 +774,46 @@ test('a remote copy reaches the local clipboard, but neither the viewer\'s own p
   clipboardNotice(app);
   await settle();
   assert.deepEqual(written, ['remote text']);
+});
+
+function pasteText(app, text) {
+  chord(app, 'keydown', 'KeyV', { ctrlKey: true });
+  app.listeners.paste({ preventDefault() {}, clipboardData: { getData: () => text } });
+}
+
+test('a paste upload started before blur cannot replay a newer paste', async () => {
+  const uploads = [];
+  const { app, posted } = clipboardViewer('', () => new Promise((resolve) => uploads.push(resolve)));
+  await settle();
+  pasteText(app, 'old');
+  app.windowListeners.blur();
+  pasteText(app, 'new');
+  assert.deepEqual(posted, ['old', 'new']);
+  uploads[0]({ ok: true });
+  await settle();
+  assert.deepEqual(inputBytes(app).filter(([, key]) => key === 25), []);
+  uploads[1]({ ok: true });
+  await settle();
+  assert.deepEqual(inputBytes(app).filter(([, key]) => key === 25), [[1, 25], [2, 25]]);
+});
+
+test('a rejected clipboard upload drops the paste instead of inserting old remote text', async () => {
+  const { app, posted } = clipboardViewer('old', async () => ({ ok: false, status: 413 }));
+  await settle();
+  const text = 'x'.repeat(256 * 1024 + 1);
+  pasteText(app, text);
+  await settle();
+  assert.deepEqual(posted, [text]);
+  assert.deepEqual(inputBytes(app), []);
+});
+
+test('a copy after window blur can sync the same remote text again', async () => {
+  const { app, written } = clipboardViewer('remote text');
+  await settle();
+  clipboardNotice(app);
+  await settle();
+  app.windowListeners.blur();
+  clipboardNotice(app);
+  await settle();
+  assert.deepEqual(written, ['remote text', 'remote text']);
 });
