@@ -305,14 +305,26 @@ test('a refused control connection reports busy', async () => {
   } finally { globalThis.WebSocket = original; }
 });
 
-test('a viewer taking control ends the control session with control_taken', async () => {
+test('takeover ends session input and screenshots but leaves HTTP status and capabilities available', async () => {
+  const server = createServer((request, response) => {
+    response.writeHead(['/capabilities', '/metrics'].includes(request.url) ? 200 : 404, { 'content-type': 'application/json' });
+    response.end(JSON.stringify({ path: request.url }));
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
   const original = globalThis.WebSocket; globalThis.WebSocket = FakeSocket;
   try {
-    const session = await connect();
+    const session = await connect({ url: `http://127.0.0.1:${server.address().port}` });
     const pending = session.input({ type: 'releaseAll' });
     FakeSocket.current.readyState = 3;
     FakeSocket.current.dispatchEvent(Object.assign(new Event('close'), { code: 4001 }));
     await assert.rejects(pending, { reason: 'control_taken' });
     await assert.rejects(session.input({ type: 'releaseAll' }), { reason: 'control_taken' });
-  } finally { globalThis.WebSocket = original; }
+    await assert.rejects(session.screenshot(), { reason: 'control_taken' });
+    assert.deepEqual(await session.capabilities(), { path: '/capabilities' });
+    assert.deepEqual(await session.status(), { path: '/metrics' });
+  } finally {
+    globalThis.WebSocket = original;
+    await new Promise(resolve => server.close(resolve));
+  }
 });
