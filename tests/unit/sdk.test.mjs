@@ -290,3 +290,15 @@ test('remote credentials require HTTPS and are not forwarded through redirects',
     await Promise.all([new Promise(resolve => server.close(resolve)), new Promise(resolve => target.close(resolve))]);
   }
 });
+
+test('a viewer taking control ends the control session with control_taken', async () => {
+  const original = globalThis.WebSocket; globalThis.WebSocket = FakeSocket;
+  try {
+    const session = await connect();
+    const pending = session.input({ type: 'releaseAll' });
+    FakeSocket.current.readyState = 3;
+    FakeSocket.current.dispatchEvent(Object.assign(new Event('close'), { code: 4001 }));
+    await assert.rejects(pending, { reason: 'control_taken' });
+    await assert.rejects(session.input({ type: 'releaseAll' }), { reason: 'control_taken' });
+  } finally { globalThis.WebSocket = original; }
+});

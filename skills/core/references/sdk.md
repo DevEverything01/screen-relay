@@ -49,7 +49,7 @@ input(event): Promise<void>                        // one raw SDK input event
 close(): void
 ```
 
-Only one controller sends input at a time. A control session needs the viewer closed, because the engine serves one stream or control connection at a time. See [One controller](../SKILL.md#one-controller).
+Only one controller sends input at a time. A control session can run while a viewer watches. A viewer that chooses **Take control** ends it with `control_taken`. See [One controller](../SKILL.md#one-controller).
 
 ## Errors
 

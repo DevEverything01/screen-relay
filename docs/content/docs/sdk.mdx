@@ -43,7 +43,7 @@ try {
 }
 ```
 
-- A control session needs the viewer closed, because the engine serves one `/stream` or `/control` connection at a time.
+- A control session can run while a viewer watches. It cannot connect while a viewer owns input, and it ends with `control_taken` when a viewer chooses **Take control**.
 - The session exposes `surface: { width, height }`.
 - It allows 32 pending input requests.
 - An acknowledgement timeout closes the session.
@@ -54,7 +54,7 @@ try {
 
 - A viewer that took control, a control session, or the CLI can own input. The viewer opens view-only, so client calls work while it watches.
 - Choose **Release control** in a viewer that owns input, or close it, before sending input from the CLI or SDK. Otherwise the call returns `busy`.
-- A control session cannot connect while a viewer is open.
+- A viewer that chooses **Take control** ends a control session with `control_taken`.
 - Status, capabilities, and screenshots do not need input control.
 
 ## Methods
@@ -134,6 +134,7 @@ Pass these options to `createClient`, the standalone functions, or `connect`. Co
 | `unauthorized`, `forbidden` | The engine rejected the token, host, or origin. Check the connection settings. |
 | `unreachable`, `timeout` | Check the URL, network, and TLS certificate. Increase `timeout` if needed. |
 | `disconnected` | The control session closed or was lost. Connect again. |
+| `control_taken` | A viewer chose **Take control**, which ended the control session. Every later call on the session returns this reason. Connect again after the viewer releases control. |
 | `invalid_input`, `invalid_option` | Check the URL, token, input, and options. |
 | `unsupported_input` | The backend cannot apply the event or type the character. Change the input or keyboard layout. |
 | `component_failed` | The engine could not complete the request. For screenshots, check `screen-relay logs engine` and [Wayland requirements](/docs/linux#compositors). |

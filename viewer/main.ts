@@ -1,5 +1,5 @@
 import {
-  HID_KEYS, MAX_BYTES_IN_FLIGHT, encodeAck, encodeInput, h264Codec, isLoopback, parseMessage, socketTarget, validToken,
+  CLOSE_REPLACED, HID_KEYS, MAX_BYTES_IN_FLIGHT, encodeAck, encodeInput, h264Codec, isLoopback, parseMessage, socketTarget, validToken,
   type InputEvent, type Message,
 } from '../src/protocol/index.js';
 
@@ -302,7 +302,7 @@ function connect() {
     setStatus('WebCodecs unavailable in this browser');
     return;
   }
-  const target = socketTarget(new URL(`${location.protocol}//${location.host}`), viewOnly ? '/stream?view=1' : '/stream', accessToken);
+  const target = socketTarget(new URL(`${location.protocol}//${location.host}`), viewOnly ? '/stream?view=1' : '/stream?take=1', accessToken);
   socket = new WebSocket(target.url, target.protocols);
   transportBroken = false;
   loadCapabilities();
@@ -392,9 +392,15 @@ function connect() {
   ws.onerror = () => {
     if (current === epoch) { transportBroken = true; setStatus('Connection error'); }
   };
-  ws.onclose = () => {
+  ws.onclose = (e: CloseEvent) => {
     if (current !== epoch) return;
     reset();
+    if (e.code === CLOSE_REPLACED) {
+      viewOnly = true;
+      applyControl();
+      setStatus('Opened in another viewer · reconnect to watch here');
+      return;
+    }
     if (document.hidden) {
       setStatus('Paused while hidden');
       return;

@@ -79,28 +79,48 @@ Server::Server(Config settings) : config(std::move(settings)), capture([this](En
   lws_cancel_service(context);
 }) { flow.configure(config.bitrate_min, config.bitrate_start, config.bitrate_max, config.fps); }
 void Server::release() { if (input) input->releaseAll(); }
-void Server::end() {
-  if (holdsInput()) { release(); input->cancel(); }
+void Server::endStream() {
+  if (viewer && !viewOnly) { release(); input->cancel(); }
   uint32_t old;
   { std::lock_guard<std::mutex> lock(mutex); old = generation; generation = 0; pending.clear(); pending_cursor.reset(); flow.reset(); failed = false; }
   last_write_cursor = false;
   buffered_stream_bytes = 0; stream_notsent_lowat = 0; flow_timer_due_us = 0;
   if (old) capture.endSession(old);
-  lastSequence = 0; received.clear(); replies.clear(); control_ready = controller = viewOnly = false; viewer = nullptr;
+  lastSequence = 0; received.clear(); viewOnly = false; viewer = nullptr;
 }
-bool Server::message() {
-  const auto& b = received;
+void Server::endControl() {
+  if (control) { release(); input->cancel(); }
+  control_received.clear(); replies.clear(); control_ready = false; control_generation = 0; control = nullptr;
+}
+void Server::end() { endControl(); endStream(); }
+void Server::evict(lws* wsi, uint16_t code) {
+  const char* reason = code == close_taken ? "taken" : "replaced";
+  lws_close_reason(wsi, static_cast<lws_close_status>(code), reinterpret_cast<unsigned char*>(const_cast<char*>(reason)), std::strlen(reason));
+  closing.insert(wsi);
+  lws_set_timer_usecs(wsi, 1);
+}
+namespace {
+/// The 20-byte NSL1 envelope of a received message, or false when it is malformed.
+bool envelope(const std::vector<uint8_t>& b, uint32_t& gen, uint32_t& seq) {
   if (b.size() < 20 || std::memcmp(b.data(), "NSL1", 4) || b[4] != 1 || u16(b.data()+6) || u32(b.data()+16) != b.size()-20) return false;
-  const auto gen = u32(b.data()+8), seq = u32(b.data()+12);
-  if (!gen) return false;
-  if (controller) {
-    if (b[5] != 3 || b.size() != 36 || !seq || gen != generation || replies.size() >= 32) return false;
-    auto reply = std::make_shared<ControlReply>();
-    reply->seq = seq; reply->status = input->apply(inputEvent(b.data()+20));
-    replies.push_back(reply);
-    input->fence(std::make_shared<ReplyFence>(wake, [reply](bool, size_t) { reply->ready.store(true, std::memory_order_release); }));
-    lws_callback_on_writable(viewer); return true;
-  }
+  gen = u32(b.data()+8); seq = u32(b.data()+12);
+  return gen != 0;
+}
+}  // namespace
+bool Server::controlMessage() {
+  const auto& b = control_received;
+  uint32_t gen = 0, seq = 0;
+  if (!envelope(b, gen, seq) || b[5] != 3 || b.size() != 36 || !seq || gen != control_generation || replies.size() >= 32) return false;
+  auto reply = std::make_shared<ControlReply>();
+  reply->seq = seq; reply->status = input->apply(inputEvent(b.data()+20));
+  replies.push_back(reply);
+  input->fence(std::make_shared<ReplyFence>(wake, [reply](bool, size_t) { reply->ready.store(true, std::memory_order_release); }));
+  lws_callback_on_writable(control); return true;
+}
+bool Server::streamMessage() {
+  const auto& b = received;
+  uint32_t gen = 0, seq = 0;
+  if (!envelope(b, gen, seq)) return false;
   if (b[5] == 2) {
     if (b.size() != 20 && b.size() != 24) return false;
     const uint64_t wait = FlowControl::ackWaitUs(b.data()+20, b.size()-20);
@@ -118,7 +138,7 @@ bool Server::message() {
 void Server::updateFlow() {
   if (viewer && !lws_partial_buffered(viewer)) buffered_stream_bytes = 0;
 #ifdef __linux__
-  const auto sample = viewer && !controller && !config.proxy ? streamTransportSample(viewer, buffered_stream_bytes) : std::nullopt;
+  const auto sample = viewer && !config.proxy ? streamTransportSample(viewer, buffered_stream_bytes) : std::nullopt;
   uint32_t notsent_lowat;
 #endif
   uint32_t gen; unsigned window; uint64_t bitrate, admit_until, service_deadline; bool paused, inflight;
@@ -137,13 +157,13 @@ void Server::updateFlow() {
     service_deadline = flow.serviceDeadlineUs(now, flow_timer_due_us);
   }
 #ifdef __linux__
-  if (viewer && !controller && notsent_lowat != stream_notsent_lowat) {
+  if (viewer && notsent_lowat != stream_notsent_lowat) {
     const int fd = lws_get_socket_fd(viewer);
     if (fd >= 0) (void)setsockopt(fd, IPPROTO_TCP, TCP_NOTSENT_LOWAT, &notsent_lowat, sizeof(notsent_lowat));
     stream_notsent_lowat = notsent_lowat;
   }
 #endif
-  if (viewer && !controller && service_deadline != flow_timer_due_us) {
+  if (viewer && service_deadline != flow_timer_due_us) {
     const uint64_t now = nowUs();
     lws_set_timer_usecs(viewer, service_deadline - std::min(service_deadline, now));
     flow_timer_due_us = service_deadline;
@@ -181,8 +201,8 @@ std::string Server::metrics() {
 int Server::writeControl(lws* wsi) {
   if (!control_ready && (replies.empty() || !replies.front()->ready.load(std::memory_order_acquire))) return 0;
   std::vector<uint8_t> wire;
-  if (control_ready) controlReady(wire, LWS_PRE, generation, width, height);
-  else inputReply(wire, LWS_PRE, generation, replies.front()->seq, replies.front()->status);
+  if (control_ready) controlReady(wire, LWS_PRE, control_generation, width, height);
+  else inputReply(wire, LWS_PRE, control_generation, replies.front()->seq, replies.front()->status);
   const size_t size = wire.size() - LWS_PRE;
   if (lws_write(wsi, wire.data() + LWS_PRE, size, LWS_WRITE_BINARY) != int(size)) return -1;
   if (control_ready) control_ready = false; else replies.pop_front();
@@ -471,46 +491,64 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
       if (lws_hdr_copy(wsi, uri, sizeof(uri), WSI_TOKEN_GET_URI) <= 0 || !user) return 1;
       std::string target(uri);
       if (lws_hdr_copy(wsi, args, sizeof(args), WSI_TOKEN_HTTP_URI_ARGS) > 0) { target += '?'; target += args; }
-      bool control = false, viewOnly = false;
-      if (!viewerTarget(target, control, viewOnly)) return 1;
-      if (!localRequest(s->config, wsi) || s->viewer || s->nextGeneration == UINT32_MAX) return 1;
+      const Socket socket = viewerTarget(target);
+      if (socket == Socket::none || !localRequest(s->config, wsi) || s->nextGeneration == UINT32_MAX) return 1;
+      if (!connectionPlan(socket, s->viewer, s->viewer && !s->viewOnly, s->control).open) return 1;
       // Check a ticket only for a connection that would open, so a refused
       // one doesn't use it up.
       if (!authenticated(s->config, wsi, true) && !s->tickets.redeem(offeredTicket(wsi), Tickets::Clock::now())) return 1;
-      auto* response = static_cast<HttpResponse*>(user);
-      response->control = control; response->view_only = viewOnly;
+      static_cast<HttpResponse*>(user)->socket = socket;
       return 0;
     }
     case LWS_CALLBACK_ESTABLISHED: {
-      if (s->viewer || s->nextGeneration == UINT32_MAX) return -1;
-      auto* response = static_cast<HttpResponse*>(user);
-      s->viewer = wsi; s->controller = response->control; s->viewOnly = response->view_only;
+      if (s->nextGeneration == UINT32_MAX) return -1;
+      const Socket socket = static_cast<HttpResponse*>(user)->socket;
+      const auto plan = connectionPlan(socket, s->viewer, s->viewer && !s->viewOnly, s->control);
+      if (!plan.open) return -1;
+      if (plan.closeControl) { s->evict(s->control, close_taken); s->endControl(); }
+      if (plan.closeStream) { s->evict(s->viewer, close_replaced); s->endStream(); }
+      if (socket == Socket::control) {
+        s->control = wsi; s->control_generation = ++s->nextGeneration; s->control_received.clear();
+        s->input->resetLocks();
+        s->control_ready = true; lws_callback_on_writable(wsi);
+        return 0;
+      }
+      s->viewer = wsi; s->viewOnly = socket == Socket::watch;
 #ifdef __linux__
-      if (!s->controller) configureStreamSocket(wsi);
+      configureStreamSocket(wsi);
 #endif
       { std::lock_guard<std::mutex> lock(s->mutex); s->generation = ++s->nextGeneration; s->pending.clear(); s->pending_cursor.reset(); s->flow.reset(); s->failed=false; }
       s->last_write_cursor = false;
       s->lastSequence=0; s->received.clear();
       if (!s->viewOnly) s->input->resetLocks();
-      if (s->controller) { s->control_ready = true; lws_callback_on_writable(wsi); }
-      else { s->capture.beginSession(s->generation); s->updateFlow(); }
+      s->capture.beginSession(s->generation); s->updateFlow();
       return 0;
     }
-    case LWS_CALLBACK_RECEIVE:
-      if (s->viewer != wsi || !lws_frame_is_binary(wsi) || len > 65536-s->received.size()) return -1;
-      s->received.insert(s->received.end(), static_cast<uint8_t*>(in), static_cast<uint8_t*>(in)+len);
-      if (s->received.size() > 36) return -1;
+    case LWS_CALLBACK_RECEIVE: {
+      if (s->closing.count(wsi)) return 0;
+      const bool stream = s->viewer == wsi;
+      if (!stream && s->control != wsi) return -1;
+      auto& received = stream ? s->received : s->control_received;
+      if (!lws_frame_is_binary(wsi) || len > 65536-received.size()) return -1;
+      received.insert(received.end(), static_cast<uint8_t*>(in), static_cast<uint8_t*>(in)+len);
+      if (received.size() > 36) return -1;
       if (lws_is_final_fragment(wsi) && !lws_remaining_packet_payload(wsi)) {
-        if (!s->message()) return -1;
-        s->received.clear();
+        if (!(stream ? s->streamMessage() : s->controlMessage())) return -1;
+        received.clear();
       }
       return 0;
-    case LWS_CALLBACK_SERVER_WRITEABLE: return s->viewer == wsi ? (s->controller ? s->writeControl(wsi) : s->write(wsi)) : -1;
+    }
+    case LWS_CALLBACK_SERVER_WRITEABLE: {
+      if (s->closing.count(wsi)) return 0;
+      if (s->viewer == wsi) return s->write(wsi);
+      return s->control == wsi ? s->writeControl(wsi) : -1;
+    }
     case LWS_CALLBACK_EVENT_WAIT_CANCELLED: {
       if (s->viewer) {
-        if (!s->controller) s->updateFlow();
+        s->updateFlow();
         lws_callback_on_writable(s->viewer);
       }
+      if (s->control) lws_callback_on_writable(s->control);
       for (const auto& reply : s->readyInputs()) {
         auto* response = reply->wsi ? static_cast<HttpResponse*>(lws_wsi_user(reply->wsi)) : nullptr;
         if (!response) continue;
@@ -537,15 +575,20 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
       return 0;
     }
     case LWS_CALLBACK_TIMER:
+      if (s->closing.erase(wsi)) return -1;
       if (s->screenshot_client == wsi) { closeScreenshot(s, wsi, static_cast<HttpResponse*>(user)); return -1; }
       if (s->viewer != wsi) return -1;
       s->flow_timer_due_us = 0;
       if (s->timedOut()) {
-        std::cerr << "Viewer flow failure, 3s frame age, or no ACK progress for 3s\n"; s->end(); return -1;
+        std::cerr << "Viewer flow failure, 3s frame age, or no ACK progress for 3s\n"; s->endStream(); return -1;
       }
       s->updateFlow();
       return 0;
-    case LWS_CALLBACK_CLOSED: if (s->viewer == wsi) s->end(); return 0;
+    case LWS_CALLBACK_CLOSED:
+      s->closing.erase(wsi);
+      if (s->viewer == wsi) s->endStream();
+      if (s->control == wsi) s->endControl();
+      return 0;
     default: return 0;
   }
 }

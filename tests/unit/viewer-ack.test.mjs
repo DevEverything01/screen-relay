@@ -267,7 +267,7 @@ test('the viewer connects view-only and takes control from the toolbar', () => {
   key(app, 'keydown', 'KeyA');
   assert.deepEqual(app.sockets[0].inputs, []);
   runInContext('relayViewer.setViewOnly(false)', app.context);
-  assert.equal(app.sockets.at(-1).url, 'ws://localhost/stream');
+  assert.equal(app.sockets.at(-1).url, 'ws://localhost/stream?take=1');
   app.frame(1);
   assert.equal(app.document.querySelector('#status').textContent, 'Live · you have control');
   assert.equal(control().attributes['aria-pressed'], 'true');
@@ -667,4 +667,18 @@ test('under a hold, frames wait for their due time and a trimmed frame is acknow
   for (const wait of waits) assert.ok(Math.abs(wait - (hold + 1) * 1000) < 1);
   const all = traced(app, 'ack');
   assert.deepEqual(all, Array.from({ length: all.length }, (_, index) => index + 1));
+});
+
+test('a viewer replaced by a newer viewer stops without retrying and reconnects view-only', () => {
+  const app = viewer();
+  const control = () => app.document.querySelector('#toolbar-actions').querySelector('[data-action="control"]');
+  runInContext('relayViewer.setViewOnly(false)', app.context);
+  app.frame(1);
+  const count = app.sockets.length;
+  app.sockets.at(-1).onclose({ code: 4002 });
+  assert.equal(app.document.querySelector('#status').textContent, 'Opened in another viewer · reconnect to watch here');
+  assert.equal(control().attributes['aria-pressed'], 'false');
+  assert.equal(app.sockets.length, count);
+  runInContext('relayViewer.connect()', app.context);
+  assert.equal(app.sockets.at(-1).url, 'ws://localhost/stream?view=1');
 });

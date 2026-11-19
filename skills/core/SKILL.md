@@ -149,6 +149,8 @@ Exit codes: [CLI exit codes](references/cli.md#exit-codes).
 
 Only one controller sends input at a time: a browser viewer that took control, an SDK control session, or your CLI. A viewer opens view-only, so it can watch while your CLI sends input. A second controller gets `busy` with the message `Another controller holds control of the desktop.`, and nothing is applied. Screenshots, `status` and `capabilities` keep working. Do not retry in a loop. Wait for the other controller to release control or close, then retry once.
 
+A person can open the viewer while you hold an SDK control session, and choose **Take control** at any time. That ends your session with `control_taken`, and every later call on it returns the same reason. Treat it as a handover: stop sending input, and connect again only after the person releases control.
+
 ## Config
 
 Keys, defaults, file location and precedence: [config](references/config.md).

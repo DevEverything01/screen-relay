@@ -12,6 +12,10 @@ export const MAX_WIDTH = 65535;
 export const MAX_HEIGHT = 65535;
 export const MAX_BYTES_IN_FLIGHT = 8388608;
 export const SUBPROTOCOL = 'nsl1';
+/** Close code for a /control socket whose input a viewer took with /stream?take=1. */
+export const CLOSE_TAKEN = 4001;
+/** Close code for a /stream socket that a newer /stream replaced. */
+export const CLOSE_REPLACED = 4002;
 export const MESSAGE_TYPES = { frame: 1, ack: 2, input: 3, controlReady: 4, inputResponse: 5, cursor: 6 } as const;
 export const INPUT_TYPES = { keyDown: 1, keyUp: 2, pointerMove: 3, buttonDown: 4, buttonUp: 5, wheel: 6, releaseAll: 7, text: 8 } as const;
 
@@ -186,7 +190,7 @@ export function h264Codec(bytes: Uint8Array): string {
 }
 
 /** Returns the WebSocket URL and subprotocols for `/stream`, `/stream?view=1`, or `/control` on an engine origin. */
-export function socketTarget(origin: URL, path: '/stream' | '/stream?view=1' | '/control', token?: string): { url: URL; protocols: string[] } {
+export function socketTarget(origin: URL, path: '/stream' | '/stream?view=1' | '/stream?take=1' | '/control', token?: string): { url: URL; protocols: string[] } {
   const url = new URL(path, origin);
   url.protocol = origin.protocol === 'https:' ? 'wss:' : 'ws:';
   return { url, protocols: token ? [SUBPROTOCOL, `bearer.${token}`] : [SUBPROTOCOL] };

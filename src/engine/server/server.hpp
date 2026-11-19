@@ -10,6 +10,7 @@
 #include <atomic>
 #include <deque>
 #include <functional>
+#include <set>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -23,10 +24,11 @@ struct HttpResponse {
   size_t length, input_length, input_expected;
   std::vector<uint8_t>* image;
   size_t offset;
-  bool image_headers, screenshot_error, control, view_only, input_reply, input_headers, closing;
+  Socket socket;
+  bool image_headers, screenshot_error, input_reply, input_headers, closing;
   unsigned reply_status;
 };
-/** One viewer session at a time; the capture thread and the lws service thread share it through mutex. */
+/** One /stream and one /control socket at a time, as connectionPlan allows; the capture thread and the lws service thread share it through mutex. */
 struct Server {
   struct InputReply {
     lws* wsi = nullptr;
@@ -50,9 +52,14 @@ struct Server {
   Tickets tickets;
   lws_context* context = nullptr;
   lws* viewer = nullptr;
+  lws* control = nullptr;
+  /// Sockets that connectionPlan closed; each closes with its close code on its next timer callback.
+  std::set<lws*> closing;
   Screenshot screenshot;
   lws* screenshot_client = nullptr;
-  bool controller = false, viewOnly = false, control_ready = false;
+  bool viewOnly = false, control_ready = false;
+  uint32_t control_generation = 0;
+  std::vector<uint8_t> control_received;
   std::deque<std::shared_ptr<ControlReply>> replies;
   std::mutex reply_mutex;
   std::deque<std::shared_ptr<InputReply>> input_replies;
@@ -73,9 +80,14 @@ struct Server {
   std::vector<uint8_t> received;
   explicit Server(Config settings);
   void release();
+  void endStream();
+  void endControl();
   void end();
-  bool holdsInput() const { return viewer && !viewOnly; }
-  bool message();
+  /// Closes wsi with code through the timer callback, the close path that sends the code on every libwebsockets version.
+  void evict(lws* wsi, uint16_t code);
+  bool holdsInput() const { return control || (viewer && !viewOnly); }
+  bool streamMessage();
+  bool controlMessage();
   void updateFlow();
   bool timedOut();
   std::string metrics();
