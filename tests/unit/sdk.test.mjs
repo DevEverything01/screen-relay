@@ -291,6 +291,20 @@ test('remote credentials require HTTPS and are not forwarded through redirects',
   }
 });
 
+test('a refused control connection reports busy', async () => {
+  const original = globalThis.WebSocket;
+  class RefusedSocket extends EventTarget {
+    static CLOSING = 2;
+    constructor() { super(); this.readyState = 1; queueMicrotask(() => { this.readyState = 3; this.dispatchEvent(Object.assign(new Event('close'), { code: 4003 })); }); }
+    close() { this.readyState = 3; }
+    send() {}
+  }
+  globalThis.WebSocket = RefusedSocket;
+  try {
+    await assert.rejects(connect(), { code: 'BUSY', reason: 'busy' });
+  } finally { globalThis.WebSocket = original; }
+});
+
 test('a viewer taking control ends the control session with control_taken', async () => {
   const original = globalThis.WebSocket; globalThis.WebSocket = FakeSocket;
   try {

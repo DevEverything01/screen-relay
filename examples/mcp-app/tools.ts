@@ -10,13 +10,15 @@ import { RESOURCE_URI } from "./viewer.ts";
 /** Registers the desktop, screenshot, and automation tools on a server. */
 export function registerTools(server: McpServer): void {
   let sessionUrl: string | undefined;
+  let grant: Awaited<ReturnType<typeof mintGrant>> | undefined;
+  let pendingGrant: ReturnType<typeof mintGrant> | undefined;
 
   registerAppTool(
     server,
     "open_desktop",
     {
       title: "Open desktop",
-      description: "Show a screen-relay desktop stream in an interactive viewer.",
+      description: "Request a screen-relay viewer in the chat. The viewer reports its own connection status.",
       inputSchema: z.object({
         url: z.string().describe("screen-relay viewer URL, for example http://localhost:18080/"),
       }),
@@ -24,10 +26,17 @@ export function registerTools(server: McpServer): void {
     },
     async ({ url }) => {
       const viewer = originOf(url);
-      const grant = await mintGrant(viewer, ownerToken(), VIEWER_SCOPE);
+      if (!grant || grant.expiresAt <= Date.now()) {
+        const pending = pendingGrant ??= mintGrant(viewer, ownerToken(), VIEWER_SCOPE);
+        try {
+          grant = await pending;
+        } finally {
+          if (pendingGrant === pending) pendingGrant = undefined;
+        }
+      }
       sessionUrl = viewer.href;
       return {
-        content: [{ type: "text", text: "Desktop opened. Use desktop_screenshot to inspect it." }],
+        content: [{ type: "text", text: "Viewer access is ready. The inline viewer still needs to connect. Look for Live in the viewer, or use desktop_screenshot for a still image." }],
         _meta: { "relay/viewer": { url: viewer.href, ...grant } },
       };
     },
