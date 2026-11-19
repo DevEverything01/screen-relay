@@ -33,7 +33,7 @@ The session stays on loopback, so the tunnel needs no token.
    screen-relay up -d --public https://desktop.example.com
    ```
 
-   `--public` takes a bare HTTPS origin. It makes the session listen on `0.0.0.0` unless you pass `--bind`, creates a token, and accepts requests only for that host. A browser page must be served from that origin to connect. The engine also accepts a loopback page whose origin matches the address it connects to, and any origin you list with [`--allow-origin`](#browser-origins).
+   `--public` takes a bare HTTPS origin. It makes the session listen on `0.0.0.0` unless you pass `--bind` and creates a token. Use the configured HTTPS URL for remote access. The built-in viewer still works on the same loopback address, including through an SSH tunnel. See [Browser origins](#browser-origins) for embedded viewers.
 
 2. Configure the proxy to:
    - forward every path with no prefix, including `/viewer.js`, `/stream`, and `/control` ([endpoints](/docs/protocol#endpoints))
@@ -96,7 +96,7 @@ Browser HTTP requests do follow CORS. The engine sends no `Access-Control-Allow-
 
 ### Update an app that connects from another origin
 
-Earlier versions accepted any origin when the session had a token. A session with `--public` now refuses a page on another origin until you allow that origin. A loopback page on the machine that runs the browser still works when its origin uses the same `HOST:PORT` it connects to, such as `http://127.0.0.1:8080`. A page served from a different origin, including one behind a proxy or tunnel, needs `--allow-origin`.
+Earlier versions accepted any origin when the session had a token. A session with `--public` now refuses a page on another origin until you allow that origin. The built-in viewer still works on loopback when its origin uses the same `HOST:PORT` it connects to, such as `http://127.0.0.1:8080` through an SSH tunnel. Use `--allow-origin` for an embedded viewer on another origin. This enables its WebSocket connection, not cross-origin browser access to the HTTP API.
 
 An app that opens `/stream` or calls the HTTP API from its own origin now gets 403 until you allow that origin. This includes an MCP App that renders the viewer inside an AI client:
 
