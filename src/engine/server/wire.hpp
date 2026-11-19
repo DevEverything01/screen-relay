@@ -25,6 +25,7 @@ struct ConnectionPlan {
 };
 constexpr size_t max_viewers = 4;
 constexpr uint16_t close_taken = 4001;
+constexpr uint16_t close_busy = 4003;
 /// Plans a connection without changing the current input owner or any active stream.
 ConnectionPlan connectionPlan(Socket socket, size_t viewerCount, bool streamOwnsInput, bool controlOpen);
 /**

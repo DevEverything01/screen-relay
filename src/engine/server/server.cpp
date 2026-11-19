@@ -154,9 +154,9 @@ void Server::end() {
   endControl();
   for (auto& stream : streams) if (stream && stream->viewer) endStream(stream->viewer);
 }
-void Server::evict(lws* wsi) {
-  unsigned char reason[] = "taken";
-  lws_close_reason(wsi, static_cast<lws_close_status>(close_taken), reason, sizeof(reason) - 1);
+void Server::evict(lws* wsi, uint16_t code, const char* reason) {
+  auto* bytes = reinterpret_cast<unsigned char*>(const_cast<char*>(reason));
+  lws_close_reason(wsi, static_cast<lws_close_status>(code), bytes, std::strlen(reason));
   closing.insert(wsi);
   lws_set_timer_usecs(wsi, 1);
 }
@@ -561,10 +561,11 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
       if (lws_hdr_copy(wsi, args, sizeof(args), WSI_TOKEN_HTTP_URI_ARGS) > 0) { target += '?'; target += args; }
       const Socket socket = viewerTarget(target);
       if (socket == Socket::none || !localRequest(s->config, wsi) || s->nextGeneration == UINT32_MAX) return 1;
-      if (!s->planConnection(socket).open) return 1;
+      const bool admitted = s->planConnection(socket).open;
+      if (!admitted && socket != Socket::control) return 1;
       // Check a ticket only for a connection that would open, so a refused
       // one doesn't use it up.
-      if (!authenticated(s->config, wsi, true) && !s->tickets.redeem(offeredTicket(wsi), Tickets::Clock::now())) return 1;
+      if (!authenticated(s->config, wsi, true) && !(admitted && s->tickets.redeem(offeredTicket(wsi), Tickets::Clock::now()))) return 1;
       static_cast<HttpResponse*>(user)->socket = socket;
       return 0;
     }
@@ -572,7 +573,10 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
       if (s->nextGeneration == UINT32_MAX) return -1;
       const Socket socket = static_cast<HttpResponse*>(user)->socket;
       const auto plan = s->planConnection(socket);
-      if (!plan.open) return -1;
+      if (!plan.open) {
+        if (socket == Socket::control) { s->evict(wsi, close_busy, "busy"); return 0; }
+        return -1;
+      }
       if (socket == Socket::control) {
         s->control = wsi; s->control_generation = ++s->nextGeneration; s->control_received.clear();
         s->input->resetLocks();

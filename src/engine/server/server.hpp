@@ -99,8 +99,8 @@ struct Server {
   void endStream(lws* wsi);
   void endControl();
   void end();
-  /// Sends the takeover close code from the timer callback.
-  void evict(lws* wsi);
+  /// Sends a close code from the timer callback; the default is the takeover code.
+  void evict(lws* wsi, uint16_t code = close_taken, const char* reason = "taken");
   bool holdsInput() const { return control || input_viewer; }
   bool streamMessage(Stream& stream);
   bool controlMessage();

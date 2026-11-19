@@ -1,5 +1,5 @@
 import {
-  CLOSE_REPLACED, CLOSE_TAKEN, HID_KEYS, MAX_BYTES_IN_FLIGHT, encodeAck, encodeInput, h264Codec, isLoopback, parseMessage, socketTarget, validToken,
+  CLOSE_TAKEN, HID_KEYS, MAX_BYTES_IN_FLIGHT, encodeAck, encodeInput, h264Codec, isLoopback, parseMessage, socketTarget, validToken,
   type InputEvent, type Message,
 } from '../src/protocol/index.js';
 
@@ -41,7 +41,6 @@ function receiveCursor({ generation: gen, width, height, hotX, hotY, pixels }: E
 const stats = ((window as any).nativeStats = {
   received: 0, drawn: 0, superseded: 0, holdMs: 0, bytes: 0, decodeerrors: 0, outstanding: 0, pendingBytes: 0, pendingHighWater: 0,
 });
-let reconnectMode: 'automatic' | 'manual' = 'automatic';
 let socket: WebSocket, decoder: VideoDecoder, retryTimer: any, deadline: any, frameHandle = 0, drawnThisFrame = false, transportBroken = false;
 let generation = 0, sequence = 0, lastTimestamp = -1, ready = false, retry = 0, epoch = 0, takeRequested = false;
 let backlogSince: number | null = null, lastCatchUp = -Infinity;
@@ -288,11 +287,7 @@ function present() {
   }
   if (drew || decoded.length) schedulePresent();
 }
-function reconnectAutomatically() {
-  if (reconnectMode === 'automatic') connect();
-}
 function connect() {
-  reconnectMode = 'automatic';
   clearTimeout(retryTimer);
   epoch++;
   const current = epoch;
@@ -399,18 +394,13 @@ function connect() {
     }
   };
   ws.onerror = () => {
-    if (current === epoch) { transportBroken = true; setStatus('Connection error'); }
+    if (current !== epoch || !(opened || ready)) return;
+    transportBroken = true;
+    setStatus('Connection error');
   };
   ws.onclose = (e: CloseEvent) => {
     if (current !== epoch) return;
     reset();
-    if (e.code === CLOSE_REPLACED) {
-      reconnectMode = 'manual';
-      viewOnly = true;
-      applyControl();
-      setStatus('Opened in another viewer · reconnect to watch here');
-      return;
-    }
     if (e.code === CLOSE_TAKEN) retry = 0;
     if ((!opened || e.code === CLOSE_TAKEN) && !viewOnly) {
       viewOnly = true;
@@ -427,7 +417,7 @@ function connect() {
     const delay = Math.min(1000 * 2 ** retry++, 8000);
     if (e.code === CLOSE_TAKEN) setStatus('Control changed · reconnecting view-only');
     setStatus(status.textContent + ` · retrying in ${delay / 1000}s`);
-    retryTimer = setTimeout(reconnectAutomatically, delay);
+    retryTimer = setTimeout(connect, delay);
     checkAccess(current);
   };
 }
@@ -596,11 +586,11 @@ document.addEventListener('visibilitychange', () => {
     if (socket) socket.close();
     reset();
     clearTimeout(retryTimer);
-    if (reconnectMode === 'automatic') setStatus('Paused while hidden');
+    setStatus('Paused while hidden');
   } else {
     startHud();
     retry = 0;
-    reconnectAutomatically();
+    connect();
   }
 });
 function checkAccess(current: number) {

@@ -43,7 +43,7 @@ try {
 }
 ```
 
-- A control session can run while a viewer watches. It cannot connect while a viewer owns input, and it ends with `control_taken` when a viewer chooses **Take control**.
+- A control session can run while a viewer watches. Connecting while a viewer owns input fails with `busy`, and a running session ends with `control_taken` when a viewer chooses **Take control**.
 - The session exposes `surface: { width, height }`.
 - It allows 32 pending input requests.
 - An acknowledgement timeout closes the session.

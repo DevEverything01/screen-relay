@@ -677,19 +677,14 @@ test('under a hold, frames wait for their due time and a trimmed frame is acknow
   assert.deepEqual(all, Array.from({ length: all.length }, (_, index) => index + 1));
 });
 
-test('a replaced viewer stays disconnected across visibility changes until manually reconnected', () => {
+test('a refused handshake does not flash a connection error', () => {
   const app = viewer();
-  const control = () => app.document.querySelector('#toolbar-actions').querySelector('[data-action="control"]');
-  runInContext('relayViewer.setViewOnly(false)', app.context);
-  app.frame(1);
-  const count = app.sockets.length;
-  app.sockets.at(-1).onclose({ code: 4002 });
-  assert.equal(app.document.querySelector('#status').textContent, 'Opened in another viewer · reconnect to watch here');
-  assert.equal(control().attributes['aria-pressed'], 'false');
-  app.document.hidden = true; app.listeners.visibilitychange();
-  app.document.hidden = false; app.listeners.visibilitychange();
-  assert.equal(app.document.querySelector('#status').textContent, 'Opened in another viewer · reconnect to watch here');
-  assert.equal(app.sockets.length, count);
+  const status = app.document.querySelector('#status');
+  assert.equal(new URL(app.sockets[0].url).pathname, '/stream');
+  app.sockets[0].onerror();
+  assert.notEqual(status.textContent, 'Connection error');
+  app.sockets[0].onclose({ code: 1006 });
+  assert.equal(status.textContent, 'Connecting… · retrying in 1s');
   runInContext('relayViewer.connect()', app.context);
   assert.equal(app.sockets.at(-1).url, 'ws://localhost/stream?view=1');
 });
