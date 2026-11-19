@@ -49,7 +49,7 @@ export const agent = {
   product: {
     name: "screen-relay",
     description:
-      "screen-relay streams a Linux desktop to a browser and lets people and agents control it from a CLI and a Node SDK.",
+      "screen-relay streams a Linux desktop to a browser and lets humans and AI agents control it from a CLI and a Node SDK.",
     category: "Developer tools",
     audience: ["Developers", "AI agents"],
     useCases: [

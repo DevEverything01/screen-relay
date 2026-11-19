@@ -1,6 +1,6 @@
 # screen-relay
 
-Desktop streaming and control for people and AI agents: watch a desktop in a browser, and click, type, and take screenshots from the shell.
+Desktop streaming and control for humans and AI agents: watch a desktop in a browser, and click, type, and take screenshots from the shell.
 
 <p>
   <a href="https://vercel.com/labs#active-experiments"><img alt="Vercel Labs Experiment" src="https://img.shields.io/badge/LABS-EXPERIMENT-0a0a0a.svg?style=for-the-badge&amp;logo=Vercel&amp;labelColor=000000" height="28"></a>
