@@ -52,9 +52,9 @@ The engine admits up to four `/stream` connections, with one input owner at a ti
 | `/stream?view=1` | Opens if a viewer slot is available. No change to input ownership. |
 | `/stream` | Opens and owns input if a viewer slot is available and input has no owner. |
 | `/stream?take=1` | Opens and owns input if a viewer slot is available or the current owner is a viewer it can replace. The previous input owner closes with code 4001 and reason `taken`. |
-| `/control` | Opens and owns input if input has no owner. |
+| `/control` | Opens and owns input if input has no owner. Otherwise it opens and closes with code 4003 and reason `busy`. |
 
-Adding `clipboard=1` to a supported stream URL does not change these rules. A refused connection fails its WebSocket handshake. Held keys and buttons are released when a connection loses input. A browser that loses input to a takeover reconnects with `?view=1`.
+Adding `clipboard=1` to a supported stream URL does not change these rules. A refused `/stream` connection fails its WebSocket handshake, while a refused `/control` connection opens and closes with code 4003 and reason `busy` so a client can tell it apart from an unreachable engine. Held keys and buttons are released when a connection loses input. A browser that loses input to a takeover reconnects with `?view=1`.
 
 When the session has a token, offer both `nsl1` and `bearer.TOKEN` as subprotocols; the server selects `nsl1`. Do not put the token in a request URL.
 
@@ -67,9 +67,9 @@ A grant is a second credential with a narrower scope and a lifetime, for a viewe
 | `watch` | `/stream?view=1` |
 | `control` | `/stream`, `/stream?take=1`, `/stream?view=1`, and `/control` |
 
-A grant never opens a URL with `clipboard=1`, and it does not authorize HTTP requests, so `/clipboard`, `/input`, `/screenshot.png`, `/capabilities`, `/metrics`, and `/grants` still need the session token. The rules for viewer slots and input ownership above apply to grant connections unchanged.
+A grant never opens a URL with `clipboard=1`, and it does not authorize HTTP requests, so `/clipboard`, `/input`, `/screenshot.png`, `/capabilities`, `/metrics`, and `/grants` still need the session token. Grant connections share up to three browser slots. One of the four browser slots is reserved for a connection that uses the session token.
 
-A grant can open connections until it ends. It ends when its lifetime runs out, or when you send `DELETE /grants/ID` with the session token, which returns 200. The engine then closes the connections opened with that grant and refuses new ones. Connections opened with the session token or another grant stay open. Grants are kept in memory, so stopping the session ends them all.
+A grant can open connections until it ends. It ends when its lifetime runs out, or when you send `DELETE /grants/ID` with the session token, which returns 200. The engine then closes the connections opened with that grant and refuses new ones. Connections opened with the session token or another grant stay open. The engine keeps at most 32 active grants in memory. Stopping the session ends them all. A live connection closed because its grant ended receives WebSocket close code `1008` with reason `grant ended`.
 
 The bundled viewer accepts a grant in its link. `#token=GRANT_TOKEN&scope=watch` opens a watch grant: the viewer connects only to `/stream?view=1` and offers no way to take control. `#token=GRANT_TOKEN&scope=control` opens a control grant: the viewer connects to `/stream`, `/stream?take=1`, or `/stream?view=1` without `clipboard=1`. With either scope the viewer sends no HTTP request. A link with only `#token=` is treated as the session token.
 

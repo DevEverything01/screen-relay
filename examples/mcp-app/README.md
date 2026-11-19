@@ -23,7 +23,7 @@ cd examples/mcp-app && npm install
 
 ## Run
 
-Set the screen-relay origin. It must match the origin in the URL passed to `open_desktop`.
+Set the screen-relay origin. It must match the URL passed to `open_desktop`. This example requires a token-enabled relay, even on loopback, so the server can issue scoped viewer grants. For a local relay, start a token-enabled session with `screen-relay up -d --public https://localhost --bind 127.0.0.1`, then use its local `http://127.0.0.1:8080` origin and token on the same machine.
 
 ```sh
 SCREEN_RELAY_ORIGIN=https://your-sandbox.vercel.run SCREEN_RELAY_TOKEN="$SCREEN_RELAY_TOKEN" npm run start:http
@@ -35,7 +35,7 @@ In HTTP mode, each MCP session keeps its own state. `desktop_screenshot` capture
 
 An idle session closes after 30 minutes, and a later request that carries its id returns `404 Session not found`. Set `MCP_SESSION_IDLE_MS` to change the timeout in milliseconds. A host that reconnects without closing its previous session does not keep that session alive.
 
-The HTTP mode listens on loopback only, rejects any request whose `Host` is not this server, and rejects an `Origin` that is not served from this machine. That stops DNS rebinding from reaching the desktop tools while letting a local host such as `http://localhost:8080` connect.
+The HTTP mode listens on loopback only, rejects any request whose `Host` is not this server, and rejects an `Origin` that is not served from this machine. That stops DNS rebinding from reaching the desktop tools while letting a local host such as `http://localhost:8081` connect.
 
 For the ext-apps basic host:
 
@@ -44,9 +44,11 @@ cd /path/to/ext-apps/examples/basic-host
 npm install && npm run start
 ```
 
-Open `http://localhost:8080`, choose `open_desktop`, and call it with the viewer URL. Use `desktop_screenshot` afterwards to capture the same session.
+Open `http://localhost:8081`, choose `open_desktop`, and call it with the viewer URL. Use `desktop_screenshot` afterwards to capture the same session.
 
-Set `SCREEN_RELAY_TOKEN` in the MCP server environment. The server uses it to request a one-hour watch grant and sends only the grant to the viewer in `_meta`, outside model-visible content. To allow input from the viewer, set `SCREEN_RELAY_VIEWER_SCOPE=control` before starting the MCP server. Neither grant enables clipboard access. The screenshot and automation tools keep their existing server-side permissions.
+The host serves its page from a loopback HTTP origin, so allow `http://localhost:8081` when you start the relay. See [Allow the app origin](#allow-the-app-origin).
+
+Set `SCREEN_RELAY_TOKEN` in the MCP server environment. The server uses it to request a one-hour watch grant and sends only the grant to the viewer in `_meta`, outside model-visible content. To allow input from the viewer, set `SCREEN_RELAY_VIEWER_SCOPE=control` before starting the MCP server. Neither grant enables clipboard access. Reopening the same desktop reuses the current grant until it expires. After expiry, run `open_desktop` again to renew access. The screenshot and automation tools keep their existing server-side permissions.
 
 ## Claude rendering
 
@@ -84,10 +86,18 @@ agent-desktop reads the accessibility tree, so it only sees apps that publish on
 
 ## Allow the app origin
 
-The engine allows the configured relay origin by default. When your MCP host serves the viewer from another origin, add that exact HTTPS origin with `--allow-origin`. For the sandbox verification below, the default test origin is `https://relay-test.claudemcpcontent.com`. Set `SCREEN_RELAY_EMBED_ORIGIN` if you use a different one, and allow that same origin when you start the relay.
+The engine allows the configured relay origin by default. When your MCP host serves the viewer from another origin, add that exact origin with `--allow-origin`. Use an HTTPS origin for a page on a remote host, or a loopback HTTP origin such as `http://localhost:8081` for a page served on your machine. For the sandbox verification below, the default test origin is `https://relay-test.claudemcpcontent.com`. Set `SCREEN_RELAY_EMBED_ORIGIN` if you use a different one, and allow that same origin when you start the relay.
 
 ```sh
 screen-relay up -d --bind 0.0.0.0 --public https://your-sandbox.vercel.run --allow-origin https://relay-test.claudemcpcontent.com
+```
+
+The allowlist applies to the WebSocket upgrade. It does not enable cross-origin browser HTTP requests. The embedded viewer streams over WebSocket, and the MCP server handles screenshots separately.
+
+For the basic host, allow its loopback origin instead:
+
+```sh
+screen-relay up -d --bind 0.0.0.0 --public https://your-sandbox.vercel.run --allow-origin http://localhost:8081
 ```
 
 ## Verification
@@ -100,6 +110,4 @@ node check.mjs
 
 Alternatively, `SCREEN_RELAY_TOKEN_FILE` can point to the sandbox session's token file for the check. The check reads the resource through MCP, checks that credentials stay out of model-visible results, exercises both UI initialization orders, captures a screenshot, and tests a WebSocket upgrade with the scoped credential and the configured embed origin. It does not decode video or drive a browser.
 
-The check passed against a Vercel Sandbox with a 1280×720 screenshot, including after a fresh screen-relay build. In Claude Desktop's Code chat, the resource rendered inline, reported `Live · click to control`, and displayed the sandbox desktop. Its generated frame policy included both configured connection origins. Codex rendered the same resource inline at 1280×720.
-
-The direct viewer's optional capabilities and metrics fetches are cross-origin and remain subject to the engine's CORS policy. WebSocket streaming does not use that HTTP CORS flow. Mouse and keyboard, fullscreen, and clipboard still need host testing; the viewer source currently has no clipboard integration.
+Run the check with `SCREEN_RELAY_VIEWER_SCOPE=watch` and `SCREEN_RELAY_VIEWER_SCOPE=control` to cover both modes. Testing inside Claude or Codex still requires a real host session.

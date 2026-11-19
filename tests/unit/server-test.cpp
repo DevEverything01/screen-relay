@@ -55,6 +55,16 @@ int main() {
                              "https://.example.com", "https://app.example.com.", "https://[::1]", " https://app.example.com"}) {
     assert(!exactHttpsOrigin(origin));
   }
+  assert(exactLoopbackHttpOrigin("http://localhost:8081") && exactLoopbackHttpOrigin("http://127.0.0.1:3000"));
+  assert(exactLoopbackHttpOrigin("http://localhost") && exactLoopbackHttpOrigin("http://127.0.0.1"));
+  for (const char* origin : {"http://app.example.com", "http://app.example.com:8081", "http://LOCALHOST:8081",
+                             "http://localhost.evil:8081", "http://localhost:8081/", "http://localhost:80",
+                             "http://127.0.0.1:80", "http://localhost:08081", "http://localhost:65536",
+                             "http://localhost:", "https://localhost:8081", "http://[::1]:8081"}) {
+    assert(!exactLoopbackHttpOrigin(origin));
+  }
+  assert(exactAllowedOrigin("https://app.example.com") && exactAllowedOrigin("http://localhost:8081"));
+  assert(!exactAllowedOrigin("http://app.example.com") && !exactAllowedOrigin("*") && !exactAllowedOrigin("null"));
   {
     Config local;
     assert(originAllowed(local, "http://127.0.0.1:8080") && originAllowed(local, "http://localhost:3000"));
@@ -71,17 +81,19 @@ int main() {
     assert(!originAllowed(remote, "http://localhost:8080") && !originAllowed(remote, "http://127.0.0.1:8080") &&
            !originAllowed(remote, "https://desk.example.com:8443") && !originAllowed(remote, "http://desk.example.com") &&
            !originAllowed(remote, "https://app.example.com") && !originAllowed(remote, "null") && !originAllowed(remote, ""));
-    remote.allowed_origins = {"https://app.example.com", "https://host.example.net:8443"};
+    remote.allowed_origins = {"https://app.example.com", "https://host.example.net:8443", "http://localhost:8081"};
     assert(originAllowed(remote, "https://app.example.com") && originAllowed(remote, "https://host.example.net:8443") &&
-           originAllowed(remote, "https://desk.example.com"));
-    assert(!originAllowed(remote, "https://host.example.net") && !originAllowed(remote, "http://localhost:8080"));
+           originAllowed(remote, "http://localhost:8081") && originAllowed(remote, "https://desk.example.com"));
+    assert(!originAllowed(remote, "https://host.example.net") && !originAllowed(remote, "http://localhost:8080") &&
+           !originAllowed(remote, "http://localhost:8082") && !originAllowed(remote, "http://127.0.0.1:8081"));
   }
   {
     Config config;
     std::string error;
     for (const char* value : {"", "*", "null", "https://*.example.com", "http://app.example.com", "https://app.example.com/",
                               "https://app.example.com,", ",https://app.example.com", "https://a.example.com,,https://b.example.com",
-                              "https://a.example.com, https://b.example.com"}) {
+                              "https://a.example.com, https://b.example.com", "http://localhost:80", "http://localhost:8081/",
+                              "http://LOCALHOST:8081", "http://localhost.evil:8081"}) {
       error.clear();
       assert(!engineConfig({"--allow-origin", value}, config, &error) && error.rfind("Allowed origins must be", 0) == 0);
     }
@@ -99,6 +111,11 @@ int main() {
     assert(!chmod(tokenFile.c_str(), 0600));
     assert(engineConfig({"--token-file", tokenFile, "--allow-origin", "https://a.example.com,https://b.example.com:8443"}, config));
     assert((config.allowed_origins == std::vector<std::string>{"https://a.example.com", "https://b.example.com:8443"}));
+    assert(engineConfig({"--token-file", tokenFile, "--allow-origin", "https://a.example.com,http://localhost:8081"}, config));
+    assert((config.allowed_origins == std::vector<std::string>{"https://a.example.com", "http://localhost:8081"}));
+    error.clear();
+    assert(!engineConfig({"--token-file", tokenFile, "--allow-origin", "http://app.example.com,http://localhost:8081"}, config, &error) &&
+           error.rfind("Allowed origins must be", 0) == 0);
     for (const auto& [input, expected] : std::vector<std::pair<const char*, const char*>>{
            {"https://DESK.Example.com:443", "desk.example.com"},
            {"https://DESK.Example.com:08443", "desk.example.com:8443"},
@@ -178,9 +195,21 @@ int main() {
       {Socket::none, 0, false, false, false, false, false},
     };
     for (const auto& row : rows) {
-      const auto plan = connectionPlan(row.socket, row.viewerCount, row.owns, row.control);
+      const auto plan = connectionPlan(row.socket, row.viewerCount, row.owns, row.control, 0, false, false);
       assert(plan.open == row.open && plan.closeStream == row.closeStream && plan.closeControl == row.closeControl);
     }
+    const auto grantLimit = max_viewers - 1;
+    assert(!connectionPlan(Socket::watch, grantLimit, false, false, grantLimit, true, false).open);
+    assert(connectionPlan(Socket::watch, grantLimit, false, false, grantLimit, false, false).open);
+    assert(connectionPlan(Socket::watch, max_viewers - 1, false, false, grantLimit - 1, true, false).open);
+    assert(!connectionPlan(Socket::watch, max_viewers, false, false, grantLimit - 1, true, false).open);
+    assert(!connectionPlan(Socket::take, max_viewers, true, false, grantLimit, true, false).open);
+    const auto replacement = connectionPlan(Socket::take, grantLimit, true, false, grantLimit, true, true);
+    assert(replacement.open && replacement.closeStream);
+    assert(!connectionPlan(Socket::take, max_viewers, true, false, max_viewers, true, true).open);
+    assert(!connectionPlan(Socket::take, max_viewers + 1, true, false, grantLimit, false, true).open);
+    assert(connectionPlan(Socket::take, max_viewers, true, false, grantLimit, false, true).open);
+    assert(connectionPlan(Socket::control, grantLimit, false, false, grantLimit, true, false).open);
   }
   assert(clipboardLength("", length) == HTTP_STATUS_LENGTH_REQUIRED && clipboardLength("x", length) == HTTP_STATUS_BAD_REQUEST);
   assert(!clipboardLength("0", length) && length == 0);

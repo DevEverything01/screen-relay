@@ -132,6 +132,8 @@ export function responseError(status: number, detail: unknown): RelayError {
   const body = detail && typeof detail === 'object' ? detail as Record<string, unknown> : {};
   const reason: ErrorReason = status === 401 ? 'unauthorized' : status === 403 ? 'forbidden'
     : status === 404 ? 'not_found' : status === 409 || status === 429 || (status === 503 && body.error === 'busy') || body.error === 'busy' ? 'busy'
+    : body.error === 'clipboard_busy' ? 'busy'
+    : body.error === 'clipboard_too_large' ? 'component_failed'
     : body.error === 'clipboard_unavailable' ? 'clipboard_unavailable'
     : status === 422 || body.error === 'unsupported_input' ? 'unsupported_input'
     : status === 400 || status === 413 || body.error === 'invalid_input' ? 'invalid_input' : 'component_failed';
@@ -147,6 +149,8 @@ export function responseError(status: number, detail: unknown): RelayError {
     screenshot_unavailable: 'The engine could not take a screenshot. Read the engine log with screen-relay logs engine.',
     invalid_text: 'The clipboard text must be UTF-8 without NUL characters.',
     too_large: 'The text is larger than the engine accepts.',
+    clipboard_busy: 'The desktop clipboard request queue is full. Retry shortly.',
+    clipboard_too_large: 'The desktop clipboard exceeds the 256 KiB read limit.',
   };
   const message = (typeof body.error === 'string' && Object.hasOwn(details, body.error) ? details[body.error] : undefined)
     ?? messages[reason] ?? 'The engine could not complete the request.';

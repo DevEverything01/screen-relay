@@ -33,14 +33,27 @@ try {
   assert(meta.ui.csp.connectDomains.includes(origin.replace(/^http/, "ws")));
   assert(!meta.ui.csp.frameDomains);
   assert(!html.includes(token), "A resource must not contain session credentials.");
+  assert.match(html, /id="relay-connection" role="status" aria-live="polite"/);
   new Script(html.match(/<script>([\s\S]*)<\/script>/)[1]);
 
-  const opened = await client.callTool({ name: "open_desktop", arguments: { url: origin } });
+  const results = await Promise.all(Array.from({ length: 4 }, () =>
+    client.callTool({ name: "open_desktop", arguments: { url: origin } }),
+  ));
+  const [opened] = results;
   assert(!opened.isError);
+  assert.match(opened.content[0].text, /viewer still needs to connect/);
   const grant = opened._meta["relay/viewer"];
   assert.match(grant.token, /^[0-9a-f]{64}$/);
   assert.notEqual(grant.token, token, "The owner token must not reach the UI.");
   assert.equal(grant.scope, scope);
+  assert(Number.isSafeInteger(grant.expiresAt) && grant.expiresAt > Date.now());
+  for (const result of results.slice(1)) {
+    assert(!result.isError);
+    assert.deepEqual(result._meta["relay/viewer"], grant, "Concurrent opens reuse one grant.");
+  }
+  const reopened = await client.callTool({ name: "open_desktop", arguments: { url: origin } });
+  assert(!reopened.isError);
+  assert.deepEqual(reopened._meta["relay/viewer"], grant, "Reopening reuses the active grant.");
   assert(!JSON.stringify(opened).includes(token));
   assert(!JSON.stringify(opened.content).includes(grant.token));
   assert(!(JSON.stringify(opened.structuredContent) ?? "").includes(grant.token));
@@ -57,16 +70,30 @@ try {
     let receive;
     let starts = 0;
     let reconnects = 0;
-    const input = { value: "" };
+    let clock = Date.now();
+    const timers = new Map();
+    const notice = { hidden: true, textContent: "" };
+    const connectionNotice = { hidden: true, textContent: "" };
+    const status = { textContent: "" };
+    let observeStatus;
     runInNewContext(bridge, {
       URL,
-      Event,
+      Date: { now: () => clock },
+      MutationObserver: class { constructor(callback) { observeStatus = callback; } observe() {} },
+      setTimeout(callback, delay) { const id = Symbol(); timers.set(id, { callback, delay }); return id; },
+      clearTimeout(id) { timers.delete(id); },
       relayOrigin: origin,
-      startViewer(stream) { assert.equal(stream.token, grant.token); assert.equal(stream.scope, scope); starts++; },
+      startViewer(stream) {
+        assert.equal(stream.token, grant.token);
+        assert.equal(stream.scope, scope);
+        starts++;
+        return (token) => { assert.equal(token, "b".repeat(64)); reconnects++; };
+      },
       document: {
         querySelector(selector) {
-          if (selector === "#access-token") return input;
-          if (selector === "#connection-panel") return { dispatchEvent() { reconnects++; } };
+          if (selector === "#relay-expiry") return notice;
+          if (selector === "#relay-connection") return connectionNotice;
+          if (selector === "#status") return status;
           return { textContent: "" };
         },
       },
@@ -76,6 +103,17 @@ try {
         addEventListener(name, handler) { if (name === "message") receive = handler; },
       },
     });
+    assert.equal(connectionNotice.hidden, false);
+    assert.match(connectionNotice.textContent, /Waiting for desktop session/);
+    status.textContent = "Connecting… · retrying in 1s";
+    observeStatus();
+    assert.match(connectionNotice.textContent, /Could not connect to the desktop/);
+    status.textContent = "Live · view only";
+    observeStatus();
+    assert.equal(connectionNotice.hidden, true);
+    status.textContent = "Viewer link expired or was revoked";
+    observeStatus();
+    assert.equal(connectionNotice.hidden, false);
     const result = { jsonrpc: "2.0", method: "ui/notifications/tool-result", params: opened };
     const ready = { jsonrpc: "2.0", id: 1, result: {} };
     receive({ source: {}, data: result });
@@ -84,10 +122,16 @@ try {
     receive({ source: parent, data: result });
     assert.equal(starts, 1, "Start once, regardless of message ordering.");
     assert.equal(reconnects, 0, "Duplicate results must not restart the stream.");
-    const changed = { ...result, params: { _meta: { "relay/viewer": { url: origin, token: "b".repeat(64), scope } } } };
+    assert.equal(timers.size, 1);
+    clock = grant.expiresAt;
+    for (const { callback } of [...timers.values()]) callback();
+    assert.equal(notice.hidden, false);
+    receive({ source: parent, data: result });
+    assert.equal(reconnects, 0, "Expired metadata must not reconnect.");
+    const changed = { ...result, params: { _meta: { "relay/viewer": { url: origin, token: "b".repeat(64), scope, expiresAt: clock + 3600000 } } } };
     receive({ source: parent, data: changed });
+    assert.equal(notice.hidden, true);
     assert.equal(reconnects, 1, "A changed session credential must reconnect the existing viewer.");
-    assert(input.value === "b".repeat(64));
   }
   console.log("UI bridge: both message orders and duplicate results passed.");
 

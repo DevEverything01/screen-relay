@@ -105,9 +105,18 @@ Server::Stream* Server::streamFor(lws* wsi) {
   for (auto& stream : streams) if (stream && stream->viewer == wsi) return stream.get();
   return nullptr;
 }
-ConnectionPlan Server::planConnection(Socket socket) {
-  const auto count = std::count_if(streams.begin(), streams.end(), [](const auto& stream) { return stream && stream->viewer; });
-  return connectionPlan(socket, size_t(count), input_viewer != nullptr, control != nullptr);
+ConnectionPlan Server::planConnection(Socket socket, bool grant) {
+  size_t count = 0, grantCount = 0;
+  bool inputViewerHasGrant = false;
+  for (const auto& stream : streams) {
+    if (!stream || !stream->viewer) continue;
+    ++count;
+    const auto* response = static_cast<HttpResponse*>(lws_wsi_user(stream->viewer));
+    const bool hasGrant = !response || response->grant_id;
+    if (hasGrant) ++grantCount;
+    if (stream->viewer == input_viewer) inputViewerHasGrant = hasGrant;
+  }
+  return connectionPlan(socket, count, input_viewer != nullptr, control != nullptr, grantCount, grant, inputViewerHasGrant);
 }
 int Server::startStream(lws* wsi, Socket socket, const ConnectionPlan& plan, bool clipboardNotices) {
   auto slot = std::find_if(streams.begin(), streams.end(), [](const auto& stream) { return !stream || !stream->viewer; });
@@ -162,16 +171,15 @@ void Server::expireGrants() {
     auto* response = static_cast<HttpResponse*>(lws_wsi_user(wsi));
     return response && response->grant_id && !grants.active(response->grant_id, now);
   };
-  if (control && expired(control)) { evict(control, LWS_CLOSE_STATUS_POLICY_VIOLATION); endControl(); }
+  if (control && expired(control)) { evict(control, LWS_CLOSE_STATUS_POLICY_VIOLATION, "grant ended"); endControl(); }
   for (auto& stream : streams) if (stream && stream->viewer && expired(stream->viewer)) {
-    evict(stream->viewer, LWS_CLOSE_STATUS_POLICY_VIOLATION);
+    evict(stream->viewer, LWS_CLOSE_STATUS_POLICY_VIOLATION, "grant ended");
     endStream(stream->viewer);
   }
 }
-void Server::evict(lws* wsi, uint16_t code) {
-  unsigned char taken[] = "taken", expired[] = "grant ended";
-  lws_close_reason(wsi, static_cast<lws_close_status>(code), code == close_taken ? taken : expired,
-                   code == close_taken ? sizeof(taken) - 1 : sizeof(expired) - 1);
+void Server::evict(lws* wsi, uint16_t code, const char* reason) {
+  auto* bytes = reinterpret_cast<unsigned char*>(const_cast<char*>(reason));
+  lws_close_reason(wsi, static_cast<lws_close_status>(code), bytes, std::strlen(reason));
   closing.insert(wsi);
   lws_set_timer_usecs(wsi, 1);
 }
@@ -448,7 +456,7 @@ int clipboardWrite(lws* wsi, HttpResponse* response, Server* s) {
   delete response->upload; response->upload = nullptr;
   if (!complete) return -1;
   if (!validText(text)) return errorResponse(wsi, response, HTTP_STATUS_BAD_REQUEST, "invalid_text");
-  if (!s->clipboard.submit(wsi, std::move(text))) return errorResponse(wsi, response, HTTP_STATUS_SERVICE_UNAVAILABLE, "busy");
+  if (!s->clipboard.submit(wsi, std::move(text))) return errorResponse(wsi, response, HTTP_STATUS_SERVICE_UNAVAILABLE, "clipboard_busy");
   return 0;
 }
 int metricsResponse(lws* wsi, HttpResponse* response, Server* server) {
@@ -497,7 +505,7 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
         if (!authenticated(s->config, wsi)) return errorResponse(wsi, response, HTTP_STATUS_UNAUTHORIZED, "unauthorized");
         if (!s->clipboard.available()) return errorResponse(wsi, response, HTTP_STATUS_SERVICE_UNAVAILABLE, "clipboard_unavailable");
         if (!write) {
-          if (!s->clipboard.submit(wsi, std::nullopt)) return errorResponse(wsi, response, HTTP_STATUS_SERVICE_UNAVAILABLE, "busy");
+          if (!s->clipboard.submit(wsi, std::nullopt)) return errorResponse(wsi, response, HTTP_STATUS_SERVICE_UNAVAILABLE, "clipboard_busy");
           return 0;
         }
         uint64_t length = 0;
@@ -653,7 +661,6 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
       }
       const Target parsed = viewerTarget(target);
       if (parsed.socket == Socket::none || !localRequest(s->config, wsi) || s->nextGeneration == UINT32_MAX) return 1;
-      if (!s->planConnection(parsed.socket).open) return 1;
       auto* response = static_cast<HttpResponse*>(user);
       response->grant_id = 0;
       if (!authenticated(s->config, wsi, true)) {
@@ -661,16 +668,23 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
         if (!grant || parsed.clipboard || (grant->scope == GrantScope::watch && parsed.socket != Socket::watch)) return 1;
         response->grant_id = grant->id;
       }
+      if (!s->planConnection(parsed.socket, response->grant_id != 0).open && parsed.socket != Socket::control) return 1;
       response->socket = parsed.socket; response->clipboard = parsed.clipboard;
       return 0;
     }
     case LWS_CALLBACK_ESTABLISHED: {
       if (s->nextGeneration == UINT32_MAX) return -1;
       const auto* response = static_cast<HttpResponse*>(user);
-      if (response->grant_id && !s->grants.active(response->grant_id, Grants::Clock::now())) return -1;
+      if (response->grant_id && !s->grants.active(response->grant_id, Grants::Clock::now())) {
+        s->evict(wsi, LWS_CLOSE_STATUS_POLICY_VIOLATION, "grant ended");
+        return 0;
+      }
       const Socket socket = response->socket;
-      const auto plan = s->planConnection(socket);
-      if (!plan.open) return -1;
+      const auto plan = s->planConnection(socket, response->grant_id != 0);
+      if (!plan.open) {
+        if (socket == Socket::control) { s->evict(wsi, close_busy, "busy"); return 0; }
+        return -1;
+      }
       if (socket == Socket::control) {
         s->control = wsi; s->control_generation = ++s->nextGeneration; s->control_received.clear();
         s->input->resetLocks();
@@ -682,7 +696,7 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
     case LWS_CALLBACK_RECEIVE: {
       if (s->closing.count(wsi)) return 0;
       if (const auto* response = static_cast<HttpResponse*>(user); response && response->grant_id &&
-          !s->grants.active(response->grant_id, Grants::Clock::now())) return -1;
+          !s->grants.active(response->grant_id, Grants::Clock::now())) { s->expireGrants(); return 0; }
       auto* stream = s->streamFor(wsi);
       if (!stream && s->control != wsi) return -1;
       auto& received = stream ? stream->received : s->control_received;
@@ -698,7 +712,7 @@ int callback(lws* wsi, lws_callback_reasons reason, void* user, void* in, size_t
     case LWS_CALLBACK_SERVER_WRITEABLE: {
       if (s->closing.count(wsi)) return 0;
       if (const auto* response = static_cast<HttpResponse*>(user); response && response->grant_id &&
-          !s->grants.active(response->grant_id, Grants::Clock::now())) return -1;
+          !s->grants.active(response->grant_id, Grants::Clock::now())) { s->expireGrants(); return 0; }
       if (auto* stream = s->streamFor(wsi)) {
         const int result = stream->write(s->config.proxy);
         if (stream->width) { s->width = stream->width; s->height = stream->height; }

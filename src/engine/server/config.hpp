@@ -52,6 +52,10 @@ bool loopbackOrigin(const std::string& origin);
 bool loopbackHost(const std::string& host);
 /** True for a lowercase https://HOST[:PORT] origin as a browser sends it: no path, wildcard, or default port. */
 bool exactHttpsOrigin(const std::string& origin);
+/** True for a lowercase http://localhost[:PORT] or http://127.0.0.1[:PORT] origin as a browser sends it, without port 80. */
+bool exactLoopbackHttpOrigin(const std::string& origin);
+/** True for an origin --allow-origin accepts: an exact HTTPS origin, or an exact loopback HTTP origin. */
+bool exactAllowedOrigin(const std::string& origin);
 /**
  * Decides a request that sent an Origin header. An allowlisted origin always passes; otherwise a session with a
  * public origin accepts only that origin, and a session without one accepts only loopback origins.

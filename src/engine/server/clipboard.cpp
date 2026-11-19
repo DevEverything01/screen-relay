@@ -6,7 +6,7 @@ namespace relay {
 ClipboardWorker::Reply clipboardReply(const std::optional<std::string>& text, bool read, bool ok) {
   if (!ok || (read && !text)) return {nullptr, 503, "{\"error\":\"clipboard_unavailable\"}"};
   if (!read) return {nullptr, 200, "{\"length\":" + std::to_string(text->size()) + "}"};
-  if (text->size() > max_clipboard_bytes) return {nullptr, 413, "{\"error\":\"too_large\"}"};
+  if (text->size() > max_clipboard_bytes) return {nullptr, 413, "{\"error\":\"clipboard_too_large\"}"};
   return {nullptr, 200, "{\"text\":" + jsonString(*text) + "}"};
 }
 void ClipboardWorker::start(std::unique_ptr<ClipboardBackend> backend, std::function<void()> wake) {

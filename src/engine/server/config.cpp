@@ -220,6 +220,20 @@ bool exactHttpsOrigin(const std::string& origin) {
   uint64_t port = 0;
   return text.size() <= 5 && unsignedNumber(text, port) && text.front() != '0' && port <= 65535 && port != 443;
 }
+bool exactLoopbackHttpOrigin(const std::string& origin) {
+  if (origin.rfind("http://", 0) != 0) return false;
+  const auto authority = origin.substr(7);
+  const auto colon = authority.find(':');
+  const auto name = authority.substr(0, colon);
+  if (name != "localhost" && name != "127.0.0.1") return false;
+  if (colon == std::string::npos) return true;
+  const auto text = authority.substr(colon + 1);
+  uint64_t port = 0;
+  return text.size() <= 5 && unsignedNumber(text, port) && text.front() != '0' && port <= 65535 && port != 80;
+}
+bool exactAllowedOrigin(const std::string& origin) {
+  return exactHttpsOrigin(origin) || exactLoopbackHttpOrigin(origin);
+}
 static std::string httpsAuthority(const std::string& authority) {
   if (authority.empty() || authority.find_first_of("/?#@\\ \t\r\n") != std::string::npos) return {};
   auto separator = authority.find(':');
@@ -271,14 +285,16 @@ bool parseConfig(int argc, char** argv, Config& config) {
                    "  [--backend NAME] [--output NAME] [--check]\n"
                    "  [--fps N] [--bitrate-min BPS] [--bitrate-start BPS] [--bitrate-max BPS]\n"
                    "  [--token-file FILE [--public-origin https://HOST[:PORT]]\n"
-                   "    [--allow-origin https://HOST[:PORT][,...]]]\n"
+                   "    [--allow-origin ORIGIN[,...]]]\n"
                    "  [--tls-cert FILE --tls-key FILE | --behind-tls-proxy]\n"
                    "  [--insecure-local: unauthenticated, isolated development network only]\n"
                    "FPS is 10 to 120; bitrates are 250000 to 100000000 bits per second with\n"
                    "min <= start <= max. Non-loopback --bind needs --token-file;\n"
                    "--public-origin also needs TLS or --behind-tls-proxy.\n"
                    "A browser request must come from the public origin, or from a loopback origin\n"
-                   "when there is none, unless --allow-origin lists its exact origin.\n"
+                   "when there is none, unless --allow-origin lists its exact origin. Each allowed\n"
+                   "origin is a lowercase https://HOST[:PORT] origin, or http://localhost[:PORT] or\n"
+                   "http://127.0.0.1[:PORT] for a page served on the machine itself.\n"
                    "--check initializes the backend and exits without starting capture or the server.\n"
                    "Attach to DISPLAY using the caller's XAUTHORITY. Defaults: 127.0.0.1:8080, 60 fps,\n"
                    "1000000/8000000/40000000 bps.\n"
@@ -314,8 +330,8 @@ bool parseConfig(int argc, char** argv, Config& config) {
       std::istringstream origins(value + ',');
       std::string origin;
       while (std::getline(origins, origin, ',')) {
-        if (!exactHttpsOrigin(origin) || config.allowed_origins.size() == 16)
-          throw std::runtime_error("Allowed origins must be at most 16 comma-separated lowercase https://HOST[:PORT] origins without a path, wildcard or port 443");
+        if (!exactAllowedOrigin(origin) || config.allowed_origins.size() == 16)
+          throw std::runtime_error("Allowed origins must be at most 16 comma-separated lowercase https://HOST[:PORT] origins, or http://localhost[:PORT] or http://127.0.0.1[:PORT] ones, without a path, wildcard or default port");
         config.allowed_origins.push_back(origin);
       }
     } else if (option == "--token-file") {

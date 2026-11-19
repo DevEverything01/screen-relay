@@ -227,7 +227,7 @@ NODE
 if [ -z "$backend" ]; then
   step 'scoped grants (token session on 127.0.0.2)'
   grant_port=$((port + 1))
-  "$relay" up -d --name "$name-g" --port "$grant_port" --bind 127.0.0.2 --public https://Desktop.Example.test:443 --allow-origin https://app.example.test --json > "$work/up-g.json" 2> "$work/stderr" ||
+  "$relay" up -d --name "$name-g" --port "$grant_port" --bind 127.0.0.2 --public https://Desktop.Example.test:443 --allow-origin "https://app.example.test,http://localhost:8081" --json > "$work/up-g.json" 2> "$work/stderr" ||
     fail "grant session up: $(cat "$work/stderr")"
   "$relay" status --name "$name-g" --show-token --json > "$work/status-g.json" 2> "$work/stderr" || fail 'grant session status'
   node "$(dirname "$0")/integration/grants.mjs" "$grant_port" "$(field "$work/status-g.json" session.token)" ||

@@ -33,7 +33,7 @@ export function originOf(value: string): URL {
 /** Reads the owner token from the environment only (never from model/tool inputs). */
 export function ownerToken(): string {
   const token = envToken;
-  if (!token) throw new Error("Set SCREEN_RELAY_TOKEN in the MCP server environment.");
+  if (!token) throw new Error("This app requires a token-enabled relay. Set SCREEN_RELAY_TOKEN in the MCP server environment.");
   if (!/^[0-9a-f]{64}$/.test(token)) throw new Error("SCREEN_RELAY_TOKEN must be 64 lowercase hexadecimal characters");
   return token;
 }

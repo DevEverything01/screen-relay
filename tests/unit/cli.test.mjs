@@ -39,12 +39,14 @@ test('every metadata example parses through the command parser', () => {
   }
 });
 
-test('--allow-origin takes exact HTTPS origins from the flag or the environment and rejects anything looser', () => {
-  const origins = 'https://app.example.com,https://host.example.net:8443';
+test('--allow-origin takes exact HTTPS and loopback HTTP origins from the flag or the environment', () => {
+  const origins = 'https://app.example.com,https://host.example.net:8443,http://localhost:8081,http://127.0.0.1:3000';
   assert.equal(parseCommand(['up', '--allow-origin', origins], {})['allow-origin'], origins);
   assert.equal(parseCommand(['up'], { SCREEN_RELAY_ALLOW_ORIGIN: origins })['allow-origin'], origins);
   assert.equal(parseCommand(['up'], {})['allow-origin'], undefined);
-  for (const value of ['*', 'null', 'https://*.example.com', 'http://app.example.com', 'http://localhost:3000', 'https://App.example.com',
+  for (const value of ['*', 'null', 'https://*.example.com', 'http://app.example.com', 'http://app.example.com:8081',
+    'http://localhost:80', 'http://127.0.0.1:80', 'http://LOCALHOST:8081', 'http://localhost.evil:8081',
+    'http://localhost:8081/', 'http://localhost:08081', 'http://[::1]:8081', 'https://App.example.com',
     'https://app.example.com/', 'https://app.example.com:443', 'https://app.example.com:65536', 'https://user@app.example.com',
     'https://a.example.com, https://b.example.com', 'https://a.example.com,', Array.from({ length: 17 }, (_, index) => `https://h${index}.example.com`).join(',')]) {
     assert.throws(() => parseCommand(['up', '--allow-origin', value], {}), /Invalid allow-origin/, value);

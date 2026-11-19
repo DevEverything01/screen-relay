@@ -100,14 +100,15 @@ struct Server {
   uint16_t width = 0, height = 0;
   explicit Server(Config settings);
   Stream* streamFor(lws* wsi);
-  ConnectionPlan planConnection(Socket socket);
+  ConnectionPlan planConnection(Socket socket, bool grant);
   int startStream(lws* wsi, Socket socket, const ConnectionPlan& plan, bool clipboardNotices);
   void release();
   void endStream(lws* wsi);
   void endControl();
   void end();
   void expireGrants();
-  void evict(lws* wsi, uint16_t code = close_taken);
+  /// Sends a close code from the timer callback; the default is the takeover code.
+  void evict(lws* wsi, uint16_t code = close_taken, const char* reason = "taken");
   bool holdsInput() const { return control || input_viewer; }
   bool streamMessage(Stream& stream);
   bool controlMessage();
