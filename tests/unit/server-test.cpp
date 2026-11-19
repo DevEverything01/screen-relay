@@ -111,9 +111,21 @@ int main() {
       {Socket::none, 0, false, false, false, false, false},
     };
     for (const auto& row : rows) {
-      const auto plan = connectionPlan(row.socket, row.viewerCount, row.owns, row.control);
+      const auto plan = connectionPlan(row.socket, row.viewerCount, row.owns, row.control, 0, false, false);
       assert(plan.open == row.open && plan.closeStream == row.closeStream && plan.closeControl == row.closeControl);
     }
+    const auto grantLimit = max_viewers - 1;
+    assert(!connectionPlan(Socket::watch, grantLimit, false, false, grantLimit, true, false).open);
+    assert(connectionPlan(Socket::watch, grantLimit, false, false, grantLimit, false, false).open);
+    assert(connectionPlan(Socket::watch, max_viewers - 1, false, false, grantLimit - 1, true, false).open);
+    assert(!connectionPlan(Socket::watch, max_viewers, false, false, grantLimit - 1, true, false).open);
+    assert(!connectionPlan(Socket::take, max_viewers, true, false, grantLimit, true, false).open);
+    const auto replacement = connectionPlan(Socket::take, grantLimit, true, false, grantLimit, true, true);
+    assert(replacement.open && replacement.closeStream);
+    assert(!connectionPlan(Socket::take, max_viewers, true, false, max_viewers, true, true).open);
+    assert(!connectionPlan(Socket::take, max_viewers + 1, true, false, grantLimit, false, true).open);
+    assert(connectionPlan(Socket::take, max_viewers, true, false, grantLimit, false, true).open);
+    assert(connectionPlan(Socket::control, grantLimit, false, false, grantLimit, true, false).open);
   }
   assert(clipboardLength("", length) == HTTP_STATUS_LENGTH_REQUIRED && clipboardLength("x", length) == HTTP_STATUS_BAD_REQUEST);
   assert(!clipboardLength("0", length) && length == 0);

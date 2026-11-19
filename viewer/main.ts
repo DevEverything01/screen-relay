@@ -1,5 +1,5 @@
 import {
-  CLOSE_REPLACED, CLOSE_TAKEN, HID_KEYS, MAX_BYTES_IN_FLIGHT, encodeAck, encodeInput, h264Codec, isLoopback, parseMessage, socketTarget, validToken,
+  CLOSE_TAKEN, HID_KEYS, MAX_BYTES_IN_FLIGHT, encodeAck, encodeInput, h264Codec, isLoopback, parseMessage, socketTarget, validToken,
   type InputEvent, type Message,
 } from '../src/protocol/index.js';
 
@@ -45,7 +45,7 @@ function receiveCursor({ generation: gen, width, height, hotX, hotY, pixels }: E
 const stats = ((window as any).nativeStats = {
   received: 0, drawn: 0, superseded: 0, holdMs: 0, bytes: 0, decodeerrors: 0, outstanding: 0, pendingBytes: 0, pendingHighWater: 0,
 });
-let reconnectMode: 'automatic' | 'manual' = 'automatic';
+let reconnectMode: 'automatic' | 'grant-ended' = 'automatic';
 let socket: WebSocket, decoder: VideoDecoder, retryTimer: any, deadline: any, frameHandle = 0, drawnThisFrame = false, transportBroken = false;
 let generation = 0, sequence = 0, lastTimestamp = -1, ready = false, retry = 0, epoch = 0, takeRequested = false;
 let backlogSince: number | null = null, lastCatchUp = -Infinity;
@@ -99,16 +99,14 @@ function releaseLatched() {
   clearLatched();
 }
 const authHeaders = () => accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
-/**
- * Clipboard sync for the viewer that holds control.
- * Paste: a paste shortcut is held back (idle -> waiting) until the browser's paste event gives the local text, which is
- * sent to the remote clipboard (waiting -> sending) before the shortcut is replayed (-> idle). Without a paste event or
- * text, the shortcut is replayed at once and pastes what the remote clipboard already holds.
- * Copy: a clipboard notice that arrives while the page has focus writes the remote text to the local clipboard. A
- * notice that arrives without focus is not applied, so a copy in another local app is never overwritten.
- */
-type PasteState = { state: 'idle' } | { state: 'waiting' | 'sending'; key: number; chord: number[] };
+type ClipboardState = { state: 'local' } | { state: 'remote-pending' | 'remote-unavailable' };
+type PasteState = { state: 'idle' } | {
+  state: 'waiting' | 'sending'; key: number; buttons: number; modifiers: number;
+  source: 'local' | 'remote'; queue: Uint8Array[];
+};
 let paste: PasteState = { state: 'idle' }, clipboardAvailable = false;
+const MAX_PASTE_INPUT = 256;
+let clipboard: ClipboardState = { state: 'local' };
 let syncedText: string | null = null, clipboardEpoch = 0;
 async function readRemoteClipboard(): Promise<string | null> {
   const response = await fetch('/clipboard', { cache: 'no-store', redirect: 'error', headers: authHeaders(), signal: AbortSignal.timeout(5000) });
@@ -116,37 +114,48 @@ async function readRemoteClipboard(): Promise<string | null> {
   return typeof data?.text === 'string' ? data.text : null;
 }
 async function writeRemoteClipboard(local: string): Promise<boolean> {
-  const current = clipboardEpoch;
+  const current = clipboardEpoch, previous = clipboard;
   const text = local.replace(/\r\n/g, '\n');
   const response = await fetch('/clipboard', { method: 'POST', cache: 'no-store', redirect: 'error', headers: { ...authHeaders(), 'Content-Type': 'text/plain;charset=utf-8' }, body: text, signal: AbortSignal.timeout(5000) });
   if (!response.ok || current !== clipboardEpoch) return false;
-  syncedText = text;
+  if (clipboard === previous) { syncedText = text; clipboard = { state: 'local' }; }
   return true;
 }
 async function copyRemoteClipboard(always = false): Promise<void> {
-  const current = clipboardEpoch;
-  const text = await readRemoteClipboard();
-  if (current !== clipboardEpoch || !document.hasFocus()) return;
-  if (text === null) throw new Error('unavailable');
-  if (!always && (!text || text === syncedText)) return;
-  await navigator.clipboard.writeText(text);
-  if (current === clipboardEpoch) syncedText = text;
+  const current = clipboardEpoch, pending: ClipboardState = { state: 'remote-pending' };
+  clipboard = pending;
+  try {
+    const text = await readRemoteClipboard();
+    if (current !== clipboardEpoch || clipboard !== pending || !document.hasFocus()) return;
+    if (text === null) throw new Error('unavailable');
+    if (!always && text === syncedText) { clipboard = { state: 'local' }; return; }
+    if (!always && !text) { clipboard = { state: 'remote-unavailable' }; return; }
+    await navigator.clipboard.writeText(text);
+    if (current === clipboardEpoch && clipboard === pending) { syncedText = text; clipboard = { state: 'local' }; }
+  } catch (error) {
+    if (current === clipboardEpoch && clipboard === pending) clipboard = { state: 'remote-unavailable' };
+    throw error;
+  }
 }
 function remoteClipboardChanged() {
-  if (navigator.clipboard && document.hasFocus()) copyRemoteClipboard().catch(() => {});
+  if (document.hasFocus() && navigator.clipboard) copyRemoteClipboard().catch(() => {});
+  else clipboard = { state: 'remote-unavailable' };
 }
 function finishPaste(current: Exclude<PasteState, { state: 'idle' }>, replay: boolean) {
   if (paste !== current) return;
   paste = { state: 'idle' };
-  if (!replay) return;
-  const { key, chord } = current;
-  const pressed = chord.filter((code) => !held.has(code) && holdKey(code));
-  if (holdKey(key)) releaseKey(key);
-  for (const code of pressed.reverse()) releaseKey(code);
+  if (!ready || socket?.readyState !== WebSocket.OPEN || viewOnly) return;
+  if (replay) {
+    const { key, buttons, modifiers } = current;
+    socket.send(encodeInput({ type: 'keyDown', key, buttons, modifiers }, generation, 0));
+    socket.send(encodeInput({ type: 'keyUp', key, buttons, modifiers }, generation, 0));
+  }
+  for (const input of current.queue) socket.send(input);
+  if (!replay) setStatus('Could not send the clipboard');
 }
 function holdBackPaste(e: KeyboardEvent, key: number): boolean {
   if (viewOnly || !clipboardAvailable || paste.state !== 'idle' || e.code !== 'KeyV' || e.altKey || !(e.ctrlKey || e.metaKey)) return false;
-  const waiting = { state: 'waiting' as const, key, chord: [...held].filter((code) => code >= 224) };
+  const waiting = { state: 'waiting' as const, key, buttons, modifiers, source: clipboard.state === 'local' ? 'local' as const : 'remote' as const, queue: [] };
   paste = waiting;
   setTimeout(() => finishPaste(waiting, true), 0);
   return true;
@@ -155,7 +164,7 @@ document.addEventListener('paste', (e) => {
   if (paste.state !== 'waiting') return;
   e.preventDefault();
   const text = e.clipboardData?.getData('text/plain');
-  if (!text) { finishPaste(paste, true); return; }
+  if (!text || paste.source === 'remote' || clipboard.state !== 'local') { finishPaste(paste, true); return; }
   const sending = { ...paste, state: 'sending' as const };
   paste = sending;
   writeRemoteClipboard(text).then(
@@ -166,7 +175,10 @@ document.addEventListener('paste', (e) => {
 
 function sendInput(event: InputEvent): boolean {
   if (!ready || socket?.readyState !== WebSocket.OPEN || (viewOnly && event.type !== 'releaseAll')) return false;
-  socket.send(encodeInput({ ...event, buttons, modifiers }, generation, 0));
+  const input = encodeInput({ ...event, buttons, modifiers }, generation, 0);
+  if (paste.state === 'idle') socket.send(input);
+  else if (paste.queue.length < MAX_PASTE_INPUT) paste.queue.push(input);
+  else { release(); setStatus('Paste cancelled · too much input queued'); return false; }
   return true;
 }
 function holdKey(code: number): boolean {
@@ -190,6 +202,7 @@ function dropLatch(code: number): boolean {
 function release() {
   clipboardEpoch++;
   syncedText = null;
+  if (clipboard.state !== 'local') clipboard = { state: 'remote-unavailable' };
   paste = { state: 'idle' };
   buttons = modifiers = 0;
   if (ready) sendInput({ type: 'releaseAll' });
@@ -360,10 +373,8 @@ function present() {
   }
   if (drew || decoded.length) schedulePresent();
 }
-function reconnectAutomatically() {
-  if (reconnectMode === 'automatic') connect();
-}
 function connect() {
+  if (reconnectMode === 'grant-ended') return;
   reconnectMode = 'automatic';
   clearTimeout(retryTimer);
   epoch++;
@@ -475,16 +486,16 @@ function connect() {
     }
   };
   ws.onerror = () => {
-    if (current === epoch) { transportBroken = true; setStatus('Connection error'); }
+    if (current !== epoch || !(opened || ready)) return;
+    transportBroken = true;
+    setStatus('Connection error');
   };
   ws.onclose = (e: CloseEvent) => {
     if (current !== epoch) return;
     reset();
-    if (e.code === CLOSE_REPLACED) {
-      reconnectMode = 'manual';
-      viewOnly = true;
-      applyControl();
-      setStatus('Opened in another viewer · reconnect to watch here');
+    if (access !== 'owner' && e.code === 1008 && e.reason === 'grant ended') {
+      reconnectMode = 'grant-ended';
+      setStatus('Viewer link expired or was revoked');
       return;
     }
     if (e.code === CLOSE_TAKEN) retry = 0;
@@ -503,7 +514,7 @@ function connect() {
     const delay = Math.min(1000 * 2 ** retry++, 8000);
     if (e.code === CLOSE_TAKEN) setStatus('Control changed · reconnecting view-only');
     setStatus(status.textContent + ` · retrying in ${delay / 1000}s`);
-    retryTimer = setTimeout(reconnectAutomatically, delay);
+    retryTimer = setTimeout(connect, delay);
     checkAccess(current);
   };
 }
@@ -527,6 +538,9 @@ canvas.addEventListener('keydown', (e) => {
   if (e.code === 'CapsLock') return;
   if (e.repeat || held.has(code)) return;
   if (!holdKey(code)) return;
+  if (clipboardAvailable && !e.altKey && (e.ctrlKey || e.metaKey) && (e.code === 'KeyC' || e.code === 'KeyX')) {
+    clipboard = { state: 'remote-unavailable' };
+  }
   held.add(code);
   if (code < 224) releaseLatched();
 });
@@ -681,7 +695,7 @@ document.addEventListener('visibilitychange', () => {
   } else {
     startHud();
     retry = 0;
-    reconnectAutomatically();
+    connect();
   }
 });
 function checkAccess(current: number) {
@@ -791,7 +805,7 @@ function applyControl() {
   if (clipboard.hidden && !panels.clipboard.hidden) showPanel(null);
 }
 function setViewOnly(next: boolean) {
-  if (viewOnly === next || (access === 'watch' && !next)) return;
+  if (reconnectMode === 'grant-ended' || viewOnly === next || (access === 'watch' && !next)) return;
   release();
   viewOnly = next;
   takeRequested = !next;
@@ -888,6 +902,17 @@ panels.keys.addEventListener('click', (e) => {
   showPanel(null);
   canvas.focus();
 });
+function replaceAccess(value: string, next: Access) {
+  clipboardAvailable = false;
+  accessToken = value;
+  access = next;
+  viewOnly = next === 'watch';
+  takeRequested = false;
+  reconnectMode = 'automatic';
+  retry = 0;
+  applyControl();
+  connect();
+}
 panels.connection.addEventListener('submit', (e) => {
   e.preventDefault();
   const value = (document.querySelector('#access-token') as HTMLInputElement).value.trim();
@@ -895,9 +920,7 @@ panels.connection.addEventListener('submit', (e) => {
     setStatus('Use a 64-character token over HTTPS or a localhost tunnel');
     return;
   }
-  accessToken = value;
-  retry = 0;
-  connect();
+  replaceAccess(value, 'owner');
 });
 if (!document.hidden) startHud();
 applyScale();
@@ -906,4 +929,4 @@ applyControl();
 watchDpr();
 connect();
 
-export { socket, capsLock, connect, reset, setScale, setViewOnly, toggleSharp, watchDpr, toggleMeta };
+export { socket, capsLock, connect, reset, setScale, setViewOnly, toggleSharp, watchDpr, toggleMeta, replaceAccess };

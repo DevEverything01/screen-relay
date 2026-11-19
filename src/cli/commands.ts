@@ -147,7 +147,7 @@ export const commands: Record<string, Command> = {
       { description: 'Put a URL on the clipboard', command: 'screen-relay clipboard set "https://example.com"' },
       { description: 'Put piped text on the clipboard', command: 'screen-relay clipboard set --stdin' },
     ],
-    notes: ['get prints the text exactly, with no newline added. Use --json for a JSON string.', 'Text is UTF-8, up to 256 KiB. set "" clears the clipboard.', 'To paste the text, press the paste keys afterwards, such as screen-relay key ctrl+v.'],
+    notes: ['get prints the text exactly, with no newline added. Use --json for the text and byte count.', 'Text is UTF-8, up to 256 KiB. set "" clears the clipboard.', 'To paste the text, press the paste keys afterwards, such as screen-relay key ctrl+v.'],
     resultSchema: { clipboard: { text: 'string', bytes: 'number' }, outcome: 'set' },
     validate: (args) => args.action === 'get' && (args.text !== undefined || args.stdin) ? 'screen-relay clipboard get takes no text'
       : args.action === 'set' ? textSource('text')(args) : undefined,

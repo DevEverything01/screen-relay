@@ -679,19 +679,14 @@ test('under a hold, frames wait for their due time and a trimmed frame is acknow
   assert.deepEqual(all, Array.from({ length: all.length }, (_, index) => index + 1));
 });
 
-test('a replaced viewer stays disconnected across visibility changes until manually reconnected', () => {
+test('a refused handshake does not flash a connection error', () => {
   const app = viewer();
-  const control = () => app.document.querySelector('#toolbar-actions').querySelector('[data-action="control"]');
-  runInContext('relayViewer.setViewOnly(false)', app.context);
-  app.frame(1);
-  const count = app.sockets.length;
-  app.sockets.at(-1).onclose({ code: 4002 });
-  assert.equal(app.document.querySelector('#status').textContent, 'Opened in another viewer · reconnect to watch here');
-  assert.equal(control().attributes['aria-pressed'], 'false');
-  app.document.hidden = true; app.listeners.visibilitychange();
-  app.document.hidden = false; app.listeners.visibilitychange();
-  assert.equal(app.document.querySelector('#status').textContent, 'Opened in another viewer · reconnect to watch here');
-  assert.equal(app.sockets.length, count);
+  const status = app.document.querySelector('#status');
+  assert.equal(new URL(app.sockets[0].url).pathname, '/stream');
+  app.sockets[0].onerror();
+  assert.notEqual(status.textContent, 'Connection error');
+  app.sockets[0].onclose({ code: 1006 });
+  assert.equal(status.textContent, 'Connecting… · retrying in 1s');
   runInContext('relayViewer.connect()', app.context);
   assert.equal(app.sockets.at(-1).url, 'ws://localhost/stream?view=1');
 });
@@ -709,17 +704,17 @@ test('an automatic reconnect claims idle input without taking it from another ow
   assert.equal(app.sockets.at(-1).url, 'ws://localhost/stream?view=1');
 });
 
-function clipboardViewer(remoteText = '', upload) {
+function clipboardViewer(remoteText = '', upload, { read, write } = {}) {
   const posted = [], written = [];
   const json = (body) => ({ ok: true, status: 200, json: async () => body });
   const app = viewer({
     fetch: async (path, options = {}) => {
       if (path === '/capabilities') return json({ fps: 60, clipboard: true });
       if (path === '/clipboard' && options.method === 'POST') { posted.push(options.body); return upload ? upload(options.body) : json({ length: options.body.length }); }
-      if (path === '/clipboard') return json({ text: remoteText });
+      if (path === '/clipboard') return read ? read() : json({ text: remoteText });
       return { ok: false, status: 404 };
     },
-    navigator: { clipboard: { writeText: async (text) => { written.push(text); } } },
+    navigator: { clipboard: { writeText: async (text) => { if (write) await write(text); written.push(text); } } },
   });
   runInContext('relayViewer.setViewOnly(false)', app.context);
   app.frame(1);
@@ -749,13 +744,29 @@ test('a paste shortcut puts the local text on the remote clipboard before the re
   chord(app, 'keyup', 'ControlLeft');
   await settle();
   assert.deepEqual(posted, ['local ✓\nline']);
-  assert.deepEqual(inputBytes(app), [[1, 224], [2, 224], [1, 224], [1, 25], [2, 25], [2, 224]]);
+  assert.deepEqual(inputBytes(app), [[1, 224], [1, 25], [2, 25], [2, 224]]);
   chord(app, 'keyup', 'KeyV');
-  assert.equal(inputBytes(app).length, 6);
+  assert.equal(inputBytes(app).length, 4);
   chord(app, 'keydown', 'KeyV', { ctrlKey: true });
   app.listeners.paste({ preventDefault() {}, clipboardData: { getData: () => 'local ✓\r\nline' } });
   await settle();
   assert.deepEqual(posted, ['local ✓\nline', 'local ✓\nline']);
+});
+
+test('input after a paste waits for the upload and follows the paste in order', async () => {
+  let complete;
+  const { app } = clipboardViewer('', () => new Promise((resolve) => { complete = resolve; }));
+  await settle();
+  chord(app, 'keydown', 'ControlLeft', { ctrlKey: true });
+  pasteText(app, 'local');
+  chord(app, 'keyup', 'KeyV', { ctrlKey: true });
+  chord(app, 'keyup', 'ControlLeft');
+  chord(app, 'keydown', 'Enter');
+  chord(app, 'keyup', 'Enter');
+  assert.deepEqual(inputBytes(app), [[1, 224]]);
+  complete({ ok: true });
+  await settle();
+  assert.deepEqual(inputBytes(app), [[1, 224], [1, 25], [2, 25], [2, 224], [1, 40], [2, 40]]);
 });
 
 test('a paste shortcut without local text pastes what the remote clipboard holds', async () => {
@@ -791,6 +802,55 @@ function pasteText(app, text) {
   chord(app, 'keydown', 'KeyV', { ctrlKey: true });
   app.listeners.paste({ preventDefault() {}, clipboardData: { getData: () => text } });
 }
+
+test('a paste after the copy shortcut uses the remote clipboard before a notice arrives', async () => {
+  const { app, posted } = clipboardViewer('remote');
+  await settle();
+  chord(app, 'keydown', 'ControlLeft', { ctrlKey: true });
+  chord(app, 'keydown', 'KeyC', { ctrlKey: true });
+  chord(app, 'keyup', 'KeyC', { ctrlKey: true });
+  pasteText(app, 'stale');
+  await settle();
+  assert.deepEqual(posted, []);
+  assert.deepEqual(inputBytes(app).slice(-2), [[1, 25], [2, 25]]);
+});
+
+test('a paste during a pending remote copy does not upload stale local text', async () => {
+  let complete;
+  const { app, posted, written } = clipboardViewer('', undefined, { read: () => new Promise((resolve) => { complete = resolve; }) });
+  await settle();
+  clipboardNotice(app);
+  pasteText(app, 'stale');
+  assert.deepEqual(posted, []);
+  assert.deepEqual(inputBytes(app), [[1, 25], [2, 25]]);
+  complete({ ok: true, json: async () => ({ text: 'remote' }) });
+  await settle();
+  assert.deepEqual(written, ['remote']);
+});
+
+test('a paste while a remote copy is being written locally does not upload stale text', async () => {
+  let complete;
+  const { app, posted, written } = clipboardViewer('remote', undefined, { write: () => new Promise((resolve) => { complete = resolve; }) });
+  await settle();
+  clipboardNotice(app);
+  await settle();
+  pasteText(app, 'stale');
+  assert.deepEqual(posted, []);
+  complete();
+  await settle();
+  assert.deepEqual(written, ['remote']);
+});
+
+test('a failed local clipboard write keeps the remote clipboard authoritative', async () => {
+  const { app, posted } = clipboardViewer('remote', undefined, { write: async () => { throw new Error('denied'); } });
+  await settle();
+  clipboardNotice(app);
+  await settle();
+  pasteText(app, 'stale');
+  await settle();
+  assert.deepEqual(posted, []);
+  assert.deepEqual(inputBytes(app), [[1, 25], [2, 25]]);
+});
 
 test('a paste upload started before blur cannot replay a newer paste', async () => {
   const uploads = [];
@@ -885,4 +945,26 @@ test('a control link claims, releases, and takes input without clipboard paths o
   assert.equal(app.sockets.at(-1).url, 'ws://localhost/stream?take=1');
   app.sockets.at(-1).onclose({ code: 1006 });
   assert.deepEqual(requests, []);
+});
+
+
+test('an ended grant stays disconnected until a new credential is supplied', () => {
+  const { app, action } = linkedViewer('&scope=watch');
+  const stream = app.sockets[0];
+  stream.onopen();
+  app.frame(1);
+  stream.onclose({ code: 1008, reason: 'grant ended' });
+  const status = app.document.querySelector('#status');
+  assert.equal(status.textContent, 'Viewer link expired or was revoked');
+  app.document.hidden = true;
+  app.listeners.visibilitychange();
+  app.document.hidden = false;
+  app.listeners.visibilitychange();
+  runInContext('relayViewer.connect()', app.context);
+  assert.equal(app.sockets.length, 1);
+  assert.equal(status.textContent, 'Viewer link expired or was revoked');
+  app.document.querySelector('#access-token').value = 'b'.repeat(64);
+  app.document.querySelector('#connection-panel').handlers.submit({ preventDefault() {} });
+  assert.equal(app.sockets.at(-1).url, 'ws://localhost/stream?clipboard=1');
+  assert.equal(action('control').hidden, false);
 });
